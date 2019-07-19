@@ -1,0 +1,65 @@
+local mailsData = {}
+local curMailType = 0
+local curMailsData = {}
+local curMailData = {}
+
+function DoInit()
+
+end
+
+function InitProperties()
+
+end
+
+function DoEnable()
+
+end
+
+function OnCommand_Apply(objs)
+    curMailData=objs[0]
+    local req={}
+    req.id=curMailData.id
+    HttpRequest("readMail", "ReadMailReq", "ReadMailResp", req,OnApply)
+
+end
+
+function OnApply(resp)
+    if resp~= nil then 
+        self:SendNotification("Apply")
+    end
+end
+
+function OnCommand_Report(objs)
+    curMailData=objs[0]
+    local req={}
+    req.id=curMailData.id
+    HttpRequest("readMail", "ReadMailReq", "ReadMailResp", req,OnReport)
+
+end
+
+function OnReport(resp)
+    if resp~= nil then 
+        self:SendNotification("Report")
+    end
+end
+
+function OnCommand_Screen(objs)
+    curMailData=objs[0]
+    local req={}
+    req.id=curMailData.id
+    HttpRequest("readMail", "ReadMailReq", "ReadMailResp", req,OnScreen)
+
+end
+
+function OnScreen(resp)
+    if resp~= nil then 
+        self:SendNotification("Screen")
+    end
+end
+
+function DoOnExit()
+    mailsData = nil
+    curMailType = nil
+    curMailsData = nil
+    curMailData = nil
+end

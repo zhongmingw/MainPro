@@ -1,0 +1,15 @@
+
+function OnSignItemSlotBindValue(slot,data)
+
+	slot.m_SelectSprite=slot:GetGameObjectAtPath("CheckSprite")
+	slot:UnSelected()
+	local itemBase_TF = slot.transform:Find("ItemBase")
+
+	local signed_GO = slot:GetGameObjectAtPath("SignedGO")
+	local resign_GO = slot:GetGameObjectAtPath("ResignGO")
+
+
+	BindItemBaseValue(itemBase_TF,data.rewards[1])
+	signed_GO:SetActive(data.signed)
+	resign_GO:SetActive(data.id<data.maxAvaliableId and not data.signed)
+end

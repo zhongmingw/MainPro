@@ -1,0 +1,1003 @@
+require "SkillItemSlot"
+require "AttrEffectItemSlot"
+
+local tweenUtils=CsBridge.TweenUtils
+local cache=CsBridge.objectCache
+
+local utils = require "HeroBagUtils"
+local HeroBagPageType = utils.HeroBagPageType
+local HeroShowPageType = utils.HeroShowPageType
+
+local raceBg
+local raceBgBack
+
+local initRaceImgPos
+local initNameTxtWidth
+
+local soulNumTxt
+local stepStoneNumTxt
+local soulTweener
+local stepStoneTweener
+
+local heroBaseTF
+local raceImg
+local nameTxt
+local platformSpine
+local starRoot
+local skillGrid
+local leftHeroBaseTF
+local leftRaceImg 
+local leftNameTxt
+local leftPlatformSpine
+local leftStarRoot
+local leftSkillGrid
+local rightHeroBaseTF
+local rightRaceImg
+local rightNameTxt
+local rightPlatformSpine
+local rightStarRoot
+local rightSkillGrid
+
+local go_heroModelCollider
+local go_heroModel
+local leftModelRoot
+local rightModelRoot
+local modelRoot
+local modelObj 
+local modelGroupName
+local leftModelObj
+local leftGroupName
+local rightModelObj
+local rightGroupName
+
+local upImg
+local downImg
+local imgMaxHeight
+local scaleFactor
+
+local heroTogGroup
+local heroTogArr 
+local infoFlag
+local equipFlag
+local distillFlag
+local jewelEquipFlag
+
+local leftBtn
+local rightBtn
+local leftBtnTweener
+local rightBtnTweener
+
+local lockBtnObj
+local shareBtnObj
+local resetBtnObj
+
+local heroLevelUpSpine
+
+local resetPosY
+
+local doAttackSkeleton
+
+local effectObj
+local attrEffectGrid
+local attrEffectCG
+local attrEffectTweener
+local attrEffectCGTweener
+local resetEffectTrans
+local resetEffectObj
+
+local curView
+local unJewelTogObj
+
+local waitSwitchAnim = false
+
+local isInitUI = false
+
+local yield_return = (require 'cs_coroutine').yield_return
+
+local putOnSoulImprintItemBtnObj
+
+local haveSoulImprintItemTagTrans
+
+local haveSoulImprintItemTagObj
+
+local initHaveSoulImprintItemTagPos
+
+local SetAnchoredPosition = CsBridge.UnityHelper.SetAnchoredPosition
+local SetUISizeDelta = CsBridge.UnityHelper.SetUISizeDelta
+
+local checkBtn = false
+
+function DoInit()
+	self.Shadow = 1
+end
+
+function initUI()
+	soulNumTxt = self:GetComponentAtPath("Top/Soul/NumTxt",CLS_TEXT)
+	stepStoneNumTxt = self:GetComponentAtPath("Top/StepStone/NumTxt",CLS_TEXT)
+
+	raceBg = self:GetGameObjectAtPath("BGS/RaceBg")
+	raceBgBack = self:GetGameObjectAtPath("BGS/RaceBgBack")
+
+	leftModelRoot = self:GetGameObjectAtPath("Center/Mask/HeroModel/LeftModelRoot")
+	rightModelRoot = self:GetGameObjectAtPath("Center/Mask/HeroModel/RightModelRoot")
+	modelRoot=self:GetGameObjectAtPath("Center/Mask/HeroModel/ModelRoot")
+
+	local modelRootTrans = modelRoot.transform
+	heroBaseTF=modelRootTrans:GetComponentAtPath("HeroBase",CLS_RECTTRANSFORM)
+	raceImg=modelRootTrans:GetComponentAtPath("HeroBase/RaceBg/RaceImg",CLS_IMAGE)
+	nameTxt=modelRootTrans:GetComponentAtPath("HeroBase/NameTxt",CLS_TEXT)
+	platformSpine=modelRootTrans:GetComponentAtPath("FloorSpine",CLS_SKELETONGRAPHIC)
+	starRoot=modelRootTrans:GetComponentAtPath("HeroBase/StarRoot",CLS_RECTTRANSFORM)
+	skillGrid=modelRootTrans:GetComponentAtPath("HeroBase/SkillGrid",CLS_UI_ITEM_GRID)
+	heroLevelUpSpine=modelRootTrans:GetComponentAtPath("HeroLevelUpSpine",CLS_SKELETONGRAPHIC)
+
+	initRaceImgPos=raceImg.transform.parent.localPosition
+	initNameTxtWidth=nameTxt:GetComponent("RectTransform").sizeDelta.x
+
+	local leftModelRootTrans = leftModelRoot.transform
+	leftHeroBaseTF=leftModelRootTrans:GetComponentAtPath("HeroBase",CLS_RECTTRANSFORM)
+	leftRaceImg=leftModelRootTrans:GetComponentAtPath("HeroBase/RaceBg/RaceImg",CLS_IMAGE)
+	leftNameTxt=leftModelRootTrans:GetComponentAtPath("HeroBase/NameTxt",CLS_TEXT)
+	leftPlatformSpine=leftModelRootTrans:GetComponentAtPath("FloorSpine",CLS_SKELETONGRAPHIC)
+	leftStarRoot=leftModelRootTrans:GetComponentAtPath("HeroBase/StarRoot",CLS_RECTTRANSFORM)
+	leftSkillGrid=leftModelRootTrans:GetComponentAtPath("HeroBase/SkillGrid",CLS_UI_ITEM_GRID)
+
+	local rightModelRootTrans = rightModelRoot.transform
+	rightHeroBaseTF=rightModelRootTrans:GetComponentAtPath("HeroBase",CLS_RECTTRANSFORM)
+	rightRaceImg=rightModelRootTrans:GetComponentAtPath("HeroBase/RaceBg/RaceImg",CLS_IMAGE)
+	rightNameTxt=rightModelRootTrans:GetComponentAtPath("HeroBase/NameTxt",CLS_TEXT)
+	rightPlatformSpine=rightModelRootTrans:GetComponentAtPath("FloorSpine",CLS_SKELETONGRAPHIC)
+	rightStarRoot=rightModelRootTrans:GetComponentAtPath("HeroBase/StarRoot",CLS_RECTTRANSFORM)
+	rightSkillGrid=rightModelRootTrans:GetComponentAtPath("HeroBase/SkillGrid",CLS_UI_ITEM_GRID)
+
+	go_heroModel=self:GetGameObjectAtPath("Center/Mask/HeroModel")
+	go_heroModelCollider=go_heroModel:GetComponent("TestDrag")
+	resetPosY = go_heroModel.transform.localPosition.y
+
+	leftBtn = {
+		obj = self:GetGameObjectAtPath("Center/LeftBtn")
+	}
+	leftBtn.trans = leftBtn.obj.transform
+	leftBtn.initPos = leftBtn.trans:CheckLocalPosition()
+
+	rightBtn = {
+		obj = self:GetGameObjectAtPath("Center/RightBtn")
+	}
+	rightBtn.trans = rightBtn.obj.transform
+	rightBtn.initPos = rightBtn.trans:CheckLocalPosition()
+
+	upImg = self:GetComponentAtPath("BGS/UpImg",CLS_RECTTRANSFORM)
+	downImg = self:GetComponentAtPath("BGS/DownImg",CLS_RECTTRANSFORM)
+
+	imgMaxHeight = upImg.sizeDelta.y
+
+	scaleFactor = 255/rightModelRoot.transform.localPosition.x
+	SetUISizeDelta(upImg,upImg.sizeDelta.x,0)
+	SetUISizeDelta(downImg,downImg.sizeDelta.x,0)
+	upImg.gameObject:SetSelfActive(true)             
+	downImg.gameObject:SetSelfActive(true)
+
+	heroTogArr = {}
+	heroTogGroup = self:GetComponentAtPath("Center/HeroTogs",CLS_TOGGLE_GROUP_ARCHLY)
+	local heroTogGroupTrans = heroTogGroup.transform
+	local infoTog = heroTogGroupTrans:GetComponentAtPath("HeroInfoTog",CLS_TOGGLE_ARCHLY)
+	local equipTog = heroTogGroupTrans:GetComponentAtPath("HeroEquipTog",CLS_TOGGLE_ARCHLY)
+	local distillationTog = heroTogGroupTrans:GetComponentAtPath("HeroDistillationTog",CLS_TOGGLE_ARCHLY)
+	local ratingTog = heroTogGroupTrans:GetComponentAtPath("HeroRatingTog",CLS_TOGGLE_ARCHLY)
+	local jewelTog = heroTogGroupTrans:GetComponentAtPath("JewelEquipTog",CLS_TOGGLE_ARCHLY)
+	unJewelTogObj = heroTogGroupTrans:GetGameObjectAtPath("UnJewelEquipTog")
+	table.insert(heroTogArr, infoTog)
+	table.insert(heroTogArr, equipTog)
+	table.insert(heroTogArr, distillationTog)
+	table.insert(heroTogArr, ratingTog)
+	table.insert(heroTogArr, jewelTog)
+	infoFlag = infoTog.transform:GetGameObjectAtPath("NewFlag")
+	equipFlag = equipTog.transform:GetGameObjectAtPath("NewFlag")
+	distillFlag = distillationTog.transform:GetGameObjectAtPath("NewFlag")
+	jewelEquipFlag = jewelTog.transform:GetGameObjectAtPath("NewFlag")
+
+	lockBtnObj = self:GetComponentAtPath("Center/LockBtn",CLS_TOGGLE_ARCHLY)
+	shareBtnObj = self:GetGameObjectAtPath("Center/ShareBtn")
+	resetBtnObj = self:GetGameObjectAtPath("Center/ResetBtn")
+
+	effectObj = self:GetGameObjectAtPath("Effect")
+	local effectTrans = effectObj.transform
+	attrEffectGrid = effectTrans:GetComponentAtPath("AttrEffect",CLS_UI_ITEM_GRID)
+	attrEffectCG = effectTrans:GetComponentAtPath("AttrEffect",CLS_CANVAS_GROUP)
+	resetEffectObj = self:GetGameObjectAtPath("ResetEffect")
+	resetEffectTrans = resetEffectObj.transform
+	putOnSoulImprintItemBtnObj = self:GetGameObjectAtPath("Center/PutOnSoulImprintItemBtn")
+	haveSoulImprintItemTagObj = self:GetGameObjectAtPath("Center/Mask/HeroModel/ModelRoot/HeroBase/HavaSoulImprintItemTag")
+	haveSoulImprintItemTagTrans = haveSoulImprintItemTagObj.transform
+	initHaveSoulImprintItemTagPos = haveSoulImprintItemTagTrans.localPosition
+end
+
+function OnOpen() 
+	if not isInitUI then
+		initUI()
+		isInitUI = true
+	end 
+end 
+
+function SetParamDataList(objs)
+	local curType,heroArr,index = objs[0],objs[1],objs[2]
+	self:SendCommand("InitData",curType,heroArr,index)
+end
+
+function DoExit()
+	tweenUtils = nil
+	cache = nil
+
+	utils = nil
+	HeroBagPageType = nil
+	HeroShowPageType = nil
+
+	raceBg = nil
+	raceBgBack = nil
+
+	initRaceImgPos = nil
+	initNameTxtWidth = nil
+
+	soulNumTxt = nil
+	stepStoneNumTxt = nil
+	soulTweener = nil
+	stepStoneTweener = nil
+
+	heroBaseTF = nil
+	raceImg = nil
+	nameTxt = nil
+	platformSpine = nil
+	starRoot = nil
+	skillGrid = nil
+	leftHeroBaseTF = nil
+	leftRaceImg  = nil
+	leftNameTxt = nil
+	leftPlatformSpine = nil
+	leftStarRoot = nil
+	leftSkillGrid = nil
+	rightHeroBaseTF = nil
+	rightRaceImg = nil
+	rightNameTxt = nil
+	rightPlatformSpine = nil
+	rightStarRoot = nil
+	rightSkillGrid = nil
+
+	go_heroModelCollider = nil
+	go_heroModel = nil
+	leftModelRoot = nil
+	rightModelRoot = nil
+	modelRoot = nil
+	modelObj  = nil
+	modelGroupName = nil
+	leftModelObj = nil
+	leftGroupName = nil
+	rightModelObj = nil
+	rightGroupName = nil
+
+	upImg = nil
+	downImg = nil
+	imgMaxHeight = nil
+	scaleFactor = nil
+
+	heroTogGroup = nil
+	heroTogArr  = nil
+	infoFlag = nil
+	equipFlag = nil
+	distillFlag = nil
+	jewelEquipFlag = nil
+
+	leftBtn = nil
+	rightBtn = nil
+	leftBtnTweener = nil
+	rightBtnTweener = nil
+
+	lockBtnObj = nil
+	shareBtnObj = nil
+	resetBtnObj = nil
+
+	heroLevelUpSpine = nil
+
+	resetPosY = nil
+
+	doAttackSkeleton = nil
+
+	effectObj = nil
+	attrEffectGrid = nil
+	attrEffectCG = nil
+	attrEffectTweener = nil
+	attrEffectCGTweener = nil
+	resetEffectTrans = nil
+	resetEffectObj = nil
+
+	curView = nil
+	unJewelTogObj = nil
+
+	waitSwitchAnim = nil
+
+	isInitUI = nil
+
+	yield_return = nil
+
+	putOnSoulImprintItemBtnObj = nil
+	haveSoulImprintItemTagTrans = nil
+	initHaveSoulImprintItemTagPos = nil
+
+	SetAnchoredPosition = nil
+	SetUISizeDelta = nil
+	checkBtn = nil
+end 
+
+function OnNotification_ShowAttrEffect(objs)
+	local attrs = objs[0]
+	CsBridge.CacheAssetsByModule(self.Module,function()
+		if attrEffectTweener then
+			attrEffectTweener:DoKill()
+		end
+		if attrEffectCGTweener then
+			attrEffectCGTweener:DoKill()
+		end 
+		attrEffectGrid:ClearItems()
+		local initPos = {x = 0, y = 178}
+		attrEffectGrid.gameObject:SetPosition(initPos.x, initPos.y)
+		attrEffectCG.alpha = 1
+		attrEffectGrid.gameObject:SetSelfActive(true)
+		local targetPos = {x = 0, y = 193}
+		local duration = 0.8
+		attrEffectTweener = tweenUtils.MoveTo(attrEffectGrid.transform,targetPos.x,targetPos.y,duration)
+		attrEffectGrid:RefreshItemSlots(attrs,self.gameObject,"AttrEffectItemSlot")
+		attrEffectTweener:OnCompleteAction(function()
+			local targetAlpha, fadeDuration = 0, 0.5
+			attrEffectCGTweener = tweenUtils.FadeTo(attrEffectCG,targetAlpha,fadeDuration)
+			attrEffectCGTweener:OnCompleteAction(function()
+				attrEffectGrid:ClearItems()
+				attrEffectGrid.gameObject:SetSelfActive(false)
+			end)
+			attrEffectCGTweener:DoPlay()
+		end)
+		attrEffectTweener:DoPlay()
+	end,"AttrEffectItemSlot")
+end
+
+function OnAnimationFinished()
+	local targetPosX = leftBtn.initPos.x+10
+	local duration = 0.5
+	leftBtnTweener = tweenUtils.MoveLeftRight(leftBtn.trans, targetPosX, duration)
+	leftBtnTweener:DoPlay()
+
+	targetPosX = rightBtn.initPos.x-10
+	rightBtnTweener = tweenUtils.MoveLeftRight(rightBtn.trans, targetPosX, duration)
+	rightBtnTweener:DoPlay()
+	self:SendCommand("InitHeroShowData")
+	self:SendCommand("HeroShowViewOpened")
+end
+
+function OnNotification_RefreshHeroShowView(objs)
+    local curPageType = objs[0]
+    heroTogGroup:SetToggleOn(curPageType - 1)
+end
+
+function OnHeroTogsClick(isOn, index)
+    if not isOn then
+        return
+    end
+    self:SendCommand("OpenHeroShowPage", index+1)
+end
+
+function OnHeroModelDrag(obj)	
+	local newPosX = obj.transform:CheckLocalPosition().x
+
+	local posY = heroBaseTF:CheckAnchoredPosition().y
+	local posX = -newPosX*0.5
+	local newPos = {
+		x = posX,
+		y = posY
+	}
+	heroBaseTF:ResetAnchoredPosition(newPos)
+	leftHeroBaseTF:ResetAnchoredPosition(newPos)
+	rightHeroBaseTF:ResetAnchoredPosition(newPos)
+
+	local moveRight = newPosX >= 0
+	local moveLeft = newPosX <= 0
+	local toRight = newPosX > 0
+	if moveRight and not leftBtn.obj.activeSelf or moveLeft and not rightBtn.activeSelf then
+		return
+	end 
+	self:SendCommand("SwitchRaceEffect",toRight)
+end 
+
+local function SetDragEnable(enable)
+	waitSwitchAnim = not enable
+	go_heroModelCollider.enabled = enable
+end
+
+local function CacheAsset(heroId, groupName, finished)
+	local modelName = ResTblContainer:GetPropToStr(heroId,HeroBase.model,HeroBase.actorTbl)
+	local groupName = groupName 
+	CsBridge.CacheAssetsByGroup(groupName,function()
+		finished(modelName,groupName)
+	end,modelName)
+end
+
+--Add：创建模型
+local function CreateModel(name, root, active, skeleton)
+	local obj = cache:CreateObject(name, active)
+	local model = obj.transform:GetChild(0)
+	obj.transform:SetParent(root.transform, false)
+	SetAnchoredPosition(obj.gameObject,0,0)
+	CsBridge.UnityHelper.SetlocalScale(model.gameObject,-0.9,0.9,1)
+	obj.transform:SetSiblingIndex(root.transform.childCount-2);
+	local ske = model:GetComponent(CLS_SKELETONGRAPHIC)
+	ske:PlayAnimation("stand", true , nil, nil)
+	return obj
+end 
+
+local function ShowModel(hero, model, root, platform, callback)
+	if model == nil then
+		if hero ~= nil then
+			root:SetSelfActive(true)
+			platform:PlayAnimation(GetPlatformAnim(hero.race),true)
+			CacheAsset(hero.heroId,tostring(hero.uid),function(modelName)
+				callback(CreateModel(modelName,root,true),tostring(hero.uid))
+				SetDragEnable(true)
+			end)
+		else 
+			root:SetSelfActive(false)
+			SetDragEnable(true)
+		end 
+	else 
+		root:SetSelfActive(true)
+	end 
+end 
+
+--重置模型位置到中间
+local function ResetModelPos()
+	local duration = 0.3
+	local t = tweenUtils.MoveTo(go_heroModel.transform,0,resetPosY,duration)
+	local t2 = tweenUtils.SizeDeltaTo(upImg,upImg.sizeDelta.x,0,duration)
+	local t3 = tweenUtils.SizeDeltaTo(downImg,downImg.sizeDelta.x,0,duration)
+	t:DoPlay()
+	t2:DoPlay()
+	t3:DoPlay()
+
+	--todo:
+	local posY = heroBaseTF:CheckAnchoredPosition().y
+	local t4 = tweenUtils.MoveToByAnchored(heroBaseTF.transform,0,posY,duration)
+	t4:DoPlay()
+	posY = leftHeroBaseTF:CheckAnchoredPosition().y
+	local t5 = tweenUtils.MoveToByAnchored(leftHeroBaseTF.transform,0,posY,duration)
+	t5:DoPlay()
+	posY = rightHeroBaseTF:CheckAnchoredPosition().y
+	local t6 = tweenUtils.MoveToByAnchored(rightHeroBaseTF.transform,0,posY,duration,function()
+		SetDragEnable(true)
+	end)
+	t6:DoPlay()
+end
+
+--拖拽结束，切换英雄
+function OnHeroModelEndDrag(obj)
+	SetDragEnable(false)
+	local changePosX = CsBridge.UnityHelper.GetMainCameraSize() / 8
+	local pos = obj.transform:CheckPosition()
+	if(pos.x>changePosX)then
+		self:SendCommand("SwitchPos", true)
+	elseif(pos.x<-changePosX)then
+		self:SendCommand("SwitchPos", false)
+	else--没有拖到边缘，不算拖拽，回到中间
+		ResetModelPos()
+	end
+end
+
+function OnNotification_RefreshExtraTog(objs)
+	local togs = objs[0]
+	for i,tog in ipairs(togs) do
+		local type = tog.type
+		local ret = tog.ret
+		if heroTogArr[type].isOn and not ret then
+			heroTogArr[HeroShowPageType.HeroInfo].isOn = true
+			self:SendCommand("OpenHeroShowPage",HeroShowPageType.HeroInfo)
+		end
+		heroTogArr[type].gameObject:SetSelfActive(ret)	
+	end
+	if checkBtn then
+		return
+	end
+	local co = coroutine.create(function()
+		yield_return(1)
+		checkBtn = true
+	end)
+	assert(coroutine.resume(co))
+end
+
+function OnNotification_RefreshHeroJewelEquipRedTip(objs)
+	local redFlag = objs[0]
+	jewelEquipFlag:SetSelfActive(redFlag)
+end
+
+function OnNotification_RefreshHeroShowRedTip(objs)
+	local infoRedFlag,equipRedFlag = objs[0],objs[1]
+	local distillRedFlag,jewelEquipRedFlag = objs[2],objs[3]
+	infoFlag:SetSelfActive(infoRedFlag)
+	equipFlag:SetSelfActive(equipRedFlag)
+	distillFlag:SetSelfActive(distillRedFlag)
+	jewelEquipFlag:SetSelfActive(jewelEquipRedFlag)
+end 
+
+function OnNotification_RefreshHeroShowHeroInfoRedTip(objs)
+	local redFlag = objs[0]
+	infoFlag:SetSelfActive(redFlag)
+end
+
+function OnNotification_RefreshHeroShowHeroEquipRedTip(objs)
+	local redFlag = objs[0]
+	equipFlag:SetSelfActive(redFlag)
+end
+
+function OnNotification_RefreshHeroShowHeroDistillRedTip(objs)
+	local redFlag = objs[0]
+	distillFlag:SetSelfActive(redFlag)
+end
+
+function OnNotification_RefreshHeroShowHeroJewelEquipRedTip(objs)
+	local redFlag = objs[0]
+	jewelEquipFlag:SetSelfActive(redFlag)
+end
+
+function OnNotification_ShowLevelUpEffect(objs)
+	heroLevelUpSpine.gameObject:SetSelfActive(true)
+	heroLevelUpSpine:PlayAnimation("a_1",false,function()
+		heroLevelUpSpine.gameObject:SetSelfActive(false)
+	end)
+end 
+
+function OnNotification_RefreshOperationBtns(objs)
+	local curType = objs[0]
+	if curType == HeroBagPageType.Hero then
+		soulNumTxt.transform.parent.gameObject:SetSelfActive(true)
+		stepStoneNumTxt.transform.parent.gameObject:SetSelfActive(true)
+		lockBtnObj.gameObject:SetSelfActive(true)
+		shareBtnObj.gameObject:SetSelfActive(true)
+		resetBtnObj:SetSelfActive(true)
+		unJewelTogObj:SetSelfActive(CheckUIOpen(UI_OPEN_TYPE_JEWEL) and not CheckUILevelOpen(UI_OPEN_TYPE_JEWEL))
+		heroTogArr[HeroShowPageType.HeroEquip].gameObject:SetSelfActive(true)
+		heroTogArr[HeroShowPageType.HeroRating].gameObject:SetSelfActive(false)
+		heroTogArr[HeroShowPageType.HeroJewelEquip].gameObject:SetSelfActive(UIOpen(UI_OPEN_TYPE_JEWEL, false))
+	else 
+		soulNumTxt.transform.parent.gameObject:SetSelfActive(false)
+		stepStoneNumTxt.transform.parent.gameObject:SetSelfActive(false)
+		lockBtnObj.gameObject:SetSelfActive(false)
+		shareBtnObj:SetSelfActive(false)
+		resetBtnObj:SetSelfActive(false)
+		unJewelTogObj:SetSelfActive(false)
+		heroTogArr[HeroShowPageType.HeroEquip].gameObject:SetSelfActive(false)
+		heroTogArr[HeroShowPageType.HeroDistillation].gameObject:SetSelfActive(false)
+		heroTogArr[HeroShowPageType.HeroRating].gameObject:SetSelfActive(true)
+		heroTogArr[HeroShowPageType.HeroJewelEquip].gameObject:SetSelfActive(false)
+	end 
+end 
+
+function OnUnJewelEquipTogClick(sender)
+	if not UIOpen(UI_OPEN_TYPE_JEWEL) then
+		return
+	end
+end
+
+local function TweenTextChangeColor(txt,changeColor,duration,onFinished)
+	return tweenUtils.TextChangeColor(soulNumTxt,changeColor.r,changeColor.g,changeColor.b,duration,onFinished)
+end
+
+function OnNotification_RefreshTopView(objs)
+	if soulTweener ~= nil then
+		soulTweener:Kill(true)
+	end
+	if stepStoneTweener ~= nil then
+		stepStoneTweener:Kill(true)
+	end
+	local showSoulAnim,soulCoin = objs[0],objs[1]
+	local showStepStoneAnim,stepStoneCoin = objs[2],objs[3]
+	local changeColor = {
+		r = 1,
+		g = 0,
+		b = 42/255
+	}
+	local duration = 0.15
+	if showSoulAnim then
+		soulTweener = TweenTextChangeColor(soulNumTxt,changeColor,duration,function()
+			soulNumTxt.text = GetValueAbbreviation(soulCoin)
+		end)
+		soulTweener:DoPlay()
+	else 
+		soulNumTxt.text = GetValueAbbreviation(soulCoin)
+	end
+	if showStepStoneAnim then
+		stepStoneTweener = TweenTextChangeColor(stepStoneNumTxt,changeColor,duration,function()
+			stepStoneNumTxt.text = GetValueAbbreviation(stepStoneCoin)
+		end)
+		stepStoneTweener:DoPlay()
+	else
+		stepStoneNumTxt.text = GetValueAbbreviation(stepStoneCoin)
+	end
+end 
+
+function OnNotification_SwitchPos(objs)
+	local toRight = objs[0]
+	local moveToRoot = nil
+	if toRight == true then 
+		moveToRoot = rightModelRoot
+	else 
+		moveToRoot = leftModelRoot
+	end
+	local targetPosX = moveToRoot.transform:CheckLocalPosition().x
+	local t = tweenUtils.MoveTo(go_heroModel.transform,targetPosX,resetPosY,0.3,function()
+		SetUISizeDelta(upImg,upImg.sizeDelta.x,0)
+		SetUISizeDelta(downImg,downImg.sizeDelta.x,0)
+	end)
+	t:OnUpdateAction(function()
+		local toRight = go_heroModel.transform:CheckLocalPosition().x>0
+		self:SendCommand("SwitchRaceEffect",toRight)
+	end)
+	t:DoPlay()
+
+	local targetPosY = heroBaseTF:CheckAnchoredPosition().y
+	local duration = 0.5
+	local t1 = tweenUtils.MoveToByAnchored(heroBaseTF.transform,0,targetPosY,duration,function()
+		SetAnchoredPosition(go_heroModel.gameObject,0,resetPosY)
+		self:SendCommand("SwitchHero")
+	end)
+	t1:DoPlay()
+	targetPosY = leftHeroBaseTF:CheckAnchoredPosition().y
+	local t2 = tweenUtils.MoveToByAnchored(leftHeroBaseTF.transform,0,targetPosY,duration)
+	t2:DoPlay()
+	targetPosY = rightHeroBaseTF:CheckAnchoredPosition().y
+	local t3 = tweenUtils.MoveToByAnchored(rightHeroBaseTF.transform,0,targetPosY,duration)
+	t3:DoPlay()
+end 
+
+--crossfade effect
+local function SetCrossFade()
+	local newPosX = go_heroModel.transform:CheckLocalPosition().x
+	
+	local targetAlpha = math.abs(newPosX*scaleFactor)
+	local curPos = 0
+	if newPosX > 0 then
+		curPos = -1
+	else 
+		curPos = 1
+	end 
+	self:SendCommand("SetBackRace",curPos)
+	local alpha = (255-targetAlpha)/255
+	raceBg:SetRawImageAlpha(alpha)
+end 
+
+local function SetUpDownImg()
+	local newPosX = go_heroModel.transform:CheckLocalPosition().x
+	local targetY = math.abs(newPosX*scaleFactor)
+	local curPos = 0
+	if targetY >= imgMaxHeight then
+		if newPosX > 0 then
+			curPos = -1
+		else 
+			curPos = 1
+		end 
+		targetY = imgMaxHeight*2-math.abs(newPosX*(scaleFactor))
+	end 
+	self:SendCommand("SwitchRace",curPos)
+	SetUISizeDelta(upImg,upImg.sizeDelta.x,targetY)
+	SetUISizeDelta(downImg,downImg.sizeDelta.x,targetY)
+end 
+
+local function RefreshHeroBase(hero,race,star,name,skill,isCenter)
+	if hero ~= nil then
+		SetRaceIconByHeroId(race.gameObject,hero.heroId)
+		ShowHeroQuality(hero.heroId,star,nil,hero.distillationStar)
+		name.text = ResTblContainer:GetPropToStr(hero.heroId,HeroBase.title,HeroBase.actorTbl)
+		local obj = race.transform.parent.gameObject
+		local initPosX = initRaceImgPos.x-((name:GetPreferredValues().x-initNameTxtWidth)/2)
+		SetAnchoredPosition(obj,initPosX,initRaceImgPos.y)
+		skill:RefreshItemSlots(hero.skill,self.gameObject,"SkillItemSlot")
+		local offsetX = (name:GetPreferredValues().x - initNameTxtWidth) / 2
+		if isCenter then
+			if hero.showHaveEmblem then
+				haveSoulImprintItemTagObj:SetSelfActive(true)
+			else
+				haveSoulImprintItemTagObj:SetSelfActive(false)
+			end
+			CsBridge.UnityHelper.SetAnchoredPosition(haveSoulImprintItemTagObj, initHaveSoulImprintItemTagPos.x + offsetX, initHaveSoulImprintItemTagPos.y)
+		end
+	end
+end
+
+local function SwitchModel(toRight)
+	if modelObj then
+		if toRight and leftModelObj then
+			local temp = rightModelObj
+			rightModelObj = modelObj
+			modelObj = leftModelObj
+			leftModelObj = temp
+
+			temp = rightGroupName
+			rightGroupName = modelGroupName
+			modelGroupName = leftGroupName
+			leftGroupName = temp
+
+			temp = rightPlatformSpine
+			rightPlatformSpine = platformSpine
+			platformSpine = leftPlatformSpine
+			leftPlatformSpine = temp
+			local modelTrans = modelObj.transform
+			local modelRootTrans = modelRoot.transform
+			local platformTrans = platformSpine.transform
+			local leftPlatformTrans = leftPlatformSpine.transform
+			local rightPlatformTrans = rightPlatformSpine.transform
+			local leftModelRootTrans = leftModelRoot.transform
+			local rightModelRootTrans = rightModelRoot.transform
+			modelTrans:SetParent(modelRootTrans, false)
+			modelTrans:SetSiblingIndex(modelRootTrans.childCount-2);
+			local rightModelTrans = rightModelObj.transform
+			rightModelTrans:SetParent(rightModelRootTrans, false)
+			rightModelTrans:SetSiblingIndex(rightModelRootTrans.childCount-2);
+
+			platformTrans:SetParent(modelRootTrans, false)
+			platformTrans:SetAsFirstSibling()
+			leftPlatformTrans:SetParent(leftModelRootTrans, false)
+			leftPlatformTrans:SetAsFirstSibling()
+			rightPlatformTrans:SetParent(rightModelRootTrans, false)
+			rightPlatformTrans:SetAsFirstSibling()
+		elseif not toRight and rightModelObj then
+			local temp = leftModelObj
+			leftModelObj = modelObj
+			modelObj = rightModelObj
+			rightModelObj = temp
+
+			temp = leftGroupName
+			leftGroupName = modelGroupName
+			modelGroupName = rightGroupName
+			rightGroupName = temp
+
+			temp = leftPlatformSpine
+			leftPlatformSpine = platformSpine
+			platformSpine = rightPlatformSpine
+			rightPlatformSpine = temp
+			local modelTrans = modelObj.transform
+			local modelRootTrans = modelRoot.transform
+			local platformTrans = platformSpine.transform
+			local leftPlatformTrans = leftPlatformSpine.transform
+			local rightPlatformTrans = rightPlatformSpine.transform
+			local leftModelRootTrans = leftModelRoot.transform
+			local rightModelRootTrans = rightModelRoot.transform
+			modelTrans:SetParent(modelRootTrans, false)
+			modelTrans:SetSiblingIndex(modelRootTrans.childCount-2)
+			local leftModelTrans = leftModelObj.transform
+			leftModelTrans:SetParent(leftModelRootTrans, false)
+			leftModelTrans:SetSiblingIndex(leftModelRootTrans.childCount-2)
+
+			platformTrans:SetParent(modelRoot.transform, false)
+			platformTrans:SetAsFirstSibling()
+			leftPlatformTrans:SetParent(leftModelRootTrans, false)
+			leftPlatformTrans:SetAsFirstSibling()
+			rightPlatformTrans:SetParent(rightModelRootTrans, false)
+			rightPlatformTrans:SetAsFirstSibling()
+		end 
+	end
+
+	if leftModelObj and toRight then
+		DestroyModel(leftModelObj,leftGroupName)
+		leftModelObj = nil
+	end
+	
+	if rightModelObj and not toRight then
+		DestroyModel(rightModelObj,rightGroupName)
+		rightModelObj = nil
+	end
+end 
+
+function OnNotification_SwitchModel(objs)
+	local toRight = objs[0]
+	SwitchModel(toRight)
+end 
+
+function OnNotification_SwitchRaceEffect(objs)
+	SetCrossFade()
+end 
+
+function OnNotification_SetBackRace(objs)
+	raceBgBack:SetSelfActive(true)
+	SetRawImageByModule(raceBgBack,"ui_bg_zy"..objs[0].race)
+end 
+
+function OnNotification_SwitchRace(objs)
+	if not raceBg.activeSelf then
+		raceBg:SetSelfActive(true)
+	end
+	SetRawImageByModule(raceBg,"ui_bg_zy"..objs[0].race)
+end 
+
+function OnNotification_InitShowModel(objs)
+
+	local curHero,leftHero,rightHero = objs[0],objs[1],objs[2]
+	
+	local co = coroutine.create(function()
+	    yield_return(1)
+		ShowModel(curHero,modelObj,modelRoot,platformSpine,function(model,groupName)
+			modelObj = model
+			modelGroupName = groupName
+	    end)
+	    RefreshHeroBase(curHero,raceImg,starRoot,nameTxt,skillGrid,true)
+		yield_return(1)
+		ShowModel(leftHero,leftModelObj,leftModelRoot,leftPlatformSpine,function(model,groupName)
+			leftModelObj = model
+			leftGroupName = groupName
+	    end)
+	    RefreshHeroBase(leftHero,leftRaceImg,leftStarRoot,leftNameTxt,leftSkillGrid)
+		yield_return(1)
+		ShowModel(rightHero,rightModelObj,rightModelRoot,rightPlatformSpine,function(model,groupName)
+			rightModelObj = model
+			rightGroupName = groupName
+	    end)
+	    RefreshHeroBase(rightHero,rightRaceImg,rightStarRoot,rightNameTxt,rightSkillGrid)
+    end)
+	assert(coroutine.resume(co))
+end 
+
+local function ShowAllModel(curHero,leftHero,rightHero)
+	SetRawImageByModule(raceBg,"ui_bg_zy"..curHero.race)
+	raceBg:SetRawImageAlpha(1)
+	raceBgBack:SetSelfActive(false)
+	ShowModel(curHero,modelObj,modelRoot,platformSpine,function(model,groupName)
+		modelObj = model
+		modelGroupName = groupName
+	end)
+	RefreshHeroBase(curHero,raceImg,starRoot,nameTxt,skillGrid,true)
+
+	ShowModel(leftHero,leftModelObj,leftModelRoot,leftPlatformSpine,function(model,groupName)
+		leftModelObj = model
+		leftGroupName = groupName
+	end)
+	RefreshHeroBase(leftHero,leftRaceImg,leftStarRoot,leftNameTxt,leftSkillGrid)
+	
+	ShowModel(rightHero,rightModelObj,rightModelRoot,rightPlatformSpine,function(model,groupName)
+		rightModelObj = model
+		rightGroupName = groupName
+	end)
+	RefreshHeroBase(rightHero,rightRaceImg,rightStarRoot,rightNameTxt,rightSkillGrid)
+end
+
+local function ClearAllModel()
+	if modelObj ~= nil then
+		DestroyModel(modelObj,modelGroupName)
+		modelObj = nil
+	end
+
+	if leftModelObj ~= nil then
+		DestroyModel(leftModelObj,leftGroupName)
+		leftModelObj = nil
+	end 
+
+	if rightModelObj ~= nil then
+		DestroyModel(rightModelObj,rightGroupName)
+		rightModelObj = nil
+	end
+end
+
+function OnNotification_ShowModel(objs)
+	local curHero,leftHero,rightHero = objs[0],objs[1],objs[2]
+	ShowAllModel(curHero,leftHero,rightHero)
+end 
+
+function OnNotification_ResetAllModel(objs)
+	local curHero,leftHero,rightHero = objs[0],objs[1],objs[2]
+	local leftEnable = leftHero ~= nil
+	local rightEnable = rightHero ~= nil
+	if leftHero == nil or leftHero.clear then
+		DestroyModel(leftModelObj,leftGroupName)
+		leftModelObj = nil
+	end
+	if rightHero == nil or rightHero.clear then
+		DestroyModel(rightModelObj,leftGroupName)
+		rightModelObj = nil
+	end
+	ShowAllModel(curHero,leftHero,rightHero)
+	leftBtn.obj:SetSelfActive(leftEnable)
+	rightBtn.obj:SetSelfActive(rightEnable)
+end
+
+function OnNotification_RefreshSwitchBtns(objs)
+	leftBtn.obj:SetSelfActive(objs[0])
+	rightBtn.obj:SetSelfActive(objs[1])
+	lockBtnObj.isOn = objs[2]
+	putOnSoulImprintItemBtnObj:SetSelfActive(objs[3])
+end
+
+function OnNotification_ResetPos()
+	ResetModelPos()
+end
+
+function OnNotification_RefreshSkill(objs)
+	skillGrid:RefreshItemSlots(objs[0],self.gameObject,"SkillItemSlot")
+end 
+
+function OnLeftBtnClick(sender)
+	if waitSwitchAnim then
+		return
+	end 
+	SetDragEnable(false)
+	self:SendCommand("SwitchPos", true)
+end
+
+function OnRightBtnClick(sender)
+	if waitSwitchAnim then
+		return
+	end 
+	SetDragEnable(false)
+	self:SendCommand("SwitchPos", false)
+end
+
+function OnLockBtnClick(sender)
+	self:SendCommand("LockHero")
+end 
+
+function OnShareBtnClick(sender)
+	self:SendCommand("ShareHero")
+end
+
+function OnResetBtnClick(sender)
+	self:SendCommand("OpenResetHeroView")
+end
+
+function OnAttackBtnClick(sender)
+	doAttackSkeleton = modelObj.transform:GetChild(0):GetComponent(CLS_SKELETONGRAPHIC)
+	doAttackSkeleton:PlayAnimation("attack_1", false, function()
+		if doAttackSkeleton then
+			doAttackSkeleton:PlayAnimation("stand", true);
+			doAttackSkeleton = nil
+		end
+	end);
+end
+
+---灵魂纹章点击事件
+function OnPutOnSoulImprintItemBtnClick()
+	self:SendCommand("OpenPutSoulImprintItemOnView")
+end
+
+function OnSkillGridItemClick(obj)
+	utils.OpenSkillTipView(self, obj.m_data)
+end
+
+function OnNotification_CloseHeroShowView(objs)
+	Close()
+end
+
+function OnMaskClick(sender)
+	Close()
+end 
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close()
+	heroTogGroup:SetAllTogglesOff()
+	self:SendCommand("CloseHeroShowView")
+	self:HideView("HeroRatingView")		
+	self:HideView(self.gameObject.name)
+end 
+
+function OnClose()
+	ClearAllModel()
+	modelRoot:SetSelfActive(false)
+	leftModelRoot:SetSelfActive(false)
+	rightModelRoot:SetSelfActive(false)
+
+	if leftBtnTweener then
+		leftBtnTweener:DoKill(true)
+	end
+	if rightBtnTweener then
+		rightBtnTweener:DoKill(true)
+	end
+	leftBtn.trans:ResetLocalPosition(leftBtn.initPos)
+	rightBtn.trans:ResetLocalPosition(rightBtn.initPos)
+	raceBg:SetSelfActive(false)
+end
+
+function CheckBtn()
+	return checkBtn
+end

@@ -1,0 +1,61 @@
+
+Í	
+WorldBossData.protoWorldBossDatastage.protoUnion.protoplayerData.proto""
+GetWorldBossReq
+useless ("†
+GetWorldBossResp+
+	worldBoss (2.WorldBossData.WorldBoss
+status (
+endTime (
+payCount (
+
+rewardTime ("@
+	WorldBoss
+
+id (
+buff (
+curHp (
+
+hp ("P
+ChallengeBossReq)
+formationPos (2.stage.FormationPos
+	sixManPos ("
+
+GetRankReq
+count ("{
+GetUnionScoreRankResp'
+	rankItems (2.Union.UnionRankItem(
+
+myRankItem (2.Union.UnionRankItem
+endTime ("s
+GetUnionMemberRankResp+
+	rankItems (2.Union.MemberWarRankInfo,
+
+myRankItem (2.Union.MemberWarRankInfo"
+GmReq
+parm ("
+GmResp
+status ("Œ
+WorldBossPlayerInfo
+lastChallengeTime (
+payCount (
+dailyChallengeCount (#
+dailyChallengeRecoveryCount ("
+dailyChallengeRecoveryTime ($
+sixMan (2.playerData.HeroItem
+sixManCombat (
+sixManCount	 (
+	sixManPos
+ ("M
+SixManListReq)
+formationPos (2.stage.FormationPos
+	sixManPos ("@
+SixManListResp.
+list (2 .Union.UnionMemberWithCombatResp"<
+	SixManReq
+zone (	
+userid (	
+	sixManPos ("
+
+SixManResp
+status (

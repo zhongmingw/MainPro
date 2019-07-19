@@ -1,0 +1,673 @@
+local HeroAttrData = require "HeroAttrData"
+
+local heroRefineDataFromTbl
+
+local curHero
+local curHeroArr
+local allHeroArr
+
+local curMaterialArr
+local curSelectedMaterialArr 
+local tmpSelectedMaterialArr
+local ownMaterialArr
+local allMaterialArr
+
+local curConsumeArr
+
+local matType  --点击材料英雄的4个弹窗  1 2 3 4
+
+local curRace = 0
+
+local heroSimpleInfoShow = false
+
+local function GetTopData()
+    return appData:checkData("PlayerInfo").stepStoneCoin
+end
+
+local function GetHeroBreakMatDataFromStr(str)
+    local infos = SplitString(str, ",")
+    local data = GetHeroMatData(tonumber(infos[0]), tonumber(infos[2]), tonumber(infos[1]))
+    return data
+end
+
+local function UpdateBreakMaterialData()
+    local tbl = ResTblContainer:GetTable(HeroBreak.tblName)
+    local infos = tbl:GetRow(tostring(curHero.heroId), HeroBreak.main, HeroBreak.material1, HeroBreak.material2, HeroBreak.material3, HeroBreak.other)
+    for i,curMat in ipairs(curMaterialArr) do
+        local mat = GetHeroBreakMatDataFromStr(infos[i-1])
+        curMat.heroId = mat.heroId
+        curMat.typeId = mat.typeId
+        curMat.count = mat.count
+        curMat.raceId = mat.raceId
+        curMat.quality = mat.quality
+        curMat.putMatList = table.copy(mat.putMatList)
+        curMat.distillationStar = mat.distillationStar
+        curMat.type = mat.type
+    end
+end
+
+local function UpdateComposeMaterialData()
+    local tbl=ResTblContainer:GetTable(HeroBase.actorTbl)
+    for i,curMat in ipairs(curMaterialArr) do
+        local mat = GetHeroMatData(heroRefineDataFromTbl[curHero.heroId][i].id,heroRefineDataFromTbl[curHero.heroId][i].count)
+        curMat.heroId = mat.heroId
+        curMat.typeId = mat.typeId
+        curMat.count = mat.count
+        curMat.putMatList = table.copy(mat.putMatList)
+        curMat.distillationStar = mat.distillationStar
+        curMat.quality = mat.quality
+        curMat.raceId = mat.raceId
+        curMat.type = mat.type
+    end
+end
+
+local function UpdateCurConsume(isBreak)
+    if isBreak then
+        curConsumeArr = GetRewardFromTbl(ResTblContainer:GetPropToStr(curHero.heroId,HeroBreak.other,HeroBreak.tblName))
+    else
+        curConsumeArr = {{
+            typeId = ItemTypeEnum.Resource,
+            id = ResourceEnum.GreenSoul,
+            count = 0
+        }}
+    end
+end
+
+
+local function DoComposeHero()
+    local req = {}
+    req.id = curHero.heroId
+    req.mainMaterialId = curMaterialArr[1].putMatList[1].uid
+    req.subMaterial1 = {}
+    for i,mat in ipairs(curMaterialArr[2].putMatList) do
+        --print("mat1=>",mat.uid)
+        table.insert(req.subMaterial1,mat.uid)
+    end
+    req.subMaterial2 = {}
+    for i,mat in ipairs(curMaterialArr[3].putMatList) do
+        --print("mat2=>",mat.uid)
+        table.insert(req.subMaterial2,mat.uid)
+    end
+    req.subMaterial3 = {}
+    for i,mat in ipairs(curMaterialArr[4].putMatList) do
+        --print("mat3=>",mat.uid)
+        table.insert(req.subMaterial3,mat.uid)
+    end
+    HttpRequest("composeHero","ComposeHeroReq","ComposeHeroResp",req,OnCompose)
+end
+
+local function DoBreakHero()
+    local req = {
+        id = curHero.heroId,
+        mainMaterialUId = curMaterialArr[1].putMatList[1].uid,
+        subMaterial1 = {},
+        subMaterial2 = {},
+        subMaterial3 = {}
+    }
+    for i,v in ipairs(curMaterialArr[2].putMatList) do
+        table.insert(req.subMaterial1, v.uid)
+    end
+    for i,v in ipairs(curMaterialArr[3].putMatList) do
+        table.insert(req.subMaterial2, v.uid)
+    end
+    for i,v in ipairs(curMaterialArr[4].putMatList) do
+        table.insert(req.subMaterial3, v.uid)
+    end
+    HttpRequest("heroBreak","HeroBreakReq","HeroBreakResp",req,OnCompose)
+end
+
+function DoInit()
+    -- body
+    heroRefineDataFromTbl = GetHeroRefineDataFromTbl()
+end
+
+function InitProperties()
+    -- body
+end
+
+function DoEnable()
+    -- body
+end
+
+function RefreshRedFlag()
+    local result = CheckRedTipHeroCompose(curHeroArr,nil,true)
+    local redHeros = {}
+    for i,v in ipairs(curHeroArr) do
+        if v.flag ~= (result[v.heroId] ~= nil) then
+            v.flag = result[v.heroId]
+            table.insert(redHeros,v)
+        end
+    end
+    self:SendNotification("RefreshRedFlag",redHeros)
+end
+
+function OnCommand_InitHeroComposeData(objs)
+    InitHeroData()
+    curHeroArr = allHeroArr
+    self:SendNotification("RefreshHeroComposeView",curHeroArr)
+    self:SendNotification("RefreshTopView",GetTopData())
+    RefreshRedFlag()
+end
+
+function InitHeroData()
+    allHeroArr = {}
+    for i,id in ipairs(heroRefineDataFromTbl.ids) do
+        if CheckHeroOpen(global_heroBaseArr[id].id) then
+            local composeHero = {}
+            composeHero.heroId = global_heroBaseArr[id].id
+            composeHero.model = global_heroBaseArr[id].model
+            composeHero.title = global_heroBaseArr[id].title
+            composeHero.icon = global_heroBaseArr[id].icon
+            composeHero.job = global_heroBaseArr[id].job
+            composeHero.group = global_heroBaseArr[id].group
+            composeHero.quality = global_heroBaseArr[id].quality
+            composeHero.grade = 1
+            composeHero.level = 1
+            composeHero.showBaseAttr = true
+            composeHero.skill = GetHeroSkillArr(composeHero)
+            composeHero.isBreak = false
+            table.insert(allHeroArr,composeHero)
+        end
+    end
+
+    --break hero
+    local heroBreaktbl = ResTblContainer:GetTable(HeroBreak.tblName)
+    local ids = heroBreaktbl:GetCol(HeroBreak.id)
+    for i = 0, ids.Length-1 do
+        local heroId = tonumber(ids[i])
+        local isOpen = heroBreaktbl:GetInt(heroId, HeroBreak.isOpen)
+        if isOpen == 1 and CheckHeroOpen(heroId) then
+            local heroTbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+            local quality = heroTbl:GetInt(heroId, HeroBase.quality)
+            local breakHero = {
+                heroId = heroId,
+                model = heroTbl:Get(heroId, HeroBase.model),
+                title = heroTbl:Get(heroId, HeroBase.title),
+                job = heroTbl:GetInt(heroId, HeroBase.job),
+                group = heroTbl:GetInt(heroId, HeroBase.group),
+                quality = quality,
+                grade = 1,
+                level = 1,
+                distillationStar = GetHeroMinDistillationStar(quality),
+                distillationLevel = 0,
+                breakLevel = 0,
+                showBaseAttr = true,
+                isBreak = true
+            }
+            breakHero.fight = HeroAttrData.GetHeroFightByHero(breakHero)
+            local attrs = HeroAttrData.GetHeroAttrsByHero(breakHero)
+            breakHero.fight = GetHeroFight(breakHero)
+            breakHero.hp = attrs[HeroAttrEnum.HP].val
+            breakHero.attack = attrs[HeroAttrEnum.ATK].val
+            breakHero.def = attrs[HeroAttrEnum.DEF].val
+            breakHero.speed = attrs[HeroAttrEnum.SPEED].val
+            breakHero.skill = GetHeroSkillArr(breakHero)
+            table.insert(allHeroArr, breakHero)
+        end
+    end
+
+    table.sort(allHeroArr,SortHeroByRace)
+
+    curMaterialArr = {}
+    for i=1,4 do
+        table.insert(curMaterialArr,{})
+    end
+
+    UpdateOwnMaterial()
+
+end
+
+local function SetHeroSelect(heroId, state)
+    for i = 1, #allHeroArr do
+        if allHeroArr[i].heroId == heroId then
+            allHeroArr[i].IsSelected = state
+            return allHeroArr[i]
+        end
+    end
+end
+
+function OnCommand_ScreenHero(objs)
+    --修改：
+    local race = objs[0]
+    if curRace == race then
+        return
+    end
+    local direct = race - curRace < 0
+    curRace = race
+    self:SendNotification("ScreenAnim",curRace,direct)
+    ScreenHero()
+end
+
+function ScreenHero()
+    --修改
+    if allHeroArr == nil or #allHeroArr == 0 then
+        return
+    end
+    curHeroArr = {}
+    for i,hero in ipairs(allHeroArr) do
+        if curRace == 0 then
+            table.insert(curHeroArr, hero)
+        elseif curRace == hero.group then
+            table.insert(curHeroArr, hero)
+        end
+    end
+    self:SendNotification("ScreenHero", curHeroArr)
+    
+    RefreshRedFlag()
+end
+
+function OnCommand_SelectHero(objs)
+    local index = objs[0]
+    SelectHero(index+1)
+end
+
+function SelectHero(index)
+    if curHero == curHeroArr[index] then
+        return
+    end
+    if curHero ~= nil then
+        CancelSelectHero(curHero)
+    end
+
+    curHero = curHeroArr[index]
+    UpdateCurMaterialData(curHero.isBreak)
+    UpdateCurConsume(curHero.isBreak)
+    UpdateOwnMaterial()
+    if heroSimpleInfoShow then
+        if curHero.fight == nil then
+            curHero.fight = HeroAttrData.GetHeroFightByHero(curHero)
+            local attrs = HeroAttrData.GetHeroAttrsByHero(curHero)
+            curHero.hp = attrs[HeroAttrEnum.HP].val
+            curHero.attack =  attrs[HeroAttrEnum.ATK].val
+            curHero.def =  attrs[HeroAttrEnum.DEF].val
+            curHero.speed =  attrs[HeroAttrEnum.SPEED].val
+        end
+        self:SendNotification("RefreshSimpleInfoView",curHero)
+    end
+    self:SendNotification("RefreshComposeHero",curHero,curMaterialArr,true,true,CheckMatCount(),CheckOwnHasMat(),curConsumeArr,matType)
+    self:SendNotification("SelectHero",curHero)
+end
+
+function OnCommand_CancelSelectHero(objs)
+    local heroData = objs[0]
+    CancelSelectHero(heroData)
+end
+
+function CancelSelectHero(heroData)
+    self:SendNotification("CancelSelectHero",heroData)
+    curHero = nil
+end
+
+function UpdateCurMaterialData(isBreak)
+    if isBreak then
+        UpdateBreakMaterialData()
+    else
+        UpdateComposeMaterialData()
+    end
+end
+
+--select material logic
+function OnCommand_OpenMaterialSelect(objs)
+    if curHero == nil then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("HeroCompose_Select"))
+        return
+    end
+    matType = objs[0]
+    InitSelectMaterialData()
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        CsBridge.OpenView("HeroComposeMaterialSelectView","HeroComposeModel",false,true)
+	end, "HeroComposeMaterialSelectView")
+end
+
+function OnCommand_InitMaterialSelectData(objs)
+    self:SendNotification("InitMaterialSelectView",curSelectedMaterialArr,#curSelectedMaterialArr==0)
+end
+
+function UpdateSelectMaterialData()
+    curSelectedMaterialArr = {}
+    for i,ownMat in ipairs(ownMaterialArr) do
+        if ownMat.selectedPos == 0 or ownMat.selectedPos == matType then
+            local curMat = curMaterialArr[matType]
+            if curMat.type == HeroMatType.FixedQualityAndRace then
+                if ownMat.raceId == curMat.raceId and (ownMat.quality + ownMat.distillationStar) == (curMat.quality + curMat.distillationStar) then
+                    table.insert(curSelectedMaterialArr, ownMat)
+                end
+            else
+                if ownMat.heroId == curMat.heroId and ownMat.raceId == curMat.raceId and (ownMat.quality + ownMat.distillationStar) == (curMat.quality + curMat.distillationStar) then
+                    table.insert(curSelectedMaterialArr, ownMat)
+                end
+            end
+        end
+    end
+end
+
+function InitSelectMaterialData()
+    curSelectedMaterialArr = {}
+    tmpSelectedMaterialArr = {}
+    for i,v in ipairs(curMaterialArr[matType].putMatList) do
+        table.insert(tmpSelectedMaterialArr, v)
+    end
+    UpdateSelectMaterialData()
+end
+
+function OnCommand_InitMaterialData(objs)
+    matType = objs[0]
+    
+    curMaterialArr = ownMaterialArr[matType]
+    tmpSelectedMaterialArr = {}
+    for i,mat in ipairs(curSelectedMaterialArr[matType]) do
+        table.insert(tmpSelectedMaterialArr, mat)
+    end
+    self:SendNotification("InitMaterialData",curMaterialArr)
+end
+
+
+function UpdateOwnMaterial()
+    ownMaterialArr = {}
+
+    --add hero card
+    local tbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    local ids = tbl:GetCol(HeroBase.id)
+    for i=0, ids.Length-1 do
+        local id = tonumber(ids[i])
+        local itemId = tbl:GetInt(id,HeroBase.item)
+        if itemId ~= 0 then
+            local item = appData:checkItem("PackItem",itemId)
+            if item and item.count ~= 0 then
+                for i=1, item.count do
+                    local ownMat = {
+                        uid = -1*itemId,
+                        heroId = id,
+                        grade = 0,
+                        level = 0,
+                        distillationStar = 0,
+                        distillationLevel = 0,
+                        breakLevel = 0,
+                        raceId = tbl:GetInt(id,HeroBase.group),
+                        quality = tbl:GetInt(id,HeroBase.quality),
+                        selected = false,
+                        selectedPos = 0,
+                    }
+                    table.insert(ownMaterialArr, ownMat)
+                end
+            end        
+        end
+    end
+
+    local pbs = appData:checkAllItems("HeroItem")
+    if pbs ~= nil then
+        for i=0,pbs.Length-1 do
+            local pb = pbs[i]
+            local ownMatData = {
+                uid = pb.uid,
+                heroId = pb.heroId,
+                grade = pb.grade,
+                level = pb.level,
+                duty = pb.duty,
+                distillationStar = pb.distillationStar,
+                distillationLevel = pb.distillationLevel,
+                breakLevel = pb.breakLevel,
+                showDuty = CheckHeroInDuty(pb,GetNoDelHeroLockDuty()),
+                raceId = global_heroBaseArr[pb.heroId].group,
+                quality = global_heroBaseArr[pb.heroId].quality,
+                selected = false,
+                selectedPos = 0, --被选择的材料位置
+            }
+            table.insert(ownMaterialArr, ownMatData)
+        end
+    end
+end
+
+--------
+function OnCommand_SelectMaterial(objs)
+    local selectIndex = objs[0]
+    local selectHero = curSelectedMaterialArr[selectIndex+1]
+    if #tmpSelectedMaterialArr+1 > curMaterialArr[matType].count then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("HeroCompose_MatEnough"))
+        return
+    end
+    if ShowSoulImprintedTip(selectHero) then
+        return
+    end
+    if DownHeroFromFormation(self, selectHero, selectIndex) then
+        return
+    end
+    local index = selectIndex+1
+    SelectMaterial(index)
+end
+
+function SelectMaterial(index)
+    table.insert(tmpSelectedMaterialArr, curSelectedMaterialArr[index])
+    self:SendNotification("SelectMaterial",index)
+end
+
+function OnCommand_CancelSelectMaterial(objs)
+    local materialData = objs[0]
+    CancelSelectMaterial(materialData)
+end
+
+function CancelSelectMaterial(materialData)
+    for i=1,#tmpSelectedMaterialArr do
+        if tmpSelectedMaterialArr[i] == materialData then
+            table.remove(tmpSelectedMaterialArr,i)
+        end
+    end
+    self:SendNotification("CancelSelectMaterial",materialData)
+end
+
+function OnCommand_ConfirmSelectMaterial()
+    for i,mat in ipairs(curMaterialArr[matType].putMatList) do
+        mat.selected = false
+        mat.selectedPos = 0
+    end
+    curMaterialArr[matType].putMatList = {}
+    for i,mat in ipairs(tmpSelectedMaterialArr) do
+        mat.selected = true
+        mat.selectedPos = matType
+        table.insert(curMaterialArr[matType].putMatList, mat)
+    end
+    tmpSelectedMaterialArr = {}
+    self:SendNotification("RefreshComposeHero",curHero,curMaterialArr,false,true,CheckMatCount(),CheckOwnHasMat(),nil,matType) 
+end
+
+function OnCommand_NoSelectMaterial()
+    for i,mat in ipairs(tmpSelectedMaterialArr) do
+        self:SendNotification("CancelSelectMaterial",mat)
+    end
+    tmpSelectedMaterialArr = {}
+end
+
+function OnCommand_OpenSimpleInfoView(objs)
+    if curHero == nil then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("HeroCompose_Select"))
+        return
+    end
+    OpenSimpleInfoView()
+end
+
+function OpenSimpleInfoView(callback)
+    if not heroSimpleInfoShow then
+        if curHero.fight == nil then
+            curHero.fight = HeroAttrData.GetHeroFightByHero(curHero)
+            local attrs = HeroAttrData.GetHeroAttrsByHero(curHero)
+            curHero.hp = attrs[HeroAttrEnum.HP].val
+            curHero.attack =  attrs[HeroAttrEnum.ATK].val
+            curHero.def =  attrs[HeroAttrEnum.DEF].val
+            curHero.speed =  attrs[HeroAttrEnum.SPEED].val
+        end
+        self:SendNotification("RefreshSimpleInfoView",curHero)
+    end
+    self:SendNotification("ShowSimpleInfoEffect",heroSimpleInfoShow,callback)
+    heroSimpleInfoShow = not heroSimpleInfoShow
+end
+
+function OnCommand_OpenDetailAttr(objs)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+		local view=CsBridge.OpenView("AttrDetailView","AttrDetailModel",false,true)
+		view:SetParamDataList(curHero)
+		AddTipCanvas(view)
+	end, "AttrDetailView","AttrItemSlot")
+end
+
+function OnCommand_Compose(objs)
+    if curHero == nil then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("HeroCompose_Select"))
+        return
+    end
+    if not CheckMatCount() then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("HeroCompose_MatNoEnough"),2)
+        return
+    end
+    local breakTime = curHero.quality - DISTILL_QUALITY
+    local constArr = {
+        "MainHeroLevel",
+        "MainHeroLevel2"
+    }
+    if curHero.quality > DISTILL_QUALITY then
+        local MainHeroLevel = tonumber(GetConstValue(constArr[breakTime]) or 1)
+        if not CheckMatHasHighLevel(MainHeroLevel-1,curMaterialArr[1].putMatList) then
+            CsBridge.hintUILayer:ShowHintBox(string.format(Language:getStr("HeroCompose_NeedMainMatLevel"),MainHeroLevel),2)
+            return
+        end
+    end
+    if CheckMatHasHighLevel(1,curMaterialArr[2].putMatList,curMaterialArr[3].putMatList,curMaterialArr[4].putMatList) then
+        CsBridge.messageManager:PopMsgBox("",Language:getStr("HeroCompose_Confirm"),Language:getStr("local_cancel"),nil,Language:getStr("local_confirm"),function()
+            DoCompose(curHero.isBreak)
+        end)
+    else
+        DoCompose(curHero.isBreak)
+    end
+end
+
+function DoCompose(isBreak)
+    if isBreak then
+        DoBreakHero()
+    else
+        DoComposeHero()
+    end
+end
+
+function OnCompose(resp)
+    if resp~=nil then
+        local fxFinishedCbk = function()
+            local rewards = {}
+            table.insert(rewards,{id = curHero.heroId,typeId = ItemTypeEnum.Hero,count=1,distillationStar=curHero.distillationStar})
+            if resp.rewardItems ~= nil then
+                for i,v in ipairs(resp.rewardItems) do
+                    table.insert(rewards, v)
+                end
+            end
+            local confirmCbk = function()
+                InitHeroData()
+                ScreenHero()
+                UpdateCurMaterialData(curHero.isBreak)
+                UpdateOwnMaterial()
+                curHero = SetHeroSelect(curHero.heroId, true)
+                self:SendNotification("RefreshComposeHero",curHero,curMaterialArr,false,true,CheckMatCount(),CheckOwnHasMat(),nil,matType)    
+                self:SendNotification("RefreshTopView",GetTopData())
+                RefreshRedFlag()
+            end
+            ShowRewardReceivedTip(self, rewards, confirmCbk)
+        end
+        local refreshView = function()
+            self:SendNotification("ComposeEnd",curHero.isBreak,fxFinishedCbk)
+        end
+        if not heroSimpleInfoShow then
+            refreshView()
+        else
+            OpenSimpleInfoView(refreshView)
+        end
+    end
+end
+
+function CheckMatCount()
+    for i,mat in ipairs(curMaterialArr) do
+        if #mat.putMatList < mat.count then
+            return false
+        end
+    end
+    return true
+end
+
+function CheckOwnHasMat()
+    local result = {}
+    for i,mat in ipairs(curMaterialArr) do
+        local compareFunc = nil
+        if mat.type == HeroMatType.FixedQualityAndRace then
+            compareFunc = function(data) 
+                if (data.quality + data.distillationStar) == (mat.quality + mat.distillationStar) and data.raceId == mat.raceId and not data.selected then
+                    return true
+                end
+            end
+        else
+            compareFunc = function(data) 
+                if data.heroId == mat.heroId and (data.quality + data.distillationStar) == (mat.quality + mat.distillationStar) and data.raceId == mat.raceId and not data.selected then
+                    return true
+                end
+            end
+        end
+        table.insert(result, mat.count <= CheckItemCountInTb(ownMaterialArr,mat,compareFunc))
+    end
+    return result
+end
+
+function GetHeroRefineDataFromTbl()
+    local data = {}
+    data.ids = {}
+    local ids = GetIds(HeroRefine.tblName)
+    local tbl=ResTblContainer:GetTable(HeroRefine.tblName)
+    for i=0,ids.Length-1 do
+        local id = tonumber(ids[i])
+        local isOpen = tbl:GetInt(id,HeroRefine.isOpen)
+        if isOpen == 1 then
+            table.insert(data.ids,id)
+            data[id] = {}
+            local infos = tbl:GetRow(tostring(id),HeroRefine.mainId,HeroRefine.subId1,HeroRefine.subId2,HeroRefine.subId3)
+            local mainMat = {
+                id = tonumber(infos[0]),
+                typeId = 3,
+                count = 1
+            }
+            table.insert(data[id], mainMat)
+            local sub1Str = SplitString(infos[1],",")
+            local subMat1 = {
+                id = tonumber(sub1Str[0]),
+                typeId = 3,
+                count = tonumber(sub1Str[1])
+            }
+            table.insert(data[id], subMat1)
+            local sub2Str = SplitString(infos[2],",")
+            local subMat2 = {
+                id = tonumber(sub2Str[0]),
+                typeId = 3,
+                count = tonumber(sub2Str[1])
+            }
+            table.insert(data[id], subMat2)
+            local sub3Str = SplitString(infos[3],",")
+            local subMat3 = {
+                id = tonumber(sub3Str[0]),
+                typeId = 2,
+                count = tonumber(sub3Str[1])
+            }
+            table.insert(data[id], subMat3)
+        end
+    end
+    return data
+end
+
+function DoOnExit()
+    HeroAttrData = nil
+    heroRefineDataFromTbl = nil
+    curHero = nil
+    curHeroArr = nil
+    allHeroArr = nil
+    curMaterialArr = nil
+    curSelectedMaterialArr  = nil
+    tmpSelectedMaterialArr = nil
+    ownMaterialArr = nil
+    allMaterialArr = nil
+    curConsumeArr = nil
+    matType  = nil
+    curRace  = nil
+    heroSimpleInfoShow  = nil
+end

@@ -1,0 +1,329 @@
+require "JewelUtils"
+local NO_OWNER_UID = 0
+local TOTAL_NUM = 4
+local curOwnUpJewelArr = {}
+local selectedArr = {}
+local tmpSelectJewel
+local curJewelId
+local curMatPos
+local function UpdateCurOwnUpJewelArr()
+    curOwnUpJewelArr = {}
+    local pbs = appData:checkAllItems("JewelItem")
+    if pbs then
+        for i=0, pbs.Length-1 do
+            local pb = pbs[i]
+            local jewel = {
+                uid = pb.uid,
+                id = pb.id,
+                owner = pb.owner,
+                typeId = ItemTypeEnum.Jewel,
+            }
+            table.insert(curOwnUpJewelArr, jewel)
+        end
+    end
+end
+
+local function GetJewelDataFromTbl()
+    local data = {}
+    local tbl = ResTblContainer:GetTable(Jewel.tblName)
+    local ids = tbl:GetCol(Jewel.id)
+    for i = 0, ids.Length - 1 do
+        local id = tonumber(ids[i])
+        local infos = tbl:GetRow(id, Jewel.name, Jewel.icon, Jewel.quality, Jewel.star, Jewel.type)
+        data[id] = {
+            id = id,
+            typeId = ItemTypeEnum.Jewel,
+            name = infos[0],
+            icon = infos[1],
+            quality = tonumber(infos[2]),
+            star = tonumber(infos[3]),
+            type = tonumber(infos[4])
+        }
+    end
+    return data
+end
+
+local function GetJewelEquipViewData(jewelData, jewel)
+    if jewel.id == 0 then
+        return
+    end
+    jewelData.icon = jewelDataFromTbl[jewel.id].icon
+    jewelData.quality = jewelDataFromTbl[jewel.id].quality
+    jewelData.type = jewelDataFromTbl[jewel.id].type
+    jewelData.star = jewelDataFromTbl[jewel.id].star
+    jewelData.typeId = ItemTypeEnum.Jewel
+end
+
+local function GetJewelData(jewel)
+    if jewel == nil then
+        return nil
+    end
+    local jewelData = table.copy(jewel)
+    if jewelData.id ~= 0 then
+        GetJewelEquipViewData(jewelData, jewel)
+        jewelData.isEquip = jewel.owner and jewel.owner ~= NO_OWNER_UID or false
+    end
+    return jewelData
+end
+
+local function GetSelectedArrLen()
+    local len = 0
+    for k,v in pairs(selectedArr) do
+        len = len + 1
+        curJewelId = v.mainId
+    end
+    return len
+end
+
+local function GetComposeIds()
+    local mainIds = ResTblContainer:GetIds(JewelComposeTbl.tblName)
+    local JewelTbl = ResTblContainer:GetTable(Jewel.tblName)
+    local composeTbl = ResTblContainer:GetTable(JewelComposeTbl.tblName)
+    local composeIds = {}
+    local ids = ResTblContainer:GetIds(Jewel.tblName)
+    for i=0,mainIds.Length-1 do
+        local mainId = tonumber(mainIds[i])
+        local mainInfos = composeTbl:GetRow(mainId, JewelComposeTbl.quality, JewelComposeTbl.type, JewelComposeTbl.subType)
+        local quality,type,subType = mainInfos[0],mainInfos[1],mainInfos[2]
+        local id_quality,id_type,id_subType
+        for j=0,ids.Length-1 do
+            local id = tonumber(ids[j])
+            local idInfos = JewelTbl:GetRow(id, Jewel.quality, Jewel.type, Jewel.subType)
+            id_quality,id_type,id_subType = idInfos[0],idInfos[1],idInfos[2]
+            if id_quality == quality and id_type == type and id_subType == subType then
+                table.insert(composeIds,{id = id,mainId = mainId})
+            end
+        end
+    end
+
+    return composeIds
+end
+
+local function GetSelectComposeJewelMatsData()
+    UpdateCurOwnUpJewelArr()
+    local arr = {}
+    local composeIds = GetComposeIds()
+    for _,ids in pairs(composeIds) do
+        for k,v in pairs(curOwnUpJewelArr) do
+            if tonumber(v.id) == tonumber(ids.id) then
+                local jewel = GetJewelData(v)
+                jewel.mainId = ids.mainId
+                jewel.IsSelected = selectedArr[curMatPos] and jewel.uid == selectedArr[curMatPos].uid
+                if jewel.IsSelected then
+                    tmpSelectJewel = jewel
+                end
+                if GetSelectedArrLen() == 0 then
+                    table.insert(arr,jewel)
+                elseif curJewelId == jewel.mainId then
+                    local flag = false--其它孔位是否已选择
+                    for pos,selected in pairs(selectedArr) do
+                        if selected.uid == jewel.uid and pos ~= curMatPos then
+                            flag = true
+                            break
+                        end
+                    end
+                    if not flag then
+                        table.insert(arr,jewel)
+                    end
+                end
+            end
+        end
+    end
+    local tempTb = {}
+    for k,v in pairs(arr) do
+        local mainId = v.mainId
+        if tempTb[mainId] then
+            if not v.isEquip then
+                tempTb[mainId].count = tempTb[mainId].count + 1
+            end
+        else
+            if not v.isEquip then
+                tempTb[mainId] = table.copy(v)
+                tempTb[mainId].count = 1
+            end
+        end
+    end
+    for k,v in pairs(arr) do
+        local mainId = v.mainId
+        if tempTb[mainId] and (tempTb[mainId].count + #selectedArr) >= TOTAL_NUM then
+            arr[k].redFlag = true
+        end
+    end
+    return arr
+end
+
+local function ShowMsgBox(desp, confirmCallback)
+    CsBridge.messageManager:PopMsgBox(Language:getStr("local_confirm"),
+    desp,
+    Language:getStr("local_cancel"),nil,
+    Language:getStr("local_confirm"),confirmCallback)
+end
+
+function DoInit()
+    jewelDataFromTbl = GetJewelDataFromTbl()
+end
+
+function OnCommand_OpenJewelComposeSelectView(objs)
+    local index = objs[0]
+    curMatPos = index + 1
+    tmpSelectJewel = nil
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        CsBridge.OpenView("JewelSelectView", "JewelComposeModel")
+    end,"JewelSelectView", "ItemSlot")
+end
+
+function OnCommand_InitItemSelectData(objs)
+    local arr = GetSelectComposeJewelMatsData()
+    self:SendNotification("RefreshItemSelectView", arr, Language:getStr("Title_JewelMatSelect"))
+end
+
+local function CancelSelectJewelMat(jewel)
+    jewel.IsSelected = false
+    tmpSelectJewel = nil
+    self:SendNotification("RefreshSingleSelectItem", jewel)
+end
+
+function OnCommand_SelectItem(objs)
+    local jewel = objs[0]
+    if jewel.IsSelected then
+        CancelSelectJewelMat(jewel)
+        return
+    end
+    jewel.IsSelected = true
+    if tmpSelectJewel then
+        CancelSelectJewelMat(tmpSelectJewel)
+    end
+    tmpSelectJewel = jewel
+    self:SendNotification("RefreshSingleSelectItem", jewel)
+end
+
+function OnCommand_GetMainIcon(objs)
+    local mainId = objs[0]
+    local extraStr = ResTblContainer:GetPropToStr(mainId,JewelComposeTbl.extra,JewelComposeTbl.tblName)
+    local infos = string.split(extraStr, ",")
+    resId = tonumber(infos[1])
+    num = tonumber(infos[2])
+    mainIcon = jewelDataFromTbl[tonumber(mainId)].icon
+    self:SendNotification("RefreshMainIcon",mainIcon,resId,num)
+end
+
+function OnCommand_ConfirmSelectItem(objs)
+    if tmpSelectJewel then
+        selectedArr[curMatPos] = tmpSelectJewel
+    else
+        selectedArr[curMatPos] = nil
+    end
+    self:SendNotification("RefreshJewelData",selectedArr)
+end
+
+function OnCommand_CancelConfirmSelectItem(objs)
+    
+end
+
+function OnCommand_ClearSelectedArr()
+    selectedArr = {}
+end
+
+function OnCommand_ComposeJewel()
+    if GetSelectedArrLen() == TOTAL_NUM then
+        local req = {}
+        req.jewelUids = {}
+        req.mainId = nil
+        local hasEquip = false
+        for k,v in pairs(selectedArr) do
+            if v.isEquip then
+                hasEquip = true
+            end
+            req.mainId = v.mainId
+            table.insert(req.jewelUids,v.uid)
+        end
+        if req.mainId then
+            if hasEquip then
+                ShowMsgBox(Language:getStr("Jewel_ComposeHasEquip_Confirm"), function() 
+                    HttpRequest("jewelCompose","JewelComposeReq","JewelComposeResp",req,function(resp)
+                        if resp then
+                            selectedArr = {}
+                            self:SendNotification("ComposeSuccess",resp.jewelItems,mainIcon)
+                            self:SendNotification("RefreshJewelData",selectedArr)
+                            self:SendNotification("RefreshRedFlag")
+                            curJewelId = nil
+                        end
+                    end)
+                end)
+            else
+                HttpRequest("jewelCompose","JewelComposeReq","JewelComposeResp",req,function(resp)
+                    if resp then
+                        selectedArr = {}
+                        self:SendNotification("ComposeSuccess",resp.jewelItems,mainIcon)
+                        self:SendNotification("RefreshJewelData",selectedArr)
+                        self:SendNotification("RefreshRedFlag")
+                        curJewelId = nil
+                    end
+                end)
+            end
+        end
+    else
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("Jewel_Compose_NotEnough"))
+    end
+end
+
+function OnCommand_PlacedJewel()
+    -- body
+    selectedArr = {}
+    local arr = GetSelectComposeJewelMatsData()
+    local tempTb = {}
+    for k,v in pairs(arr) do
+        local mainId = v.mainId
+        if tempTb[mainId] then
+            if not v.isEquip then
+                tempTb[mainId].count = tempTb[mainId].count + 1
+                table.insert(tempTb[mainId].uids,v.uid)
+            end
+        else
+            if not v.isEquip then
+                tempTb[mainId] = v
+                tempTb[mainId].uids = {}
+                table.insert(tempTb[mainId].uids,v.uid)
+                tempTb[mainId].count = 1
+            end
+        end
+    end
+    local canComposeTab = {}
+    for k,v in pairs(tempTb) do
+        local extraStr = ResTblContainer:GetPropToStr(v.mainId,JewelComposeTbl.extra,JewelComposeTbl.tblName)
+        local infos = string.split(extraStr, ",")
+        local typeId = infos[0]
+        local id = tonumber(infos[1])
+        local num = tonumber(infos[2])
+        if v.count >= TOTAL_NUM and CheckResEnough(id,num,false) then
+            table.insert(canComposeTab,v)
+        end
+    end
+    if #canComposeTab == 0 then
+        self:SendNotification("RefreshJewelData",selectedArr)
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("Jewel_Compose_NoJewel"))
+        return
+    end
+    table.sort(canComposeTab,function(a,b)
+        if a.quality ~= b.quality then
+            return a.quality > b.quality
+        else
+            return a.type < b.type
+        end
+    end)
+    local selectData = canComposeTab[1]
+    for i=1,TOTAL_NUM do
+        selectedArr[i] = table.copy(selectData)
+        local uid = selectData.uids[i]
+        selectedArr[i].uid = uid
+    end
+    self:SendNotification("RefreshJewelData",selectedArr)
+end
+
+function DoOnExit()
+    curOwnUpJewelArr = nil
+    selectedArr = nil
+    tmpSelectJewel = nil
+    curJewelId = nil
+    curMatPos = nil
+end

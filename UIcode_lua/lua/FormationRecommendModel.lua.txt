@@ -1,0 +1,106 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-02-18 15:33:05
+
+local FormationUtils = require "FormationUtils"
+
+local Lineupcommend = {
+    tblName = "LineUpCommend",
+    id = "id",
+    description = "description",
+    type = "type",
+    lineUp = "lineUp",
+    walkthrough = "walkthrough",
+    isOpen = "isOpen"
+}
+
+local formationRecommendDataFromTbl
+
+local function GetUpHeroArrFromTblStr(str)
+    local arr = {}
+    local results = SplitString(str, ";")
+    for i=0,results.Length-1 do
+        local result = SplitString(results[i], ",")
+        local hero = {
+            heroId = tonumber(result[0]),
+            level = 1,
+            grade = 1,
+            distillationStar = tonumber(result[1]),
+            distillationLevel = 0
+        }
+        table.insert(arr, hero)
+    end
+    return arr
+end
+
+local function GetFormationRecommendDataFromTbl() 
+    local data = {}
+    local tbl = ResTblContainer:GetTable(Lineupcommend.tblName)
+    local ids = tbl:GetCol(Lineupcommend.id)
+    for i=0,ids.Length-1 do
+        local id = tonumber(ids[i])
+        local infos = tbl:GetRow(id,Lineupcommend.description,Lineupcommend.type,Lineupcommend.lineUp,Lineupcommend.walkthrough,Lineupcommend.isOpen)
+        local isOpen = tonumber(infos[4])
+        if isOpen == 1 then
+            local name = infos[0]
+            local type = tonumber(infos[1])
+            local upHeroArr = GetUpHeroArrFromTblStr(infos[2])
+            local desp = infos[3]
+            local recommend = {
+                id = id,
+                name = name,
+                type = type,
+                upHeroArr = upHeroArr,
+                desp = desp
+            }
+            table.insert(data, recommend)
+        end
+    end
+    return data
+end
+
+local function GetFormationRecommendData()
+    local arr = {}
+    for i,v in ipairs(formationRecommendDataFromTbl) do
+        local recommend = table.copy(v)
+        recommend.anim = false
+        recommend.showDesp = false
+        recommend.auraArr = FormationUtils.GetAuraArr()
+        recommend.curAura = FormationUtils.CalcAura(recommend.auraArr, recommend.upHeroArr)
+        table.insert(arr, recommend)
+    end
+    return arr
+end
+
+function DoInit()
+    formationRecommendDataFromTbl = GetFormationRecommendDataFromTbl()
+end
+
+function OnCommand_InitFormationRecommendData(objs)
+    local arr = GetFormationRecommendData()
+    self:SendNotification("RefreshFormationRecommendView", arr)
+end
+
+function OnCommand_OpenRecommend(objs)
+    local recommend = objs[0]
+    recommend.showDesp = not recommend.showDesp
+    recommend.anim = true
+    self:SendNotification("RefreshSingleFormationRecommend", recommend)
+end
+
+function OnCommand_OpenAura(objs)
+    local recommend = objs[0]
+    CsBridge.CacheAssetsByModule(self.Module,
+    function()
+		local view = CsBridge.OpenView("aureoleView",self.ModelName,true,true)
+		view:SetParamDataList(recommend.auraArr, recommend.curAura)
+		view.transform.parent:SetAsLastSibling()
+	end, "aureoleView","aureoleItemSlot")
+end
+
+function DoOnExit()
+    Lineupcommend = nil
+    formationRecommendDataFromTbl = nil
+    FormationUtils = nil
+end

@@ -1,0 +1,47 @@
+import "stage.proto";
+package DailyRewardData;
+
+message DailyRewardInfo 
+{
+	required int32 round = 1;
+	repeated int32 takenIds = 2;
+	required int32 maxAvaliableId = 3;
+	required int32 lastRefreshTime = 4;	
+}
+
+message RefreshDailyRewardReq 
+{
+	required int32 id = 1;
+}
+message RefreshDailyRewardResp 
+{
+	required int32 result = 1;
+}
+
+message TakeDailyRewardReq 
+{
+	required int32 id = 1;
+}
+message TakeDailyRewardResp 
+{
+	repeated stage.RewardItem rewardItems = 1;
+}
+
+message GMResetDailyRewardRoundReq 
+{
+	required int32 round =1;
+	required int32 id =2;
+}
+message GMResetDailyRewardRoundResp 
+{
+	required int32 result = 1;
+}
+
+
+
+
+
+
+
+
+

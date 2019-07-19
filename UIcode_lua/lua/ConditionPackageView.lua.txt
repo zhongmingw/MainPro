@@ -1,0 +1,132 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-11-16 10:13:11
+
+local isInit = false
+
+local iconImg
+local titleImg
+local oldPriceTxt
+local newPriceTxt
+local rewardGrid
+local defaultSpriteName
+local timerTxt
+local despTxt
+
+local effect
+
+local TICKER_NAME = "ticker_ConditionPackageView"
+
+local exitCallback
+
+function DoInit()	
+    self.Shadow = 2
+    self.Anim = 8
+end
+
+function InitUI()
+    iconImg = self:GetGameObjectAtPath("Center/IconImg")
+    titleImg = self:GetGameObjectAtPath("Center/titleImg")
+    oldPriceTxt = self:GetComponentAtPath("Center/OldPriceTxt",CLS_TEXT)
+    newPriceTxt = self:GetComponentAtPath("Center/NewPriceTxt",CLS_TEXT)
+    rewardGrid = self:GetComponentAtPath("Center/ScrollRect/Viewport/RewardGrid",CLS_UI_ITEM_GRID)
+    defaultSpriteName = self:GetComponentAtPath("Center/IconImg",CLS_IMAGE).sprite.name
+    timerTxt = self:GetComponentAtPath("Center/TimerTxt",CLS_TEXT)
+    despTxt = self:GetComponentAtPath("Center/DespTxt",CLS_TEXT)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitConditionPackageData")
+end
+
+function SetParamDataList(objs)
+    local config = objs[0]
+    exitCallback = objs[1]
+    self:SendCommand("InitPackageConfigData",config)
+end
+
+function IsSetAnchor()
+    self.transform.parent:SetAsLastSibling()
+    return true
+end
+
+function OnClose()
+    Timer:StopTicker(TICKER_NAME)
+    CsBridge.IconData.SetIconByName(iconImg,defaultSpriteName)
+    iconImg:SetSelfActive(false)
+    titleImg:SetSelfActive(false)
+    despTxt.text = ""
+    effect = false
+    rewardGrid:ClearItems()
+    self:SendCommand("CloseView")
+end
+
+function OnNotification_RefreshConditionPackageView(objs)
+    local data = objs[0]
+    CsBridge.IconData.SetIconByName(iconImg,data.icon,false,true)
+    titleImg:SetSelfActive(true)
+    oldPriceTxt.text = string.format(Language:getStr("OldPrice"),data.oldPrice)
+    newPriceTxt.text = string.format(Language:getStr("NewPrice"),data.newPrice)
+    despTxt.text = data.desp
+    effect = data.effect
+    rewardGrid:RefreshItemSlots(data.rewards,self.gameObject,"ItemSlot")
+    Timer:AddTicker(TICKER_NAME, data.targetTime,function(targetTime)
+        if self == nil or self.Module == nil then
+            return
+        end
+        timerTxt.text = string.format(Language:getStr("ConditionPackageCountDownWithTime"),CheckTimeRemain(targetTime,false))
+    end,function()
+        self:SendCommand("ConditionPackageTimeOver")
+    end,nil)
+end
+
+function OnRewardGridItemSlotClick(obj)
+    local data = obj.m_data
+    ShowTip(self,data.typeId,data.id)
+end
+
+function OnBuyBtnClick(sender)
+    self:SendCommand("BuyConditionPackage")
+end
+
+function OnNotification_CloseConditionPackageView(objs)
+    self:HideView(self.gameObject.name)
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name)
+    ShowEffect()
+end
+
+function OnMaskClick(sender)
+    self:HideView(self.gameObject.name)
+    ShowEffect()  
+end
+
+function ShowEffect()
+    if effect then
+        local view = CsBridge.OpenView("ConditionPackageEffectView","ConditionPackageModel",false,true)
+        view:SetParamDataList(exitCallback)
+    end
+end
+
+function DoExit()
+    Timer:StopTicker(TICKER_NAME)
+    isInit = nil
+    iconImg = nil
+    titleImg = nil
+    oldPriceTxt = nil
+    newPriceTxt = nil
+    rewardGrid = nil
+    defaultSpriteName = nil
+    timerTxt = nil
+    despTxt = nil
+    effect = nil
+    TICKER_NAME = nil
+    exitCallback = nil
+end

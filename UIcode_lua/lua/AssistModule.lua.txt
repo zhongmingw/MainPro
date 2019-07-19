@@ -1,0 +1,19 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-08-15 14:01:05
+
+function DoInit()
+end
+
+function AssetNames(objs)
+    local arr = {"AssistView","AssistItemSlot","SubAssistItemSlot"}
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    self:OpenView("AssistView", "AssistModel")
+    if(onFinished ~= nil) then
+        onFinished()
+    end
+end

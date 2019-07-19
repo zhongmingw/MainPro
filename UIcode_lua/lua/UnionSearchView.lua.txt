@@ -1,0 +1,61 @@
+--[[
+	file: UnionSearchView.lua
+	author: hangang
+	description: View for union search
+]]
+
+require "UnionItemSlot"
+
+local nameInput
+local itemsGrid
+
+local viewData
+
+function DoInit()
+	self.Shadow = 0
+	InitUI()
+end 
+
+function InitUI()
+	local path = "Center/unionSV/ScrollRect/Viewport/Grid"
+	itemsGrid = self:GetComponentAtPath(path ,CLS_UI_ITEM_GRID)
+	path = "Top/Input"
+	nameInput = CsBridge.GetInputFromView(self, path)
+end
+
+function OnNotification_RefreshSearchResult(objs)
+	viewData = objs[0]
+	RefreshView(viewData)
+end
+
+function RefreshView(data)
+	itemsGrid:RefreshItemSlots(data, self.gameObject, "UnionItemSlot")
+end
+
+function OnGridApplyBtnClick(itemSlot)
+	local itemData = itemSlot.m_data
+	local unionID = itemData.id
+	self:SendCommand("ApplyUnion", unionID)
+end
+
+function OnSearchBtnClick(sender)
+	local name = nameInput.text
+	if name == nil or name == "" then
+		local hint = CS.Client.Library.HintUILayer.instance
+		hint:ShowHintBox(Language:getStr("EmptyUnionNameInput"))
+		return
+	end
+
+	self:SendCommand("SearchUnion", name)
+end
+
+function OnNotification_CloseUnionApplyView(obj)
+	self:HideView("UnionSearchView")
+end
+
+function DoExit()
+	nameInput = nil
+	itemsGrid = nil
+
+	viewData = nil
+end

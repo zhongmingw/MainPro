@@ -1,0 +1,76 @@
+local HeroItemSlot=require "HeadItemSlot"
+local RaceItemSlot=require "RaceItemSlot"
+local JobItemSlot=require "JobItemSlot"
+local SortItemSlot=require "SortItemSlot"
+
+local heroGrid
+local heroArr={}
+local DirtyFun
+
+function DoInit()
+	heroGrid = self.transform:Find("obj/Content/HeroSc/HeroScrollRect/Viewport/HeroGrid"):GetComponent("UIItemGrid")
+end
+
+function SetParamDataList(obj)
+	DirtyFun=obj[0]
+	--OnReset()
+end
+
+function OnOpen()
+	--OnReset()
+end
+
+function OnAnimationFinished()
+    OnReset()
+end
+
+function OnReset()
+	PackHeroData()
+	RefreshData()
+end
+
+function PackHeroData()
+	heroArr={}
+	local playerInfo=appData:checkData("PlayerInfo")
+	for i,id in pairs(playerInfo.avaliableIcons) do
+		if(id~=0)then
+			local newData={}
+			newData.heroId=id
+			table.insert(heroArr,newData)
+		end
+	end
+end
+
+--刷新数据
+function RefreshData()
+	table.sort(heroArr, SortHeroByQuality)
+	heroGrid:RefreshItemSlots(heroArr,self.gameObject,"HeadItemSlot")
+end
+
+function OnHeroGridItemBtnClick(obj)
+	local data=obj:GetItemData().data
+	local req={}
+	req.icon=data.heroId
+	HttpRequest("changeIcon", "ChangeIconReq", "ChangeIconResp", req,OnChangeIconResp)
+end
+
+function OnChangeIconResp(resp)
+	if(resp.result==0)then
+		DirtyFun()
+		OnCloseBtnClick(nil)
+	end
+end
+
+function SortHeroByQuality(a, b)
+    return a.heroId < b.heroId
+end
+
+function OnCloseBtnClick(sender)
+	self:ReturnBack()
+end
+
+function DoExit()
+	heroGrid = nil
+	heroArr = nil
+	DirtyFun = nil
+end

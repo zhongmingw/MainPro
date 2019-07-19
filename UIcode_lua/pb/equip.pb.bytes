@@ -1,0 +1,29 @@
+
+×
+equip.protoequip"0
+PutOnEquipReq
+equipId (
+heroId (" 
+PutOnEquipResp
+status ("/
+TakeOffEquipReq
+type (
+heroId (""
+TakeOffEquipResp
+status ("$
+TakeOffAllEquipReq
+heroId ("%
+TakeOffAllEquipResp
+status (""
+PutOnAllEquipReq
+heroId ("#
+PutOnAllEquipResp
+status ("
+HeroLevelUpReq
+uid ("!
+HeroLevelUpResp
+status ("
+HeroGradeUpReq
+uid ("!
+HeroGradeUpResp
+status (

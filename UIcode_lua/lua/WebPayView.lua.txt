@@ -1,0 +1,97 @@
+--[[
+	file: WebPayView.lua
+	author: hangang
+	description:֧����ҳ������
+]]
+
+local closedCbk
+local url
+local tipsTxt
+
+local TICKER_NAME = "ticker_WebPayView"
+
+function DoInit()
+	self.Shadow = 1	
+end
+
+function SetParamDataList(obj)
+	closedCbk = obj[0]
+	url = obj[1]
+end
+
+function OnAnimationFinished()
+	tipsTxt = self:GetComponentAtPath("tipTxt" ,CLS_TEXT)
+	local endTime = CsBridge.timeManager.ServerTime * 2
+	local interval = 0.5
+	Timer:AddTicker(TICKER_NAME,endTime,RefreshTipText,nil,interval)
+	local margins = GetMargins()
+	CsBridge.ArchlyWebViewer.init(margins.left, margins.top, margins.right, margins.bottom, url)
+end
+
+function RefreshTipText()
+	if self == nil or self.Module == nil then
+		return
+	end
+	if tipsTxt.text == "." then
+		tipsTxt.text = ".."
+	elseif tipsTxt.text == ".." then
+		tipsTxt.text = "..."
+	elseif tipsTxt.text == "..." then
+		tipsTxt.text = ""
+	else
+		tipsTxt.text = "."
+	end
+end
+
+function GetMargins()
+	local screenWidth = CS.UnityEngine.Screen.width
+	local screenHeight = CS.UnityEngine.Screen.height
+
+	local rectTrans = self.transform:Find("BGS/webView")
+	local canvas = rectTrans:GetComponent(CLS_IMAGE).canvas
+	local contentSize = rectTrans.rect.size * canvas.scaleFactor;
+	local contentPos = rectTrans.anchoredPosition
+	local leftMargin = math.floor((screenWidth - contentSize.x) / 2)
+	local rightMargin = leftMargin
+
+	local verticalGap = (screenHeight - contentSize.y) / 2
+	local topMargin = math.floor(verticalGap - contentPos.y)
+	local bottomMargin = math.floor(verticalGap + contentPos.y)
+
+	local margins = {}
+	margins.left = leftMargin
+	margins.right = rightMargin
+	margins.top = topMargin
+	margins.bottom = bottomMargin
+	return margins
+end
+
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close()
+	Timer:StopTicker(TICKER_NAME)
+	self:HideView(self.gameObject.name)
+	if closedCbk then
+		closedCbk()
+	end
+end
+
+function OnClose()
+	Timer:StopTicker(TICKER_NAME)
+end
+
+function DoExit()
+	self.Module=nil
+	Timer:StopTicker(TICKER_NAME)
+
+	closedCbk = nil
+	url = nil
+	tipsTxt = nil
+	TICKER_NAME = nil
+end

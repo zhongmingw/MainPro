@@ -1,0 +1,53 @@
+require "SoulRecordItemSlot"
+local isInit = false
+local recordsGrid
+
+function DoInit()
+	self.Shadow = 1
+end 
+
+function InitUI()
+	recordsGrid = self:GetComponentAtPath("playerSV/ScrollRect/Viewport/Grid",CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+	end
+	self:SendCommand("InitRecordsData")
+end
+
+function OnNotification_RefreshRecords(objs)
+	local defRecords = objs[0]
+	recordsGrid:RefreshItemSlots(defRecords,self.gameObject,"SoulRecordItemSlot")
+end
+
+function OnGridRecordBtnClick(obj)
+	local data=obj.m_data
+	self:SendCommand("PlayVideoNormal",data.id)
+end
+
+function OnGridQuikBtnClick(obj)
+	local data=obj.m_data
+	self:SendCommand("PlayVideoQuikly",data.id)
+end
+
+function CloseView()
+	self:HideView(self.gameObject.name)
+end
+
+function OnClose()
+end
+
+function OnCloseBtnClick(sender)
+    CloseView()
+end
+
+function OnMaskClick(sender)
+	CloseView()
+end
+
+function DoExit()
+	recordsGrid = nil
+end

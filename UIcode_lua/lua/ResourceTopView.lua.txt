@@ -1,0 +1,90 @@
+local resourceItem0
+local icon0_Sprite
+local count0_Lab
+
+local resourceItem2
+local icon2_Sprite
+local count2_Lab
+
+local index_One = -1
+local index_Two = -1
+
+function DoInit()
+	count0_Lab = self.transform:Find("ResourceGrid/ResourceItem0/ResourceNum"):GetComponent(CLS_TEXT)
+	icon0_Sprite=self.transform:Find("ResourceGrid/ResourceItem0/ResourceIcon"):GetComponent("UnityEngine.UI.Image")
+	resourceItem0=self.transform:Find("ResourceGrid/ResourceItem0").gameObject
+
+	count1_Lab = self.transform:Find("ResourceGrid/ResourceItem1/ResourceNum"):GetComponent(CLS_TEXT)
+	icon1_Sprite=self.transform:Find("ResourceGrid/ResourceItem1/ResourceIcon"):GetComponent("UnityEngine.UI.Image")
+	resourceItem1=self.transform:Find("ResourceGrid/ResourceItem1").gameObject
+end
+
+function InitResourceTopView(objs)
+	if objs==nil or objs.Length==0 then
+		resourceItem0:SetActive(false)
+		resourceItem1:SetActive(false)
+		index_One=-1
+		index_Two=-1
+	elseif objs.Length==1 then
+		resourceItem0:SetActive(true)
+		resourceItem1:SetActive(false)
+		index_One=objs[0]
+		index_Two=-1
+	elseif objs.Length==2 then
+		resourceItem0:SetActive(true)
+		resourceItem1:SetActive(true)
+		index_One=objs[0]
+		index_Two=objs[1]
+	end
+	OnUpdateResource()
+end
+
+function OnUpdateResource()
+	local playerInfo = appData:checkData("PlayerInfo")
+	local ResourceItemData_One = GetResourceItemData(index_One,playerInfo)
+	local ResourceItemData_Two = GetResourceItemData(index_Two,playerInfo)
+    if ResourceItemData_One~=nil then
+    	count0_Lab.text = tostring(GetValueAbbreviation(GetFloat(ResourceItemData_One.count)))
+    	CsBridge.IconData.SetIconByName(icon0_Sprite.gameObject,ResourceItemData_One.icon) 
+    end
+    if ResourceItemData_Two~=nil then
+    	count1_Lab.text = tostring(GetValueAbbreviation(GetFloat(ResourceItemData_Two.count)))
+    	CsBridge.IconData.SetIconByName(icon1_Sprite.gameObject,ResourceItemData_Two.icon) 
+    end
+end
+
+function GetResourceItemData(index,playerInfo)
+	if index<=0 then
+		return nil
+	end
+	local data = {}
+	data.id=index
+	data.icon=ResTblContainer:GetPropToStr(index,Resource.icon,Resource.ResourceTbl)
+	if index==1 then
+		data.count=playerInfo.coin
+	elseif index==2 then
+		data.count=playerInfo.payGem+playerInfo.rewardGem
+	elseif index==3 then
+		data.count=playerInfo.soulCoin
+	elseif index==4 then
+		data.count=playerInfo.stepStoneCoin
+	elseif index==5 then
+		data.count=playerInfo.exchangeCoin
+	elseif index==6 then
+		data.count=playerInfo.playerExp
+	end
+	return data
+end
+
+function DoExit()
+	resourceItem0 = nil
+	icon0_Sprite = nil
+	count0_Lab = nil
+
+	resourceItem2 = nil
+	icon2_Sprite = nil
+	count2_Lab = nil
+
+	index_One  = nil
+	index_Two  = nil
+end

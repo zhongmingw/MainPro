@@ -1,0 +1,20 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-04-17 14:57:40
+]]
+
+local MazeGrid = require "MazeGrid"
+
+local MazeEntryGrid = class("MazeEntryGrid",MazeGrid)
+
+function MazeEntryGrid:Ctor(row, col, state, type)
+    super(self,row,col,state,type)
+end
+
+function MazeEntryGrid:Click(data)
+    data.onFinished()
+end
+
+return MazeEntryGrid

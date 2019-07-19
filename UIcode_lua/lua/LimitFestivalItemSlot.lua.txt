@@ -1,0 +1,34 @@
+
+function OnLimitFestivalItemSlotBindValue(slot, data)
+    local itemBaseTrans = slot.transform:Find("ItemSlot")
+	BindItemBaseValue(itemBaseTrans, data.rewards[1])
+
+	local bottomTrans = slot.transform:Find("Bottom")
+    local priceReward = data.prices[1]
+	local path = "priceImg"
+	local priceImageTrans = bottomTrans : Find(path)
+	if priceReward.typeId==1 then
+		SetIconByResourceId(priceImageTrans.gameObject,priceReward.id)
+	elseif priceReward.typeId==2 then
+		SetIconByItemId(priceImageTrans.gameObject,priceReward.id)
+    end
+    
+	path = "basePriceTxt"
+	local basePriceText = bottomTrans : Find(path) : GetComponent(CLS_TEXT)
+	if basePriceText then
+		basePriceText.text = GetValueAbbreviation(priceReward.count)
+	end
+
+	path = "inventoryTxt"
+	local inventoryText = bottomTrans : Find(path) : GetComponent(CLS_TEXT)
+	inventoryText.text = "("..(data.buyLimit-data.remain) .."/"..data.buyLimit..")" 
+
+	path = "BuyBtn"
+	local buyBtn = slot.transform : Find(path) : GetComponent(CLS_BUTTON_ARCHLY)
+	buyBtn.Gray = data.remain==0
+
+	path = "BuyBtn/buyBg"
+	local buyImageObj = slot:GetGameObjectAtPath(path)
+	local materialName = data.remain == 0 and "SpriteGray" or ""
+	CsBridge.IconData.ChangeImageMaterial(buyImageObj, materialName)
+end

@@ -1,0 +1,116 @@
+--[[
+	file: UnionMailView.lua
+	author: hangang
+	description: Union mail view
+]]
+
+local nickTxt
+local content_Input
+local sendBtn
+local receiveNickName
+local targetUserID, targetUserZone
+local onBackAction
+
+local mailTimeLimit
+local lastSendCd
+
+local TICKER_NAME = "ticker_UnionMailView"
+
+function DoInit()
+    self.Anim = 1
+    self.Shadow = 1
+	nickTxt = self:GetComponentAtPath("other/nickTxt" ,CLS_TEXT)
+    content_Input = CsBridge.GetInputFromView(self, "other/contentInput")
+    sendBtn = self:GetComponentAtPath("button/sendBtn" ,CLS_BUTTON_ARCHLY)
+    mailTimeLimit = GetConstValue("mailTimeLimit")*1000
+end
+
+function IsSetAnchor()
+    return true
+end
+
+function SetParamDataList(objs)
+    receiveNickName=objs[0]
+    targetUserID = objs[1]
+    targetUserZone = objs[2]
+    if objs.Length > 3 then
+        onBackAction=objs[3]
+    end
+    nickTxt.text=FormatWorldPlayerName(receiveNickName, targetUserZone)
+    local info = appData:checkItem("PlayerMailCd",targetUserID)
+    if info ~= nil then
+        lastSendCd = info.lastSendTime
+        local targetTime = lastSendCd + mailTimeLimit
+        sendBtn.Gray = CsBridge.timeManager.ServerTime < targetTime
+        if sendBtn.Gray then
+            Timer:AddTicker(TICKER_NAME,targetTime,nil, function()
+                if self == nil or self.Module == nil then
+                    return
+                end
+                sendBtn.Gray = false
+            end,nil)
+        end
+    end
+end
+
+function OnsendBtnClick(sender)
+    if sendBtn.Gray then
+        CsBridge.hintUILayer:ShowHintBox(string.format(Language:getStr("SendMail_CD"), CsBridge.timeManager:checkTimeShow(lastSendCd+mailTimeLimit-CsBridge.timeManager.ServerTime)))
+        return
+    end
+	local content = content_Input.text
+	if receiveNickName == nil or receiveNickName == "" then
+	   CsBridge.hintUILayer:ShowHintBox(Language:getStr("SendMail_CheckReceiveNickName"))
+	   return
+	end	
+	if content == nil or content == "" then
+	   CsBridge.hintUILayer:ShowHintBox(Language:getStr("SendMail_CheckContent"))
+	   return
+	end
+    local reciver = IsNilOrEmpty(targetUserZone) and targetUserID
+        or targetUserID .. "@" .. targetUserZone
+    
+   self:SendCommand("SendMail",reciver,content)
+end
+
+function OnNotification_SendMail(objs)
+    CsBridge.hintUILayer:ShowHintBox(Language:getStr("SendMail_Success"))
+    DoClose()
+end
+
+function OncloseBtnClick(sender)
+	DoClose()
+end
+
+function OnMaskClick(sender)
+    DoClose()
+end
+
+function DoClose()
+    if onBackAction ~= nil then
+        onBackAction()
+    end
+    Timer:StopTicker(TICKER_NAME)
+    content_Input.text = ""
+    self:HideView(self.gameObject.name)
+end
+
+function OnClose()
+    Timer:StopTicker(TICKER_NAME)
+end
+
+function DoExit()
+	self.Module=nil
+    Timer:StopTicker(TICKER_NAME)
+    nickTxt = nil
+    content_Input = nil
+    sendBtn = nil
+    receiveNickName = nil
+    targetUserID = nil
+    targetUserZone = nil
+    onBackAction = nil
+
+    mailTimeLimit = nil
+    lastSendCd = nil
+    TICKER_NAME = nil
+end

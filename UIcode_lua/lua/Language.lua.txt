@@ -1,0 +1,19 @@
+
+Language={}
+local lanTbl
+
+function Language:clear()
+    lanTbl = nil
+end
+
+function Language:getStr(key)
+	if lanTbl == nil then
+        lanTbl = ResTblContainer:GetTable("local_"..CsBridge.localizationHelper.Language)
+    end
+	local val = lanTbl:Get(key, "localizedStr")
+    if val == nil or val == "" then
+	    return key
+	else
+	    return val
+	end
+end

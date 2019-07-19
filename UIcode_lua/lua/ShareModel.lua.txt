@@ -1,0 +1,84 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-06-07 10:52:17
+
+require "ChatWorldData"
+
+
+local ShareToChat = {
+    World = 1,
+    Legion = 2
+}
+
+local shareData
+local shareType
+
+local toChat
+
+function DoInit()
+    
+end
+
+function InitProperties()
+end
+
+function OnCommand_InitShareData(objs)
+    shareData = objs[0]
+    shareType = objs[1]
+end
+
+function OnCommand_Share(objs)
+    toChat = objs[0]
+    if toChat == ShareToChat.World then
+        CsBridge.chatManager:init()
+        enterGame()
+        CS.Client.Library.MsgCenter.Subscribe(1001, FirstChatMsgAction)
+    elseif toChat == ShareToChat.Legion then
+        if not UIOpen(UI_OPEN_TYPE_GUILD) then
+            return
+        end
+        CheckUnionData(function(unionID)
+            if unionID == "0" or unionID == "" then
+                CsBridge.hintUILayer:ShowHintBox(Language:getStr("canNotLegion"),2)
+                return
+            end
+            CsBridge.chatManager:init()
+            enterGame(unionID or "")
+            CS.Client.Library.MsgCenter.Subscribe(1001, FirstChatMsgAction)
+        end)
+    end
+end
+
+function CheckUnionData(onJoined)
+	local req = {}
+	req.useless = 0
+	local returnCbk = function(resp)
+		OnGetUnionInfoFinished(resp, onJoined)
+	end
+	HttpRequest("checkMyUnion", "CheckMyUnionReq", "CheckMyUnionResp", req, returnCbk)
+end
+
+function OnGetUnionInfoFinished(resp, onJoined)
+	onJoined(tostring(resp.unionUserRecord.id))
+end
+
+function FirstChatMsgAction(obj)
+    if toChat == ShareToChat.World then
+        chatZone(shareType,shareData)
+    elseif toChat == ShareToChat.Legion then
+        chatLegion(shareType,shareData)
+    end
+    CsBridge.hintUILayer:ShowHintBox(Language:getStr("Share_Success"))
+    CsBridge.chatManager:close()
+    CS.Client.Library.MsgCenter.Unsubscribe(1001, FirstChatMsgAction)
+end
+
+function DoOnExit()
+    ShareToChat = nil
+
+    shareData = nil
+    shareType = nil
+
+    toChat = nil
+end

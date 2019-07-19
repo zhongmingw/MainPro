@@ -1,0 +1,489 @@
+ShopRefreshType = {
+	None = 0,
+	Fixed = 1,
+	ByServer = 2,
+}
+
+
+local shopConfigs = {}
+local goodsConfigs = {}
+
+local currentItemData
+
+local curSelectShop
+
+local currentShopIdx = 0
+
+local LIMIT_TURNTABLE_SHOP_ID = 6
+
+local sendBuyCount = 1
+
+function DoInit()
+	LoadShopConfig()
+	LoadGoodsConfig()
+end
+
+local function GetShopArrViewData()
+	local shopArr = {}
+	for k,v in pairs(shopConfigs) do
+		local shop = table.copy(v)
+		if shop.id == currentShopIdx then
+			shop.selected = true
+			curSelectShop = shop
+		else
+			shop.selected = false
+		end
+		table.insert(shopArr, shop)
+	end
+	table.sort(shopArr, function(a,b)
+		return a.id < b.id
+	end)
+	return shopArr
+end
+
+function OnCommand_GetShopBaseViewData(objs)
+	currentShopIdx = objs[0]+1
+	local types = {}
+    table.insert(types,ACTIVITY_TYPE_LIMIT_TURNTABLE)
+    local req = {
+        types = types
+    }
+	HttpRequest("getActivity","GetActivityReq","GetActivityResp",req,function(resp)
+        if resp and resp.activities ~= nil then
+			for i,activity in ipairs(resp.activities) do
+				if activity.type == ACTIVITY_TYPE_LIMIT_TURNTABLE then
+					local shopArr = GetShopArrViewData()
+					self:SendNotification("GetShopBaseViewData", shopArr)
+					self:SendNotification("RefreshShopView", currentShopIdx, GetViewData(curSelectShop.id))
+					return
+				end
+			end
+		end
+		shopConfigs[LIMIT_TURNTABLE_SHOP_ID] = nil
+		local shopArr = GetShopArrViewData()
+		self:SendNotification("GetShopBaseViewData", shopArr)
+		self:SendNotification("RefreshShopView", currentShopIdx, GetViewData(curSelectShop.id))
+    end)
+end
+
+function OnCommand_SelectShopType(objs)
+	local shop = objs[0]
+	if curSelectShop == shop then
+		return
+	end
+	if curSelectShop then
+		curSelectShop.selected = false
+		self:SendNotification("RefreshSingleShopType",curSelectShop)
+	end
+	shop.selected = true
+	curSelectShop = shop
+	currentShopIdx = curSelectShop.id
+	local enabled = curSelectShop.sys == 0 and true or UIOpen(curSelectShop.sys)
+	self:SendNotification("RefreshSingleShopType",curSelectShop)
+	self:SendNotification("CheckShopEnabled", enabled)
+end
+
+function OnCommand_CheckShopEnabled(objs)
+	local enabled = false
+	local shopIdx = objs[0]
+	local shopConfig = shopConfigs[shopIdx]
+	if shopConfig then
+		enabled = shopConfig.sys == 0 and true or UIOpen(shopConfig.sys)
+	end
+	self:SendNotification("CheckShopEnabled", enabled)
+end
+
+function OnCommand_RefreshShopItemList(objs)
+	if not AssertRefreshBalance(curSelectShop.id) then
+		--print("Not enough balance to refresh shop!")
+		local shopConfig = curSelectShop
+		CsBridge.hintUILayer:ShowHintBox(string.format(Language:getStr("ResNotEnough"), GetNameByResId(shopConfig.refreshPriceType)))
+		return
+	end
+
+
+	local req = {}
+	req.shop = curSelectShop.id
+	HttpRequest("refreshShop", "RefreshShopReq", "RefreshShopResp", req, OnRefreshItemListResp)
+end
+
+function AssertRefreshBalance(shopID)
+	local shopConfig = shopConfigs[shopID]
+	if shopConfig.refreshType <= ShopRefreshType.None then
+		return true
+	end
+
+	local freeTime, restTime = GetFreeRefreshTime(shopID)
+	if restTime <= 0 then
+		return true
+	end
+
+	local balance = GetBalance(shopConfig.refreshPriceType)
+	local price = shopConfig.refreshPrice
+	return balance >= price
+end
+
+function OnRefreshItemListResp(resp)
+	if currentShopIdx > 0 then
+		self:SendNotification("RefreshShopView", currentShopIdx, GetViewData(currentShopIdx))
+	end
+end
+
+function OnCommand_RefreshShop(objs)
+	self:SendNotification("RefreshShopView", currentShopIdx, GetViewData(curSelectShop.id))
+end
+
+function OnCommand_RefreshShopTime(objs)
+    --currentShopIdx = objs[0]
+	local viewData = GetViewData(curSelectShop.id)
+	viewData.itemList = nil --TODO:��ʱ���Σ���ֹƵ��ˢ����Ʒ�б�
+	self:SendNotification("RefreshShopTime", currentShopIdx, viewData)
+end
+
+function OnCommand_BuyItem(objs)
+	currentItemData = objs[0]
+	local autoConfirm = objs[1]
+
+	local dealInfo = {
+		item = {
+			id = currentItemData.id,
+			count = currentItemData.remainCount,
+			priceIcon = currentItemData.priceTypeId
+		}
+	}
+	dealInfo.resId = currentItemData.priceTypeId
+	dealInfo.title = Language:getStr("buy")
+	dealInfo.btn = Language:getStr("buy")
+	dealInfo.type = 5
+	dealInfo.single = currentItemData.basePrice
+	dealInfo.itemData = currentItemData
+
+	CsBridge.CacheAssetsByModule( self.Module,  function()
+		local view = CsBridge.OpenView("DealView", "DealModel",false,true)
+		view:SendCommand("InitData", dealInfo, function(buyCount)
+			buyCount = buyCount or 1
+			local title = ""
+			local content = Language:getStr("HeroSummonShop_Check")
+			local confirmText = Language:getStr("local_confirm")
+			local cancelText = Language:getStr("local_cancel")
+			if autoConfirm then
+				DoBuyItem(currentItemData, buyCount ,currentItemData.uid)
+			else
+				CsBridge.messageManager:PopMsgBox(title, content, cancelText, nil, confirmText, function()
+					DoBuyItem(currentItemData, buyCount ,currentItemData.uid)
+				end)
+			end
+		end)
+	end, "DealView")
+end
+
+function DoBuyItem(currentItemData, buyCount, uid)
+	if currentItemData.limitType and
+			currentItemData.limitType > 0 and
+			currentItemData.ownedCount >= currentItemData.inventory then
+		return
+	end
+
+
+	local price = currentItemData.basePrice
+	if not CheckItemEnough(currentItemData.priceTypeId,currentItemData.priceType,price,true) then
+		return
+	end
+
+	local req={}
+	req.buyList={}
+	sendBuyCount = buyCount
+	for i = 1, buyCount do
+		local goods = {
+			id = currentItemData.id,
+			count = 1 ,
+			uid = currentItemData.uid,
+		}
+		table.insert(req.buyList, goods)
+	end
+
+	req.shop = currentShopIdx
+	HttpRequest("shopping", "BuyReq", "BuyResp", req, OnBuyItemResp)
+end
+
+function OnBuyItemResp(resp)
+	if	resp.status~= 0 then
+		return
+    end
+
+	local rewards ={}
+    local reward = {
+        id = currentItemData.reward.id,
+        typeId = currentItemData.reward.typeId,
+        count = currentItemData.reward.count * sendBuyCount
+    }
+    table.insert(rewards, reward)
+	local hideCbk = nil
+	self:HideView("DealView", hideCbk, false)
+	local confirmCbk = function()
+		self:SendNotification("RefreshShopView", currentShopIdx, GetViewData(currentShopIdx))
+	end
+	ShowRewardReceivedTip(self, rewards, confirmCbk)
+end
+
+function OnCommand_OpenTipView(objs)
+	local data = objs[0]
+	local itemType = data.reward.typeId
+	if itemType == ItemTypeEnum.Hero then
+		ShowHeroTip(self, data.reward.id, 1, 1)
+	else
+		ShowTip(self, data.reward.typeId, data.reward.id)
+	end
+end
+
+function LoadShopConfig()
+	local tblName = ShopConfig.tblName
+	local resTableName = Resource.ResourceTbl
+	local tbl=ResTblContainer:GetTable(tblName)
+	local resTbl=ResTblContainer:GetTable(resTableName)
+    local itemIds = GetIds(tblName)
+	local rowData
+	for  i = 0, itemIds.Length - 1 do
+		local id = tonumber(itemIds[i])
+		local isOpen = tbl:GetInt(id, ShopConfig.isOpen)
+		if isOpen == 1 then
+			rowData = {
+				id = id,
+			}
+			rowData.name = tbl:Get(id, ShopConfig.name)
+			rowData.icon = tbl:Get(id, ShopConfig.icon)
+			rowData.priceType = tbl:GetInt(id, ShopConfig.priceType)
+			rowData.refreshType = tbl:GetInt(id, ShopConfig.refreshType)
+			rowData.refreshInterval = tbl:GetInt(id, ShopConfig.refreshInterval)
+			rowData.sys = tbl:GetInt(id, ShopConfig.sys, tblName)
+			rowData.consumes = GetRewardFromTbl(tbl:Get(id, ShopConfig.priceType))
+			for i,consume in ipairs(rowData.consumes) do
+				consume.count = GetCountByItemType(consume.id,consume.typeId)
+				consume.desp = GetDespByItemType(consume.id,consume.typeId)
+			end
+
+			if rowData.refreshType > 0 then
+				local refreshConfigStr = tbl:Get(id, ShopConfig.refreshPrice)
+				local configValues = SplitString(refreshConfigStr, ",")
+				local priceTypeIdx, priceIdx = 1, 2
+				rowData.refreshPriceType = tonumber(configValues[priceTypeIdx])
+				rowData.refreshPrice = tonumber(configValues[priceIdx])
+			else
+				rowData.refreshPriceType = 0
+				rowData.refreshPrice = 0
+			end
+			shopConfigs[id] = rowData
+		end
+	end
+end
+
+function GetDespByItemType(id,type)
+	if type == ItemTypeEnum.Item then
+		return ResTblContainer:GetPropToStr(id,ItemBase.title,ItemBase.actorTbl)
+	elseif type == ItemTypeEnum.Resource then
+		return ResTblContainer:GetPropToStr(id,Resource.desp,Resource.ResourceTbl)
+	end
+end
+
+function ToTimeStamp(timeStr)
+	local hour = tonumber(string.sub(timeStr, 1, 2))
+	local min = tonumber(string.sub(timeStr, 4, 5))
+	local sec = tonumber(string.sub(timeStr, 7, 8))
+
+	return (hour * 60 + min * 60 + sec) * 1000
+end
+
+function LoadGoodsConfig()
+	local tblName = Goods.tblName
+    local itemIds = GetIds(tblName)
+	local rowData
+	local tbl=ResTblContainer:GetTable(tblName)
+    for  i = 0, itemIds.Length - 1 do
+		local id = tonumber(itemIds[i])
+		local isOpen = tbl:GetInt(id, Goods.isOpen)
+		if isOpen == 1 then
+			rowData = {
+				id = id,
+			}
+			rowData.reward={}
+			rowData.reward.typeId=tbl:GetInt(id,Goods.type)
+			rowData.reward.id=tbl:GetInt(id,Goods.typeId)
+			rowData.reward.showItemBound = CheckShowItemBound(rowData.reward.typeId, rowData.reward.id)
+			rowData.reward.count=tbl:GetInt(id,Goods.count)
+			rowData.priceType=tbl:GetInt(id,Goods.priceType)
+			rowData.priceTypeId=tbl:GetInt(id,Goods.priceTypeId)
+			rowData.basePrice=tbl:GetInt(id,Goods.price)
+			rowData.discountPrice = rowData.basePrice
+			rowData.startTime = tbl:Get(id, Goods.startTime)
+			rowData.duration = tbl:GetInt(id, Goods.duration)
+			rowData.limitCount = tbl:GetInt(id, Goods.limitCount)
+			rowData.timeLimited = rowData.startTime ~= nil and rowData.startTime ~= ""
+			rowData.shopId = tbl:GetInt(id, Goods.shopID)
+			rowData.discount = tbl:GetInt(id, Goods.discount)
+
+			if rowData.timeLimited then
+				rowData.endTimeStamp = ToTimeStamp(rowData.startTime) + rowData.duration * 1000
+			end
+			goodsConfigs[id] = rowData
+		end
+    end
+end
+
+function CheckShowItemBound(typeId, itemID)
+	local enabled = false
+	if typeId == ItemTypeEnum.Item then
+		if(itemID >= 1 and itemID <= 1000) or
+			(itemID >= 5001 and itemID <= 10000) then
+			enabled = true
+		end
+	elseif typeId == ItemTypeEnum.Hero or typeId == ItemTypeEnum.Relic then
+		enabled = true
+	end
+
+	return enabled
+end
+
+function GetEnabledItems(shopID)
+	local svrData = appData:checkItem("ShopItem", tostring(shopID))
+	if not svrData or not svrData.goodsList then
+		return nil
+	end
+
+	local itemList = {}
+	local svrItemList = svrData.goodsList
+	local itemConfigTbl = goodsConfigs
+	local itemConfig, itemID, itemSvrData
+	for k, itemSvrData in pairs(svrItemList) do
+		itemID = itemSvrData.id;
+		local itemConfig = itemConfigTbl[itemID];
+		if itemConfig and itemConfig.shopId == shopID then
+			local itemViewData = {}
+			itemViewData.id = itemID
+			itemViewData.reward = itemConfig.reward
+			itemViewData.priceType = itemConfig.priceType
+			itemViewData.priceTypeId = itemConfig.priceTypeId
+			itemViewData.basePrice = itemConfig.basePrice
+			itemViewData.discountPrice = itemConfig.discountPrice
+			itemViewData.startTime = itemConfig.startTime
+			itemViewData.duration = itemConfig.duration
+			itemViewData.timeLimited = itemConfig.timeLimited
+			itemViewData.endTimeStamp = itemConfig.endTimeStamp
+			itemViewData.discount = itemConfig.discount
+			itemViewData.uid = itemSvrData.uid
+
+			itemViewData.inventoryAnchor = CsBridge.TextAlignmentOptions.MiddleLeft
+			itemViewData.inventoryTextColor = color13
+			local inventoryText = ""
+			local limitCount = itemConfig.limitCount
+			if limitCount and limitCount > 0 then
+				local ownedCount = limitCount - itemSvrData.count
+				inventoryText = "(" .. tostring(ownedCount) .. "/" .. limitCount .. ")"
+				if ownedCount >= limitCount then
+					itemViewData.inventoryTextColor = color26
+				end
+				itemViewData.remainCount = itemSvrData.count
+				itemViewData.limited = true
+			end
+			itemViewData.buyLblAnchor = (inventoryText == "") and
+				CsBridge.TextAlignmentOptions.Center or CsBridge.TextAlignmentOptions.Left
+			itemViewData.inventoryText = inventoryText
+			itemViewData.inventory = itemSvrData.count
+			if itemViewData.discount and itemViewData.discount > 0 then
+				itemViewData.showDiscountStr = math.floor((tonumber(itemConfig.discount)/1000)*100) .. '%'
+				itemViewData.showDiscountStr = string.format(Language:getStr("ShopItemDiscountStr"), itemViewData.showDiscountStr)
+			end
+			table.insert(itemList, itemViewData)
+		end
+	end
+
+	return itemList
+end
+
+function UpdateCountdown(itemDataTbl)
+	local MILLISECONDS_DAY = 1000 * 60 * 60 * 24
+	local currentTime = CsBridge.timeManager.ServerTime % MILLISECONDS_DAY
+	for i, itemData in pairs(itemDataTbl) do
+		if itemData.timeLimited then
+			itemData.restTime = ""
+			if currentTime > itemData.endTimeStamp then
+				itemData.restTime = CheckTimeRemain(currentTime - itemData.endTimeStamp)
+			end
+		end
+	end
+end
+
+function GetItemID(svrKeyString)
+	local index = string.find(svrKeyString, ":") + 1
+	local idStr = string.sub(svrKeyString, index)
+	return tonumber(idStr)
+end
+
+function GetFreeRefreshTime(shopID)
+	local freeTime, restTime
+
+	local shopConfig = shopConfigs[shopID]
+	if shopConfig.refreshInterval and shopConfig.refreshInterval > 0 then
+		local svrData = appData:checkItem("ShopItem", tostring(shopID))
+		local currentTime = CsBridge.timeManager.ServerTime
+		if not svrData then
+			freeTime = 0
+			restTime = 0
+		else
+			local lastRefreshTime = svrData.lastFreeRefreshTime
+			freeTime = lastRefreshTime + (shopConfig.refreshInterval * 1000)
+			restTime = freeTime - currentTime
+		end
+	else
+		freeTime = 0
+		restTime = 9999999999999999
+	end
+
+	return freeTime, restTime
+end
+
+function GetViewData(tabIndex)
+	local viewData = {}
+	local itemList = GetEnabledItems(tabIndex)
+	if itemList then
+		UpdateCountdown(itemList)
+	end
+	viewData.itemList = itemList;
+
+	local shopConfig = shopConfigs[tabIndex]
+
+	for i,consume in ipairs(shopConfig.consumes) do
+		consume.count = GetCountByItemType(consume.id,consume.typeId)
+	end
+
+	if shopConfig.refreshType > 0 then
+		if shopConfig.refreshInterval > 0 then
+			local freeTime, restTime = GetFreeRefreshTime(tabIndex)
+			local showDays = false
+			shopConfig.restTime = CheckTimeRemain(freeTime, showDays)
+			shopConfig.freeRefresh = (restTime <= 0)
+			if shopConfig.freeRefresh then
+				shopConfig.restTime = "00:00:00"
+			end
+		else
+			shopConfig.freeRefresh = false
+		end
+	end
+	viewData.shopConfig = shopConfig
+
+	return viewData
+end
+
+function DoOnExit()
+	shopConfigs = nil
+	goodsConfigs = nil
+
+	currentItemData = nil
+
+	curSelectShop = nil
+
+	currentShopIdx = nil
+
+	LIMIT_TURNTABLE_SHOP_ID = nil
+
+	sendBuyCount = nil
+end

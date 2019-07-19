@@ -1,0 +1,13 @@
+local initRaceImgPos
+local initNameTxtWidth
+
+function InitNameWithIcon(nameTxt, iconImg)
+    initRaceImgPos=iconImg.transform.parent.localPosition
+    initNameTxtWidth=nameTxt:GetComponent("RectTransform").sizeDelta.x
+end
+
+function SetNameWithIcon(nameTxt, iconImg)
+    if initRaceImgPos ~= nil and initNameTxtWidth ~= nil then
+        CsBridge.UnityHelper.SetAnchoredPosition(iconImg.transform.parent.gameObject,initRaceImgPos.x-((nameTxt.preferredWidth-initNameTxtWidth)/2),initRaceImgPos.y)
+    end
+end

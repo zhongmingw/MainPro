@@ -1,0 +1,17 @@
+package HeroBagData;
+
+message HeroBagInfo
+{
+    required int32 capacity = 1;
+    required int32 extendTimes = 2;
+}
+
+message ExtendHeroBagReq
+{
+    required int32 useless = 1;
+}
+
+message ExtendHeroBagResp
+{
+    required int32 result = 1;
+}

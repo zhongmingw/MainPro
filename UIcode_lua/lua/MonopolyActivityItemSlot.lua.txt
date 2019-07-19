@@ -1,0 +1,4 @@
+function OnMonopolyActivityItemSlotBindValue(slot,data)
+	-- body
+	
+end

@@ -1,0 +1,458 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-09-10 16:22:31
+
+require "GloryRoadStageItemSlot"
+
+local isInit = false
+
+local floorRoot
+local centerFloor
+local floorSpineRoot
+local dragCollider
+local waitSwitchAnim = false
+local leftBtn
+local rightBtn
+
+local remainTxt
+local floorNumTxt
+local stageGrid
+
+local MinPosX
+local MaxPosX
+local MinScale
+local MaxScale
+local FloorOffset
+local SwitchPosX
+
+local scaleFactor
+local oldFloorRootPosX
+local Direction = {
+    Left = -1,
+    Right = 1
+}
+local direction = Direction.Left
+local floorQueue
+local floorQueueCount
+
+local scaleFactor
+
+local isSwitch = false
+
+function DoInit()	
+    self.Shadow = 1
+end
+
+function InitUI()
+    local root = self:GetComponentAtPath("Center/Mask/FloorRoot",CLS_RECTTRANSFORM)
+    floorRoot = {}
+    floorRoot.trans = root
+    floorRoot.obj = root.gameObject
+    local pos = root:CheckLocalPosition()
+    floorRoot.initX = pos.x
+    floorRoot.initY = pos.y
+    oldFloorRootPosX = floorRoot.initX
+
+    local spineRoot = self:GetComponentAtPath("Center/Mask/FloorSpineRoot",CLS_RECTTRANSFORM)
+    floorSpineRoot = {}
+    floorSpineRoot.trans = spineRoot
+    floorSpineRoot.obj = spineRoot.gameObject
+    floorSpineRoot.spine = spineRoot:GetComponentAtPath("GloryRoadFloorSpine",CLS_SKELETONGRAPHIC)
+    floorSpineRoot.initPos = spineRoot:CheckLocalPosition()
+    floorSpineRoot.initScale = spineRoot:CheckLocalScale()
+
+    dragCollider = self:GetComponentAtPath("Center/Mask/FloorRoot","TestDrag")
+
+    local floor = self:GetComponentAtPath("Center/Mask/Floor",CLS_RECTTRANSFORM)
+    local leftFloor = self:GetComponentAtPath("Center/Mask/LeftFloor",CLS_RECTTRANSFORM)
+    local rightFloor = self:GetComponentAtPath("Center/Mask/RightFloor",CLS_RECTTRANSFORM)
+    InitFloorQueue(leftFloor,floor,rightFloor)
+
+    MinPosX = floorQueue[1].initX
+    MaxPosX = floorQueue[floorQueueCount].initX
+
+    FloorOffset = (MaxPosX-MinPosX)/(floorQueueCount-1)
+    SwitchPosX = FloorOffset*1.5
+
+    MaxScale = floor:CheckLocalScale()
+    MinScale = rightFloor:CheckLocalScale()
+
+    scaleFactor = {}
+    scaleFactor.x = (MaxScale.x - MinScale.x) / FloorOffset
+    scaleFactor.y = (MaxScale.y - MinScale.y) / FloorOffset
+
+    leftBtn = {}
+    leftBtn.obj = self:GetGameObjectAtPath("Center/LeftBtn")
+    leftBtn.trans = leftBtn.obj.transform
+    leftBtn.initPos = leftBtn.trans:CheckLocalPosition()
+    leftBtn.tweener = nil
+    
+    rightBtn = {}
+    rightBtn.obj = self:GetGameObjectAtPath("Center/RightBtn")
+    rightBtn.trans = rightBtn.obj.transform
+    rightBtn.initPos = rightBtn.trans:CheckLocalPosition()
+    rightBtn.tweener = nil
+
+    remainTxt = self:GetComponentAtPath("Top/ChanceItem/NumTxt",CLS_TEXT)
+    floorNumTxt = self:GetComponentAtPath("Center/Floor/NumTxt",CLS_TEXT)
+    stageGrid = self:GetComponentAtPath("Bottom/StageSV/ScrollRect/Viewport/StageGrid",CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitGloryRoadData")
+end
+
+function Active()
+    self:SendCommand("UpdateGloryRoadData")
+end
+
+function OnNotification_RefreshGloryRoadView(objs)
+    local curGloryRoad, curSelectFloor = objs[0], objs[1]
+    RefreshFloor(curGloryRoad, curSelectFloor)
+    RefreshStage(curGloryRoad, curSelectFloor)
+    RefreshRemain(curGloryRoad)
+end
+
+function OnNotification_UpdateGloryRoadRemain(objs)
+    RefreshRemain(objs[0])
+end
+
+function RefreshFloor(curGloryRoad, curSelectFloor)
+    local isFirst = curSelectFloor.id == 1
+    local isLast = curSelectFloor.id == #curGloryRoad.floorArr
+    leftBtn.obj:SetSelfActive(not isLast)
+    if not isLast then
+        if leftBtn.tweener == nil then
+            leftBtn.tweener = CsBridge.TweenUtils.MoveLeftRight(leftBtn.trans, leftBtn.initPos.x+10, 0.5)
+            leftBtn.tweener:DoPlay()
+        end
+    end
+    floorQueue[direction == Direction.Left and 1 or floorQueueCount].floor.obj:SetSelfActive(not isFirst)
+    rightBtn.obj:SetSelfActive(not isFirst)
+    if not isFirst then
+        if rightBtn.tweener == nil then
+            rightBtn.tweener = CsBridge.TweenUtils.MoveLeftRight(rightBtn.trans, rightBtn.initPos.x-10, 0.5)
+            rightBtn.tweener:DoPlay()
+        end
+    end
+    floorQueue[direction == Direction.Left and floorQueueCount or 1].floor.obj:SetSelfActive(not isLast)
+    local floors = {
+        curGloryRoad.floorArr[curSelectFloor.id-1],
+        curGloryRoad.floorArr[curSelectFloor.id],
+        curGloryRoad.floorArr[curSelectFloor.id+1]
+    }
+    for i,v in ipairs(floorQueue) do
+        if v.floor.hasSpine == nil then
+            if floors[i] ~= nil then
+                local state = floors[i].state
+                RefreshFloorState(v.floor,state)
+            else
+                v.floor.hasSpine = false
+            end
+        end
+    end
+
+    floorNumTxt.text = string.format(Language:getStr("FloorName"),curSelectFloor.id)
+end
+
+function RefreshFloorState(floor, state)
+    if state == FloorState.Passing then
+        floor.hasSpine = true
+        floor.obj:SetSelfActive(false)
+        local pos = floor.trans:CheckLocalPosition()
+        local spinePos = floorSpineRoot.trans:CheckLocalPosition()
+        spinePos.x = pos.x
+        floorSpineRoot.trans:ResetLocalPosition(spinePos)
+        floorSpineRoot.trans:ResetLocalScale(floor.trans:CheckLocalScale())
+        floorSpineRoot.obj:SetSelfActive(true)
+        floorSpineRoot.spine:PlayAnimation("loop",true)
+    else
+        floor.hasSpine = false
+        floor.obj:SetSelfActive(true)
+        local matName = state == FloorState.Passed and "" or "SpriteGray"
+        CsBridge.IconData.ChangeImageMaterial(floor.obj, matName);
+    end
+end
+
+function RefreshStage(curGloryRoad, curSelectFloor)
+    if stageGrid:GetAllItems() ~= nil then
+        for i,v in ipairs(curSelectFloor.stageArr) do
+            stageGrid:RefreshSlot(v,i-1)
+        end
+        if curGloryRoad.curFloor == curSelectFloor.id then
+            stageGrid:SrollToCell(math.max(0,curGloryRoad.curStage-3),1500)
+        end
+    else
+        stageGrid:RefreshItemSlots(curSelectFloor.stageArr,self.gameObject,"GloryRoadStageItemSlot")
+    end
+end
+
+function RefreshRemain(curGloryRoad)
+    remainTxt.text = curGloryRoad.ramins
+end
+
+function OnFloorRootBeginDrag(obj)
+    centerFloor = floorQueue[2].floor
+end
+
+function OnFloorRootDrag(obj)
+    local posX = CsBridge.UnityHelper.GetAnchoredPosition(floorRoot.trans,1)
+    if posX < MinPosX or
+     posX > MaxPosX or 
+     (posX >= 0 and not rightBtn.obj.activeSelf) or
+     (posX < 0 and not leftBtn.obj.activeSelf) then
+        return
+    end
+
+    MoveFloorQueue(posX)
+end
+
+function OnFloorRootEndDrag(obj)
+    SetDragEnable(false)
+    ResetFloorQueue()
+    InitFloorRoot()
+end
+
+function OnLeftBtnClick(sender)
+	if waitSwitchAnim then
+		return
+	end 
+    SetDragEnable(false)
+    ManualMoveFloorQueue(Direction.Left,0.1)
+end
+
+function OnRightBtnClick(sender)
+	if waitSwitchAnim then
+		return
+	end 
+	SetDragEnable(false)
+    ManualMoveFloorQueue(Direction.Right,0.1)
+end
+
+function OnRankBtnClick(sender)
+    self:SendCommand("OpenRankView")
+end
+
+function OnHelpBtnClick(sender)
+    ShowHelpTip(self,INSTRUCTION_GLORYROAD)
+end
+
+function OnAddBtnClick(sender)
+    self:SendCommand("BuyExtraChance")
+end
+
+function OnRewardGridItemSlotClick(obj)
+    local data = obj.m_data
+    ShowTip(self,data.typeId,data.id)
+end
+
+function OnStageGridFirstPassItemSlotClick(obj)
+    local data = obj.m_data.firstRewards[1]
+    ShowTip(self,data.typeId,data.id)
+end
+
+function OnStageGridRaidBtnClick(obj)
+    self:SendCommand("TryRaid",obj.m_data)
+end
+
+function OnStageGridGoBtnClick(obj)
+    self:SendCommand("GoStage",obj.m_data)
+end
+
+function OnCloseBtnClick(sender)
+    self:ReturnBack()
+end
+
+-------------------------------------switch view--------------------------------
+function InitFloorRoot()
+    SetGameObjPosX(floorRoot.trans,floorRoot.initX,floorRoot.initY)
+    oldFloorRootPosX = floorRoot.initX
+end
+
+function InitFloorQueue( ... )
+    local floors = { ... }
+    floorQueue = {}
+    for i,v in ipairs(floors) do
+        local data = {}
+        data.floor = {
+            trans = v,
+            obj = v.gameObject,
+            hasSpine = nil
+        }
+        local pos = v:CheckLocalPosition()
+        data.initX = pos.x
+        data.initY = pos.y
+        local size = v:CheckLocalScale()
+        data.initW = size.x
+        data.initH = size.y
+        table.insert(floorQueue,data)
+    end
+    floorQueueCount = #floorQueue
+end
+
+function MoveFloorQueue(posX)
+    local newPosX = posX
+    local deltaX = newPosX - oldFloorRootPosX
+
+    for i,v in ipairs(floorQueue) do
+        SetGameObjPosOffsetX(v.floor.trans,deltaX,v.initY)
+        if v.floor.hasSpine then
+            SetGameObjPosOffsetX(floorSpineRoot.trans,deltaX,floorSpineRoot.initPos.y)
+        end
+    end
+
+    oldFloorRootPosX = newPosX
+    
+    local dir = deltaX > 0 and Direction.Right or Direction.Left
+    if direction ~= dir then
+        SetFloorQueueDirection(dir)
+    end
+    local head = floorQueue[1].floor
+    if CsBridge.UnityHelper.GetLocalPosition(head.trans,1)*direction >= SwitchPosX then
+        SwitchFloorQueue(head)
+        self:SendCommand("CheckHasData",direction,function(result)
+            if result then
+                RefreshFloorState(head, result)
+            else
+                head.obj:SetSelfActive(false)
+                if head.hasSpine then
+                    floorSpineRoot.obj:SetSelfActive(false)
+                    head.hasSpine = false
+                end
+            end
+        end)
+    end
+
+    SetFloorQueueScale()
+end
+
+function ManualMoveFloorQueue(direction,duration)
+    centerFloor = floorQueue[2].floor
+    local delta = direction*(FloorOffset*0.5+10)
+    local d = duration
+    local b = CsBridge.UnityHelper.GetLocalPosition(floorRoot.trans,1)
+    ChangeValuePerFrame(b,delta,d,function(v)
+        MoveFloorQueue(v)
+    end,function()
+        MoveFloorQueue(delta)
+        ResetFloorQueue()
+        InitFloorRoot()
+    end)
+end
+
+function SetFloorQueueDirection(dir)
+    direction = dir
+    local head = floorQueue[1].floor
+    floorQueue[1].floor = floorQueue[floorQueueCount].floor
+    floorQueue[floorQueueCount].floor = head
+end
+
+function SwitchFloorQueue(head)
+    for i=1,floorQueueCount-1 do
+        floorQueue[i].floor = floorQueue[i+1].floor
+    end
+    floorQueue[floorQueueCount].floor = head
+    SetGameObjPosX(head.trans,
+    CsBridge.UnityHelper.GetLocalPosition(floorQueue[1].floor.trans,1)-direction*FloorOffset*2,
+    floorQueue[floorQueueCount].initY)
+    head.obj:SetSelfActive(true)
+end
+
+function SetFloorQueueScale()
+    for i,v in ipairs(floorQueue) do
+        local vX = CsBridge.UnityHelper.GetLocalPosition(v.floor.trans,1)
+        local vSize = v.floor.trans:CheckLocalScale()
+        if vX >= MinPosX and vX <= MaxPosX then
+            vX = math.abs(vX)
+            vSize.x = MaxScale.x - scaleFactor.x*vX
+            vSize.y = MaxScale.y - scaleFactor.y*vX
+            v.floor.trans:ResetLocalScale(vSize)
+            if v.floor.hasSpine then
+                floorSpineRoot.trans:ResetLocalScale(vSize)
+            end
+        end
+    end
+end
+
+function ResetFloorQueue()
+    for i,v in ipairs(floorQueue) do
+        local t1 = CsBridge.TweenUtils.MoveTo(v.floor.trans,-direction*v.initX,v.initY,0.3)
+        local t2 = CsBridge.TweenUtils.ScaleTo(v.floor.trans,v.initW,v.initH,0.3)
+
+        if v.floor.hasSpine then
+            local t3 = CsBridge.TweenUtils.MoveTo(floorSpineRoot.trans,-direction*floorQueue[i].initX,floorSpineRoot.initPos.y,0.3)
+            local t4 = CsBridge.TweenUtils.ScaleTo(floorSpineRoot.trans,floorQueue[i].initW,floorQueue[i].initH,0.3)
+            t3:DoPlay()
+            t4:DoPlay()
+        end
+        t1:DoPlay()
+        t2:DoPlay()
+        if i == floorQueueCount then
+            t2:OnCompleteAction(function()
+                SetDragEnable(true)
+                if centerFloor ~= floorQueue[2].floor then
+                    self:SendCommand("SwitchFloor",direction)
+                end
+            end)
+        end
+    end
+end
+
+function SetDragEnable(enable)
+	waitSwitchAnim = not enable
+	dragCollider.enabled = enable
+end
+
+function ChangeValuePerFrame(startVal,endVal,duration,update,finished)
+    CsBridge.timeManager:UpdateFrame(duration,function(interval)
+        if self == nil or self.Module == nil then
+		    return
+		end
+        update(startVal+endVal*interval/duration)
+    end,finished)
+end
+
+function SetGameObjPosOffsetX(trans,offsetX,y)
+    SetGameObjPosX(trans,CsBridge.UnityHelper.GetLocalPosition(trans,1)+offsetX,y)
+end
+
+function SetGameObjPosX(trans,x,y)
+    local pos = trans:CheckLocalPosition()
+    pos.x = x
+    pos.y = y or CsBridge.UnityHelper.GetLocalPosition(trans,2)
+    trans:ResetLocalPosition(pos)
+end
+
+function DoExit()
+    self.Module=nil
+     isInit = false
+    floorRoot = nil
+    centerFloor = nil
+    floorSpineRoot = nil
+    dragCollider = nil
+    waitSwitchAnim  = nil
+    leftBtn = nil
+    rightBtn = nil
+    remainTxt = nil
+    floorNumTxt = nil
+    stageGrid = nil
+    MinPosX = nil
+    MaxPosX = nil
+    MinScale = nil
+    MaxScale = nil
+    FloorOffset = nil
+    SwitchPosX = nil
+    scaleFactor = nil
+    oldFloorRootPosX = nil
+    Direction  = nil
+    direction  = nil
+    floorQueue = nil
+    floorQueueCount = nil
+    scaleFactor = nil
+    isSwitch  = nil
+end

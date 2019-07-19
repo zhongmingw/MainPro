@@ -1,0 +1,55 @@
+function CheckArenaCount(id)
+    if id == nil then
+        local arenaBaseInfos = appData:checkAllItems("ArenaBasicInfo")
+        if arenaBaseInfos == nil then
+            return true
+        end
+        for i=0, arenaBaseInfos.Length-1 do
+            if arenaBaseInfos[i] == nil or (arenaBaseInfos[i].remains + arenaBaseInfos[i].extraRemains)>0 then
+                return true
+            end
+        end
+        return false
+    end
+    local arenaBaseInfo=appData:checkItem("ArenaBasicInfo",tostring(id))  
+    return arenaBaseInfo == nil or (arenaBaseInfo.remains + arenaBaseInfo.extraRemains)>0
+end
+
+function CheckChallengeCount(id)
+    if id == nil then
+        local localChallengeItems = appData:checkAllItems("ChallengeItem")
+        if localChallengeItems == nil then
+            return true
+        end
+        for i=0, localChallengeItems.Length-1 do
+            if localChallengeItems[i] == nil or localChallengeItems[i].remains>0 then
+                return true
+            end
+        end
+        return false
+    end
+    local localChallengeItem=appData:checkItem("ChallengeItem",tostring(id)) 
+    return localChallengeItem == nil or localChallengeItem.remains>0
+end
+
+function CheckSkyTowerCount()
+    local skyTower=appData:checkData("SkyTowerItem") 
+    if skyTower ~= nil then
+    -- --print("remains",skyTower.remains) 
+    -- --print("itemKeyRemains",skyTower.itemKeyRemains)
+    end
+    return skyTower == nil or (skyTower.remains + skyTower.itemKeyRemains)>0
+end
+
+function CheckAutoTaskCount()
+    local autoTaskInfo=appData:checkData("AutoTaskInfo") 
+    return autoTaskInfo == nil or autoTaskInfo.usedNum == 0 or autoTaskInfo.remains>0
+end
+
+function CheckStageCount()
+    local stage = appData:checkData("StageItem")
+    if stage == nil then
+        return 0, 0
+    end
+    return stage.difficulty, stage.chapter
+end

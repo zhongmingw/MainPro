@@ -1,0 +1,58 @@
+
+‘	
+SoulPalace.proto
+SoulPalacestage.protoplayerData.protoBattleData.proto"ø
+PlayerTempleInfo
+remains (
+extraRemains (
+lastRenewTime ()
+targets (2.SoulPalace.TempleTarget,
+
+myRankInfo (2.SoulPalace.TempleTarget
+
+rankReward (!
+dailyBuyExtraRemainsCount (
+hisHighestRank ("o
+TempleTarget2
+playerBaseInfo (2.playerData.PlayerBaseInfo
+robot (
+rank (
+combat ("O
+PlayerTempleDefInfo)
+
+defRecords (2.SoulPalace.DefRecord
+index ("¦
+	DefRecord
+
+id (2
+playerBaseInfo (2.playerData.PlayerBaseInfo
+time (
+win (
+
+deltaScore (*
+
+battleInfo (2.BattleData.BattleInfo"!
+MatchTargetReq
+useless ("8
+MatchTargetResp
+status (
+seasonEndTime ("a
+TempleChallengeReq)
+formationPos (2.stage.FormationPos
+
+targetRank (
+rank ("
+TempleRankReq
+count ("k
+TempleRankResp+
+	rankItems (2.SoulPalace.TempleTarget,
+
+myRankItem (2.SoulPalace.TempleTarget"%
+TempleDefRecordReq
+useless ("@
+TempleDefRecordResp)
+
+defRecords (2.SoulPalace.DefRecord"$
+TempleDefRecordPlayReq
+
+id (

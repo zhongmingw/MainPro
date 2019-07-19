@@ -1,0 +1,133 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-04-25 11:29:27
+
+local isInit = false
+
+local gateObj
+local upGateTrans
+local downGateTrans
+
+local rewardGrid
+local exploreBtnNameTxt
+local exploreBtn
+local curStageTxt
+
+local entryPannelTrans
+
+function DoInit()	
+    self.Shadow = 1
+end
+
+local function InitUI()
+    gateObj = self:GetGameObjectAtPath("Center/Gate")
+    upGateTrans = self:GetComponentAtPath("Center/Gate/UpGate",CLS_RECTTRANSFORM)
+    downGateTrans = self:GetComponentAtPath("Center/Gate/DownGate",CLS_RECTTRANSFORM)
+    entryPannelTrans = self:GetComponentAtPath("Center/EntryPanel",CLS_RECTTRANSFORM)
+    rewardGrid = self:GetComponentAtPath("Center/EntryPanel/ScrollRect/Viewport/RewardGrid",CLS_UI_ITEM_GRID)
+    exploreBtn = self:GetComponentAtPath("Center/EntryPanel/ExploreBtn",CLS_BUTTON_ARCHLY)
+    exploreBtnNameTxt = self:GetComponentAtPath("Center/EntryPanel/ExploreBtn/NameTxt",CLS_TEXT)
+    curStageTxt = self:GetComponentAtPath("Center/EntryPanel/CurStageDespTxt",CLS_TEXT)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    local isFirst = true
+    self:SendCommand("InitMazeEntryData",isFirst)
+end
+
+function Active()
+    local isFirst = false
+    self:SendCommand("InitMazeEntryData",isFirst)
+end
+
+function DoExit()
+    isInit = nil
+
+    gateObj = nil
+    upGateTrans = nil
+    downGateTrans = nil
+    
+    rewardGrid = nil
+    exploreBtnNameTxt = nil
+    exploreBtn = nil
+    curStageTxt = nil
+    
+    entryPannelTrans = nil
+end
+
+local function RefreshBtnState(name, gray)
+    exploreBtnNameTxt.text = name
+    exploreBtn.Gray = gray
+end
+
+local function RefreshRewards(rewards)
+    rewardGrid:RefreshItemSlots(rewards,self.gameObject,"ItemSlot")
+end
+
+local function RefreshCurStageDesp(curStageDesp)
+    curStageTxt.text = curStageDesp
+end
+
+local function ShowMoveTweener(trans,x,y,duration,ease,onFinished)
+    CsBridge.TweenUtils.MoveTo(trans,x,y,duration,onFinished,ease or 0)
+end
+
+local function ShowMazeEntryEffect()
+    local upPos = upGateTrans:CheckLocalPosition()
+    local downPos = downGateTrans:CheckLocalPosition()
+    local moveDelta = 550
+    local targetUpPosY = upPos.y + moveDelta
+    local targetDownPosY = downPos.y - moveDelta
+    local entryPos = entryPannelTrans:CheckLocalPosition()
+    local targetEntryPosY = 34
+    local duration = 0.8
+    local ease = 27
+    local onFinished = function()
+        gateObj:SetSelfActive(false)
+        ShowMoveTweener(entryPannelTrans,entryPos.x,targetEntryPosY,duration,ease)
+    end
+    ShowMoveTweener(upGateTrans,upPos.x,targetUpPosY,duration)
+    ShowMoveTweener(downGateTrans,downPos.x,targetDownPosY,duration,nil,onFinished)
+end
+
+local function RefreshEntryPanel(data)
+    RefreshRewards(data.rewards)
+    RefreshBtnState(data.name,data.isEnd)
+    RefreshCurStageDesp(data.curStageDesp)
+end
+
+local function ReturnBack()
+    self:ReturnBack()
+end
+
+function OnNotification_RefreshMazeEntryView(objs)
+    local data = objs[0]
+    RefreshEntryPanel(data)
+    ShowMazeEntryEffect()
+end
+
+function OnRewardGridItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("ShowTip",data)
+end
+
+function OnExploreBtnClick(sender)
+    self:SendCommand("Explore")
+end
+
+function OnHelpBtnClick(sender)
+    ShowHelpTip(self,INSTRUCTION_MAZE)
+end
+
+function OnCloseBtnClick(sender)
+    ReturnBack()
+end
+
+function OnMaskClick(sender)
+    ReturnBack()
+end

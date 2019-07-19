@@ -1,0 +1,382 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-06-29 11:19:07
+
+local RefreshType = {
+    Auto = 1,
+    Manual = 2
+}
+
+local lotteryArr 
+local luckyCoin
+local nextRefreshTime
+local hasFreeRefresh = false
+local LUCKY_COIN_ID
+
+local recordArr
+
+local rankData
+local RANK_NUM = 100
+
+local rewardData
+local ActivityLotteryChartReward = {
+    tblName = "ActivityLotteryChartReward",
+    id = "RewardID",
+    min = "min",
+    max = "max",
+    rewardStr = "RewardStr"
+}
+
+local lotteryDataFromTbl
+local tenthOpenVip
+local activityLotteryResetPrice;
+local activityCoinPrice;
+local activityLotteryDiscount;
+
+local Lottery
+
+function DoInit()
+    --lotteryDataFromTbl = GetLotteryDataFromTbl()
+    LUCKY_COIN_ID = ResTblContainer:GetPropToInt(UI_OEPN_TYPE_LIMIT_TURNTABLE,UIOpenBase.addCountItemId,UIOpenBase.actorTbl)
+end
+
+function InitProperties()
+end
+
+function OnCommand_InitTurnTableData(objs)
+    InitTurnTable(RefreshType.Auto)
+end
+
+function InitTurnTable(type)
+    local req = {
+        id = type
+    }
+    --UpdateLotteryInfo(true)
+    HttpRequest("refreshActivityLottery","RefreshLotteryReq","RefreshActivityLotteryResp",req,function(resp)
+        if resp.result == 0 then
+            tenthOpenVip = resp.ActivityLotteryTenxLimit
+            activityLotteryResetPrice = resp.ActivityLotteryResetPrice
+            activityCoinPrice = resp.ActivityCoinPrice;
+            activityLotteryDiscount = resp.ActivityLotteryDiscount;
+            UpdateLotteryInfo(true)
+            UpdateLuckyCoin()
+            self:SendNotification("RefreshTurnTableView",lotteryArr,luckyCoin,nextRefreshTime,hasFreeRefresh,activityLotteryResetPrice,activityLotteryDiscount)
+        end
+    end)
+end
+
+function UpdateLotteryInfo(anim)
+    lotteryArr = {}
+    local lotteryInfo = appData:checkData("LotteryActivityInfo")
+    local drawItems = lotteryInfo.drawItems
+    for i,item in ipairs(drawItems) do
+        local lottery = {}
+        lottery.id = item.id
+        local reward = item.rewardItem
+        lottery.reward = {
+            typeId = reward.typeId,
+            id = reward.id,
+            count = reward.count
+        }
+        lottery.disable = item.disable
+        lottery.anim = anim
+        table.insert(lotteryArr,lottery)
+    end
+    local DAY_SENCOND_CONST = 24 * 3600000;
+    nextRefreshTime = lotteryInfo.lastRefreshTime + DAY_SENCOND_CONST
+    hasFreeRefresh = lotteryInfo.hasFreeRefresh
+end
+
+function UpdateSingleLotteryInfo(reward)
+    local updateLottery = GetLotteryByReward(reward)
+    if updateLottery ~= nil then
+        local drawItems = appData:checkData("LotteryActivityInfo").drawItems
+        for i,item in ipairs(drawItems) do
+            if item.id == updateLottery.id then
+                updateLottery.disable = item.disable 
+                break
+            end
+        end
+    end
+    return updateLottery
+end
+
+function UpdateLuckyCoin()
+    local pb = appData:checkItem("PackItem",LUCKY_COIN_ID)
+    luckyCoin = pb ~= nil and pb.count or 0
+end
+
+function OnCommand_Lottery(objs)
+    local count = objs[0]
+    local price = objs[1]
+    if not CheckVipEnough(count) or not CheckPackItemEnough(LUCKY_COIN_ID,price,true) then
+        return
+    end
+    local req = {
+        count = count
+    }
+    HttpRequest("drawActivityLottery","DrawLotteryReq","DrawLotteryResp",req,function(resp)
+        if resp and resp.rewardItems ~= nil then
+            local updateRewards = {}
+            for i,reward in ipairs(resp.rewardItems) do
+                local updateReward = UpdateSingleLotteryInfo(reward)
+                if updateReward ~= nil then
+                    table.insert(updateRewards, updateReward)
+                end
+            end
+            UpdateLuckyCoin()
+            self:SendNotification("ShowTableLotteryAnim",updateRewards[1],function()
+                local confirmCbk = function()
+                    self:SendNotification("UpdateSingleItemSlot",updateRewards)
+                    self:SendNotification("UpdateLuckyCoin",luckyCoin)
+                end
+                ShowRewardReceivedTip(self,resp.rewardItems,confirmCbk,false)
+            end,count)
+        else
+            CsBridge.hintUILayer:ShowHintBox(Language:getStr("LimitTurnTableEnd"),2)
+        end
+    end)
+end
+
+function OnCommand_ManualRefreshTurnTable(objs)
+    InitTurnTable(RefreshType.Manual)
+    MsgCenter:Broadcast(Notify_SetUpdateEffect)
+end
+
+function OnCommand_AutoRefreshTurnTable(objs)
+    InitTurnTable(RefreshType.Auto)
+end
+
+function OnCommand_BuyLuckyCoin(objs)
+    ShowBuyView(self,ItemTypeEnum.Item,LUCKY_COIN_ID,nil,ResourceEnum.Gem,activityCoinPrice,function()
+        UpdateLuckyCoin()
+        self:SendNotification("UpdateLuckyCoin",luckyCoin)
+    end)
+end
+
+function OnCommand_InitTurnTableRecordData(objs)
+    UpdateTurnTableRecord()
+    self:SendNotification("UpdateLuckyCoin",luckyCoin)
+end
+
+function OnCommand_RevertRefreshTimer(objs)
+    self:SendNotification("RefreshTimer",nextRefreshTime,hasFreeRefresh)
+end
+
+function UpdateTurnTableRecord()
+    local req = {
+        id = 0
+    }
+    HttpRequest("getLotteryActivityHitRecord","GetLotteryActivityHitRecordReq","GetLotteryActivityHitRecordResp",req,function(resp)
+        recordArr = {}
+        if resp ~= nil and resp.records ~= nil then            
+            for i,v in ipairs(resp.records) do
+                local record = {}
+                record.reward = {
+                    typeId = v.type,
+                    id = v.id,
+                    count = 1,
+                }
+                record.count = v.count
+                record.nick = v.nick
+                record.ext = v.ext
+                record.zone = v.zone
+                table.insert(recordArr, record)
+            end         
+        end
+        self:SendNotification("RefreshTurnTableRecordView",recordArr)
+    end)
+end
+
+-----------------rank ------------------------------
+
+function OnCommand_InitLimitTurnTableRankData(objs)
+    local req = {
+        count = RANK_NUM
+    }
+    HttpRequest("getLotteryActivityRank","GetLotteryActivityRankReq","GetLotteryActivityRankResp",req,function(resp)
+        if resp then
+            UpdateRankInfo(resp)
+            self:SendNotification("RefreshLimitTurnTableRankView",rankData)
+        end
+    end)
+end
+
+function UpdateRankInfo(pbData)
+    rankData = {}
+    rankData.rankItems = pbData.rankItems
+    rankData.selfRankData = pbData.playerRankItem
+end
+
+-- -------------------reward------------------
+function OnCommand_InitLimitTurnTableRankRewardData(objs)
+    local types = {}
+    table.insert(types,ACTIVITY_TYPE_LIMIT_TURNTABLE)
+    local req = {
+        types = types
+    }
+	HttpRequest("getActivity","GetActivityReq","GetActivityResp",req,function(resp)
+        if resp and resp.activities ~= nil then
+			for i,activity in ipairs(resp.activities) do
+                if activity.type == ACTIVITY_TYPE_LIMIT_TURNTABLE then
+                    UpdateRewardData(activity,function()
+                        self:SendNotification("RefreshLimitTurnTableRankRewardView",rewardData)
+                    end)
+					break
+                end
+			end
+		end
+    end)
+end
+
+function UpdateRewardData(pb,onFinished)
+    if rewardData == nil then
+        local req = {
+            useless = 0
+        }
+        HttpRequest("getLotteryRankReward","GetLotteryRankRewardReq","GetLotteryRankRewardResp",req,function(resp)
+            rewardData = {}
+            rewardData.rankRewardItems = {}
+            for i, v in ipairs(resp.rewardConfigs) do
+                local rewardItem = {
+                    rank = (v.min == v.max) and v.min or (v.min.."-"..v.max),
+                    min = v.min,
+                    max = v.max,
+                    rewardItems = v.rewardItems
+                }
+                table.insert(rewardData.rankRewardItems,rewardItem)
+            end
+            rewardData.rank = rankData.selfRankData.rank
+            rewardData.playerRewardItems = {}
+            for i,v in ipairs(rewardData.rankRewardItems) do
+                if rewardData.rank >= v.min and rewardData.rank <= v.max then
+                    rewardData.playerRewardItems = v.rewardItems
+                    break
+                end
+            end
+            rewardData.endTime = pb.endTime
+            if onFinished then
+                onFinished()
+            end
+        end)
+    else
+        rewardData.rank = rankData.selfRankData.rank
+        rewardData.playerRewardItems = {}
+        for i,v in ipairs(rewardData.rankRewardItems) do
+            if rewardData.rank >= v.min and rewardData.rank <= v.max then
+                rewardData.playerRewardItems = v.rewardItems
+                break
+            end
+        end
+        rewardData.endTime = pb.endTime
+        if onFinished then
+            onFinished()
+        end
+    end
+end
+
+
+function GetLotteryDataFromTbl()
+    if Lottery == nil then
+        Lottery = {}
+        Lottery.tblName = "Lottery"
+        Lottery.id = "id"
+        Lottery.rewardStr = "rewardStr"
+    end
+    local tbl = {}
+    local ids = GetIds(Lottery.tblName)
+    local tbl=ResTblContainer:GetTable(Lottery.tblName)
+    for i=0,ids.Length-1 do
+        local id = tonumber(ids[i])
+        tbl[id] = {}
+        local rewardStr = tbl:Get(id,Lottery.rewardStr)
+        local result = SplitString(rewardStr,",")
+        local reward = {
+            typeId = tonumber(result[0]),
+            id = tonumber(result[1]),
+            count = tonumber(result[2])
+        }
+        tbl[id].reward = reward
+    end
+    return tbl
+end
+
+function GetLotteryByReward(reward)
+    for i,lottery in ipairs(lotteryArr) do
+        if lottery.reward.typeId == reward.typeId and lottery.reward.id == reward.id and lottery.reward.count == reward.count then
+            return lottery
+        end
+    end
+    return nil
+end
+
+function CheckVipEnough(count)
+    if count == 1 then
+        return true
+    end
+    local ret = false
+    local vip = appData:checkData("PlayerInfo").vip
+    ret = vip >= tenthOpenVip
+    if not ret then
+        CsBridge.hintUILayer:ShowHintBox(string.format(Language:getStr("Not_TurnTable_Tenth"), tenthOpenVip), 2)
+    end
+    return ret
+end
+
+---打开活动的商店
+function OnCommand_OpenActivityShop()
+    local req = {}
+    req.id = ServerActivityType.LimitWelfare
+    HttpRequest("getAllActivities", "GetAllActivitiesReq", "GetAllActivitiesResp", req, function (resp)
+        local data = resp == nil and {} or resp.activityItems
+        local isExist = IsExistSoulBitsShopActivity(data)
+        local activityId = ActivityIcon.LimitWelfare
+        if isExist then
+            activityId = ActivityIcon.LimitWelfare
+        else
+            activityId = ActivityIcon.LimitActivity
+        end
+        MsgCenter:Broadcast(Notify_OpenActivityView,{id = activityId, data = ActivityType.SoulBitsShopActivity})
+    end)
+end
+
+---是否存在魂屑商店
+function IsExistSoulBitsShopActivity(data)
+    local isExist = false
+    if data then
+        for k, activity in pairs(data) do
+            if activity.type == ActivityType.SoulBitsShopActivity then
+                isExist = true
+            end
+        end
+    end
+    return isExist
+end
+
+function DoOnExit()
+
+    RefreshType = nil
+
+    lotteryArr  = nil
+    luckyCoin = nil
+    nextRefreshTime = nil
+    hasFreeRefresh = nil
+    LUCKY_COIN_ID = nil
+
+    recordArr = nil
+
+    rankData = nil
+    RANK_NUM  = nil
+
+    rewardData = nil
+    ActivityLotteryChartReward  = nil
+
+    lotteryDataFromTbl = nil
+    tenthOpenVip = nil
+    activityLotteryResetPrice = nil
+    activityCoinPrice = nil
+    activityLotteryDiscount = nil
+
+    Lottery = nil
+end

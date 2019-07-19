@@ -1,0 +1,58 @@
+--[[
+	file: GloryRoadActivityUtils.lua
+	author: zhangyue
+	description: GloryRoadActivity utilities
+]]
+
+
+local function GloryRoadActivityGetReward(data, currentActivityID, onFinished, model)
+	if not data.active then
+		local desp = data.finished and "GloryRoadActivity_HasGetReward" or "GloryRoadActivity_NotGetReward"
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr(desp),2)
+		return
+	end
+	local req = {
+		acId = currentActivityID,
+		count = data.count
+	}
+	HttpRequest("getGloryRoadActivityReward","GetGloryRoadActivityRewardReq","GetGloryRoadActivityRewardResp",req,function(resp)
+		local confirmCbk = function()
+			onFinished(currentActivityID)
+		end
+		ShowRewardReceivedTip(model, resp.rewardItems, confirmCbk)
+	end)
+end
+
+local function GetItemViewData(activityData)
+	local allItemData = {}
+	for i, item in ipairs(activityData.items) do
+		local itemViewData = {}
+		itemViewData.curCount = item.curCount
+		itemViewData.count = item.config.count
+		itemViewData.title = item.config.title
+		itemViewData.rewards = item.config.rewards
+		itemViewData.active = item.active
+		itemViewData.finished = item.curCount >= item.config.count
+		itemViewData.hasGet = itemViewData.finished and not item.active
+		itemViewData.finishedAndNotGet = itemViewData.finished and not itemViewData.hasGet
+		itemViewData.btnName = itemViewData.hasGet and Language:getStr("HasGet") or Language:getStr("Global_30")
+		table.insert(allItemData, itemViewData)
+	end
+
+	table.sort(allItemData, function(a, b)
+		if a.finishedAndNotGet ~= b.finishedAndNotGet then
+			return a.finishedAndNotGet
+		end
+		if a.hasGet ~= b.hasGet then
+			return b.hasGet
+		end
+		return a.count < b.count
+	end)
+
+	return allItemData
+end
+
+return{
+	GloryRoadActivityGetReward = GloryRoadActivityGetReward,
+	GetItemViewData = GetItemViewData,
+}

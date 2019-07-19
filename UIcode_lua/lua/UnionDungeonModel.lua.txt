@@ -1,0 +1,509 @@
+--[[
+	file: UnionDungeonModel.lua
+	author: hangang
+	description: Union dungeon logics
+]]
+
+require "UnionUtils"
+
+local TICKER_NAME = "UnionDungeonModel"
+local ID_RESOURCE_CHALLENGE = 2
+local freeChallengeTimes
+local maxChallengeTimes
+local minLevelID, maxLevelID = 1, 1
+
+local dungeonData
+local cachedLevelData
+
+------initialization-------
+function DoInit()
+	freeChallengeTimes = tonumber(GetConstValue("guildDungeonLimit"))
+
+    local tbl=ResTblContainer:GetTable(GuildDungeonPrice.tblName)
+	local itemIds = tbl:GetCol(GuildDungeonPrice.id)
+	maxChallengeTimes = freeChallengeTimes + itemIds.Length
+
+	local guildTbl=ResTblContainer:GetTable(GuildDungeon.tblName)
+	itemIds = guildTbl:GetCol(GuildDungeon.id)
+	maxLevelID = itemIds.Length
+
+	MsgCenter:Subscribe(Notify_OnBattleEnd, OnBattleFinished)
+end
+
+function DoOnExit()
+	MsgCenter:Unsubscribe(Notify_OnBattleEnd, OnBattleFinished)
+	self.Module = nil
+	TICKER_NAME = nil
+	ID_RESOURCE_CHALLENGE = nil
+	freeChallengeTimes = nil
+	maxChallengeTimes = nil
+	minLevelID = nil
+	maxLevelID = nil
+
+	dungeonData = nil
+	cachedLevelData = nil
+end
+
+function OnBattleFinished()
+	TryGetDungeonData()
+end
+
+------Union dungeon logics-------
+function TryGetDungeonData()
+	local req = {}
+	req.useless = 0
+	HttpRequest("unionDungeon", "UnionDungeonReq", "UnionDungeonResp", req, OnGetDungeonDataResp)
+end
+
+function OnGetDungeonDataResp(resp)
+	dungeonData = resp
+	local finishedCbk = function()
+		local viewData = GetChallengeViewData()
+		self:SendNotification("RefreshChallengeView", viewData)
+	end
+	GetLevelData(dungeonData.currentId, finishedCbk)
+end
+
+function GetDailyData()
+	local req = {}
+	req.useless = 0
+	HttpRequest("dungeonDailyRank", "DungeonDailyRankReq", "DungeonDailyRankResp", req, OnGetDailyDataResp)
+end
+
+function OnGetDailyDataResp(resp)
+	local viewData = GetDailyViewData(resp)
+	self:SendNotification("RefreshDailyView", viewData)
+end
+
+function GetLevelData(levelID, finishedCbk)
+	local req = {}
+	req.id = levelID
+	local onFinished = function(resp)
+		OnGetLevelDataResp(resp)
+		if finishedCbk then
+			finishedCbk()
+		end
+	end
+	HttpRequest("dungeonChallengeInfo", "DungeonChallengeInfoReq", "DungeonChallengeInfoResp", req, onFinished)
+end
+
+function OnGetLevelDataResp(resp)
+	cachedLevelData = resp
+	cachedLevelData.memberList = {}
+	if resp.hurtList then		
+		local memberList = resp.hurtList
+		for k, memberData in pairs(memberList) do
+			local item = memberData.basicInfo
+			item.combat = memberData.combat
+			item.damage = memberData.hurt
+
+			table.insert(cachedLevelData.memberList, item)
+		end
+	end
+end
+
+function Challenge(formation, levelID)
+	local req = {}
+	req.formationPos = formation
+	req.id = levelID
+	HttpRequest("dungeonChallenge", "DungeonChallengeReq", "BattleInfo", req, OnChallengeResp)
+end
+
+function OnChallengeResp(resp)
+	ShowBattleModule(resp, self)
+end
+
+function GetChallengePrice()
+	local price = 0
+
+	local times = GetChallengedTimes() + 1
+	times = times > maxChallengeTimes and maxChallengeTimes or times
+	if times > freeChallengeTimes then
+		local id = times - freeChallengeTimes
+		price = ResTblContainer:GetPropToInt(id, GuildDungeonPrice.price, GuildDungeonPrice.tblName)
+	end
+
+	return price
+end
+
+function GetChallengedTimes()
+	local unionPB = appData:checkData("PlayerUnionRecord")
+	return unionPB.challengeCount
+end
+
+function StartCountdown()
+	local endTime = CsBridge.timeManager.ServerTime * 2
+	Timer:AddTicker(TICKER_NAME, endTime, RefreshCountdown)
+end
+
+function StopCountdown()
+	Timer:StopTicker(TICKER_NAME)
+	dungeonData = nil
+end
+
+------Commands-------
+function OnCommand_GetChallengeViewData(objs)
+	TryGetDungeonData()
+end
+
+function OnCommand_GetLeaderboardViewData(objs)
+	local levelID = objs[0]
+	levelID = levelID == 0 and dungeonData.currentId or levelID
+	levelID = levelID < minLevelID and minLevelID or levelID
+	levelID = levelID > maxLevelID and maxLevelID or levelID
+
+	local finishedCbk = function()
+		local viewData = GetLeaderboardViewData(levelID)
+		self:SendNotification("RefreshLeaderboardView", viewData)
+	end
+
+	GetLevelData(levelID, finishedCbk)
+end
+
+function OnCommand_GetDailyViewData(objs)
+	GetDailyData()
+end
+
+function OnCommand_OpenHelpView(objs)
+	local instuctionID = 36
+	local parentViewName = objs[0]
+	CsBridge.CacheAssetsByModule( self.Module,
+		function()
+			local view = CsBridge.OpenView("HelpView","UnionDungeonModel", false, true)
+			view:SetData(instuctionID)
+		end,
+		"HelpView")    
+end
+
+function OnCommand_Challenge(objs)
+	local levelID = objs[0]
+	if not AssertEnabled() then
+		return
+		
+	end	
+	local price = GetChallengePrice()
+	if price > 0 then
+		local title = Language:getStr("hint")
+		local text = Language:getStr("UnionBossBattleHint")
+		text = string.format(text, tostring(price))
+		local cancelText = Language:getStr("local_cancel")
+		local confirmText = Language:getStr("local_confirm")
+		local cancelCbk = nil
+		local confirmCbk = function()
+			OpenFormationView(levelID)
+		end
+		CsBridge.messageManager:showAlertView(title, text, cancelText, cancelCbk, confirmText, confirmCbk)
+	else
+		OpenFormationView(levelID)
+	end
+end
+
+function AssertEnabled()
+	if cachedLevelData.curHpPercentage == 0 then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionDungeonBossAlreadyDead"))
+		return false		
+	end
+
+	local times = GetChallengedTimes() + 1
+	if times > maxChallengeTimes then 
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionDungeonClosed"))
+		return false
+	end
+
+	local price = GetChallengePrice()
+	local balance = GetBalance(ID_RESOURCE_CHALLENGE)
+	if balance < price then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("1001"))
+		return false		
+	end
+
+	return true
+end
+
+function OpenFormationView(levelID)
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			local view = CsBridge.OpenView("FormationView", "FormationModel",true,true)
+			local formationType = FormationTypeEnum.FormationType_PVE
+			local battleCbk = function(heroIds)
+				Challenge(heroIds, levelID)
+			end
+			local formView = 0
+			local canSkip = false
+			local hideCbk = nil
+			view:SetParamDataList(formationType, battleCbk , nil , formView, canSkip, nil)
+		end, 
+		"FormationView",
+		"HeroItemSlot")
+end
+
+function OnCommand_OpenTipView(objs)
+	local data = objs[0]
+	local itemType = data.typeId
+	if itemType == ItemTypeEnum.Hero then
+		ShowHeroTip(self, data.id, 1, 1)
+	else
+		ShowTip(self, data.typeId, data.id)
+	end
+end
+
+function OnCommand_OpenMemberDetailView(objs)
+	local uid = tostring(objs[0])
+	local zone = tostring(objs[1])
+	local parentView = objs[2]
+	local playerInfo = appData:checkData("PlayerInfo")
+	local isLocal = false
+	local showUnionInfoBtn = false
+	local siblingIdx = -1
+	CsBridge.CacheAssetsByModule( self.Module,
+		function()
+			local view = CsBridge.OpenView("PlayerInfoView", "PlayerInfoModel", true, true)
+			view:SetParamDataList(isLocal, uid, zone, siblingIdx, showUnionInfoBtn)
+		end, 
+		"PlayerInfoView","AchievementItemSlot")
+end
+
+function OnCommand_StartCountdown(objs)
+	StartCountdown()
+end
+
+function OnCommand_StopCountdown(objs)
+	StopCountdown()
+end
+
+------View Controller-------
+function GetChallengeViewData()
+	local viewData = {}
+
+	local levelID = dungeonData.currentId
+	viewData.isPassAll = dungeonData.isPassAll
+	viewData.levelID = levelID
+	viewData.fightRewards = cachedLevelData.trialRewards	
+	viewData.killRewards = cachedLevelData.rewards
+	viewData.bossModelName = GetDungeonBossModel(levelID)
+	viewData.bossPower = cachedLevelData.combat
+	viewData.bossGroupID = GetDungeonBossGroupID(levelID)
+	viewData.platformAnim = GetPlatformAnim(viewData.bossGroupID)
+	viewData.bossHp = tostring(cachedLevelData.curHpPercentage) .. "%"
+	viewData.bossHpPercent = cachedLevelData.curHpPercentage / 100.0
+	viewData.damageData = GetDamageViewData(cachedLevelData.memberList)
+
+	local priceText, priceColor = GetPriceDesc()
+	viewData.priceText = priceText
+	viewData.priceColor = priceColor
+
+	return viewData
+end
+
+function GetDailyViewData(resp)
+	local viewData = {}
+	viewData.damageData = resp.rankResps and GetDailyGridViewData(resp.rankResps) or {}
+	return viewData
+end
+
+function GetLeaderboardViewData(levelID)
+	local viewData = {}
+
+	viewData.levelID = levelID
+	viewData.bossModelName = GetDungeonBossModel(levelID)
+	viewData.bossName = GetBossName(levelID)
+	viewData.bossLevel = "Lv." .. tostring(GetBossLevel(levelID))
+	viewData.bossPower = cachedLevelData.combat
+	viewData.bossGroupID = GetDungeonBossGroupID(levelID)
+	viewData.platformAnim = GetPlatformAnim(viewData.bossGroupID)
+	viewData.groupBgName = "ui_bg_zy"..viewData.bossGroupID
+	viewData.showPreviousBtn = levelID > minLevelID
+	viewData.showNextBtn = levelID < dungeonData.currentId
+	viewData.damageData = GetDamageViewData(cachedLevelData.memberList)
+
+	local prevModelName = ""
+	local prevPlatformAnim = ""
+	local prevLevelID = levelID - 1
+	if prevLevelID >= minLevelID then
+		prevModelName = GetDungeonBossModel(prevLevelID)
+		prevPlatformAnim = GetPlatformAnim(GetDungeonBossGroupID(prevLevelID))
+	end
+	viewData.prevBossModelName = prevModelName
+	viewData.prevPlatformAnim = prevPlatformAnim
+
+	local nextModelName = ""
+	local nextPlatformAnim = ""
+	local nextLevelID = levelID + 1
+	if nextLevelID <= dungeonData.currentId then
+		nextModelName = GetDungeonBossModel(nextLevelID)
+		nextPlatformAnim = GetPlatformAnim(GetDungeonBossGroupID(nextLevelID))
+	end
+	viewData.nextBossModelName = nextModelName
+	viewData.nextPlatformAnim = nextPlatformAnim
+
+	local priceText, priceColor = GetPriceDesc()
+	viewData.priceText = priceText
+	viewData.priceColor = priceColor
+
+	return viewData
+end
+
+function GetPriceDesc()
+	local priceText = "0"
+	local priceColor = color2
+
+	local price = GetChallengePrice()
+	priceText = tostring(price)
+	local balance = GetBalance(ID_RESOURCE_CHALLENGE)
+	priceColor = balance >= price and color2 or color26
+
+	return priceText, priceColor
+end
+
+function GetDungeonBossModel(levelID)
+	local name = ""
+	if dungeonData then
+		local bossID = GetDungeonBossID(levelID)
+		name = GetMonsterModelName(bossID)
+	end
+
+	return name
+end
+
+function GetBossName(levelID)
+	local name = ""
+	if dungeonData then
+		local bossID = GetDungeonBossID(levelID)
+		name = GetMonsterName(bossID)
+	end
+
+	return name
+end
+
+function GetBossLevel(levelID)
+	local level = 0
+	if dungeonData then
+		local bossID = GetDungeonBossID(levelID)
+		level = GetMonsterLevel(bossID)
+	end
+
+	return level
+end
+
+function GetDungeonBossGroupID(levelID)
+	local id = 0
+	if dungeonData then
+		local bossID = GetDungeonBossID(levelID)
+		id = GetMonsterGroupID(bossID)
+	end
+
+	return id
+end
+
+function GetDamageViewData(itemList)
+	local viewData = {}
+
+	local maxDamage = 0
+	for k, memberData in pairs(itemList) do
+		local memberViewData = {}
+		memberViewData.playerInfo = memberData
+		memberViewData.userId = memberData.userId
+		memberViewData.name = FormatWorldPlayerName(memberData.name, memberData.zone)
+		memberViewData.icon = memberData.icon
+		memberViewData.power = GetValueAbbreviation(memberData.combat)
+		memberViewData.title = FormatTitle(memberData.authority)
+		memberViewData.zone = memberData.zone
+
+		local damage = memberData.damage
+		maxDamage = damage > maxDamage and damage or maxDamage
+		memberViewData.damage = damage
+		memberViewData.damageText = tostring(damage)
+		memberViewData.damagePercent = 0
+		table.insert(viewData, memberViewData)
+	end
+
+	if maxDamage > 0 then
+		table.sort(viewData, function(a, b)
+			return a.damage > b.damage
+		end)
+	end
+
+	local RIBBON_IDX_MAX = 3
+	local ICON_NAME_RIBBON = "new_com_paiming"
+	for i = 1, #viewData do
+		local memberViewData = viewData[i]
+		memberViewData.damagePercent = memberViewData.damage / maxDamage
+		memberViewData.rankText = tostring(i)
+		memberViewData.showRibbon = i <= RIBBON_IDX_MAX
+		memberViewData.ribbonIcon = ICON_NAME_RIBBON .. memberViewData.rankText
+	end
+	
+	return viewData
+end
+
+function GetDailyGridViewData(dataList)
+	local viewData = {}
+
+	local maxDamage = 0
+	for k, itemData in pairs(dataList) do
+		local memberViewData = {}
+		local memberData = itemData.basicInfo
+		memberViewData.playerInfo = memberData
+		memberViewData.userId = memberData.userId
+		memberViewData.name = FormatWorldPlayerName(memberData.name, memberData.zone)
+		memberViewData.icon = memberData.icon
+		memberViewData.power = GetValueAbbreviation(itemData.combat)
+		memberViewData.title = FormatTitle(memberData.authority)
+		memberViewData.countText = tostring(itemData.count)
+		memberViewData.countText = string.format(Language:getStr("UnionDungeonView_nameTxt_1046"),itemData.count)
+		memberViewData.zone = memberData.zone
+
+		local damage = itemData.hurt
+		maxDamage = damage > maxDamage and damage or maxDamage
+		memberViewData.damage = damage
+		memberViewData.damageText = tostring(damage)
+		memberViewData.damagePercent = 0
+		table.insert(viewData, memberViewData)
+	end
+
+	if maxDamage > 0 then
+		table.sort(viewData, function(a, b)
+			return a.damage > b.damage
+		end)
+	end
+
+	local RIBBON_IDX_MAX = 3
+	local ICON_NAME_RIBBON = "new_com_paiming"
+	for i = 1, #viewData do
+		local memberViewData = viewData[i]
+		memberViewData.damagePercent = maxDamage ~= 0 
+			and memberViewData.damage / maxDamage or 0
+		memberViewData.rankText = tostring(i)
+		memberViewData.showRibbon = i <= RIBBON_IDX_MAX
+		memberViewData.ribbonIcon = ICON_NAME_RIBBON .. memberViewData.rankText
+	end
+	
+	return viewData
+end
+
+function FormatTitle(title)
+	local languageKey = "UnionMember"
+	if title == UnionMemberType.Elder then
+		languageKey = "UnionElder"
+	elseif title == UnionMemberType.Leader then
+		languageKey = "UnionLeader"
+	end
+	return Language:getStr(languageKey)
+end
+
+function RefreshCountdown()
+	if self == nil or self.Module == nil then
+		return
+	end
+	if dungeonData then
+		local endTime = dungeonData.seasonEndTime
+		local countdownText = CheckTimeRemain(endTime, false)
+		if IsNilOrEmpty(countdownText) then
+			TryGetDungeonData()
+			CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionBossResetTips"))
+		else
+			self:SendNotification("RefreshCountdown", countdownText)
+		end
+	end
+end

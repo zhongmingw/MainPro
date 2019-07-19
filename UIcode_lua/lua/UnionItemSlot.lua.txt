@@ -1,0 +1,27 @@
+
+
+function OnUnionItemSlotBindValue(slot, data)
+	local selfTrans = slot.transform
+
+	local path = "Banner"
+	local bannerTrans = selfTrans:Find(path)
+	path = "bannerImg"
+	local bannerImage = bannerTrans:GetGameObjectAtPath(path)
+	CsBridge.IconData.SetIconByName(bannerImage, data.icon)
+    
+	path = "lvlTxt"
+	local lvlText = bannerTrans:GetComponentAtPath(path ,CLS_TEXT)
+	lvlText.text = data.levelText
+
+	path = "unionNameTxt"
+	local nameText = slot:GetComponentAtPath(path ,CLS_TEXT)
+	nameText.text = data.name
+
+	path = "memberCountTxt"
+	local memberCountText = slot:GetComponentAtPath(path ,CLS_TEXT)
+	memberCountText.text = data.memeberText
+
+	path = "ApplyBtn"
+	local applyBtn = slot:GetComponentAtPath(path ,CLS_BUTTON_ARCHLY)
+	applyBtn.interactable = data.btnEnabled
+end

@@ -1,0 +1,48 @@
+
+local oldPwdInput
+local newPwdInput
+local confirmPwdInput
+
+local isInit = false
+
+function DoInit()
+    self.Shadow = 1
+end
+
+function InitUI()
+    oldPwdInput = CsBridge.GetInputFromView(self, "Center/OldPwdInput")
+	newPwdInput = CsBridge.GetInputFromView(self, "Center/NewPwdInput")
+    confirmPwdInput = CsBridge.GetInputFromView(self, "Center/ConfirmPwdInput")
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end 
+end
+
+function OnConfirmBtnClick(sender)
+    self:SendCommand("ChangePwd",oldPwdInput.text,newPwdInput.text,confirmPwdInput.text)
+end 
+
+function OnNotification_CloseChangePwdView(objs)
+    self:HideView(self.gameObject.name)
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function OnClose() 
+    oldPwdInput.text = ""
+    newPwdInput.text = ""
+    confirmPwdInput.text = ""
+end
+
+function DoExit()
+    oldPwdInput = nil
+    newPwdInput = nil
+    confirmPwdInput = nil
+    isInit	 = nil
+end

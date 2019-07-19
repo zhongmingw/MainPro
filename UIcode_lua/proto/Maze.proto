@@ -1,0 +1,52 @@
+import "BattleData.proto";
+package Maze;
+
+message EnterLabyrinthReq 
+{
+    required bool enterNext = 1;//是否进入下一关，（上梯子时为true）
+}
+
+/**
+ * @author tanghanxiang
+ * @date 2019.4.28
+ * @description 进入迷宫和移动都用这个响应结构
+ */
+message LabyrinthResp 
+{
+    required string labyrinthResp = 1;
+    required BattleData.BattleInfo battleInfo = 2;
+}
+
+message MoveReq 
+{
+    //目标点的行和列
+    required string moveReq = 1;
+}
+
+message DeleteLabyrinthReq
+{
+    required int32 useless = 1;
+}
+
+message DeleteLabyrinthResp
+{
+    required int32 status = 1;
+}
+
+message UseItemReq
+{
+    required int32 itemId = 1;
+    required int32 row = 2;
+    required int32 col = 3;
+}
+
+message GMSkipFloorReq 
+{
+    required int32 floor = 1;
+}
+
+message GMGetItemReq 
+{
+    required int32 itemId = 1;
+    required int32 count = 2;
+}

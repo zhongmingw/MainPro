@@ -1,0 +1,77 @@
+--[[
+	file: LeagueSignupView.lua
+	author: hangang
+	description: For league season sign up
+]]
+
+local cdTxt, rankTxt
+local signUpBtnObj, formationBtnObj
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 0     --shadow type
+	InitUI()            --cache UI items
+end 
+
+function InitUI()
+	local path = "Labels/placeCountTxt"
+	rankTxt = self:GetComponentAtPath(path, CLS_TEXT)
+	path = "Labels/cdTxt"
+	cdTxt = self:GetComponentAtPath(path, CLS_TEXT)
+	path = "Buttons/SignupBtn"
+	signUpBtnObj = self:GetGameObjectAtPath(path)
+	path = "Buttons/FormationBtn"
+	formationBtnObj = self:GetGameObjectAtPath(path)
+end
+
+--UIController events handlers-------------------------------------------------------
+function OnNotification_RefreshSignUpView(objs)
+	if self.gameObject.activeInHierarchy then
+		local viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function RefreshView(data)
+	cdTxt.text = data.countdown or "00:00:00"
+	rankTxt.text = data.rank
+	signUpBtnObj:SetActive(not data.signed)
+	formationBtnObj:SetActive(data.signed)
+end
+
+function OnNotification_RefreshSignUpCD(objs)
+	if self.gameObject.activeInHierarchy then
+		cdTxt.text = objs[0]
+	end
+end
+
+--UI event handlers-------------------------------------------------------------------
+function OnTipsBtnClick(sender)
+	self:SendCommand("OpenHelpView", self.gameObject.name)
+end
+
+function OnSignupBtnClick(sender)
+	self:SendCommand("SignUpBtnClicked")
+end
+
+function OnFormationBtnClick(sender)
+	self:SendCommand("SignupViewFormationBtnClicked")
+end
+
+function OnListBtnClick(sender)
+	self:SendCommand("SignupViewListBtnClicked")
+end
+
+--On closing--------------------------------------------------------------------------
+function OnNotification_CloseLeagueView(obj)
+	self:HideView("LeagueSignupView")
+end
+
+
+function DoExit()
+
+	cdTxt = nil 
+	rankTxt = nil
+	signUpBtnObj = nil 
+	formationBtnObj = nil
+end

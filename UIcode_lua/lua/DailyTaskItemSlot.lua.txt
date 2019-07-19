@@ -1,0 +1,18 @@
+local loadedRewardItemSlot = require "RewardItemSlot"
+
+function OnDailyTaskItemSlotBindValue(slot, data)
+    local receivedBtn = slot:GetComponentAtPath("ReceivedBtn", CLS_BUTTON_ARCHLY)
+    local goBtnObj = slot:GetGameObjectAtPath("GoBtn")
+    local desTxt = slot:GetComponentAtPath("NameTxt", CLS_TEXT)
+    local compProgressSlider = slot:GetComponentAtPath("ProgressSlider", CLS_SLIDER)
+    local compNumTxt = slot:GetComponentAtPath("NumTxt", CLS_TEXT)
+    local reward = slot.transform:Find("Reward/ItemSlot")
+
+    SetRewardIcon(reward, data.rewardStr)
+    desTxt.text = data.description
+    compProgressSlider.value = data.sliderValue
+    compNumTxt.text = data.sliderTxt
+    receivedBtn.gameObject:SetActive(not data.showGoBtn)
+    goBtnObj:SetActive(data.showGoBtn)
+    receivedBtn.interactable = not data.getBtnGray
+end

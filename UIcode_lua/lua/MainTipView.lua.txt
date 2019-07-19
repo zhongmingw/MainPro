@@ -1,0 +1,825 @@
+require "ActivityIconItemSlot"
+local yield_return = (require 'cs_coroutine').yield_return
+
+local TICKER_ONLINE = "MainTipView_OnlineReward"
+local TICKER_VIDEO = "MainTipView_RewardedVideo"
+
+local leftTop_TF
+local rightTop_TF
+local rightTopInitX
+local rightTopInitY
+local activityIconGrid
+local activityIconTrans
+local bottom_TF
+local activityIconSpacing
+local ActivityIconItemSlotHeight = 83
+local ActivityIconGridColWidth = 100
+local MAX_ROWS = 6
+
+local leftContent
+local upArrowObj
+local downArrowObj
+local player_GO
+local player_TF
+local head_Sprite
+local vipLv_Lab, vipLbl
+local lv_Lab
+local swithGroup
+local bottomGroup, bottomToggles
+local iconTips
+local isSwitchOn = false
+
+--online reward
+local onlineRewardBtnObj
+local onlineRewardTimeTxt
+local onlineRewardTimeParentObj
+local onlineRewardTF
+local onlineRewardIcon 
+local onlineRewardMoveLight
+local onlineRewardLightObj
+local onlineRewardBreathScript
+
+local upRewardVedioBtnObj
+
+local challengeFlag
+local challengeCountFlag
+
+local swithTogFlag
+local heroBagFlag
+local mailFlag
+local dailyTaskFlag 
+local bagFlag
+local friendFlag
+local stageFormationFlag
+local chatRedFlag
+
+local curBgmIndex
+local onlineRewarded = false
+
+local specialActivityIconGrid
+
+local hasItemSlot = false
+local cnt = 0
+
+local isInitCoinView = false
+
+function OnOpen()
+    curBgmIndex = 16
+	LoadHead()
+	LoadMoneyBanner()
+	LoadOnlineReward()
+	self:SendCommand("CheckFaildPayOrder")
+end
+
+function DoInit()
+	local viewTrans = self.transform
+	leftTop_TF = viewTrans:Find("LeftTop")
+	rightTop_TF = viewTrans:Find("RightTop")
+	rightTopInitX = CsBridge.UnityHelper.GetAnchoredPosition(rightTop_TF,1)
+	rightTopInitY = CsBridge.UnityHelper.GetAnchoredPosition(rightTop_TF,2)
+	activityIconGrid = viewTrans:GetComponentAtPath("RightTop/ActivityIconGrid",CLS_UI_ITEM_GRID)
+	activityIconTrans = activityIconGrid.transform
+	activityIconSpacing = activityIconTrans:GetComponent("GridLayoutGroup").spacing
+	bottom_TF = viewTrans:Find("Bottom")
+    leftContent = viewTrans:Find("LeftTop/Viewport/Content")
+    upArrowObj = viewTrans:GetGameObjectAtPath("LeftTop/SwithGroup/SwithTog/Arrow_Up")
+    downArrowObj = viewTrans:GetGameObjectAtPath("LeftTop/SwithGroup/SwithTog/Arrow_Down")
+	player_GO = viewTrans:Find("LeftTop/Player_GO")
+	player_TF = player_GO:Find("PlayerBase")
+    swithGroup = viewTrans:GetComponentAtPath("LeftTop/SwithGroup" ,"ToggleGroupArchly")
+	iconTips = player_GO:GetGameObjectAtPath("Tips")
+    bottomGroup = viewTrans:GetComponentAtPath("Bottom/BottomGroup" ,"ToggleGroupArchly")
+
+	bottomToggles = {}
+	bottomToggles.unionTog = viewTrans:GetComponentAtPath("Bottom/BottomGroup/UnionTog" ,CLS_TOGGLE_ARCHLY)
+	bottomToggles.stageTog = viewTrans:GetComponentAtPath("Bottom/BottomGroup/StageTog" ,CLS_TOGGLE_ARCHLY)
+
+	swithTogFlag=viewTrans:GetGameObjectAtPath("LeftTop/SwithGroup/SwithTog/NewFlag").gameObject
+	challengeFlag=viewTrans:GetGameObjectAtPath("LeftTop/Viewport/Content/ChallengeBtn/icon01Img")
+	challengeCountFlag=viewTrans:GetGameObjectAtPath("LeftTop/Viewport/Content/ChallengeBtn/icon02Img")
+	heroBagFlag = viewTrans:GetGameObjectAtPath("Bottom/HeroBtn/NewFlag")
+	mailFlag = viewTrans:GetGameObjectAtPath("LeftTop/Viewport/Content/MailBtn/NewFlag")
+	dailyTaskFlag = viewTrans:GetGameObjectAtPath("LeftTop/Viewport/Content/DailyTaskBtn/NewFlag")
+	bagFlag = viewTrans:GetGameObjectAtPath("Bottom/BagBtn/NewFlag")
+	friendFlag = viewTrans:GetGameObjectAtPath("LeftTop/Viewport/Content/friendbtnBtn/NewFlag")
+	stageFormationFlag = viewTrans:GetGameObjectAtPath("LeftTop/Viewport/Content/FormationBtn/NewFlag")
+	chatRedFlag = self:GetGameObjectAtPath("Left/ChatBtn/NewFlag")
+
+	onlineRewardBtnObj = viewTrans:GetGameObjectAtPath("RightTop/OnlineRewardBtn")
+	onlineRewardTimeTxt = onlineRewardBtnObj.transform:GetComponentAtPath("bgImg/TimeTxt" ,CLS_TEXT)
+	onlineRewardTimeParentObj = viewTrans:GetGameObjectAtPath("RightTop/OnlineRewardBtn/bgImg")
+	onlineRewardTF = onlineRewardBtnObj.transform:Find("ItemSlot")
+	onlineRewardIcon = onlineRewardTF:GetGameObjectAtPath("IconSprite")
+	onlineRewardBreathScript = onlineRewardTF:GetComponent("LuaMono")
+
+	upRewardVedioBtnObj = self:GetGameObjectAtPath("LeftTop/UpRewardVedioBtn")
+	specialActivityIconGrid = self:GetComponentAtPath("Left/SpecialActivityIconGrid",CLS_UI_ITEM_GRID)
+
+	MsgCenter:Subscribe(CsBridge.SysMsgDef.Notify_SingleDataChanged, OnSingleDataChanged)
+	MsgCenter:Subscribe(CsBridge.SysMsgDef.Notify_ItemDataChanged, OnAppItemDataChanged)
+	MsgCenter:Subscribe(Notify_OnBattleEnd, OnBattleEnd)
+	MsgCenter:Subscribe(Notify_InitCoin,InitCoin)
+	MsgCenter:Subscribe(Notify_StopCoin,StopCoin)
+	MsgCenter:Subscribe(Notify_ShowMap,ShowMap)
+	MsgCenter:Subscribe(Notify_HideMap,HideMap)
+	MsgCenter:Subscribe(Notify_HeroBagRedFlagChanged, OnHeroBagRedFlagChanged)
+	MsgCenter:Subscribe(Notify_MailRedFlagChanged, OnMailRedFlagChanged)
+	MsgCenter:Subscribe(Notify_DailyTaskRedFlagChanged, OnDailyTaskRedFlagChanged)
+	MsgCenter:Subscribe(Notify_BagRedFlagChanged, OnBagRedFlagChanged)
+	MsgCenter:Subscribe(Notify_ChatWorldRedFlagChanged, OnChatWorldRedFlagChanged)
+	MsgCenter:Subscribe(Notify_GuideView, OnGuideViewChange)
+end
+
+function SetParamDataList(data)
+	local togIdx = data[0]
+	bottomGroup:SetToggleOn(togIdx)
+end
+
+function OnBattleEnd()
+	if not UIOpen(UI_OPEN_TYPE_ONLINEREWARD) then
+		return
+	end 
+	self:SendCommand("InitOnlineRewardData")
+end
+
+function InitCoin(class)
+	if class~=0 then
+		swithGroup:SetAllTogglesOff()
+	end
+end
+
+function StopCoin()
+	swithGroup:SetToggleOn(0)
+end
+
+function OnLinked(data)
+	local index=tonumber(data)
+	bottomGroup:SetAllTogglesOff()
+	bottomGroup:SetToggleOn(index)
+end
+
+function OnAnimationFinished()
+	self:SendCommand("RefreshMainTipRedFlag")
+	self:SendCommand("CheckUpRewardVedioBtn")
+	self:SendCommand("InitActivityIconData")
+	hasItemSlot = false
+	cnt = 0
+end 
+
+function OnAppItemDataChanged(obj)
+	local clsName = obj[0]
+	if clsName == "PlayerAchievement" then
+		RefreshIconFlag()
+	elseif clsName == "PackItem" then
+
+	end 
+end
+
+function OnSingleDataChanged(obj)
+	if obj == "PlayerInfo" then
+		LoadHead()
+		RefreshMoneyBanner()
+		RefreshIconFlag()
+
+	elseif obj == "PlayerAchievement" then
+		RefreshIconFlag()
+	elseif obj == "GetGoldInfo" then
+		RefreshGetGoldFlag()
+	end 
+end
+
+function ShowMap(obj)
+	local action = obj
+	CsBridge.TweenUtils.MoveToByAnchored(leftTop_TF,-130,0,0.3,function()
+	    leftTop_TF.gameObject:SetSelfActive(false)
+	end)
+	CsBridge.TweenUtils.MoveToByAnchored(rightTop_TF,130,rightTopInitY,0.3,function()
+	    rightTop_TF.gameObject:SetSelfActive(false)
+	end)
+	CsBridge.TweenUtils.MoveToByAnchored(bottom_TF,0,-130,0.3,function()
+	    bottom_TF.gameObject:SetSelfActive(false)
+	    if (action ~= nil) then
+	        action()
+	    end
+	end)
+
+end
+
+function HideMap()
+    leftTop_TF.gameObject:SetSelfActive(true)
+    rightTop_TF.gameObject:SetSelfActive(true)
+    bottom_TF.gameObject:SetSelfActive(true)
+	CsBridge.TweenUtils.MoveToByAnchored(leftTop_TF,0,0,0.3,nil)
+	CsBridge.TweenUtils.MoveToByAnchored(rightTop_TF,rightTopInitX,rightTopInitY,0.3,nil)
+	CsBridge.TweenUtils.MoveToByAnchored(bottom_TF,0,0,0.3,nil)
+end
+
+function RefreshTips()
+	RefreshGetGoldFlag()
+	RefreshIconFlag()
+end
+
+function OnNotification_ChallengeRed(objs)
+	local active = objs[0]
+	swithTogFlag:SetSelfActive(active and not isSwitchOn or swithTogFlag.activeSelf)
+	challengeFlag:SetSelfActive(active)
+end
+
+function OnHeroBagRedFlagChanged(redFlag)
+	heroBagFlag:SetSelfActive(redFlag)
+end 
+
+function OnMailRedFlagChanged(redFlag)
+	swithTogFlag:SetSelfActive(redFlag and not isSwitchOn or swithTogFlag.activeSelf)
+	mailFlag:SetSelfActive(redFlag)
+end
+
+function OnDailyTaskRedFlagChanged(redFlag)
+	swithTogFlag:SetSelfActive(redFlag and not isSwitchOn or swithTogFlag.activeSelf)
+	dailyTaskFlag:SetSelfActive(redFlag)
+end
+
+function OnBagRedFlagChanged(redFlag)
+	bagFlag:SetSelfActive(redFlag)
+end
+
+function OnChatWorldRedFlagChanged(redFlag)
+	chatRedFlag:SetSelfActive(redFlag)
+end
+
+function OnNotification_RefreshFriendRedFlag(objs)
+	local redFlag = objs[0]
+	swithTogFlag:SetSelfActive(redFlag and not isSwitchOn or swithTogFlag.activeSelf)
+	friendFlag:SetSelfActive(redFlag)
+end 
+
+function OnNotification_RefreshFormationRedFlag(objs)
+	local redFlag = objs[0]
+	swithTogFlag:SetSelfActive(redFlag and not isSwitchOn or swithTogFlag.activeSelf)
+	stageFormationFlag:SetSelfActive(redFlag)
+end
+
+function RefreshGetGoldFlag()
+	CsBridge.MoneyBanner.SetCoinTipsVisible(true)
+	local goldInfo = appData:checkData("GetGoldInfo")
+	if goldInfo == nil then
+		return
+	end
+
+	local getGoldStatus = goldInfo.takenIds
+	
+	if getGoldStatus ~= nil then
+		for k, typeID in pairs(getGoldStatus) do
+			if typeID == 1 then
+				CsBridge.MoneyBanner.SetCoinTipsVisible(false)
+			end
+		end
+	end
+end
+
+function RefreshIconFlag()
+	local rewardEnabled = CheckAchivementTips()
+	iconTips:SetActive(rewardEnabled)
+end
+
+function LoadHead()
+	local playerInfo = appData:checkData("PlayerInfo")
+	BindPlayerBaseInfoValue(player_TF,playerInfo)
+	RefreshIconFlag()
+end
+
+function LoadMoneyBanner()
+	CsBridge.MoneyBanner.SetCoinBannerClickedCbk(OnCoinBannerClick)	
+	CsBridge.MoneyBanner.SetGemBannerClickedCbk(OnGemBannerClick)
+	RefreshMoneyBanner()
+	RefreshGetGoldFlag()
+end
+
+function OnCoinBannerClick(sender)
+	if CheckShowing() then return end
+
+	local getGold_ModelID = 38
+	local showHint = true
+	if not UIOpen(getGold_ModelID, showHint) then
+		return
+	end
+	self:ShowModule("GetGoldModule",nil,true, nil, false)
+end
+
+function OnGemBannerClick(sender)
+	if CheckShowing() then return end
+    self:ShowModule("PayModule",nil,true, nil, false)
+end
+
+function OnCoinBtnClick(sender)
+	OnCoinBannerClick(sender)
+end
+
+function CheckShowing()
+	return CsBridge.moduleManager.Showing
+end
+
+function RefreshMoneyBanner()
+	local playerInfo = appData:checkData("PlayerInfo")
+	local num=playerInfo.payGem + playerInfo.rewardGem
+	CsBridge.MoneyBanner.SetGemCount(num)
+	num = playerInfo.coin
+	CsBridge.MoneyBanner.SetCoinCount(num)
+end
+
+function OnSwithGroupClick(isOn,index)
+	if (isSwitchOn and isOn) or ((not isSwitchOn) and (not isOn)) then
+	    return
+	else
+		upArrowObj:SetActive(not isOn)
+		downArrowObj:SetActive(isOn)
+		specialActivityIconGrid.gameObject:SetSelfActive(not isOn)
+		local duration = 0.3
+	    if isOn then
+		    leftContent.gameObject:SetSelfActive(true)
+		    CsBridge.TweenUtils.MoveTo(leftContent,0,400,duration,nil)
+		    swithTogFlag:SetSelfActive(false)
+        else     
+		    CsBridge.TweenUtils.MoveTo(leftContent,0,1181,duration,
+		    function()
+			    leftContent.gameObject:SetSelfActive(false)
+		    end)
+		    swithTogFlag:SetSelfActive(
+			    challengeFlag.activeSelf or
+			    mailFlag.activeSelf or
+			    dailyTaskFlag.activeSelf or
+			    friendFlag.activeSelf or
+			    stageFormationFlag.activeSelf)
+        end
+        isSwitchOn=not isSwitchOn
+	end
+end
+
+function OnHeroBtnClick(sender)
+    self:ShowModule("HeroBookModule", nil, false)
+end
+
+function OnBagBtnClick(sender)
+    if not UIOpen(31) then
+        return
+	end
+    self:ShowModule("BagModule", nil, false)
+end
+
+function OnBottomGroupClick(isOn,index)
+    if not isOn then
+        return
+    end
+
+	local viewRoot = self.transform.parent
+	local popupRoot
+    if index==0 then
+		if not UIOpen(UI_OPEN_TYPE_GUILD) then
+			return
+		end
+		self:SendCommand(
+			"EnterUnion",
+			function(view, joined)
+				if joined then
+					viewRoot:SetAsLastSibling()
+					self:HideView("StageView",false)
+					self:HideView("MainView",false)
+					swithGroup:SetAllTogglesOff()
+				else
+					bottomGroup:SetAllTogglesOff()
+				end
+			end)
+    elseif index==1 then
+        if not UIOpen(1) then
+            return
+        end
+		self:OpenView("StageView","StageModel",false,false)
+		viewRoot:SetAsLastSibling()
+		if not isInitCoinView then
+			local view = self:OpenView("CoinView","StageModel",true,false)
+			view.transform:SetAsLastSibling()
+			isInitCoinView = true
+		end
+		self:HideView("MainView",false)
+		self:HideView("UnionSceneView",false)
+        curBgmIndex = 16
+    elseif index==2 then
+        if not UIOpen(1) then
+            return
+		end
+
+		self:OpenView("MainView","MainModel",false,false)
+		viewRoot:SetAsLastSibling()
+		self:HideView("StageView",false)
+		self:HideView("UnionSceneView",false)
+        curBgmIndex = 14
+	end
+end
+
+function OnChallengeBtnClick(sender)
+    if not UIOpen(9) then
+		return
+    end
+	self:ShowModule("ChallengeModule",nil,false)
+end
+
+function OnDailyTaskBtnClick(sender)
+	if not UIOpen(20) then
+		return
+    end
+	self:ShowModule("DailyTaskModule",nil,false)
+end
+
+function OnAssistBtnClick(sender)
+	self:ShowModule("AssistModule",nil)
+end
+
+function OnSettingBtnClick(sender)
+	self:ShowModule("SettingModule", {curBgmIndex},false)
+end
+
+function OnFormationBtnClick(sender)
+	self:ShowModule("StageFormationModule", nil,false)
+end
+
+function OnChatBtnClick(sender)
+	if not UIOpen(14) then
+		return
+	end
+	self:ShowModule("ChatWorldModule",nil,false)
+end
+
+function OnMailBtnClick(sender)
+	if not UIOpen(12) then
+		return
+	end
+	self:ShowModule("MailModule",nil,false)
+end
+
+function OnPlayerBaseClick(sender)
+    self:ShowModule("HeadModule", {RefreshPlayerInfo})
+end
+
+function OnPetBtnClick(sender)
+	if not UIOpen(UI_OPEN_TYPE_PET) then
+		return
+	end
+	self:ShowModule("PetModule",nil,false)
+end
+
+function DoExit()
+	MsgCenter:Unsubscribe(CsBridge.SysMsgDef.Notify_SingleDataChanged, OnSingleDataChanged)
+	MsgCenter:Unsubscribe(CsBridge.SysMsgDef.Notify_ItemDataChanged, OnAppItemDataChanged)
+	MsgCenter:Unsubscribe(Notify_OnBattleEnd, OnBattleEnd)
+	MsgCenter:Unsubscribe(Notify_InitCoin,InitCoin)
+	MsgCenter:Unsubscribe(Notify_StopCoin,StopCoin)
+	MsgCenter:Unsubscribe(Notify_ShowMap,ShowMap)
+	MsgCenter:Unsubscribe(Notify_HideMap,HideMap)
+	MsgCenter:Unsubscribe(Notify_HeroBagRedFlagChanged, OnHeroBagRedFlagChanged)
+	MsgCenter:Unsubscribe(Notify_MailRedFlagChanged, OnMailRedFlagChanged)
+	MsgCenter:Unsubscribe(Notify_DailyTaskRedFlagChanged, OnDailyTaskRedFlagChanged)
+	MsgCenter:Unsubscribe(Notify_BagRedFlagChanged, OnBagRedFlagChanged)
+	MsgCenter:Unsubscribe(Notify_ChatWorldRedFlagChanged, OnChatWorldRedFlagChanged)
+	MsgCenter:Unsubscribe(Notify_GuideView, OnGuideViewChange)
+	self.Module=nil
+	
+	Timer:StopTicker(TICKER_ONLINE)
+	Timer:StopTicker(TICKER_VIDEO)
+
+	yield_return = nil
+
+	TICKER_ONLINE = nil
+	TICKER_VIDEO = nil
+
+	leftTop_TF = nil
+	rightTop_TF = nil
+	rightTopInitX = nil
+	rightTopInitY = nil
+	activityIconGrid = nil
+	activityIconTrans = nil
+	bottom_TF = nil
+	activityIconSpacing = nil
+	ActivityIconItemSlotHeight = nil
+	ActivityIconGridColWidth = nil
+	MAX_ROWS = nil
+
+	leftContent = nil
+	upArrowObj = nil
+	downArrowObj = nil
+	player_GO = nil
+	player_TF = nil
+	head_Sprite = nil
+	vipLv_Lab, vipLbl = nil
+	lv_Lab = nil
+	swithGroup = nil
+	bottomGroup, bottomToggles = nil
+	iconTips = nil
+	isSwitchOn = nil
+
+--online reward
+	onlineRewardBtnObj = nil
+	onlineRewardTimeTxt = nil
+	onlineRewardTimeParentObj = nil
+	onlineRewardTF = nil
+	onlineRewardIcon  = nil
+	onlineRewardMoveLight = nil
+	onlineRewardLightObj = nil
+	onlineRewardBreathScript = nil
+
+	upRewardVedioBtnObj = nil
+
+	challengeFlag = nil
+	challengeCountFlag = nil
+
+	swithTogFlag = nil
+	heroBagFlag = nil
+	mailFlag = nil
+	dailyTaskFlag  = nil
+	bagFlag = nil
+	friendFlag = nil
+	stageFormationFlag = nil
+	chatRedFlag = nil
+
+	curBgmIndex = nil
+	onlineRewarded = nil
+
+	specialActivityIconGrid = nil
+
+	hasItemSlot = nil
+	cnt = nil
+end
+
+function OnDoUnhide()
+	RefreshTips()
+	self:SendCommand("RevertOnlineRewardTimer")
+	self:SendCommand("InitActivityIconData")
+end
+
+function OnfriendbtnBtnClick(sender)
+	if not UIOpen(UI_OPEN_TYPE_FRIIEND,true) then
+		return
+	end
+    self:ShowModule("FriendModule",nil,false)
+end
+
+function CheckAchivementTips()
+	local achievements = appData:checkAllItems("PlayerAchievement")
+	if achievements and achievements.Length > 0 then
+		local rewardFlag = 1
+		for i = 0, achievements.Length - 1 do
+			local achievement = achievements[i]
+			local enabled = (achievement.status == rewardFlag)
+			if enabled then
+				return true
+			end
+		end
+	end
+
+	return false
+end
+
+--online reward
+function LoadOnlineReward()
+	if not UIOpen(UI_OPEN_TYPE_ONLINEREWARD) then
+		return
+	end 
+	self:SendCommand("InitOnlineRewardData")
+end
+
+local function CacheOnlineRewardRes(data, onFinished)
+	local typeId = data.typeId
+	local itemId = data.id
+	local resName = ""
+	if typeId == ItemTypeEnum.Resource then
+		resName = ResTblContainer:GetPropToStr(itemId,Resource.icon,Resource.ResourceTbl)
+	elseif typeId == ItemTypeEnum.Item then
+		resName = ResTblContainer:GetPropToStr(itemId,ItemBase.icon,ItemBase.actorTbl)
+	elseif typeId == ItemTypeEnum.Hero then
+		resName = ResTblContainer:GetPropToStr(itemId,HeroBase.icon,HeroBase.actorTbl)
+	elseif typeId == ItemTypeEnum.Relic then
+		resName = ResTblContainer:GetPropToStr(itemId,Relic.icon,Relic.tblName)
+	elseif typeId == ItemTypeEnum.Jewel then
+		resName = ResTblContainer:GetPropToStr(itemId,Jewel.icon,Jewel.tblName)
+	end
+
+	CsBridge.CacheAssetsByModule(self.Module, onFinished, resName)
+end
+
+function OnNotification_RefreshOnlineReward(objs)
+	local curOnlineReward = objs[0]
+	if curOnlineReward ~= nil then
+		onlineRewardBtnObj:SetSelfActive(true)
+		local onlineRewardReady = curOnlineReward.status == 1
+		CacheOnlineRewardRes(
+			curOnlineReward.reward, 
+			function()
+				BindItemBaseValue(onlineRewardTF,curOnlineReward.reward)
+				onlineRewardTF.gameObject:SetSelfAndChildrenGray(not onlineRewardReady)
+			end)
+		onlineRewardTimeTxt:SetText("")
+		onlineRewardTimeParentObj:SetSelfActive(not onlineRewardReady)
+		MsgCenter:Broadcast(Notify_SetBreatheScaleFactor, onlineRewardReady)
+
+		if not onlineRewardReady then
+			local endTime = curOnlineReward.startTime+curOnlineReward.time
+			local onLooping = function()
+				if onlineRewardTimeTxt ~= nil then
+					onlineRewardTimeTxt:SetText(CheckTimeRemain(endTime))
+				end
+			end
+			local onFinished = function()
+				self:SendCommand("OnlineTimeCanReceived")
+			end
+			Timer:AddTicker(TICKER_ONLINE, endTime, onLooping, onFinished)
+		end
+	else 
+		MsgCenter:Broadcast(Notify_SetBreatheScaleFactor, false)
+		onlineRewardBtnObj:SetSelfActive(false)
+	end	
+end
+
+function OnOnlineRewardBtnClick(sender)
+	self:SendCommand("ReceivedOnlineReward")
+end
+
+function OnNotification_RefreshUpRewardVedio(objs)
+	local data = objs[0]
+	upRewardVedioBtnObj:SetSelfActive(false)
+	if not data.isOpen then
+		return
+	end
+	if data.lastTime <= 0 then
+		upRewardVedioBtnObj:SetSelfActive(true)
+	else
+		local endTime = data.lastTime+data.cdTime
+		local onLooping = nil
+		local onFinished = function()
+			upRewardVedioBtnObj:SetSelfActive(true)
+		end
+		local interval = 10
+		Timer:AddTicker(TICKER_VIDEO, endTime, onLooping, onFinished, interval)
+	end
+end
+
+function OnUpRewardVedioBtnClick(sender)
+	ShowUpRewardVedio(self, UpRewardVedioID.MainCity)
+end
+
+function ShowNickNameView()
+	self:OpenModule("RenameModule",nil)
+end
+
+function OnGuideViewChange(obj)
+    if(obj=="ShowLeft") then
+	    ShowLeft()
+	elseif (obj=="ShowRight") then
+	    ShowRight()
+	elseif (obj=="HideAll") then
+	    HideAll()
+	elseif (obj=="ShowAll") then
+	    ShowAll()
+	end
+end
+
+function ShowLeft()
+    CsBridge.MoneyBanner.SetButtonsEnabled(false)
+	OnSwithGroupClick(true,0)
+	rightTop_TF.gameObject:SetSelfActive(false)
+end
+
+function ShowRight()
+    CsBridge.MoneyBanner.SetButtonsEnabled(false)
+	OnSwithGroupClick(false,0)
+	rightTop_TF.gameObject:SetSelfActive(true)
+end
+
+function HideAll()
+    CsBridge.MoneyBanner.SetButtonsEnabled(false)
+	OnSwithGroupClick(false,0)
+	rightTop_TF.gameObject:SetSelfActive(false)
+end
+
+function ShowAll()
+    CsBridge.MoneyBanner.SetButtonsEnabled(true)
+	OnSwithGroupClick(false,0)
+	rightTop_TF.gameObject:SetSelfActive(true)
+end
+
+function HideMarquee()
+	CsBridge.marquee:HideBanner()
+end
+
+function ShowMarquee()
+	CsBridge.marquee:ShowBanner()
+end
+
+function ShowTripleGift()
+	MsgCenter:Broadcast(Notify_OpenActivityView,{id = ActivityIcon.FirstCharge})
+end
+
+function OnNotification_ReceivedOnlineReward()
+    onlineRewarded = true
+end
+
+function ResetOnlineStatus()
+    ShowRight()
+    onlineRewarded = false
+end
+
+function SwitchExpand()
+    OnSwithGroupClick(true,0)
+end
+
+function SwitchReduce()
+	OnSwithGroupClick(false,0)
+end
+
+function FinishOnlineReward()
+    return onlineRewarded
+end
+
+function OnNotification_TurnUnionTogOff(data)
+	bottomToggles.unionTog.isOn = false
+	bottomToggles.stageTog.isOn = false
+	bottomToggles.stageTog.isOn = true
+end
+
+function OnNotification_TurnUnionTogOn(data)
+	bottomToggles.unionTog.isOn = false
+	bottomToggles.unionTog.isOn = true
+end
+
+function OnNotification_RefreshActivityIconView(objs)
+	if self.gameObject.activeInHierarchy then
+		local activityIconData = objs[0]
+		local count = #activityIconData
+		local cols = math.modf(count/MAX_ROWS)+1
+		local sizeDelta = {
+			x = ActivityIconGridColWidth*cols+(cols-1)*activityIconSpacing.x,
+			y = math.min(count, MAX_ROWS)*ActivityIconItemSlotHeight+math.min(count-1, MAX_ROWS-1)*activityIconSpacing.y
+		}
+		activityIconTrans:ResetSizeDelta(sizeDelta)
+		activityIconGrid:RefreshItemSlots(activityIconData,self.gameObject,"ActivityIconItemSlot")
+		hasItemSlot = true
+	end
+end
+
+function OnNotification_RefreshActivityIcon(objs)
+	local icon = objs[0]
+	activityIconGrid:SingleRefreshSlot(icon)
+end
+
+function OnNotification_RefreshSpecialActivityIconView(objs)
+	local activityIconData = objs[0]
+	specialActivityIconGrid.gameObject:SetSelfActive(#activityIconData ~= 0 and not isSwitchOn)
+	specialActivityIconGrid:RefreshItemSlots(activityIconData,self.gameObject,"ActivityIconItemSlot")
+end
+
+function OnNotification_UpdateActivityIconCountDown(objs)
+	local dic = objs[0]
+	local slots = activityIconGrid:GetAllItems()
+	if slots then
+		for i=0, slots.Length-1 do
+			local slot = slots[i]
+			if slot.m_data then
+				local data = dic[slot.m_data.id]
+				if data then
+					local timeTxt = slot:GetComponentAtPath("bgImg/TimeTxt",CLS_TEXT)
+					timeTxt.text = data.remainTime
+				end
+			end
+		end
+	end
+end
+
+
+function OnSpecialActivityIconGridActivityIconItemSlotClick(obj)
+	local data = obj.m_data
+	local pos = obj.transform:CheckPosition()
+	self:SendCommand("SelectActivityIcon",data,pos)
+end
+
+function OnActivityIconGridActivityIconItemSlotClick(obj)
+	local data = obj.m_data
+	local pos = obj.transform:CheckPosition()
+	self:SendCommand("SelectActivityIcon",data,pos)
+end
+
+function CheckHasItemSlot()
+    if (hasItemSlot) then
+	    cnt=cnt+1
+		if (cnt > 1) then
+		    return true
+		else
+		    return false
+		end
+	else
+	    cnt = 0
+	    return false
+	end
+end
+
+function OnClose()
+	Timer:StopTicker(TICKER_ONLINE)
+	Timer:StopTicker(TICKER_VIDEO)
+end

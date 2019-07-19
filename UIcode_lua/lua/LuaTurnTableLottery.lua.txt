@@ -1,0 +1,126 @@
+local arrowTrans
+local count = 1
+local t
+local lastAngle = 0
+local DELTA = 22.5
+
+local angleArr
+
+local initAngle = 0
+local oldIdleAngle = 0
+local startLotteryAnim = false
+
+local selfRectTrans
+
+function DoInit()
+    angleArr = {}
+    for i=0,15 do
+        table.insert(angleArr, i*DELTA)
+    end
+    selfRectTrans = self.transform:GetComponent("RectTransform")
+end
+
+function DoEnable()
+    MsgCenter:Subscribe(Notify_SetTurnTableLottery,OnSetTurnTableLottery)
+    MsgCenter:Subscribe(Notify_SetTurnTableIdle,OnSetTurnTableIdle)
+end
+
+function DoDisable()
+    MsgCenter:Unsubscribe(Notify_SetTurnTableLottery,OnSetTurnTableLottery)
+    MsgCenter:Unsubscribe(Notify_SetTurnTableIdle,OnSetTurnTableIdle)
+end
+
+function LotteryUpdate()
+    if arrowTrans == nil then
+        if t then
+            t:DoKill(true)
+        end
+        return
+    end
+
+    local z = CsBridge.UnityHelper.GetLocalEulerAngles(selfRectTrans,3)
+    if math.abs(z - lastAngle) > DELTA then
+        lastAngle = GetAngle(z)
+        t = CsBridge.TweenUtils.Rotate(arrowTrans,15,0.05)
+        t:OnCompleteAction(function()
+            CsBridge.TweenUtils.Rotate(arrowTrans,0,0.08)
+        end)
+    end
+end
+
+function IdleUpdate()
+    if arrowTrans == nil then
+        if t then
+            t:DoKill(true)
+        end
+        return
+    end
+    local newAngle = CsBridge.UnityHelper.GetLocalEulerAngles(selfRectTrans,3)
+    local offset = newAngle - initAngle
+    newAngle = offset < 0 and 360 + offset or offset
+    if oldIdleAngle >= 0 and oldIdleAngle < 10 and newAngle >= 350 and newAngle < 360 or oldIdleAngle >= 350 and oldIdleAngle < 360 and newAngle >= 0 and newAngle < 10 then
+        local angle = 0
+        angle = (oldIdleAngle >= 0 and oldIdleAngle < 10) and 15 or -15
+        t = CsBridge.TweenUtils.Rotate(arrowTrans,angle,0.5)
+        t:OnCompleteAction(function()
+            CsBridge.TweenUtils.Rotate(arrowTrans,0,0.8)
+        end)
+    end
+    oldIdleAngle = newAngle
+end
+
+function OnSetTurnTableIdle(arrow)
+    arrowTrans = arrow
+    if arrowTrans ~= nil then
+        initAngle = CsBridge.UnityHelper.GetLocalEulerAngles(selfRectTrans,3)
+    end
+    self:DoAnimation(0, IdleUpdate)
+end
+
+function OnSetTurnTableLottery(arrow)
+    arrowTrans = arrow
+    self:DoAnimation(0, LotteryUpdate)
+end
+
+function GetAngle(angle)
+    local count = math.floor(angle/DELTA)+1
+    local rest = angle % DELTA
+    if rest*2 > DELTA then
+        return angleArr[(count+1)>16 and 1 or count+1]
+    else
+        return angleArr[count]
+    end
+end
+
+function CheckCanIdleAnim(old,new)
+    if new >= 0 and new < 10 then
+        return old >= 0 and old < 10 and new >= 350 and new < 360 or old >= 350 and old < 360 and new >= 0 and new < 10
+    else
+        return old >= new and old < new+10
+    end
+end
+
+function CheckCanIdleAnim(newAngle)
+    --return 
+    if initAngle >= 0 and initAngle < 10 or initAngle >=350 or initAngle < 360 then
+        return oldIdleAngle >= 0 and oldIdleAngle < 10 and newAngle >= 350 and newAngle < 360 or oldIdleAngle >= 350 and oldIdleAngle < 360 and newAngle >= 0 and newAngle < 10
+    else
+        return oldIdleAngle >= initAngle and newAngle < initAngle or oldIdleAngle < initAngle and newAngle >= initAngle
+    end
+end
+
+function DoExit()
+    arrowTrans = nil
+    count = nil
+    t = nil
+    lastAngle = nil
+    DELTA = nil
+
+    angleArr = nil
+
+    initAngle = nil
+    oldIdleAngle  = nil
+    startLotteryAnim = nil
+
+    selfRectTrans = nil
+end

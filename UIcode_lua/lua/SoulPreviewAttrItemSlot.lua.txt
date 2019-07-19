@@ -1,0 +1,6 @@
+function OnSoulPreviewAttrItemSlotBindValue(slot, data)
+    ---@type UnityEngine.Transform
+    local slotTrans = slot.transform
+    local attrNameTxt = slotTrans:Find("AttrNameTxt"):GetComponent(CLS_TEXT)
+    attrNameTxt.text = data.nameAndValueStr
+end

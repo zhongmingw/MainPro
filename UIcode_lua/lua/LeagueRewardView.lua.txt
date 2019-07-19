@@ -1,0 +1,63 @@
+--[[
+	file: LeagueRewardView.lua
+	author: hangang
+	description: League reward view
+]]
+
+require "ItemSlot"
+
+local descTxt, rankGrid
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 0     --shadow type
+	InitUI()            --cache UI items
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	local path = "Center/ScrollRect/Viewport/Grid"
+	rankGrid = selfTrans:GetComponentAtPath(path, CLS_UI_ITEM_GRID)
+    path = "Center/ScrollRect/Viewport/Grid/RuleGO/RuleTxt"
+	descTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+end
+
+--UIController events handlers-------------------------------------------------------
+function OnNotification_RefreshRewardView(objs)
+	if self.gameObject.activeInHierarchy then
+		local viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function RefreshView(data)
+	descTxt.text = data.description
+	rankGrid:RefreshItemSlots(data.rewardList, self.gameObject, "LeagueRewardItemSlot")
+end
+
+--Bind item slots--------------------------------------------------------------------
+function OnLeagueRewardItemSlotBindValue(slot, data)
+	local rankTxt=slot:GetComponentAtPath("RankTxt",CLS_TEXT)
+	local rankSpriteObj=slot:GetGameObjectAtPath("RankSprite")
+	local rewardGrid = slot:GetComponentAtPath("RewardGrid",CLS_UI_ITEM_GRID)
+
+	rankTxt.text = data.rankText
+    rankSpriteObj:SetActive(false)
+    rewardGrid:RefreshItemSlots(data.rewards, self.gameObject, "ItemSlot")
+end
+
+--UI event handlers-------------------------------------------------------------------
+function OnRewardGridItemSlotClick(obj)
+	local itemData = obj.m_data
+    self:SendCommand("OpenTipView", itemData)
+end
+
+--On closing--------------------------------------------------------------------------
+function OnNotification_CloseLeagueView(obj)
+	self:HideView("LeagueRewardView")
+end
+
+function DoExit()
+	descTxt = nil
+	rankGrid = nil
+end

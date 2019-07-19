@@ -1,0 +1,38 @@
+
+require("StagePlayerBaseItemSlot")
+
+function OnStageItemSlotBindValue(slot,data)
+	if data.state==0 then
+		slot.gameObject:SetSelfActive(false)
+		return
+	end
+	slot.gameObject:SetSelfActive(true)
+	local onHook_GO = slot:GetGameObjectAtPath("OnHookGO")
+	local hook_Lab = slot:GetComponentAtPath("OnHookGO/HookTxt" ,CLS_TEXT)
+	local onStage_GO = slot:GetGameObjectAtPath("OnStageGO")
+	local stage_TF = slot.transform:Find("StageBtn")
+	local stageId_Lab = slot:GetComponentAtPath("StageBtn/StageIdTxt" ,CLS_TEXT)
+	local route_Sprite = slot:GetComponentAtPath("StageBtn/RouteSprite" ,CLS_IMAGE)
+	local layout = slot:GetComponent("LayoutElement")
+	local onStageGrid = slot:GetComponentAtPath("OnStageGO/OnStageGrid" ,CLS_UI_ITEM_GRID)
+	local iconName = ""
+	local locked = data.state == 2
+	if locked then
+		iconName = "atlas_btn_stage_locked"
+	else
+		if data.isOnStage then
+			iconName="new_com_route01"
+		elseif data.isOnHook then
+			iconName="new_com_route03"
+		else
+			iconName="new_com_route02"
+		end
+	end
+	CsBridge.IconData.SetIconByName(route_Sprite.gameObject,iconName)
+	stageId_Lab.gameObject:SetSelfActive(data.state~=2)
+	onHook_GO:SetSelfActive(data.isOnHook)
+	hook_Lab.gameObject:SetSelfActive(data.isOnHook and not data.isOnStage)
+	onStage_GO:SetSelfActive(#data.friendInfos~=0)
+	stageId_Lab.text=data.name
+	onStageGrid:RefreshItemSlots(data.friendInfos,slot.m_grid.viewBase.gameObject,"StagePlayerBaseItemSlot")
+end

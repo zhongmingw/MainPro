@@ -1,0 +1,192 @@
+require "OrderItemSlot"
+
+local inited = false
+
+local timer_Lab
+local orderCount_Lab
+local orderGrid
+local nothing_GO
+local getOrderBtn_GO
+local cannotGetOrderBtn_GO
+
+local guildTradeCD
+
+function DoInit()
+    self.Shadow = 0
+    self.Anim = 0
+    guildTradeCD = GetConstValue("guildTradeCD")
+end 
+
+function InitUI()
+    timer_Lab = self:GetComponentAtPath("Center/TimerTxt" ,CLS_TEXT)
+    orderCount_Lab = self:GetComponentAtPath("Center/OrderCountTxt" ,CLS_TEXT)
+    orderGrid = self:GetComponentAtPath("Center/ScrollRect/Viewport/OrderGrid" ,CLS_UI_ITEM_GRID)
+    nothing_GO = self:GetGameObjectAtPath("Center/Nothing")
+    getOrderBtn_GO = self:GetGameObjectAtPath("Center/GetOrderBtn")
+    cannotGetOrderBtn_GO = self:GetGameObjectAtPath("Center/CannotGetOrderBtn").gameObject
+end
+
+function OnOpen()
+    -- body
+end
+
+function OnAnimationFinished()
+    if not inited then
+        InitUI()
+        inited = true
+	end 
+    self:SendCommand("InitOrderData")
+end 
+
+function OnNotification_InitOrderView(objs)
+    local portData = objs[0]
+    if portData.lastTradeTime==0 then
+        timer_Lab.text="00:00:00"
+        getOrderBtn_GO:SetSelfActive(true)
+        cannotGetOrderBtn_GO:SetSelfActive(false)
+
+    else
+        getOrderBtn_GO:SetSelfActive(false)
+        cannotGetOrderBtn_GO:SetSelfActive(true)
+
+        local endTime = portData.lastTradeTime + guildTradeCD
+        local timeStr = CheckTimeRemain(endTime,false)
+        timer_Lab.text=timeStr
+    end
+    local maxTradeCount = ResTblContainer:
+        GetPropToInt(portData.level,GuildTradeUpgrade.count,GuildTradeUpgrade.tblName)
+    orderCount_Lab.text = "("..tostring(portData.tradeCount).."/"..tostring(maxTradeCount)..")"
+    nothing_GO:SetSelfActive(portData.tradeCount==0)
+    orderGrid:ClearItems()
+    orderGrid:RefreshItemSlots(portData.trades,self.gameObject,"OrderItemSlot")
+end
+
+function OnNotification_UpdateNewOrderCD(objs)
+    timer_Lab.text = objs[0]
+end
+
+function OnNotification_SetNewOrderEnabled(objs)
+    getOrderBtn_GO:SetSelfActive(true)
+    cannotGetOrderBtn_GO:SetSelfActive(false)
+end
+
+function OnNotification_UpdateOrdersCD(objs)
+    local viewData = objs[0]
+    UpdateOrderCD(viewData)
+end
+
+function UpdateOrderCD(viewData)
+    local itemSlots = GetDisplayingSlot()
+    for k, itemSlot in pairs(itemSlots) do
+        local orderID = itemSlot.m_data.id
+        for k1, itemViewData in pairs(viewData) do
+            if orderID == itemViewData.id then
+                SetOrderCDText(itemSlot, itemViewData)
+            end
+        end
+    end
+end
+
+function GetDisplayingSlot()
+    local slots = {}
+    local gridTrans = orderGrid.transform
+    for i = 0, gridTrans.childCount - 1 do
+        local slotTrans = gridTrans:GetChild(i)
+        table.insert(slots, slotTrans:GetComponent(CLS_ITEM_SLOT))
+    end
+    return slots
+end
+
+function SetOrderCDText(itemSlot, itemViewData)
+    local label = itemSlot:GetComponentAtPath("TimerTxt", CLS_TEXT)
+    label.text = itemViewData.CD
+
+    local slider = itemSlot:GetComponentAtPath("TimerSlider" ,CLS_SLIDER)
+    slider:SetSliderValue(itemViewData.progress)
+
+    if itemViewData.finished then
+        local claimBtnObj = itemSlot:GetGameObjectAtPath("CompleteBtn")
+        local processingBtnObj = itemSlot:GetGameObjectAtPath("GoingBtn")
+        local finishedBarObj = itemSlot:GetGameObjectAtPath("CompleteSprite")
+        claimBtnObj:SetSelfActive(true)
+        processingBtnObj:SetSelfActive(false)
+        finishedBarObj:SetSelfActive(true)
+    end
+end
+
+function OnGetOrderBtnClick(sender)
+    self:SendCommand("TradeGet")
+end
+
+function OnCannotGetOrderBtnClick(sender)
+    CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionReinfoce_RequestDonationCD"))
+end
+
+function OnOrderGridUpgradeBtnClick(obj)
+    local data = obj.m_data
+    if data.startTime~=0 then
+        return 
+    end
+    local upgrade = ResTblContainer:GetPropToInt(data.tradeId,GuildTrade.upgrade,GuildTrade.tblName)
+    if upgrade==0 then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionOrder_MaxLevel"))
+    else
+        CsBridge.messageManager:PopMsgBox("",string.format(Language:getStr("UnionOrder_Check"),upgrade),Language:getStr("local_cancel"),nil,Language:getStr("local_confirm"),
+            function ()
+                local playerInfo = appData:checkData("PlayerInfo")
+                local gem = playerInfo.payGem+playerInfo.rewardGem
+                if gem>=upgrade then
+                    self:SendCommand("TradeUpgrade",data.id)
+                else
+                    CsBridge.hintUILayer:ShowHintBox(Language:getStr("1001"))
+                end
+            end)
+    end
+
+end
+
+function OnOrderGridStartBtnClick(obj)
+    local data = obj.m_data
+    if data.status~=0 then
+        return 
+    end
+    self:SendCommand("TradeStart",data.id)
+end
+
+function OnOrderGridGoingBtnClick(obj)
+    local data = obj.m_data
+    if data.startTime==0 then
+        return 
+    end
+    CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionOrder_Going"))
+end
+
+function OnOrderGridCompleteBtnClick(obj)
+    local data = obj.m_data
+    if data.status~=1 then
+        return 
+    end
+    self:SendCommand("TradePay",data.id)
+end
+
+function OnItemGridItemSlotClick(obj)
+	local data = obj.m_data
+	ShowRewardTip(self,data)
+end
+
+function OnHelpBtnClick(sender)
+	self:SendCommand("OpenHelpView", self.gameObject.name)
+end
+
+function DoExit()
+	self.Module=nil
+    inited = nil
+    timer_Lab = nil
+    orderCount_Lab = nil
+    orderGrid = nil
+    nothing_GO = nil
+    getOrderBtn_GO = nil
+    cannotGetOrderBtn_GO = nil
+
+    guildTradeCD = nil
+end

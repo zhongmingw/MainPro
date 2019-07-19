@@ -1,0 +1,90 @@
+import "stage.proto";
+package AutoTaskData;
+
+message AutoTaskInfo 
+{
+	repeated AutoTaskItem autoTasks = 1;
+	required int64 lastFreeRefreshTime = 2;
+	required int64 lastRenewTime = 3;
+	// required int32 usedNum = 4;
+	// required int32 remains = 5;
+}
+
+message AutoTaskItem 
+{
+	required int64 id = 1;
+	required int64 endTime = 2;
+	repeated int32 heroUids = 3;
+	required bool locked = 4;
+	required string taskName = 5;
+	required int32 taskQuality = 6;
+	required int32 heroQuality = 7;
+	required int32 needHeroNum = 8;
+	repeated int32 camps = 9;
+	repeated int32 jobs = 10;
+	repeated stage.RewardItem rewardItems = 11;
+	required int64 taskTime = 12;
+}
+
+message StartAutoTaskReq 
+{
+	required int64 id =1;
+	repeated int32 uidList =2;
+}
+message StartAutoTaskResp 
+{
+	required int32 result =1;
+}
+
+message CancelAutoTaskReq 
+{
+	required int64 id =1;
+}
+message CancelAutoTaskResp 
+{
+	required int32 result =1;
+}
+
+message RefreshAutoTaskReq 
+{
+	required int32 type =1;
+}
+message RefreshAutoTaskResp 
+{
+	required int32 result =1;
+}
+
+message HasteAutoTaskReq 
+{
+	required int64 id =1;
+}
+message HasteAutoTaskResp 
+{
+	required int32 result =1;
+}
+
+message FinishAutoTaskReq 
+{
+	required int64 id =1;
+}
+message FinishAutoTaskResp 
+{
+	required int32 result =1;
+	repeated stage.RewardItem rewardItems = 2;
+}
+
+message LockAutoTaskReq 
+{
+	required int64 id =1;
+	required bool lock =2;
+}
+message LockAutoTaskResp 
+{
+	required int32 result =1;
+}
+
+
+
+
+
+

@@ -1,0 +1,321 @@
+local miningHolderInfoUtils = require "MiningHolderInfoUtils"
+local miningFormationUtils = require "MiningFormationUtils"
+local miningTechnologyUtils = require "MiningTechnologyUtils"
+
+---@type table 购买保护时间的消耗
+local buyProtectConsumeArr = nil
+---@type table 消耗
+local buyCostConsume
+---@type table 矿点信息
+local caveInfo = nil
+---@type table 光环数组
+local auraArr = nil
+---@type table 当前光环
+local curAura = nil
+---@type table 上阵的英雄
+local upHeroArray = {}
+---@type string 定时器
+local TICKER_NAME = "ticker_MiningHolderInfoModel"
+---@type number 保护持续时间
+local BUY_PROTECT_CODE_TIME = 0
+---@type boolean
+local isBuyProtectMoreTime
+
+local ProtectTypeEnum = {
+    SystemProtect = 1,
+    PlayerBuyProtect = 2,
+}
+
+---矿点信息改变了
+local function CaveInfoChanged(caveItem)
+    caveInfo = caveItem
+    self:SendNotification("UpdateCaveInfo", caveInfo)
+end
+
+---获取阵容界面的按钮和文字
+local function GetFormationBtnStateAndTxt(titleType, isNobody)
+    local result = {}
+    result.titleType = titleType
+    result.showRecoverBtn = true
+    result.showStartBtn = titleType ~= FormationTitleEnum.ChangeFormation
+    result.showSaveBtn = titleType ~= FormationTitleEnum.GotoFight
+    if (titleType == FormationTitleEnum.ChangeFormation) then
+        result.titleNameTxt = Language:getStr("uiStr_3") ---整容配置
+    else
+        result.titleNameTxt = Language:getStr("uiStr_1")  ---英雄出站
+    end
+    if isNobody then
+        result.startBtnTxt = tostring(Language:getStr("GoHold")) ---驻守
+    else
+        result.startBtnTxt = tostring(Language:getStr("Global_36")) ---开战
+    end
+    return result
+end
+
+---获取按钮的状态
+local function GetHolderViewBtnState()
+    local result = {}
+    result.showRobBtn = false
+    result.showBuyProtectBtn = false
+    result.showExitBtn = false
+    result.showChangeFormationBtn = false
+    result.buyProtectBtnGray = true
+    result.robBtnGray = true
+    if caveInfo.host.isSelf then
+        result.showBuyProtectBtn = true
+        result.showExitBtn = true
+        result.showChangeFormationBtn = true
+        result.buyCostConsume, isBuyProtectMoreTime = miningHolderInfoUtils.GetBuyProtectCostConsume(buyProtectConsumeArr)
+        result.buyCostConsume = result.buyCostConsume.costConsume
+        buyCostConsume = result.buyCostConsume
+        result.selfCostConsume = miningTechnologyUtils.GetSelfConsume(result.buyCostConsume)
+        if caveInfo.protectionType == ProtectTypeEnum.PlayerBuyProtect and caveInfo.protectionEndTime > CsBridge.timeManager.ServerTime then
+            result.buyProtectBtnGray = true
+        else
+            result.buyProtectBtnGray = false
+        end
+        if isBuyProtectMoreTime then
+            result.buyProtectBtnGray = true
+        end
+    else
+        result.showRobBtn = true
+    end
+    if caveInfo.protectionEndTime > CsBridge.timeManager.ServerTime then
+        result.robBtnGray = true
+    else
+        result.robBtnGray = false
+    end
+    return result
+end
+
+---更新按钮的状态
+local function UpdateTimeAndBtnState()
+    local showTip = false
+    if caveInfo.protectionEndTime > CsBridge.timeManager.ServerTime then
+        local remainTime = CheckTimeRemain(caveInfo.protectionEndTime, false)
+        caveInfo.protectionEndTimeStr = remainTime
+    end
+    if caveInfo.protectionEndTime < CsBridge.timeManager.ServerTime then
+        caveInfo.protectionEndTimeStr = ""
+        Timer:StopTicker(TICKER_NAME)
+    end
+    if caveInfo.protectionEndTimeStr ~= "" then
+        showTip = true
+    end
+    self:SendNotification("UpdateProtectTimeStr", caveInfo.protectionEndTimeStr, showTip)
+    local btnState = GetHolderViewBtnState()
+    self:SendNotification("RefreshBtnState", btnState)
+end
+
+---保护时间倒计时
+local function ProtectTimeDownCount()
+    if caveInfo.protectionEndTime > CsBridge.timeManager.ServerTime then
+        Timer:AddTicker(TICKER_NAME, caveInfo.protectionEndTime, function(targetTime)
+            UpdateTimeAndBtnState()
+        end, function()
+            caveInfo.protectionEndTimeStr = ""
+            self:SendNotification("UpdateProtectTimeStr", caveInfo.protectionEndTimeStr, false)
+            local btnState = GetHolderViewBtnState()
+            self:SendNotification("RefreshBtnState", btnState)
+        end, 1)
+    else
+        self:SendNotification("UpdateProtectTimeStr", "", false)
+    end
+end
+
+---退出矿产
+local function DoExitCave()
+    miningHolderInfoUtils.ExitCaveItem(caveInfo, function()
+        self:HideView("MiningHolderInfoView")
+        self:HideView("MiningNobodyHoldView")
+    end)
+end
+
+---收取资源
+local function DoReceiveCaveOutput()
+    miningHolderInfoUtils.ReceiveCaveOutput(caveInfo, function(rewardList)
+        local confirmCbk = function()
+            DoExitCave()
+        end
+        ShowRewardReceivedTip(self, rewardList, confirmCbk, true)
+    end)
+end
+
+---购买保护时间
+local function DoBuyProtect()
+    miningHolderInfoUtils.BuyProtectTime(caveInfo, function()
+        local receiveTime = BUY_PROTECT_CODE_TIME * 1000
+        caveInfo.protectionType = ProtectTypeEnum.PlayerBuyProtect
+        caveInfo.protectionEndTime = CsBridge.timeManager.ServerTime + receiveTime + (caveInfo.protectionEndTime - CsBridge.timeManager.ServerTime)
+        caveInfo.protectionEndTimeStr = CheckTimeRemain(caveInfo.protectionEndTime, false)
+        self:SendNotification("UpdateProtectTimeStr", caveInfo.protectionEndTimeStr, true)
+        local btnState = GetHolderViewBtnState()
+        self:SendNotification("RefreshBtnState", btnState)
+        Timer:StopTicker(TICKER_NAME)
+        ProtectTimeDownCount()
+    end)
+end
+
+---打开采矿的阵容界面
+local function OpenMiningFormationView(titleEnum, isNobody, upHeroArray)
+    local viewBaseData = {}
+    viewBaseData.caveInfo = caveInfo
+    viewBaseData.btnAndTitleState = GetFormationBtnStateAndTxt(titleEnum, isNobody)
+    viewBaseData.formationType = FormationTypeEnum.FormationType_Mining
+    viewBaseData.canSkip = false
+    viewBaseData.upHeroArray = upHeroArray
+
+    self.Module:HideView("MiningNobodyHoldView", false)
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("MiningFormationView", "MiningFormationModel", isNobody, true)
+        view:SetParamDataList(viewBaseData)
+    end, "MiningFormationView", "MiningRobHeroItemSlot")
+end
+
+---获取详细的信息
+local function GetCaveDetailInfo()
+    if not caveInfo.host then
+        return
+    end
+    miningHolderInfoUtils.GetHolderFormationHeroArr(caveInfo, function(formationInfo, hostCombat)
+        upHeroArray = formationInfo
+        curAura = miningFormationUtils.CalcAura(upHeroArray, auraArr)
+        local btnState = GetHolderViewBtnState()
+        self:SendNotification("GetMiningHolderInfo", upHeroArray, curAura, btnState, hostCombat)
+        ProtectTimeDownCount()
+        UpdateTimeAndBtnState()
+    end)
+end
+
+---获取矿点持有者的数据
+function OnCommand_GetMiningHolderInfo(objs)
+    caveInfo = objs[0]
+    GetCaveDetailInfo()
+end
+
+---显示帮助界面
+function OnCommand_ShowHelpView(objs)
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("HelpView", "MiningMainModel")
+        view:SetData(INSTRUCTION_MINING_HOLDER)
+    end, "HelpView")
+end
+
+---显示物品提示信息
+function OnCommand_ShowItemTip(objs)
+    local data = objs[0]
+    local itemType = data.typeId
+    if itemType == ItemTypeEnum.Hero then
+        ShowHeroTip(self, data.id, 1, 1)
+    else
+        ShowTip(self, itemType, data.id)
+    end
+end
+
+---抢占一个无人驻守的矿点
+function OnCommand_WantHoldNoBodyCaveItem(objs)
+    caveInfo = objs[0]
+    OpenMiningFormationView(FormationTitleEnum.GotoFight, true, miningHolderInfoUtils.GetNilFormationHeroArr())
+end
+
+---显示英雄的简要信息
+function OnCommand_ShowSimpleHeroInfoView(objs)
+    local heroData = objs[0]
+    if heroData and heroData.heroId ~= 0 then
+        ShowHeroTip(self, heroData.heroId, heroData.level, heroData.grade, heroData.distillationStar, heroData.distillationLevel, heroData.breakLevel)
+    end
+end
+
+---显示光环
+function OnCommand_ShowAureoleView()
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("aureoleView", "MiningFormationModel", true, true)
+        view:SetParamDataList(auraArr, curAura)
+        view.transform.parent:SetAsLastSibling()
+    end, "aureoleView", "aureoleItemSlot")
+end
+
+---购买保护时间
+function OnCommand_BuyProtectTime()
+    if caveInfo.protectionType == ProtectTypeEnum.PlayerBuyProtect and caveInfo.protectionEndTime > CsBridge.timeManager.ServerTime then
+        CsBridge.ShowHintBoxTwo(Language:getStr("WaitProtectOverToBuyNext"))
+        return
+    end
+    if isBuyProtectMoreTime then
+        CsBridge.ShowHintBoxTwo(Language:getStr("BuyProtectTimeMax"))
+        return
+    end
+    local selfCostConsume = miningTechnologyUtils.GetSelfConsume(buyCostConsume)
+    if selfCostConsume.count < buyCostConsume.count then
+        CsBridge.ShowHintBoxTwo(string.format(Language:getStr("ResNotEnough"), GetNameByResId(buyCostConsume.id)))
+        return
+    end
+    local ONE_HOUR = 1 * 60 * 60 * 1000
+    if caveInfo.closeTime - CsBridge.timeManager.ServerTime < ONE_HOUR then
+        CsBridge.messageManager:PopMsgBox(Language:getStr("hint"), Language:getStr("MiningProtectNotOneHour"), Language:getStr("local_cancel"), nil, Language:getStr("local_confirm"), function()
+            DoBuyProtect()
+        end)
+        return
+    end
+    DoBuyProtect()
+end
+
+---退出矿点
+function OnCommand_ExitCave()
+    if caveInfo.lastTakeMineTime > 0 then
+        if CsBridge.timeManager.ServerTime - caveInfo.lastTakeMineTime > caveInfo.time * 1000 then
+            CsBridge.messageManager:PopMsgBox(Language:getStr("hint"), Language:getStr("CaveOutputNotReceivedTip"), Language:getStr("local_cancel"), nil, Language:getStr("local_confirm"), function()
+                DoReceiveCaveOutput()
+            end)
+        else
+            DoExitCave()
+        end
+    else
+        DoExitCave()
+    end
+end
+
+---切换防守阵容
+function OnCommand_ChangeDefendFormation()
+    OpenMiningFormationView(FormationTitleEnum.ChangeFormation, false, upHeroArray)
+end
+
+---掠夺别人的矿产
+function OnCommand_StartFightForRob()
+    if caveInfo.protectionEndTime > CsBridge.timeManager.ServerTime then
+        CsBridge.ShowHintBoxTwo(Language:getStr("ProtectTimeNotOver"))
+        return
+    end
+    OpenMiningFormationView(FormationTitleEnum.GotoFight, false, miningHolderInfoUtils.GetNilFormationHeroArr())
+end
+
+---停止定时器
+function OnCommand_StopTicker()
+    Timer:StopTicker(TICKER_NAME)
+end
+
+function DoInit()
+    buyProtectConsumeArr = miningHolderInfoUtils.GetBuyProtectCostConsumeArr()
+    auraArr = miningFormationUtils.GetAuraArr()
+    BUY_PROTECT_CODE_TIME = GetConstValue("BuyProtectTime")
+    MsgCenter:Subscribe(Notify_MiningHolderChanged, CaveInfoChanged)
+    MsgCenter:Subscribe(Notify_MiningHolderFormationChanged, GetCaveDetailInfo)
+end
+
+function DoEnable()
+    GetCaveDetailInfo()
+end
+
+function DoOnExit()
+    Timer:StopTicker(TICKER_NAME)
+    MsgCenter:Unsubscribe(Notify_MiningHolderChanged, CaveInfoChanged)
+    MsgCenter:Unsubscribe(Notify_MiningHolderFormationChanged, GetCaveDetailInfo)
+    buyProtectConsumeArr = nil
+    caveInfo = nil
+    auraArr = nil
+    curAura = nil
+    upHeroArray = nil
+    TICKER_NAME = nil
+    BUY_PROTECT_CODE_TIME = nil
+    ProtectTypeEnum = nil
+end

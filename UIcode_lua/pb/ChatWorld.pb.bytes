@@ -1,0 +1,65 @@
+
+¶
+ChatWorld.proto	ChatWorld"·
+ChatContent
+playerId (	
+nickName (	
+contentType (
+content (	
+time (
+friendNickName (	
+friendPlayerId (	
+
+friendZone (	
+zone	 (	"5
+CheckChatContentReq
+time (
+legionId (	"Y
+
+ChatRecord
+chatType ('
+content (2.ChatWorld.ChatContent
+chatTime ("M
+CheckChatContentResp
+time ('
+contents (2.ChatWorld.ChatRecord"?
+LoginChatReq
+channel (	
+zone (	
+playerId (	"
+LoginChatResp
+uid (	".
+CheckChatReq
+time (
+legionId (	"1
+CheckChatResp
+time (
+
+hasNewChat ("E
+ChatZoneReq
+contentType (
+nickName (	
+content (	"D
+
+ChatVipReq
+nickName (	
+contentType (
+content (	"Œ
+ChatPrivateReq
+nickName (	
+
+friendZone (	
+friendPlayerId (	
+contentType (
+content (	
+friendNickName (	"Y
+ChatLegionReq
+contentType (
+nickName (	
+legionId (	
+content (	"D
+
+ChatAllReq
+nickName (	
+contentType (
+content (	

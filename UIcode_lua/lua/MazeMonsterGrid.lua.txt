@@ -1,0 +1,65 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-04-17 15:05:06
+]]
+local MazeDef = require "MazeDef"
+local MazeGrid = require "MazeGrid"
+local MazeUtils = require "MazeUtils"
+
+local MazeMonsterGrid = class("MazeMonsterGrid",MazeGrid)
+
+function MazeMonsterGrid:Ctor(row, col, state, type, data)
+    super(self,row,col,state,type)
+    self.passed = data.isNormal
+    self.upPos = true
+    if not self.passed then
+        self.formation = MazeUtils.ParseSvrDataFormation(data.formation)
+    end
+end
+
+function MazeMonsterGrid:SetData(svrData)
+    self.passed = svrData.isNormal
+    if not self.passed then
+        self.formation = MazeUtils.ParseSvrDataFormation(svrData.formation)
+    end
+end
+
+function MazeMonsterGrid:BindOnStateValue(trans)
+    local bg = trans:GetGameObjectAtPath("BgImg")
+    local blockFlag = trans:GetGameObjectAtPath("BgImg/BlockFlag")
+    local monsterRootObj = trans:GetGameObjectAtPath("MonsterRoot")
+    local monsterRoot = trans:GetComponentAtPath("MonsterRoot/Monster",CLS_RECTTRANSFORM)
+    if self.passed then
+        blockFlag:SetSelfActive(false)
+        monsterRootObj:SetSelfActive(false)
+        bg:SetSelfActive(false)
+        MazeUtils.DestroyModel(monsterRoot)
+    else
+        local monster = self.formation[1]
+        blockFlag:SetSelfActive(false)
+        bg:SetSelfActive(false)
+        monsterRootObj:SetSelfActive(true)
+        if monsterRoot.childCount == 0 then
+            CsBridge.CacheAssetsByGroup(MazeDef.MazeModuleName,function()
+                local obj = CsBridge.objectCache:CreateObject(monster.model,true,monsterRoot)
+                local scale = obj.transform:CheckLocalScale()
+                scale.x = 0.4
+                scale.y = 0.4
+                obj.transform:ResetLocalScale(scale)
+                obj.transform:GetChild(0):GetComponent(CLS_SKELETONGRAPHIC):PlayAnimation("stand",true)
+            end,monster.model)
+        end
+    end
+end
+
+function MazeMonsterGrid:Click(data)
+    if self.passed then
+        data.onFinished()
+    else
+        MsgCenter:Broadcast(Notify_MazeGridTriggerMonster,self)
+    end
+end
+
+return MazeMonsterGrid

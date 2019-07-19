@@ -1,0 +1,47 @@
+import "stage.proto";
+import "CallHero.proto";
+package ExchangeData;
+
+
+message ComposePiecesReq  
+{
+	required int32 id = 1;
+	required int32 count = 2;
+}
+message ComposePiecesResp
+{
+	repeated stage.RewardItem rewards =1;
+}
+
+message OpenTreasureReq  
+{
+	required int32 uid = 1;
+	required int32 id = 2;
+	required int32 count = 3;
+}
+message OpenTreasureResp
+{
+	repeated stage.RewardItem rewards =1;
+}
+
+
+message SellReq
+{
+	repeated CallHero.Goods sellList =1;
+}
+message SellResp 
+{
+	required int32 coin = 1;
+}
+message ExchangeItemReq 
+{
+	required int32 id = 1;
+	required int32 count = 2;
+}
+message NormalExchangeItemResp 
+{
+	required int32 result = 1;
+}
+
+
+

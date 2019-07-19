@@ -1,0 +1,92 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-04-12 10:34:44
+]]
+
+local function CheckMainCityUpRewardVedio()
+    local playerAdInfo = appData:checkData("PlayerAdInfo")
+    local isOpen = playerAdInfo.isOpen and UIOpen(UI_OPEN_TYPE_UP_REWARD_VEDIO, false)
+    local curCount, maxCount = playerAdInfo.adCount, GetConstValue("MainAdCount")
+    local data = {
+        isOpen =  isOpen and curCount < maxCount,
+    }
+	if data.isOpen then
+        data.lastTime = playerAdInfo and playerAdInfo.lastVideoTime or 0
+        data.cdTime = GetConstValue("MainAdCD")*1000
+    end
+    return data
+end
+
+local function CheckAutoTaskUpRewardVedio()
+    local playerAdInfo = appData:checkData("PlayerAdInfo")
+    local isOpen = playerAdInfo.isOpen and UIOpen(UI_OPEN_TYPE_UP_REWARD_VEDIO_AUTOTASK, false)
+    local data = {
+        isOpen = isOpen,
+    }
+    if data.isOpen then
+        local lastHasteAutoTaskTime = playerAdInfo and playerAdInfo.lastHasteAutoTaskTime or 0
+        local UpRewardVedioCD = GetConstValue("TavernAdCD")*1000
+        local showUpRewardVedio = lastHasteAutoTaskTime <= 0 or (lastHasteAutoTaskTime+UpRewardVedioCD) <= CsBridge.timeManager.ServerTime
+        data.lastHasteAutoTaskTime = lastHasteAutoTaskTime
+        data.showUpRewardVedio = showUpRewardVedio
+    end
+    return data
+end
+
+local function CheckUpRewardVedio(name)
+    if name == UpRewardVedioID.AutoTask then
+        return CheckAutoTaskUpRewardVedio()
+    elseif name == UpRewardVedioID.MainCity then
+        return CheckMainCityUpRewardVedio()
+    end
+end
+
+local function ShowUpRewardVedio(name)
+    CsBridge.audioManager.MusicEnabled = false
+    if name == UpRewardVedioID.AutoTask then
+        CsBridge.messageManager:PopMsgBox("",Language:getStr("HasteTask_Ad_Check"),Language:getStr("local_cancel"),nil,Language:getStr("local_confirm"),function()
+            CsBridge.MsgCenter.Broadcast(Notify_ShowUpRewardVedio,name)
+        end)
+    elseif name == UpRewardVedioID.MainCity then
+        CsBridge.MsgCenter.Broadcast(Notify_ShowUpRewardVedio,name)
+    end
+end
+
+local function PlayBgm(soundName)
+    if soundName ~= "" then
+        CsBridge.audioManager:PlayBg(soundName)
+    end
+end
+
+local function GetUpRewardVedioReward(name, data, onFinished)
+    CsBridge.audioManager.MusicEnabled = true
+    PlayBgm(CsBridge.audioManager.CurBGMusic)
+    if name == UpRewardVedioID.AutoTask then
+        local req = {
+            id = data.id
+        }
+        HttpRequest("adHasteAutoTask","HasteAutoTaskReq","HasteAutoTaskResp",req,onFinished)
+    elseif name == UpRewardVedioID.MainCity then
+        local req = {
+            useless = 1
+        }
+        HttpRequest("getAdReward","GetAdRewardReq","GetAdRewardResp",req,onFinished)
+    end
+end
+
+local function OpenUpRewardVedio(name, data, onFinished)
+    local playerInfo = appData:checkData("PlayerInfo")
+    if playerInfo.vip <= GetConstValue("AdVip") then
+        ShowUpRewardVedio(name)
+    else
+        GetUpRewardVedioReward(name,data,onFinished)
+    end
+end
+
+return {
+    OpenUpRewardVedio = OpenUpRewardVedio,
+    GetUpRewardVedioReward = GetUpRewardVedioReward,
+    CheckUpRewardVedio = CheckUpRewardVedio,
+}

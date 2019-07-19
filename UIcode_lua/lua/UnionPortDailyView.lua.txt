@@ -1,0 +1,52 @@
+require "DonateRankItemSlot"
+
+local inited = false
+
+local donateRankGrid 
+
+function DoInit()
+    self.Shadow = 1
+end 
+
+function InitUI()
+    donateRankGrid = self:GetComponentAtPath("Center/ScrollRect/Viewport/Grid" ,CLS_UI_ITEM_GRID)
+end
+
+function OnOpen()
+    -- body
+end
+
+function OnAnimationFinished()
+	if not inited then
+        InitUI()
+        inited = true
+	end 
+    self:SendCommand("GetDailyViewData")
+end 
+
+function OnNotification_RefreshDailyView(objs)
+    local donateList = objs[0]
+    donateRankGrid:RefreshItemSlots(donateList,self.gameObject,"DonateRankItemSlot")
+end
+
+function OnGridPlayerBaseClick(obj)
+    local data = obj.m_data
+    CsBridge.CacheAssetsByModule(self.Module,
+    function()
+        local view = CsBridge.OpenView("PlayerInfoView", "PlayerInfoModel",true,true)
+        view.transform.parent:SetAsLastSibling()
+        local isLocal = false
+        local uid = data.basicInfo.userId
+        local zone = data.basicInfo.zone
+        view:SetParamDataList(isLocal, uid, zone)
+    end, "PlayerInfoView","AchievementItemSlot")
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+    inited = nil
+    donateRankGrid = nil
+end

@@ -1,0 +1,421 @@
+--[[
+	file: LeagueUtils.lua
+	author: hangang
+	description: League utilities
+]]
+
+
+--Enums
+LeagueState =
+{
+	SignUp = 0,
+	Processing = 1,
+	Finished = 2,
+}
+
+LeagueMatchLevel =
+{
+	Audition = 0,
+	Knockout = 1,
+	QuaterFinal = 2,
+	SemiFinal = 3,
+	Final = 4,
+}
+
+LeagueMatchPlayer = 
+{
+	RedPlayer = 0,
+	BlackPlayer = 1,
+}
+
+MatchTimeConfig =
+{
+	LineupTime = "20:00",
+	BetTime = "20:30",
+	BattleTime = "21:00",
+	SettleTime = "21:30",
+	BattleDuration = 1800000,
+}
+
+LeagueMatchState =
+{
+	Locked = 0,
+	Lineup = 1,
+	Preparing = 2,
+	Processing = 3,
+	Finished = 4,
+}
+
+BattleResult =
+{
+	Lose = 0,
+	Win = 1,
+}
+
+ResultText = 
+{
+	Win = Language:getStr("win"),
+	Lose = Language:getStr("lose"),
+	WinColor = color13,
+	LoseColor = color26,
+	Abstention = Language:getStr("Abstention"),
+}
+
+CountdownHeaders_Player = 
+{
+	[LeagueMatchState.Lineup] = "LineupCountdownHeader",
+	[LeagueMatchState.Preparing] = "BattleCountdownHeader",
+	[LeagueMatchState.Processing] = "SettleCountdownHeader",
+}
+
+CountdownHeaders_Audience = 
+{
+	[LeagueMatchState.Lineup] = "BetCountdownHeader",
+	[LeagueMatchState.Preparing] = "BattleCountdownHeader",
+	[LeagueMatchState.Processing] = "SettleCountdownHeader",
+}
+
+CountdownHeaders_Audition = 
+{
+	[LeagueMatchState.Lineup] = "BattleCountdownHeader",
+	[LeagueMatchState.Preparing] = "BattleCountdownHeader",
+	[LeagueMatchState.Processing] = "SettleCountdownHeader",
+}
+
+LeagueFormationTypeList = 
+{
+	[1] = FormationTypeEnum.FormationType_BraveArena_1,
+    [2] = FormationTypeEnum.FormationType_BraveArena_2,
+    [3] = FormationTypeEnum.FormationType_BraveArena_3,
+}
+
+MATCH_BATTLE_COUNT = 3
+BATTLE_FIGHT_COUNT = 3
+MATCH_FIGHT_COUNT = MATCH_BATTLE_COUNT * BATTLE_FIGHT_COUNT
+
+TEAM_COUNT_ALL = 32
+AUDITION_PLAYER_COUNT = 200
+
+MATCH_DELAY = 15000 --延迟多久到服务器获取战斗结果
+local FORMAT_STRING_ODDS = "%0.2f"
+
+------Http requet---------------------------------------------------------------------
+function SignUp(finishedCallback, formations)
+    local req = {}
+	req.formation_1 = formations[1]
+	req.formation_2 = formations[2]
+	req.formation_3 = formations[3]
+	local url, requestCls, responseCls = "signUpBraveArena", "SignUpBraveArenaReq", "SignUpBraveArenaResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function FetchSchedule(finishedCallback)
+    local req = {}
+	req.id = 0
+	local url, requestCls, responseCls = "getBraveArenaInfo", "GetBraveArenaInfoReq", "GetBraveArenaInfoResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function Bet(finishedCallback, roundID, matchID, targetPlayer, amount)
+	local req = {}
+	req.round = roundID
+	req.id = matchID
+	req.redWin = targetPlayer == LeagueMatchPlayer.RedPlayer
+	req.count = amount
+
+	local url, requestCls, responseCls = "stakeBraveArena", "StakeBraveArenaReq", "StakeBraveArenaResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function FetchMatchVideos(finishedCallback, roundID, matchID)
+	local req = {}
+	req.round = roundID
+	req.id = matchID
+
+	local url, requestCls, responseCls = "getBraveArenaVedio", "GetBraveArenaVedioReq", "GetBraveArenaVedioResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function FetchMatchData(finishedCallback, roundID, matchID)
+	local req = {}
+	req.round = roundID
+	req.id = matchID
+
+	local url, requestCls, responseCls = "getBraveArenaMatch", "GetBraveArenaMatchReq", "GetBraveArenaMatchResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function UpdateLeagueFormation(finishedCallback, formationIdx, heroIds)
+	local req = {}
+    req.type = formationIdx
+    req.formationPos = heroIds
+
+	local url, requestCls, responseCls = 
+		"updateFTArenaSingleFormation", "UpdateFTArenaSingleFormationReq", "UpdateFTArenaSingleFormationResp"
+    HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function UpdateAllLeagueFormation(finishedCallback, formations)
+	local req = {}
+    req.formation_1 = formations[1]
+    req.formation_2 = formations[2]
+    req.formation_3 = formations[3]
+
+	local url, requestCls, responseCls = 
+		"updateFTArenaFormation", "UpdateFTArenaFormationReq", "UpdateFTArenaFormationResp"
+    HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function FetchPlayerCard(finishedCallback, userID, zone, formationType)
+	local req = {}
+	req.userId = userID
+	req.zone = zone
+	req.formationType = formationType
+
+	local url, requestCls, responseCls = "getPlayerCard", "GetPlayerCardRequest", "GetPlayerCardResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function FetchPlayerPower(finishedCallback, matchID_Svr)
+	local req = {}
+	req.matchId = matchID_Svr
+
+	local url, requestCls, responseCls = "checkBraveArenaCombat", "CheckBraveArenaCombatReq", "CheckBraveArenaCombatResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function FetchAuditionPlayers(finishedCallback)
+	local req = {}
+	req.count = AUDITION_PLAYER_COUNT
+
+	local url, requestCls, responseCls = "getSigners", "GetSignersReq", "GetSignersResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function FetchRewards(finishedCallback)
+	local req = {}
+	req.userless = 0
+
+	local url, requestCls, responseCls = "checkBraveArenaReward", "CheckBraveArenaRewardReq", "CheckBraveArenaRewardResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+------Helpers-----------------------
+function GetMiniSeconds(timeStr)
+	local strs = SplitString(timeStr,":")
+	local hour, minute = tonumber(strs[0]), tonumber(strs[1])
+	
+	return (hour * 60 + minute) * 60 * 1000
+end
+
+function GetWinnerData(match)
+	if match.state == LeagueMatchState.Finished then
+		return match.winner == LeagueMatchPlayer.RedPlayer
+			and match.redPlayer or match.blackPlayer
+	else
+		return nil
+	end
+end
+
+function IsPlayerBaseEqual(playerBase1, playerBase2)
+	return playerBase1.userId == playerBase2.userId and
+		playerBase1.zone == playerBase2.zone
+end
+
+function OpenPlayerInfoView(self, playerInfo, parentView)
+	local uid = tostring(playerInfo.userId)
+	local cachedOwnPlayerInfo = appData:checkData("PlayerInfo")
+	local zone = tostring(playerInfo.zone)
+	local isLocal = uid == cachedOwnPlayerInfo.userId and zone == cachedOwnPlayerInfo.zone
+	local showUnionInfoBtn = true
+	local siblingIdx = -1
+	CsBridge.CacheAssetsByModule( self.Module,
+		function()
+			local view = CsBridge.OpenView("PlayerInfoView", "PlayerInfoModel", true, true)
+			view:SetParamDataList(isLocal, uid, zone, siblingIdx, showUnionInfoBtn)
+		end, 
+		"PlayerInfoView","AchievementItemSlot")
+end
+
+function OpenReplayView(self, match, parentView)
+	CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			local view = CsBridge.OpenView("LeagueReplayView", "LeagueReplayModel", true, true)
+			view:SetParamDataList(match)
+		end, 
+		"LeagueReplayView", "KnockoutMatchItemSlot")
+end
+
+function UpdateMatchState(match)
+	local dateTimeStamp = match.time - GetMiniSeconds(MatchTimeConfig.BattleTime)
+	local now = CsBridge.timeManager.ServerTime
+	if now >= (match.settleTime + MATCH_DELAY) then
+		match.state = LeagueMatchState.Finished
+	elseif now >= (match.time + MATCH_DELAY) then
+		match.state = LeagueMatchState.Processing
+	elseif now >= match.betTime then
+		match.state = LeagueMatchState.Preparing
+	else
+		local startTime = (match.roundID == 1 and match.turnID <= 4)
+			and dateTimeStamp
+			or (dateTimeStamp - GetMiniSeconds("02:30"))
+
+		if now >= startTime then
+			match.state = LeagueMatchState.Lineup
+		else
+			if match.state ~= LeagueMatchState.Lineup then
+				match.state = LeagueMatchState.Locked
+			end
+		end
+	end	
+end
+
+function GetCurrentKnockoutMatch(matchList)
+	return GetCurrentMatchByLevel(matchList, LeagueMatchLevel.Knockout)
+end
+
+function GetCurrentAuditionMatch(matchList)
+	return GetCurrentMatchByLevel(matchList, LeagueMatchLevel.Audition)
+end
+
+function GetCurrentMatchByLevel(matchList, matchLevel)
+	local now = CsBridge.timeManager.ServerTime
+	local battleTime = GetMiniSeconds(MatchTimeConfig.BattleTime)
+	local curDateTimeStamp = GetMorning(now)
+	local tempMatch
+	for k, match in pairs(matchList) do
+		if match.level == matchLevel then
+			local matchDate = match.time - battleTime
+			local difference = math.abs(matchDate - curDateTimeStamp)
+			if difference < 1000 then
+				tempMatch = match
+				break
+			end
+		end
+	end
+
+	if tempMatch and tempMatch.state < LeagueMatchState.Finished then
+		return tempMatch
+	else
+		local nextMatch, knockoutMatch
+		local nextDateTimeStamp = curDateTimeStamp + 24 * 60 * 60 * 1000
+		for k, match in pairs(matchList) do
+			if match.level == matchLevel then
+				knockoutMatch = match
+				local matchDate = match.time - battleTime
+				local difference = math.abs(matchDate - nextDateTimeStamp)
+				if difference < 1000 then
+					nextMatch = match
+					break
+				end
+			end
+		end
+
+		return nextMatch and nextMatch or knockoutMatch
+	end
+end
+
+function UpdateMatchProcess(match)
+	local now = CsBridge.timeManager.ServerTime
+	local timeElapsed = now - match.time
+	if timeElapsed > 0 then
+		local fightInterval = MatchTimeConfig.BattleDuration / MATCH_FIGHT_COUNT
+		match.fightProcess = math.floor(timeElapsed / fightInterval)
+		match.fightProcess = match.fightProcess > MATCH_FIGHT_COUNT
+			and MATCH_FIGHT_COUNT or match.fightProcess
+
+		match.process = math.floor(match.fightProcess / BATTLE_FIGHT_COUNT)
+	else
+		match.process = 0
+		match.fightProcess = 0
+	end
+end
+
+function GetLeagueTime(time)
+	local morningTime = GetMorning(time)
+	return morningTime + GetMiniSeconds(MatchTimeConfig.BetTime)
+end
+
+function FormatPlayerName(playerBaseInfo)
+	return FormatWorldPlayerName(playerBaseInfo.name, playerBaseInfo.zone)
+end
+
+function FormatOdds(odds)
+	odds = odds or 0
+	temp = odds * 0.001
+	return string.format(FORMAT_STRING_ODDS, temp)
+end
+
+function GetBetItemID()
+	local currencyID = tonumber(GetConstValue("FTArenaPriceId"))
+	currencyID = currencyID <= 0 and 1 or currencyID
+
+	return currencyID
+end
+
+function GetBonusItemID()
+	local bonusItemID = tonumber(GetConstValue("FTArenaReceivedId"))
+	bonusItemID = bonusItemID <= 0 and 1 or bonusItemID
+
+	return bonusItemID
+end
+
+function CaculateTurnID(roundID, turnIdx)
+	local ROUND_FACTOR = 1000
+	return turnIdx - roundID * ROUND_FACTOR
+end
+
+function CaculatePower(value, power)
+	if power == 0 then return 1 end
+	if power == 1 then return value end
+
+	local temp = value
+	for i = 2, power do
+		temp = temp * value
+	end
+
+	return temp
+end
+
+local ZONE_NAME_HEADER = "S"
+function FormatZone(zone)
+	if zone then
+		return ZONE_NAME_HEADER .. zone
+	else
+		return ""
+	end
+end
+
+function CaculateLeagueState(signUpEndTime, seasonEndTime)
+	local now = CsBridge.timeManager.ServerTime
+	local state = LeagueState.Finished
+	if now >= seasonEndTime then
+		state = LeagueState.Finished
+	elseif now >= signUpEndTime then
+		state = LeagueState.Processing
+	else
+		state = LeagueState.Preparing
+	end
+
+	return state
+end
+
+function OpenFormationView(self, savingCbk, updatingCbk)
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			local view = CsBridge.OpenView("CrossFormationView","CrossArenaFormationModel",true,true)
+			local formView = 1				
+			view:SetParamDataList(formView,savingCbk, updatingCbk, LeagueFormationTypeList)
+		end, 
+		"CrossFormationView",
+		"CrossFormationItemSlot",
+		"HeroItemSlot")
+end
+
+function CaculateLevel(roundCount, currentRound)
+	local progress = LeagueMatchLevel.Final - 
+		(roundCount - currentRound)
+	progress = progress < 0 and LeagueMatchLevel.Audition or progress
+	return progress
+end

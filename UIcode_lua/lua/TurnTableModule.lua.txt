@@ -1,0 +1,19 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-06-29 11:00:45
+
+function DoInit()
+end
+
+function AssetNames(objs)
+    local arr = {"TurnTableView"}
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    self:OpenView("TurnTableView", "TurnTableModel")
+    if(onFinished ~= nil) then
+        onFinished()
+    end
+end

@@ -1,0 +1,48 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2018-11-05 16:00:04
+]]
+
+function OnGPItemSlotBindValue(slot,data)
+    local nickTxt = slot:GetComponentAtPath("NickTxt",CLS_TEXT)
+    local playerBase = slot:GetComponentAtPath("PlayerBase",CLS_RECTTRANSFORM)
+    local itemBase = slot:GetComponentAtPath("ItemSlot",CLS_RECTTRANSFORM)
+    local buyBtnObj = slot:GetGameObjectAtPath("BuyBtn")
+    local buyBtn = slot:GetComponentAtPath("BuyBtn",CLS_BUTTON_ARCHLY)
+    local btnName = slot:GetComponentAtPath("BuyBtn/nameTxt",CLS_TEXT)
+    local peopleNumTxt = slot:GetComponentAtPath("details/PeopleNumTxt",CLS_TEXT)
+    local discountNumTxt = slot:GetComponentAtPath("details/DiscountNumTxt",CLS_TEXT)
+    local priceTxt = slot:GetComponentAtPath("details/PriceTxt",CLS_TEXT)
+    local buyPriceTxt = slot:GetComponentAtPath("details/BuyPriceTxt",CLS_TEXT)
+    local returnObj = slot:GetGameObjectAtPath("details/Return")
+    local returnPriceTxt = slot:GetComponentAtPath("details/Return/ReturnPriceTxt",CLS_TEXT)
+
+    nickTxt.text = data.player.name
+    BindPlayerBaseInfoValue(playerBase,data.player)
+    BindItemBaseValue(itemBase,data.goods)
+    peopleNumTxt.text = string.format(Language:getStr("GPPeopleNum"),data.peopleCount)
+    discountNumTxt.text = data.discount == -1 and "-" or string.format(Language:getStr("GPDiscountNum"),data.discount)
+    priceTxt.text = GetValueAbbreviation(data.price.count)
+    buyPriceTxt.text = GetValueAbbreviation(data.price.count)
+
+    if data.isMine then
+        buyBtnObj:SetSelfActive(false)
+        returnObj:SetSelfActive(true)
+        returnPriceTxt.text = GetValueAbbreviation(data.returnPrice)
+    else
+        buyBtnObj:SetSelfActive(true)
+        returnObj:SetSelfActive(false)
+        if data.isLocal then
+            buyBtn.Gray = true
+        else
+            if data.avaliable then
+                buyBtn.Gray = data.remain == 0
+            else
+                buyBtn.Gray = true
+            end
+        end
+        btnName.text = Language:getStr(data.isPeopleMax and "GPPeopleMax" or "buy")
+    end
+end

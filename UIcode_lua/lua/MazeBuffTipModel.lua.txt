@@ -1,0 +1,12 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-05-23 15:02:26
+
+function DoOnExit()
+end
+
+function OnCommand_InitData(objs)
+    local buff = objs[0]
+    self:SendNotification("RefreshMazeBuffTipView",buff)
+end

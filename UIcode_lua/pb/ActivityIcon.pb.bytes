@@ -1,0 +1,20 @@
+
+Ç
+ActivityIcon.protoActivityIcon"$
+GetActiveIconsReq
+useless ("E
+GetActiveIconsResp/
+	iconItems (2.ActivityIcon.ActiveIconItem"µ
+ActiveIconItem
+
+id (
+level (
+type (
+icon (	
+priority (
+fatherIconId (
+iconName (	
+endTime (
+redDot	 (
+	spineName
+ (	

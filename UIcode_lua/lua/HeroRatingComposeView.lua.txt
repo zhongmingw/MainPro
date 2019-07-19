@@ -1,0 +1,54 @@
+--[[
+	file: HeroRatingComposeView.lua
+	author: hangang
+	description: View for hero review composing
+]]
+
+
+local contentInput
+local confirmCbk
+
+function DoInit()
+	self.Shadow = 1
+	InitUI()
+end 
+
+function InitUI()
+	contentInput = CsBridge.GetInputFromView(self, "Input")
+end
+
+function SetParamDataList(objs)	
+	confirmCbk = objs[0]
+	RefreshView("")
+end
+
+function RefreshView(data)
+	contentInput.text = data
+end
+
+function OnConfirmBtnClick(sender)
+	if IsEmptyInput() then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("EmptyHeroReview"))
+	else
+		confirmCbk(contentInput.text)
+	end
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function IsEmptyInput()
+	local newName = contentInput.text
+	newName = string.gsub(newName, " ", "")
+	return newName == nil or newName == "" 
+end
+
+function Close()
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	contentInput = nil
+	confirmCbk = nil
+end

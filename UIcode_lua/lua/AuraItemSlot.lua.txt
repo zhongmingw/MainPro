@@ -1,0 +1,13 @@
+
+function OnAuraItemSlotBindValue(slot,data)
+	local img_icon
+	img_icon=slot.transform:Find("iconImg"):GetComponent("UnityEngine.UI.Image")
+	CsBridge.IconData.SetIconByName(img_icon.gameObject,data.icon)	
+	if data.isOn then
+		CsBridge.IconData.ChangeImageMaterial(img_icon.gameObject, "")
+	else
+		CsBridge.IconData.ChangeImageMaterial(img_icon.gameObject, "SpriteGray")
+	end	
+end
+
+

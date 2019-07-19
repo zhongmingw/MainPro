@@ -1,0 +1,488 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-04-19 17:09:59
+
+local VecUtils = require "VecUtils"
+local MazeDef = require "MazeDef"
+local MazeUtils = require "MazeUtils"
+
+local isInit = false
+
+local mazeGrid
+local playerTrans
+local playerSpineRoot
+local playerSpineTrans
+local playerSpine
+local playerIcon
+local playerHpSlider
+local playerHpNumTxt
+local playerHpTxt
+local playerBuffGrid
+local effectTrans
+local bagPos
+local colliderObj
+
+local function HideView()
+    self:HideView(self.gameObject.name)
+end
+
+local function IsTableEmpty(tb)
+    return tb == nil or tb[1] == nil
+end
+
+local function ShowCollider()
+    colliderObj:SetSelfActive(true)
+end
+
+local function HideCollider()
+    colliderObj:SetSelfActive(false)
+end
+
+local function CreatePlayerSpine(spineName,onFinished)
+    if playerSpine then
+        onFinished()
+        return
+    end
+    local cursorSpineName = "MazePlayerCursorSpine"
+    local cursorSpineAnimName = "loop"
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local obj = CsBridge.objectCache:CreateObject(spineName,true,playerSpineRoot)
+        playerSpineTrans = obj.transform
+        local scale = playerSpineTrans:CheckLocalScale()
+        scale.x = 0.5
+        scale.y = 0.5
+        playerSpineTrans:ResetLocalScale(scale)
+        playerSpine = playerSpineTrans:GetChild(0):GetComponent(CLS_SKELETONGRAPHIC)
+        local cursorObj = CsBridge.objectCache:CreateObject(cursorSpineName,true,playerSpineRoot)
+        cursorObj:GetComponent(CLS_SKELETONGRAPHIC):PlayAnimation(cursorSpineAnimName,true)
+        onFinished()
+    end,spineName,cursorSpineName)
+end
+
+local function SetPlayerDir(dir)
+    local scale = playerSpineTrans:CheckLocalScale()
+    local x = math.abs(scale.x)
+    if dir == MazeDef.PlayerDir.Left then
+        scale.x = x 
+    elseif dir == MazeDef.PlayerDir.Right then
+        scale.x = -x
+    end
+    playerSpineTrans:ResetLocalScale(scale)
+end
+
+local function ShowPlayerAnim(playerState,onFinished)
+    local PlayerState = MazeDef.PlayerState
+    local function animFinished()
+        if onFinished then onFinished() end
+    end
+    if playerState == PlayerState.Idle then
+        playerSpine:PlayAnimation("stand",true)
+    elseif playerState == PlayerState.Walk then
+        playerSpine:PlayAnimation("walk",false,animFinished)
+    elseif playerState == PlayerState.Hurt then
+        playerSpine:PlayAnimation("hurt",false,animFinished)
+    end
+end
+
+local function ShowMovePlayerTweener(moveData, duration, onFinished)
+    SetPlayerDir(moveData.dir)
+    ShowPlayerAnim(MazeDef.PlayerState.Walk)
+    duration = duration or 0.3
+    CsBridge.TweenUtils.MoveToByAnchored(playerTrans,moveData.pos.x,moveData.pos.y,duration,
+    function()
+        ShowPlayerAnim(MazeDef.PlayerState.Idle)
+        if onFinished then onFinished() end
+    end)
+end
+
+local function RefreshPlayer(player, pos)
+    SetIconByHeadId(playerIcon,player.icon,self.Module)
+    SetSliderProgress(playerHpNumTxt,playerHpSlider,player.hp,player.maxHp)
+    playerBuffGrid:RefreshItemSlots(player.buffs,self.gameObject,"MazeBuffItemSlot")
+    if pos then
+        playerTrans:ResetAnchoredPosition(pos)
+    end
+end
+
+local function CreateMazeItemsEffect(pos,scale,mazeItems,onFinished)
+    if IsTableEmpty(mazeItems) then
+        onFinished()
+        return
+    end
+    local assetName = "MazeItemEffect"
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local objTransArr = {}
+        for i,v in ipairs(mazeItems) do
+            local obj = CsBridge.objectCache:CreateObject(assetName,true,effectTrans)
+            local objTrans = obj.transform
+            objTrans:ResetAnchoredPosition(pos)
+            local iconImg = objTrans:GetGameObjectAtPath("IconImg")
+            local iconTrans = iconImg.transform
+            iconTrans:ResetLocalScale(scale)
+            SetSpriteByModule(iconImg,v.icon)
+            table.insert(objTransArr,objTrans)
+        end
+        onFinished(objTransArr)
+    end,assetName)
+end
+
+local function ShowGetMazeItemEffect(itemTrans,duration,onFinished)
+    duration = duration or 0.3
+    CsBridge.TweenUtils.MoveToByWorld(itemTrans,bagPos.x,bagPos.y,duration,onFinished)
+end
+
+local function ShowRewardItems(rewardItems,onFinished)
+    if IsTableEmpty(rewardItems) then
+        if onFinished then onFinished() end
+        return
+    end
+    ShowRewardReceivedTip(self,rewardItems,onFinished)
+end
+
+function DoInit()	
+    self.Shadow = 1
+end
+
+local function InitUI()
+    mazeGrid = self:GetComponentAtPath("Grid",CLS_UI_ITEM_GRID)
+    playerTrans = self:GetComponentAtPath("Fg/Player",CLS_RECTTRANSFORM)
+    playerSpineRoot = self:GetComponentAtPath("Fg/Player/Spine",CLS_RECTTRANSFORM)
+    playerHpTxt = self:GetComponentAtPath("Fg/Player/HpTxt",CLS_TEXT)
+    playerIcon = self:GetGameObjectAtPath("Bottom/Mask/HeadIcon")
+    playerHpSlider = self:GetComponentAtPath("Bottom/HpSlider",CLS_SLIDER)
+    playerHpNumTxt = self:GetComponentAtPath("Bottom/HpSlider/NumTxt",CLS_TEXT)
+    playerBuffGrid = self:GetComponentAtPath("Bottom/BuffGrid",CLS_UI_ITEM_GRID)
+    effectTrans = self:GetComponentAtPath("Effect",CLS_RECTTRANSFORM)
+    colliderObj = self:GetGameObjectAtPath("Collider")
+    local bagTrans = self:GetComponentAtPath("Bottom/BagBtn",CLS_RECTTRANSFORM)
+    bagPos = bagTrans:CheckPosition()
+end
+
+function SetParamDataList(objs)
+    local data = objs[0]
+    self:SendCommand("InitData",data)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitMazeStageData")
+end
+
+function Active()
+    self:SendCommand("UpdateMazeStageView")
+end
+
+function OnClose()
+    mazeGrid:ClearItems()
+    MazeUtils.DetachChildren(effectTrans)
+    MazeUtils.DetachChildren(playerSpineRoot)
+    HideCollider()
+    playerSpineTrans = nil
+    playerSpine = nil
+end
+
+function DoExit()
+    VecUtils = nil
+    MazeDef = nil
+    MazeUtils = nil
+    
+    isInit = nil
+    
+    mazeGrid = nil
+    playerTrans = nil
+    playerSpineRoot = nil
+    playerSpineTrans = nil
+    playerSpine = nil
+    playerIcon = nil
+    playerHpSlider = nil
+    playerHpNumTxt = nil
+    playerHpTxt = nil
+    playerBuffGrid = nil
+    effectTrans = nil
+    bagPos = nil
+    colliderObj = nil
+end
+
+function OnNotification_RefreshMazeStageView(objs)
+    local data = objs[0]
+    local function onFinished()
+        SetPlayerDir(MazeDef.PlayerDir.Right)
+        ShowPlayerAnim(MazeDef.PlayerState.Idle)
+        mazeGrid:RefreshItemSlots(data.grids,self.gameObject,"MazeGridItemSlot")
+        RefreshPlayer(data.curPlayer,data.pos)
+    end
+    CreatePlayerSpine("hero_175_p",onFinished)
+end
+
+function OnNotification_RefreshSingleGrids(objs)
+    local updateGrids = objs[0]
+    for i,v in ipairs(updateGrids) do
+        mazeGrid:RefreshSlot(v.grid,v.index)
+    end
+end
+
+function OnNotification_RefreshPlayer(objs)
+    local player,pos = objs[0],objs[1]
+    RefreshPlayer(player,pos)
+end
+
+function OnNotification_PlayerMove(objs)
+    local viewData = objs[0]
+    ShowMovePlayerTweener(viewData)
+end
+
+local function DoBezierAnimEffect(startPos,topPos,endPos,onLoop,onFinished,duration)
+    local function CheckPointOneLine(s,t,e)
+        local lhs = t-s
+        local rhs = e-s
+        return VecUtils.CrossVec2(lhs, rhs) == 0
+    end
+    local function CalcBezierCurve(start,top,ed,t)
+        if CheckPointOneLine(start,top,ed)then
+            return start+(ed-start)*t
+        end
+        local t1 = (1-t)*(1-t)
+        local t2 = t*(1-t)
+        local t3 = t*t
+        return start*t1+top*2*t2+ed*t3
+    end
+    CsBridge.timeManager:UpdateFrame(duration,
+    function(i)
+        local t = i/duration
+        local pos = CalcBezierCurve(startPos,topPos,endPos,t)
+        if onLoop then onLoop(pos) end
+    end,
+    function()
+        if onFinished then onFinished() end
+    end)
+end
+
+local function ShowMazeItemsDropEffect(itemTransArr,centerPos,radius,duration,onFinished)
+    if IsTableEmpty(itemTransArr) then
+        if onFinished then onFinished() end
+        return
+    end
+    local doFinished = false
+    local len = #itemTransArr
+    local lVal = 0
+    local rVal = -radius.x
+    for i,v in ipairs(itemTransArr) do
+        local delta = i/len
+        lVal = rVal
+        rVal = math.modf(2*radius.x*delta-radius.x)
+        local rdX = math.random(lVal, rVal)
+        local rdY = -radius.y
+        local startPos = v:CheckAnchoredPosition(v)
+        local endPos = { 
+            x = startPos.x + rdX,
+            y = startPos.y + rdY
+        }
+        startPos = VecUtils.GetCalcVec2(startPos)
+        endPos = VecUtils.GetCalcVec2(endPos)
+        local topPos = (endPos+startPos)*0.5
+        local rotation = -(endPos.x-startPos.x)
+        topPos = VecUtils.RotationVec2(topPos-startPos,rotation)+startPos
+        DoBezierAnimEffect(startPos,topPos,endPos,
+        function(pos)
+            v:ResetAnchoredPosition(pos)
+        end,
+        function()
+            if onFinished and not doFinished then
+                onFinished()
+                doFinished = true
+            end
+        end,duration)
+    end
+end
+
+function OnNotification_ShowMazeBoxEffect(objs)
+    local viewData = objs[0]
+    local itemData = mazeGrid:GetItemDataByIndex(viewData.index)
+    local gridSlot = itemData.itemSlot
+    local grid = itemData.data
+    local duration = 0.3
+    local itemTransArr = nil
+    local function rewardFinished()
+        if IsTableEmpty(itemTransArr) then
+            return
+        end
+        for i,v in ipairs(itemTransArr) do
+            ShowGetMazeItemEffect(v,duration,function()
+                CsBridge.GameObject.Destroy(v.gameObject)
+            end)
+        end
+    end
+    local function moveFinished()
+        HideCollider()
+        ShowRewardItems(viewData.rewardItems,rewardFinished)
+    end
+    local function dropFinished()
+        ShowMovePlayerTweener(viewData,duration,moveFinished)
+    end
+    local function createFinished(itemArr)
+        itemTransArr = itemArr
+        local centerPos = gridSlot.transform:CheckPosition()
+        local radius = {
+            x = 40,
+            y = 30
+        }
+        ShowMazeItemsDropEffect(itemTransArr,centerPos,radius,duration,dropFinished)
+    end
+    local function clickFinished()
+        local scale = {x = 0.5, y = 0.5, z = 1}
+        CreateMazeItemsEffect(viewData.pos,scale,viewData.mazeItems,createFinished)
+    end
+    ShowCollider()
+    grid:ShowBoxClickAnim(gridSlot,clickFinished)
+end
+
+function OnNotification_ShowTriggerEventParamMazeItemEffect(objs)
+    local data = objs[0]
+    local duration = 0.3
+    local onCreateFinished = function(itemTransArr)
+        local itemTrans = itemTransArr[1]
+        local onEffectFinished = function()
+            CsBridge.GameObject.Destroy(itemTrans.gameObject)
+        end
+        local onMoveFinished = function()
+            ShowGetMazeItemEffect(itemTrans,duration,onEffectFinished)
+        end
+        ShowMovePlayerTweener(data,duration,onMoveFinished)
+    end
+    local scale = {x = 1, y = 1, z = 1}
+    CreateMazeItemsEffect(data.pos,scale,{data.data},onCreateFinished)
+end
+
+local function ShowPlayerChangeHpTweener(data)
+    local duration = 0.3
+    local playerHpTxtObj = playerHpTxt.gameObject
+    local playerHpTrans = playerHpTxt.transform
+    playerHpTxt.text = data.changeHp
+    local color = data.data.count > 0 and color13 or color26
+    SetFontColor(playerHpTxt, color)
+    playerHpTxtObj:SetSelfActive(true)
+    local deltaHp = data.newHp - data.oldHp
+    if deltaHp < 0 then
+        ShowPlayerAnim(MazeDef.PlayerState.Hurt,function()
+            ShowPlayerAnim(MazeDef.PlayerState.Idle)
+        end)
+    end
+    CsBridge.TweenUtils.MoveToByAnchored(playerHpTrans,50,30,duration,function()
+        playerHpTxtObj:SetSelfActive(false)
+        local pos = {
+            x = 0,
+            y = 0
+        }
+        playerHpTrans:ResetAnchoredPosition(pos)
+    end)
+    CsBridge.TweenUtils.IntValueChange(data.oldHp,data.newHp,duration,
+    function(x)
+        playerHpNumTxt.text = x.."/"..data.maxHp
+    end)
+    CsBridge.TweenUtils.DOSliderValue(playerHpSlider,data.newHp/data.maxHp,duration,function()
+        SetSliderProgress(playerHpNumTxt,playerHpSlider,data.newHp,data.maxHp)
+    end)
+end
+
+function OnNotification_ShowTriggerEventParamChangeHpEffect(objs)
+    local data = objs[0]
+    ShowPlayerChangeHpTweener(data)
+end
+
+function OnNotification_ShowTriggerEventParamGetBuff(objs)
+    local data = objs[0]
+    local buffs = data.buffs
+    playerBuffGrid:RefreshItemSlots(buffs,self.gameObject,"MazeBuffItemSlot")
+end
+
+local function ShowTrapEffect(data, slot, onFinished)
+    data.grid:ShowTrapEffect(slot,onFinished)
+end
+
+function OnNotification_ShowTrapEffect(objs)
+    local data = objs[0]
+    local duration = 0.3
+    local itemData = mazeGrid:GetItemDataByIndex(data.index)
+    local gridSlot = itemData.itemSlot
+    data.grid = itemData.data
+    ShowCollider()
+    if data.useItem then
+        local moveFinished = function()
+            data.onFinished()
+            HideCollider()
+        end
+        local effectFinished = function()
+            ShowMovePlayerTweener(data,duration,moveFinished)
+        end
+        ShowTrapEffect(data,gridSlot,effectFinished)
+    else
+        local effectFinished = function()
+            data.onFinished()
+            HideCollider()
+        end
+        local moveFinished = function()
+            ShowTrapEffect(data,gridSlot,effectFinished)
+        end
+        ShowMovePlayerTweener(data,duration,moveFinished)
+    end
+end
+
+function OnNotification_ShowGridOpenEffect(objs)
+    local viewData = objs[0]
+    local itemData = mazeGrid:GetItemDataByIndex(viewData.index)
+    local slot = itemData.itemSlot
+    local grid = itemData.data
+    grid:ShowOpenAnim(slot)
+end
+
+function OnNotification_HideView(Objs)
+    HideView()
+end
+
+function OnMazeGridItemSlotBindValue(slot,data)
+    data:BindValue(slot)
+end
+
+function OnMazeBuffItemSlotBindValue(slot, data)
+    local iconImgObj = slot:GetGameObjectAtPath("IconImg")
+    local typeImgObj = slot:GetGameObjectAtPath("TypeImg")
+    local turnTxt = slot:GetComponentAtPath("TurnTxt",CLS_TEXT)
+    
+    SetSpriteByModule(iconImgObj,data.icon,self.Module)
+    SetSpriteByModule(typeImgObj,data.typeIcon,self.Module)
+    turnTxt.text = data.turn
+end
+
+function OnGridMazeGridItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("SelectMazeGrid",data)
+end
+
+function OnBuffGridMazeBuffItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("ShowBuffTip",data)
+end
+
+function OnBagBtnClick(sender)
+    self:SendCommand("OpenBagView")
+end
+
+function OnRewardBagBtnClick(sender)
+    self:SendCommand("OpenRewardBagView")
+end
+
+function OnHelpBtnClick(sender)
+    ShowHelpTip(self,INSTRUCTION_MAZE)
+end
+
+function OnMaskClick(sender)
+    HideView()
+end
+
+function OnCloseBtnClick(sender)
+    HideView()
+end

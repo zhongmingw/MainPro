@@ -1,0 +1,101 @@
+require "APArenaRewardItemSlot"
+
+local soulDailyRewardGrid
+local rewardGrid
+
+local maxRank_Lab
+local curRank_Lab
+
+local rule_Lab
+local time_Lab
+
+local TICKER_NAME = "SoulDailyRewardView"
+
+function InitUI()
+
+    soulDailyRewardGrid=self:GetComponentAtPath("Center/ScrollRect/Viewport/SoulDailyRewardGrid",CLS_UI_ITEM_GRID)
+    local aPArenaDailyRewardTrans = soulDailyRewardGrid.transform
+    rewardGrid=aPArenaDailyRewardTrans:GetComponentAtPath("SelfRewardGO/RewardGrid",CLS_UI_ITEM_GRID)
+    maxRank_Lab=aPArenaDailyRewardTrans:GetComponentAtPath("SelfRewardGO/MaxRankTxt",CLS_TEXT)   
+    curRank_Lab=aPArenaDailyRewardTrans:GetComponentAtPath("SelfRewardGO/CurRankTxt",CLS_TEXT)
+    rule_Lab=aPArenaDailyRewardTrans:GetComponentAtPath("RuleGO/RuleTxt",CLS_TEXT)
+    time_Lab=aPArenaDailyRewardTrans:GetComponentAtPath("TimerGO/TimeTxt",CLS_TEXT)
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+    end 
+    self:SendCommand("InitSoulDailyRewardData")
+end 
+
+function OnNotification_InitSoulDailyRewardData(objs)
+    local maxRank = objs[0]
+    local curRank = objs[1]
+    local rewardDataArr = objs[2]
+    curRank_Lab.text=(curRank~=nil and curRank~=-1) and tostring(curRank) or "-"
+    maxRank_Lab.text=(maxRank~=nil and curRank~=-1) and tostring(maxRank) or "-"
+    local rewardItems = GetRankReward(curRank,rewardDataArr)
+    rewardGrid:RefreshItemSlots(rewardItems,self.gameObject,"ItemSlot")
+    rule_Lab.text=Language:getStr("SoulPalace_DailyAwardsRule")
+    soulDailyRewardGrid:RefreshItemSlots(rewardDataArr,self.gameObject,"APArenaRewardItemSlot")
+    
+    local reloadTime = GetAPArenaRewardReloadTime() * 3600000
+    local endTime = GetReloadTimestamp(reloadTime)
+    local onLooping = function ()
+        time_Lab.text=CheckTimeRemain(endTime,false)
+    end
+    Timer:AddTicker(TICKER_NAME, endTime, onLooping)
+end
+
+function GetRankReward(rank,rewardDataArr)
+    if rank==nil or rank==-1 then
+        return nil 
+    end
+    for i,data in ipairs(rewardDataArr) do
+        if rank>=data.min and rank<=data.max then
+            return GetRewardFromTbl(data.rewardStr)
+        end
+    end
+    return nil
+end
+
+function OnRewardGridItemSlotClick(obj)
+	local item = obj.m_data
+	if item.typeId == 3 then
+		return
+	end
+    CsBridge.CacheAssetsByModule(self.Module,
+	function()
+		local item = obj.m_data
+		local view = CsBridge.OpenView("ItemTipView", "ItemTipModel",false,true)
+		local rewardTmp={}
+		rewardTmp.id=item.id
+		rewardTmp.typeId=item.typeId
+		rewardTmp.count=1
+		if item.typeId == 0 then
+			rewardTmp.attrs = item.attrs
+		end 
+		if item.typeId == 4 then
+			rewardTmp.level = item.level
+		end 
+		view:SetParamDataList(rewardTmp,itemBaseIndex+itemDespIndex+PropsIndex+itemSuitIndex)
+		view:SendCommand("InitItemData")
+	end,"ItemTipView")
+end
+
+function OnClose()
+    Timer:StopTicker(TICKER_NAME)
+end
+
+function DoExit()
+	self.Module=nil
+    soulDailyRewardGrid=nil
+    TICKER_NAME = nil
+    rewardGrid=nil
+    maxRank_Lab=nil
+    curRank_Lab=nil
+    rule_Lab=nil
+    time_Lab=nil
+end

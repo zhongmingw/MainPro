@@ -1,0 +1,15 @@
+
+local loadedClientData=require "ClientData"
+local luaIconData=require "IconData"
+require "ItemSlot"
+
+function OnSuperGiftItemSlotBindValue(slot, data)
+	local count_Lab = slot:GetComponentAtPath("LimitCountTxt" ,CLS_TEXT)
+    local vipExp_Lab = slot:GetComponentAtPath("VipExpTxt" ,CLS_TEXT)
+    local money_Lab = slot:GetComponentAtPath("BuyBtn/MoneyTxt" ,CLS_TEXT)
+	local itemsGrid = slot:GetComponentAtPath("ItemGrid" ,CLS_UI_ITEM_GRID)
+    count_Lab.text=Language:getStr("Global_99").."  <color=#42FF00FF>"..data.remain.."</color>"
+    vipExp_Lab.text=data.expText
+    money_Lab.text=data.priceText
+	itemsGrid:RefreshItemSlots(data.rewards,slot.m_grid.viewBase.gameObject,"ItemSlot")
+end

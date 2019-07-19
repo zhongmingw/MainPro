@@ -1,0 +1,162 @@
+local HonorCityUtils = require "HonorCityUtils"
+local totalInfo = {}
+local REWARD_TYPE = 1
+local RANKING_TYPE = 2
+function DoInit()
+
+end
+
+local function RefreshViewData()
+	local req = {}
+    req.id = 0
+    req.count = 50
+    HttpRequest("getHonorCityRank","GetHonorCityRankReq","GetHonorCityRankResp", req, function (resp)
+        if resp then
+            totalInfo = resp
+            local viewData = HonorCityUtils.GetViewData(resp)
+            self:SendNotification("RefreshViewData",viewData)
+        end
+    end, true, true)
+end
+
+function OnCommand_InitHonorCityInfo(objs)
+	RefreshViewData()
+end
+
+function OnCommand_OpenTipView(objs)
+	local data = objs[0]
+	local itemType = data.typeId
+	if itemType == ItemTypeEnum.Hero then
+		ShowHeroTip(self, data.id, 1, 1)
+	else
+		ShowTip(self, itemType, data.id)
+	end
+end
+
+function OnCommand_OpenScoreView(objs)
+	local req = {}
+	req.useless = 0
+	HttpRequest("getHonorCityTask","GetHonorCityTaskReq","GetHonorCityTaskResp", req, function (resp)
+		if resp then
+			CsBridge.CacheAssetsByModule(self.Module,
+		    function()
+		        local view = CsBridge.OpenView("HonorCityScoreView","HonorCityModel",true,true)
+		        local taskData = HonorCityUtils.GetTaskData(resp.tasks)
+		        view:SetData(taskData)
+		    end, "HonorCityScoreView","HonorCityScoreItemSlot","ItemSlot")
+		end
+	end, true, true)
+end
+
+function OnCommand_OpenRankRewardView(objs)
+	local _type = objs[0]
+	local deadTime = objs[1]
+	CsBridge.CacheAssetsByModule(self.Module,
+    function()
+        local view = CsBridge.OpenView("HonorCityRankRewardView","HonorCityModel",true,true)
+        local infoData = HonorCityUtils.GetRankRewardData(totalInfo,_type,deadTime)
+        view:SetData(infoData)
+    end, "HonorCityRankRewardView","HonorCityRewardItemSlot","HonorCityPlayerRankItemSlot","HonorCityZoneRankItemSlot","ItemSlot")
+end
+
+function OnCommand_RefreshRankData(objs)
+	local _type = objs[0]
+	local deadTime = objs[1]
+	local req = {}
+    req.id = 0
+    req.count = 50
+    HttpRequest("getHonorCityRank","GetHonorCityRankReq","GetHonorCityRankResp", req, function (resp)
+        if resp then
+            totalInfo = resp
+            local viewData = HonorCityUtils.GetViewData(resp)
+            self:SendNotification("RefreshViewData",viewData)
+            local infoData = HonorCityUtils.GetRankRewardData(totalInfo,_type,deadTime)
+            self:SendNotification("RefreshRankViewData",infoData)
+        end
+    end, true, true)
+end
+
+function OnCommand_RefreshGroupData(objs)
+	local viewData = objs[0]
+	local index = objs[1]
+	local data = {}
+	if index == 0 then
+		data.banner = viewData.groupBanner
+		data.title = viewData.groupTitle
+		data.scoreDec = Language:getStr("HonorCityDes1")
+		data.rankingDec = Language:getStr("HonorCityDes2")
+		data.score = viewData.groupScore
+		data.rankingNum = viewData.groupRanking > 0 and viewData.groupRanking or "-"
+		if viewData.type == REWARD_TYPE then
+			data.scoreDec = Language:getStr("HonorCityDes2")
+			data.score = viewData.groupRanking > 0 and viewData.groupRanking or "-"
+			data.slotName = "HonorCityRewardItemSlot"
+			data.rewards = HonorCityUtils.GetRewards(viewData.groupRanking,viewData.leftItems)
+		elseif viewData.type == RANKING_TYPE then
+			data.slotName = "HonorCityZoneRankItemSlot"
+		end
+		data.itemsList = viewData.leftItems
+	elseif index == 1 then
+		data.banner = viewData.selfBanner
+		data.title = viewData.selfTitle
+		data.scoreDec = Language:getStr("HonorCityDes3")
+		data.rankingDec = Language:getStr("HonorCityDes4")
+		data.score = viewData.selfScore
+		data.rankingNum = viewData.selfRanking > 0 and viewData.selfRanking or "-"
+		if viewData.type == REWARD_TYPE then
+			data.scoreDec = Language:getStr("HonorCityDes4")
+			data.score = viewData.selfRanking > 0 and viewData.selfRanking or "-"
+			data.slotName = "HonorCityRewardItemSlot"
+			data.rewards = HonorCityUtils.GetRewards(viewData.selfRanking,viewData.rightItems)
+		elseif viewData.type == RANKING_TYPE then
+			data.slotName = "HonorCityPlayerRankItemSlot"
+		end
+		data.itemsList = viewData.rightItems
+	end
+	self:SendNotification("RefreshGroupData",data)
+end
+
+function OnCommand_PlayerBaseClicked(objs)
+	local playerData = objs[0]
+	local parentViewName = objs[1]
+
+	OpenPlayerInfoView(self, playerData, parentViewName)
+end
+
+function OnCommand_DonateItems(objs)
+	local viewData = objs[0]
+	local donateCount = viewData.donateCount
+	local maxNum = viewData.honorCityDonateMax
+	local itemId = viewData.honorCityDonateItem
+	local needCount = viewData.needCount
+	if donateCount >= maxNum then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("HonorCityDes13"))
+		return
+	end
+	if itemId == 0 then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("HonorCityDes14"))
+		return
+	end
+	local itemCount = GetCountByItemType(itemId,ItemTypeEnum.Item)
+	if itemCount < needCount then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("HonorCityDes15"))
+		return
+	end
+
+	if viewData.isOver then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("HonorCityDes18"))
+		return
+	end
+
+	local req = {
+        id = itemId,
+        count = needCount
+    }
+	HttpRequest("exchangeItem", "ExchangeItemReq", "NormalExchangeItemResp", req, function(resp)
+        if resp then
+        	local str = string.format(Language:getStr("HonorCityDes16"),viewData.addScore)
+        	CsBridge.hintUILayer:ShowHintBox(str)
+       		RefreshViewData()
+       	end
+    end, true, true)
+end

@@ -1,0 +1,29 @@
+
+function OnDonateRankItemSlotBindValue(slot,data)
+    local job_Lab = slot:GetComponentAtPath("JobTxt" ,CLS_TEXT)
+	local name_Lab=slot:GetComponentAtPath("NameTxt" ,CLS_TEXT)
+	local rank_Lab=slot:GetComponentAtPath("RankTxt" ,CLS_TEXT)
+	local score_Lab=slot:GetComponentAtPath("ScoreTxt" ,CLS_TEXT)
+	local rank_Sprite=slot:GetComponentAtPath("RankSprite" ,"UnityEngine.UI.Image")
+	
+	local palyer_TF=slot.transform:Find("PlayerBase")
+	BindPlayerBaseInfoValue(palyer_TF,data.basicInfo)
+	if data.basicInfo.authority==2 then
+		job_Lab.text=Language:getStr("UnionMember")
+	elseif data.basicInfo.authority==3 then
+		job_Lab.text=Language:getStr("UnionElder")
+	elseif data.basicInfo.authority==4 then
+		job_Lab.text=Language:getStr("UnionLeader")
+	end
+    
+	name_Lab.text= FormatWorldPlayerName(data.basicInfo.name, data.basicInfo.zone)
+	rank_Lab.text=tostring(data.rank)
+	score_Lab.text=tostring(data.donate)
+	rank_Sprite.gameObject:SetActive(true)
+
+	if data.rank<=3 and data.rank>0 then
+		CsBridge.IconData.SetIconByName(rank_Sprite.gameObject,"new_com_paiming"..data.rank)
+	else
+		rank_Sprite.gameObject:SetActive(false)
+	end
+end

@@ -1,0 +1,24 @@
+local loadedClientData=require "ClientData"
+local luaIconData=require "IconData"
+require "ItemSlot"
+
+function OnLimitExchangeItemSlotBindValue(slot, data)
+    --local selfTrans = slot.transform
+    --local remain_GO = slot:GetGameObjectAtPath("RemainGO") --selfTrans:Find("RemainGO").gameObject
+    local count_Lab = slot:GetComponentAtPath("RemainGO/RemainsTxt" ,CLS_TEXT) --selfTrans:Find("RemainGO/RemainsTxt"):GetComponent(CLS_TEXT)
+    local received_GO = slot:GetGameObjectAtPath("ReceivedGO") --selfTrans:Find("ReceivedGO").gameObject
+    local money_Lab = slot:GetComponentAtPath("BuyBtn/MoneyTxt" ,CLS_TEXT) --selfTrans:Find("BuyBtn/MoneyTxt"):GetComponent(CLS_TEXT)
+    local money_Sprite = slot:GetComponentAtPath("BuyBtn/MoneySprite" ,CLS_IMAGE) --selfTrans:Find("BuyBtn/MoneySprite"):GetComponent(CLS_IMAGE)
+    local itemsGrid = slot:GetComponentAtPath("ItemGrid" ,CLS_UI_ITEM_GRID) --selfTrans:Find("ItemGrid"):GetComponent(CLS_UI_ITEM_GRID)
+    --remain_GO:SetSelfActive(data.isShowBuyLimit)
+    received_GO:SetSelfActive(data.remain==0)
+    count_Lab.text=string.format(Language:getStr("Global_97"),data.remain)
+    local priceReward = data.prices[1]
+    money_Lab.text=priceReward.count
+	if priceReward.typeId==1 then
+		SetIconByResourceId(money_Sprite.gameObject,priceReward.id)
+	elseif priceReward.typeId==2 then
+		SetIconByItemId(money_Sprite.gameObject,priceReward.id)
+    end
+	itemsGrid:RefreshItemSlots(data.rewards,slot.m_grid.viewBase.gameObject,"ItemSlot")
+end

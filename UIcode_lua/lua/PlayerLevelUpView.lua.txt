@@ -1,0 +1,129 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-03-20 16:23:57
+
+
+local luaRewardUtils = require "RewardUtils"
+local GROUP_SPINE = "PlayerLevelUpView"
+local QueueActionMgr = require "QueueActionMgr"
+
+local levelUpSkeleton
+local levelTxt
+local rewardGrid
+
+local centerObj
+
+local spParent
+
+local t
+
+local spineGo
+local sysOpenGrid
+local nothingObj
+
+local waitAnim = false
+local canClose = false
+local exitFunction = nil
+
+function DoInit()
+    self.Anim=7
+    levelTxt = self:GetComponentAtPath("Center/LevelTxt" ,CLS_TEXT)
+    rewardGrid = self:GetComponentAtPath("Center/ScrollRect/Viewport/RewardGrid",CLS_UI_ITEM_GRID)    
+    centerObj = self:GetGameObjectAtPath("Center")
+    spParent = self:GetGameObjectAtPath("Center/SpParent")
+    sysOpenGrid = self:GetComponentAtPath("Center/SysGrid",CLS_UI_ITEM_GRID)
+    nothingObj = self:GetGameObjectAtPath("Center/Nothing")
+end
+
+function OnAnimationFinished()
+end
+
+function OnClose()
+    CS.UnityEngine.GameObject.Destroy(spineGo)
+    spineGo = nil
+    levelUpSkeleton = nil
+    CsBridge.objectCache:ClearGroup(GROUP_SPINE,true)
+    sysOpenGrid:ClearItems()
+    nothingObj:SetSelfActive(false)
+end
+
+function SetData(obj)
+    canClose = obj.canClose
+    exitFunction = obj.exitCallback
+end
+
+--没动画的话 这里会后调用
+function SetParamDataList(objs)
+    local level = objs[0]
+    local rewards = objs[1]
+    self:SendCommand("InitData",level,rewards)
+end
+
+function OnNotification_RefreshPlayerLevelUpView(objs)
+    local viewData = objs[0]
+    levelTxt.text = viewData.level
+    local rewards = viewData.rewards
+    local openSys = viewData.openSys
+    CsBridge.audioManager:PlayUI(ResTblContainer:GetPropToStr(4,sound.name,sound.tblName))
+    if rewards ~= nil then
+        rewardGrid:RefreshItemSlots(MergeRewards(rewards),self.gameObject,"ItemSlot")
+    end
+    nothingObj:SetSelfActive(#openSys==0)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        sysOpenGrid:RefreshItemSlots(openSys,self.gameObject,"OpenSysIconItemSlot")
+    end,"OpenSysIconItemSlot")
+    CsBridge.CacheAssetsByGroup(GROUP_SPINE,  function()
+        spineGo = CsBridge.objectCache:CreateObject("LevelSpine", true, spParent.transform)
+        levelUpSkeleton = spineGo:GetComponent(CLS_SKELETONGRAPHIC)
+        levelUpSkeleton:PlayAnimation("apear", false, function()
+            if self.enabled then
+                levelUpSkeleton:PlayAnimation("stand", true)
+            end
+        end)
+    end, "LevelSpine")
+    CsBridge.UnityHelper.SetAnchoredPosition(centerObj, 0, 2200)
+    if t then
+        t:DoKill()
+    end
+    t = CsBridge.TweenUtils.MoveTo(centerObj.transform, 0, 0, 0.1, nil, 6)
+    t:DoPlay()
+end
+
+function OnCloseBtnClick(sender)
+    if not canClose then
+        return
+    end
+    self:HideView(self.gameObject.name)
+	local playerInfo = appData:checkData("PlayerInfo")
+	CS.Client.Library.GuideManager.instance:UpdatePlayer(playerInfo.level, playerInfo.vip)
+end
+
+function OnOpenSysIconItemSlotBindValue(slot,data)
+    local iconImgObj = slot:GetGameObjectAtPath("IconImg")
+    local iconNameTxt = slot:GetComponentAtPath("NameTxt",CLS_TEXT)
+    
+    SetSpriteByModule(iconImgObj,data.icon)
+    iconNameTxt.text = data.name
+end
+
+function DoExit()
+    if exitFunction then
+        exitFunction()
+    end
+    luaRewardUtils = nil
+    levelUpSkeleton = nil
+    levelTxt = nil
+    rewardGrid = nil
+
+    centerObj = nil
+
+    t = nil
+    spineGo = nil
+    spParent = nil
+    waitAnim  = nil
+    sysOpenGrid = nil
+    nothingObj = nil
+    exitFunction = nil
+    canClose = nil
+end

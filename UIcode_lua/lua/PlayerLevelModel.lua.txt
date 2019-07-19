@@ -1,0 +1,27 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-05-31 14:57:36
+
+local SysPreUtils = require "SysPreUtils"
+local sysPreTblData
+
+function DoInit()
+    sysPreTblData = SysPreUtils.GetSysPreTblData()
+end
+
+function DoOnExit()
+    SysPreUtils = nil
+    sysPreTblData = nil
+end
+
+function OnCommand_InitData(objs)
+    local level,rewards = objs[0],objs[1]
+    local MAX_NUM = 3
+    local viewData = {
+        level = level,
+        rewards = rewards,
+    }
+    viewData.openSys = SysPreUtils.GetOpenSysByLevel(level,MAX_NUM,sysPreTblData)
+    self:SendNotification("RefreshPlayerLevelUpView",viewData)
+end

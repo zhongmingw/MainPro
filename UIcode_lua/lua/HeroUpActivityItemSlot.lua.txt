@@ -1,0 +1,17 @@
+function OnHeroUpActivityItemSlotBindValue(slot, data)
+    local selfTrans = slot.transform
+    local itemGrid = selfTrans:GetComponentAtPath("RewardGrid", CLS_UI_ITEM_GRID)
+    local titleTxt = selfTrans:GetComponentAtPath("TitleTxt", CLS_TEXT)
+    local receiveBtn = selfTrans:GetComponentAtPath("ReceiveBtn", CLS_BUTTON_ARCHLY)
+    local gotObj = selfTrans:GetGameObjectAtPath("Get")
+    local redFlag = selfTrans:GetGameObjectAtPath("ReceiveBtn/RedFlag")
+
+    titleTxt.text = data.description
+    receiveBtn.Gray = data.btnGray
+    receiveBtn.interactable = not data.btnGray
+    if data.rewardItems then
+        itemGrid:RefreshItemSlots(data.rewardItems, slot.m_grid.viewBase.gameObject, "ItemSlot")
+    end
+    gotObj:SetActive(data.showGot)
+    redFlag:SetActive(data.canReceive)
+end

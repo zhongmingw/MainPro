@@ -1,0 +1,135 @@
+local stage_Lab
+local gold_Lab
+local soul_Lab
+local exp_Lab
+
+local hookStageBtn_GO
+
+local itemGrid
+local hooked = false
+
+function DoInit()
+	self.Shadow = 1
+end 
+
+function InitUI()
+	stage_Lab = self:GetComponentAtPath("Center/StageTxt" ,CLS_TEXT)
+	gold_Lab = self:GetComponentAtPath("Center/Gold_GO/GoldTxt" ,CLS_TEXT)
+	soul_Lab = self:GetComponentAtPath("Center/Soul_GO/SoulTxt" ,CLS_TEXT)
+	exp_Lab = self:GetComponentAtPath("Center/Exp_GO/ExpTxt" ,CLS_TEXT)
+	
+	hookStageBtn_GO = self:GetGameObjectAtPath("Center/HookStageBtn")
+	
+	itemGrid = self:GetComponentAtPath("Center/ScrollView/ScrollRect/Viewport/ItemGrid" ,"UIItemGrid")
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+	end 
+	self:SendCommand("InitStageDetailData")
+end 
+
+function OnRuleBtnClick(sender)
+	CsBridge.CacheAssetsByModule(self.Module,function()
+		local view = CsBridge.OpenView("HelpView","StageModel",false,true)
+		view:SetData(1)
+    end,"HelpView")
+end
+
+
+function OnNotification_InitStageDetailData(objs)
+    local stageDetailData = objs[0]
+    local ResRewardCycle_CONST = objs[1]
+    local chapter = math.floor((stageDetailData.id%10000)/100)
+	local stage = stageDetailData.id%100
+	local name = ResTblContainer:GetPropToStr(stageDetailData.id,Campaign.name,Campaign.actorTbl)
+	stage_Lab.text = name
+	local goldCount = GetRewardFromTbl(stageDetailData.goldStr)[1].count
+	gold_Lab.text = tostring(goldCount).."/"..tostring(ResRewardCycle_CONST).."s"
+	local soulCount = GetRewardFromTbl(stageDetailData.soulStr)[1].count
+	soul_Lab.text = tostring(soulCount).."/"..tostring(ResRewardCycle_CONST).."s"
+	local expCount = GetRewardFromTbl(stageDetailData.expStr)[1].count
+	exp_Lab.text = tostring(expCount).."/"..tostring(ResRewardCycle_CONST).."s"
+	local rewards = GetRewardFromTbl(stageDetailData.otherRewardStr)
+
+	hookStageBtn_GO:SetSelfActive(stageDetailData.id~=stageDetailData.curHookStageId)
+
+	itemGrid:RefreshItemSlots(rewards,self.gameObject,"ItemSlot")
+end
+
+function OnItemGridItemSlotClick(obj)
+	local item = obj.m_data
+	if item.typeId == 3 then
+		return
+	end
+	CsBridge.CacheAssetsByModule(self.Module,
+	function()
+		local item = obj.m_data
+		local view = CsBridge.OpenView("ItemTipView", "ItemTipModel",false,true)
+		local rewardTmp={}
+		rewardTmp.id=item.id
+		rewardTmp.typeId=item.typeId
+		rewardTmp.count=1
+		if item.typeId == 0 then
+			rewardTmp.attrs = item.attrs
+		end 
+		if item.typeId == 4 then
+			rewardTmp.level = item.level
+		end 
+		view:SetParamDataList(rewardTmp,itemBaseIndex+itemDespIndex+PropsIndex+itemSuitIndex)
+		view:SendCommand("InitItemData")
+	end,"ItemTipView")
+end 
+
+function OnHookStageBtnClick(sender)
+	self:SendCommand("SwitchStage")
+end
+
+function OnCloseBtnClick(sender)
+	self:SendCommand("CloseStageDetailView")
+end
+
+function OnMaskClick(sender)
+	self:SendCommand("CloseStageDetailView")
+end
+
+
+function OnNotification_CloseStageDetailView(objs)
+	self:HideView(self.gameObject.name)
+	hooked = true
+end
+
+function ResetHookStatus()
+    hooked = false
+end	
+
+function FinishHook()
+    return hooked
+end
+
+function OnClose()
+	itemGrid:ClearItems()
+end
+
+function DoExit()
+	self.Module=nil
+	stage_Lab = nil
+	gold_Lab = nil
+	soul_Lab = nil
+	exp_Lab = nil
+
+	hookStageBtn_GO = nil
+
+	itemGrid = nil
+	hooked = nil
+end
+
+function HideAll()
+    MsgCenter:Broadcast(Notify_GuideView, "HideAll")
+end
+
+function ShowAll()
+    MsgCenter:Broadcast(Notify_GuideView, "ShowAll")
+end

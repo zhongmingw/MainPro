@@ -1,0 +1,71 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-03-16 11:56:14
+
+require "WorldBossUnionHurtRankItemSlot"
+
+local isInit = false
+
+local unionHurtRankGrid
+local nothingObj
+
+function DoInit()	
+    self.Anim = 0
+end
+
+function InitUI()
+    unionHurtRankGrid = self:GetComponentAtPath("playerSV/ScrollRect/Viewport/UnionHurtRankGrid",CLS_UI_ITEM_GRID)
+    nothingObj = self:GetGameObjectAtPath("Nothing")
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitWorldBossUnionHurtRankData")
+end
+
+function OnClose()
+    nothingObj:SetSelfActive(false)
+    unionHurtRankGrid:ClearItems()
+end
+
+function BeoforeReturnBack()
+    self:HideView(self.gameObject.name)
+end
+
+function OnNotification_RefreshWorldBossUnionHurtRankView(objs)
+    local rankData = objs[0]
+    nothingObj:SetSelfActive(#rankData == 0)
+    unionHurtRankGrid:RefreshItemSlots(rankData,self.gameObject,"WorldBossUnionHurtRankItemSlot")
+end
+
+function OnWorldBossUnionHurtRankItemSlotBindValue(slot, data)
+    local rankImg = slot:GetGameObjectAtPath("round/bgImg")
+    local rankTxt = slot:GetComponentAtPath("round/RankTxt",CLS_TEXT)
+    local unionIconImg = slot:GetGameObjectAtPath("IconImg")
+    local nameTxt = slot:GetComponentAtPath("NameTxt",CLS_TEXT)
+    local fightTxt = slot:GetComponentAtPath("FightTxt",CLS_TEXT)
+    local hurtNumTxt = slot:GetComponentAtPath("HurtNumTxt",CLS_TEXT)
+
+    if data.rank <= 3 then
+        rankImg:SetSelfActive(true)
+        CsBridge.IconData.SetIconByName(rankImg,"new_com_paiming"..data.rank)
+    else
+        rankImg:SetSelfActive(false)
+    end
+    rankTxt.text = data.rank
+    CsBridge.IconData.SetIconByName(unionIconImg, data.icon)
+    nameTxt.text = data.name
+    fightTxt.text = data.combat
+    hurtNumTxt.text = data.hurt
+end
+
+function DoExit()
+    isInit = nil
+
+    unionHurtRankGrid = nil
+    nothingObj = nil
+end

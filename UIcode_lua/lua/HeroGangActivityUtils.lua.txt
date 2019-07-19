@@ -1,0 +1,231 @@
+--[[
+	file: HeroGangActivityUtils.lua
+	author: zhangyue
+	description: HeroGangActivity utilities
+]]
+
+local GetHeroGangComposeData
+local UpdateOwnMaterial
+local InitSelectMaterialData
+local SelectMaterial
+local CheckMatCount
+
+local function OpenHeroGangCompose(id, activityData, model)
+    local heroGangData = {}
+    activityData.heroGangData = heroGangData
+    local data = activityData.items[id]
+	heroGangData.curComposeData = GetHeroGangComposeData(data)
+	heroGangData.curComposeData.id = id
+	UpdateOwnMaterial(heroGangData)
+    CsBridge.CacheAssetsByModule(model.Module,function()
+        CsBridge.OpenView("HeroGangComposeView","ServerActivityModel",false,true)
+	end,"HeroGangComposeView")
+end
+
+local function OpenMaterialSelect(heroGangData, index, model)
+	heroGangData.curMatIndex = index+1
+    InitSelectMaterialData(heroGangData)
+    CsBridge.CacheAssetsByModule(model.Module,function()
+        CsBridge.OpenView("HeroComposeMaterialSelectView","ServerActivityModel",false,true)
+	end, "HeroComposeMaterialSelectView","HeroItemSlot")
+end
+
+local function SelectMaterials(heroGangData, index, model)
+	if #heroGangData.tmpSelectedMaterialArr+1 > heroGangData.curComposeData.materials[heroGangData.curMatIndex].count then
+        CsBridge.hintUILayer:ShowHintBox(CsBridge.localizationHelper:getStr("HeroCompose_MatEnough"))
+        return
+	end
+    if CheckHeroShowDutyTip(heroGangData.curSelectedMaterialArr[index+1],
+        function()
+            local hero = heroGangData.curSelectedMaterialArr[index+1]
+            UpdateHeroDuty(hero)
+            model:SendNotification("RefreshSingleHero",hero,index)
+        end) then
+        return
+    end
+    local newIndex = index+1
+    SelectMaterial(newIndex, heroGangData, model)
+end
+
+local function CancelSelectMaterial(materialData, heroGangData, model)
+	for i=1,#heroGangData.tmpSelectedMaterialArr do
+        if heroGangData.tmpSelectedMaterialArr[i] == materialData then
+            table.remove(heroGangData.tmpSelectedMaterialArr,i)
+        end
+    end
+    model:SendNotification("CancelSelectMaterial",materialData)
+end
+
+local function ConfirmSelectMaterial(heroGangData, model)
+	for i,mat in ipairs(heroGangData.curComposeData.materials[heroGangData.curMatIndex].putMatList) do
+        mat.selected = false
+        mat.selectedPos = 0
+    end
+    heroGangData.curComposeData.materials[heroGangData.curMatIndex].putMatList = {}
+    for i,mat in ipairs(heroGangData.tmpSelectedMaterialArr) do
+        mat.selected = true
+        mat.selectedPos = heroGangData.curMatIndex
+        table.insert(heroGangData.curComposeData.materials[heroGangData.curMatIndex].putMatList, mat)
+    end
+    heroGangData.tmpSelectedMaterialArr = {}
+	-- CheckOwnHasMat()
+	model:SendNotification("RefreshHeroGangComposeView",heroGangData.curComposeData)
+end
+
+local function NoSelectMaterial(heroGangData, model)
+	for i,mat in ipairs(heroGangData.tmpSelectedMaterialArr) do
+        model:SendNotification("CancelSelectMaterial",mat)
+    end
+    heroGangData.tmpSelectedMaterialArr = {}
+end
+
+local function HeroGangCompose(activityData, onFinished, model)
+    local activityID = activityData.id
+    local heroGangData = activityData.heroGangData
+	if not CheckMatCount(heroGangData) then
+        CsBridge.hintUILayer:ShowHintBox(CsBridge.localizationHelper:getStr("HeroCompose_MatNoEnough"),2)
+        return
+    end
+    for i,consume in ipairs(heroGangData.curComposeData.prices) do
+		if consume.typeId == ItemTypeEnum.Item then
+			if not CheckPackItemEnough(consume.id,consume.count,true) then
+				return
+			end
+		elseif consume.typeId == ItemTypeEnum.Resource then
+			if not CheckResEnough(consume.id,consume.count,true) then
+				return
+			end
+		end
+	end
+	local req = {
+		id = activityID,
+		subId = heroGangData.curComposeData.id,
+		subMaterial = {}
+	}
+	for i,mat in ipairs(heroGangData.curComposeData.materials) do
+        for i,v in ipairs(mat.putMatList) do
+            table.insert(req.subMaterial, v.uid)
+        end
+	end
+	HttpRequest("heroGang","HeroGangReq","ExchangeResp",req,function(resp)
+        model:SendNotification("CloseHeroGangComposeView")
+        onFinished(activityID)
+        PopRewardView(model,resp.rewardItems)
+	end)
+end
+
+GetHeroGangComposeData = function(item)
+	local data = {}
+	data.consumes = item.activity.prices
+	data.materials = {}
+	data.prices = {}
+	data.rewards = item.activity.rewards
+	for i,v in ipairs(item.activity.prices) do
+		if v.typeId == ItemTypeEnum.Resource then
+			table.insert(data.prices,v)
+		else
+			table.insert(data.materials,GetHeroMatData(v.id,v.count))
+		end
+	end
+	return data
+end
+
+UpdateOwnMaterial = function(heroGangData)
+	heroGangData.ownMaterialArr = {}
+	--add hero card
+    local tbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    local ids = tbl:GetCol(HeroBase.id)
+    for i=0, ids.Length-1 do
+        local id = tonumber(ids[i])
+        local itemId = tbl:GetInt(id,HeroBase.item)
+        if itemId ~= 0 then
+            local item = appData:checkItem("PackItem",itemId)
+            if item and item.count ~= 0 then
+                for i=1, item.count do
+                    local ownMat = {
+                        uid = -1*itemId,
+                        heroId = id,
+                        grade = 0,
+                        level = 0,
+                        distillationStar = 0,
+                        distillationLevel = 0,
+                        raceId = tbl:GetInt(id,HeroBase.group),
+                        quality = tbl:GetInt(id,HeroBase.quality),
+                        selected = false,
+                        selectedPos = 0
+                    }
+                    table.insert(heroGangData.ownMaterialArr, ownMat)
+                end
+            end
+        end
+    end
+
+	local heroArr = appData:checkAllItems("HeroItem")
+	if heroArr ~= nil then
+		local tbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+		for i=0,heroArr.Length-1 do
+			local hero = heroArr[i]
+			local ownMat = {
+				uid = hero.uid,
+				heroId = hero.heroId,
+				grade = hero.grade,
+				level = hero.level,
+				duty = hero.duty,
+				showDuty = CheckHeroInDuty(hero,GetNoDelHeroLockDuty()),
+				raceId = tbl:GetInt(hero.heroId, HeroBase.group),
+				quality = tbl:GetInt(hero.heroId, HeroBase.quality),
+				distillationStar = hero.distillationStar,
+				distillationLevel = hero.distillationLevel,
+				selected = false,
+				selectedPos = 0
+			}
+			table.insert(heroGangData.ownMaterialArr, ownMat)
+		end
+	end
+end
+
+InitSelectMaterialData = function(heroGangData)
+	heroGangData.curSelectedMaterialArr = {}
+    heroGangData.tmpSelectedMaterialArr = {}
+    for i,v in ipairs(heroGangData.curComposeData.materials[heroGangData.curMatIndex].putMatList) do
+        table.insert(heroGangData.tmpSelectedMaterialArr, v)
+    end
+    for i,ownMat in ipairs(heroGangData.ownMaterialArr) do
+        if ownMat.selectedPos == 0 or ownMat.selectedPos == heroGangData.curMatIndex then
+            local curMat = heroGangData.curComposeData.materials[heroGangData.curMatIndex]
+            if curMat.type == HeroMatType.FixedQualityAndRace then
+                if ownMat.raceId == curMat.raceId and ownMat.quality == curMat.quality then
+                    table.insert(heroGangData.curSelectedMaterialArr, ownMat)
+                end
+            elseif curMat.type == HeroMatType.FixedAll then
+                if ownMat.heroId == curMat.heroId and ownMat.distillationStar == 0 then
+                    table.insert(heroGangData.curSelectedMaterialArr, ownMat)
+                end
+            end
+        end
+    end
+end
+
+SelectMaterial = function(index, heroGangData, model)
+    table.insert(heroGangData.tmpSelectedMaterialArr, heroGangData.curSelectedMaterialArr[index])
+    model:SendNotification("SelectMaterial",index)
+end
+
+CheckMatCount = function(heroGangData)
+    for i,mat in ipairs(heroGangData.curComposeData.materials) do
+        if #mat.putMatList < mat.count then
+            return false
+        end
+    end
+    return true
+end
+
+return{
+	OpenHeroGangCompose = OpenHeroGangCompose,
+	OpenMaterialSelect = OpenMaterialSelect,
+	SelectMaterials = SelectMaterials,
+	CancelSelectMaterial = CancelSelectMaterial,
+	ConfirmSelectMaterial = ConfirmSelectMaterial,
+	NoSelectMaterial = NoSelectMaterial,
+	HeroGangCompose = HeroGangCompose,
+}

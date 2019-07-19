@@ -1,0 +1,57 @@
+package SoulImprint;
+
+//生产纹章 url = "emblemEngrave"
+message EmblemEngraveReq
+{
+    required int32 heroUid = 1;//做成纹章的uid
+}
+
+message EmblemEngraveResp
+{
+    required int32 status = 1;
+}
+
+//还原被印刻的英雄 url = "emblemReset"
+message EmblemRenewReq
+{
+    repeated int32 heroUids = 1;//需要还原的uids
+}
+
+message EmblemRenewResp
+{
+    required int32 status = 1;
+}
+
+//佩戴纹章 url = "putOnEmblem"
+message PutOnEmblemReq
+{
+    required int32 heroUid = 1;//需要装备的uid
+    required int32 emblemUid = 2;//被装备的uid
+}
+
+message PutOnEmblemResp
+{
+    required int32 status = 1;
+}
+
+//快速佩戴 url = "quickPutOnEmblem"
+message QuickPutOnEmblemReq
+{
+    required int32 heroUid = 1;
+}
+
+message QuickPutOnEmblemResp
+{
+    required int32 emblemUid = 1;
+}
+
+//脱下纹章 url = "takeOffEmblem"
+message TakeOffEmblemReq
+{
+    required int32 heroUid = 1;
+}
+
+message TakeOffEmblemResp
+{
+    required int32 status = 1;
+}

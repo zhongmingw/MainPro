@@ -1,0 +1,30 @@
+function OnHeroComposeMaterialItemSlotBindValue(slot, data)
+    slot.m_SelectSprite=slot.transform:Find("CheckSprite").gameObject
+    slot.m_SelectSprite:SetActive(slot.IsSelected)
+    local itemBase_TF=slot.transform:Find("ItemBase")
+    local heroBase_TF=slot.transform:Find("HeroBase")
+    local lock_GO=slot.transform:Find("LockGO").gameObject
+    local taskLockGO=slot.transform:Find("TaskLockGO").gameObject
+    if data.isItem then
+        itemBase_TF.gameObject:SetActive(true)
+        heroBase_TF.gameObject:SetActive(false)
+        BindItemBaseValue(itemBase_TF,data)        
+        lock_GO:SetActive(false)
+        taskLockGO:SetActive(false)
+    else
+        itemBase_TF.gameObject:SetActive(false)
+        heroBase_TF.gameObject:SetActive(true)
+        BindHeroBaseValue(heroBase_TF,data)
+        local dutys = CheckHeroDuty(data)
+        if dutys == nil then
+            lock_GO:SetActive(false)
+            taskLockGO:SetActive(false)
+        elseif ContainItem(dutys,1) or ContainItem(dutys,2) then
+            lock_GO:SetActive(true)
+            taskLockGO:SetActive(false)
+        elseif ContainItem(dutys,11) then
+            lock_GO:SetActive(false)
+            taskLockGO:SetActive(true)
+        end
+    end
+end

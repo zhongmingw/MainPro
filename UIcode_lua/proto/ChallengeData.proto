@@ -1,0 +1,33 @@
+import "stage.proto";
+package ChallengeData;
+
+message ChallengeItem 
+{
+	required int32 type = 1;
+    required int32 difficulty = 2;
+    required int32 remains = 3;
+    required int64 lastRenewTime = 4;
+    required int32 challengedTimes = 5;
+    required int32 dailyLimit = 6;
+    required int32 vipBoughtNum = 7;
+    required int64 combat = 8;
+}
+
+
+message ChallengeReq 
+{
+	required int32 type = 1;
+    required int32 difficulty = 2;
+    repeated stage.FormationPos formationPos = 3;
+}
+
+message BuyExtraChanceReq
+{
+    required int32 type = 1;
+    required int32 count = 2;
+}
+
+message BuyExtraChanceResp
+{
+    required int32 result = 1;
+}

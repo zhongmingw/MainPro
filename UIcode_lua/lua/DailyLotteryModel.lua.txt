@@ -1,0 +1,251 @@
+---@type number 未操作
+local noAction = -1
+
+---@type table 服务器返回的每日随机礼包数据
+local randomPackageData
+---@type number 今日随机到的礼包id
+local lastRandomId = noAction
+---@type number 今日已购买的礼包id
+local lastBuyId = noAction
+---@type number 可购买的礼包id
+local canBuyId = noAction
+
+---@type table spine名字数组
+local SpineNameArr = {
+    "GoldBoxSpine",
+    "SilverBoxSpine",
+    "IronBoxSpine"
+}
+
+function DoInit()
+
+end
+
+---向服务器获取界面需要的数据
+function OnCommand_InitDailyLotteryView(objs)
+    local req = {}
+    req.activityId = objs[0]
+    HttpRequest("getDailyRandomPackage", "GetDailyRandomPackageReq", "GetDailyRandomPackageResp", req, function(resp)
+        if resp then
+            randomPackageData = resp
+            if resp.isRandom and resp.rewards ~= nil then
+                local allFalse = true
+                lastRandomId = resp.packageId
+                for i = 1, #resp.rewards do
+                    if resp.rewards[i].canBuy then
+                        allFalse = false
+                        canBuyId = resp.rewards[i].packageLevel
+                    end
+                end
+                if allFalse then
+                    canBuyId = noAction
+                    lastBuyId = resp.packageId
+                end
+            else
+                canBuyId = noAction
+                lastRandomId = noAction
+            end
+            SetBtnTxt(randomPackageData)
+            SetBoxPosState(randomPackageData)
+            SetSpine(randomPackageData)
+            self:SendNotification("InitDailyLotteryView", randomPackageData)
+        end
+    end)
+end
+
+---设置按钮上的文字
+function SetBtnTxt(randomPackageData)
+    if lastRandomId == noAction then
+        randomPackageData.btnText = Language:getStr("LotteryChoice")
+        randomPackageData.btnGray = false
+        return
+    end
+    if lastBuyId == noAction and canBuyId ~= noAction then
+        randomPackageData.btnText = Language:getStr("buy")
+        randomPackageData.btnGray = false
+        return
+    end
+    if lastBuyId ~= noAction then
+        randomPackageData.btnText = Language:getStr("buy")
+        randomPackageData.btnGray = true
+        return
+    end
+end
+
+---设置spine状态
+function SetSpine(randomPackageData)
+    if lastBuyId ~= noAction then
+        randomPackageData.showSpine = true
+        randomPackageData.spineName = "kai_loop"
+        randomPackageData.showOpenBtn = true
+        randomPackageData.spineAssetName = SpineNameArr[randomPackageData.gotId]
+        return
+    end
+    if canBuyId ~= noAction then
+        randomPackageData.showSpine = true
+        randomPackageData.spineName = "bi_loop"
+        randomPackageData.showOpenBtn = true
+        randomPackageData.spineAssetName = SpineNameArr[randomPackageData.gotId]
+        return
+    else
+        randomPackageData.showSpine = false
+        randomPackageData.spineName = ""
+        randomPackageData.showOpenBtn = false
+    end
+end
+
+---设置箱子的位置
+function SetBoxPosState(randomPackageData)
+    randomPackageData.lastBuyId = lastBuyId
+    randomPackageData.lastRandomId = lastRandomId
+    randomPackageData.canBuyId = canBuyId
+    randomPackageData.gotId = lastBuyId ~= noAction and lastBuyId or lastRandomId
+    if lastBuyId ~= noAction or lastRandomId ~= noAction then
+        randomPackageData.autoMove = true
+    else
+        randomPackageData.autoMove = false
+    end
+end
+
+---获取剩余移动的次数
+function GetRestMoveTimes(curIndex)
+    local result = 1
+    if curIndex == 1 then
+        if canBuyId == 1 then
+            result = 3
+        elseif canBuyId == 2 then
+            result = 1
+        else
+            result = 2
+        end
+    elseif curIndex == 2 then
+        if canBuyId == 1 then
+            result = 2
+        elseif canBuyId == 2 then
+            result = 3
+        else
+            result = 1
+        end
+    else
+        if canBuyId == 1 then
+            result = 1
+        elseif canBuyId == 2 then
+            result = 2
+        else
+            result = 3
+        end
+    end
+    return result
+end
+
+---随机抽取一个档次的礼包
+function RandomLottery(curIndex)
+    if lastRandomId == noAction then
+        local req = {}
+        req.useless = 1
+        HttpRequest("randomDailyPackage", "RandomDailyPackageReq", "RandomDailyPackageResp", req, function(reps)
+            if reps then
+                lastRandomId = reps.packageId
+                randomPackageData.isRandom = true
+                randomPackageData.packageId = reps.packageId
+                canBuyId = reps.packageId
+                if randomPackageData.rewards ~= nil then
+                    for i = 1, #randomPackageData.rewards do
+                        if randomPackageData.rewards[i].packageLevel == reps.packageId then
+                            randomPackageData.rewards[i].canBuy = true
+                        else
+                            randomPackageData.rewards[i].canBuy = false
+                        end
+                    end
+                end
+                lastBuyId = noAction
+                SetBtnTxt(randomPackageData)
+                SetBoxPosState(randomPackageData)
+                SetSpine(randomPackageData)
+                randomPackageData.restMoveTimes = GetRestMoveTimes(curIndex)
+                self:SendNotification("RandomLottery", randomPackageData)
+            end
+        end)
+    end
+end
+
+---购买其中一个礼包
+function BuyLotteryGiftBag()
+    if lastRandomId ~= noAction and lastBuyId == noAction and canBuyId ~= noAction then
+        local payId = 1
+        local rewards = {}
+        local activityId = 1
+        for i = 1, #randomPackageData.rewards do
+            if randomPackageData.rewards[i].packageLevel == canBuyId then
+                payId = randomPackageData.rewards[i].payId
+                rewards = randomPackageData.rewards[i].packageReward
+                activityId = randomPackageData.rewards[i].activityId
+            end
+        end
+        if CheckCanBuy(nil, payId) then
+            local payData = CheckPayData(payId)
+            DoPayActivity(activityId, payData, function(resp)
+                lastBuyId = canBuyId
+                canBuyId = noAction
+                randomPackageData.isRandom = true
+                if randomPackageData.rewards ~= nil then
+                    for i = 1, #randomPackageData.rewards do
+                        randomPackageData.rewards[i].canBuy = false
+                    end
+                end
+                SetBtnTxt(randomPackageData)
+                SetBoxPosState(randomPackageData)
+                SetSpine(randomPackageData)
+                self:SendNotification("BuyLotteryGiftBag", randomPackageData, rewards)
+            end)
+        else
+            CsBridge.hintUILayer:ShowHintBox(Language:getStr("CycleChargeHasBuy"), 2)
+        end
+    end
+end
+
+---限时物品提示
+function OnCommand_OpenTipView(objs)
+    local data = objs[0]
+    local itemType = data.typeId
+    if itemType == ItemTypeEnum.Hero then
+        ShowHeroTip(self, data.id, 1, 1)
+    else
+        ShowTip(self, itemType, data.id)
+    end
+end
+
+---随机或者购买
+function OnCommand_ClickRandomBuy(objs)
+    local curIndex = objs[0]
+    if lastRandomId == noAction then
+        RandomLottery(curIndex)
+        return
+    end
+    if lastBuyId == noAction and canBuyId ~= noAction then
+        BuyLotteryGiftBag()
+        return
+    end
+    CsBridge.hintUILayer:ShowHintBox(Language:getStr("CycleChargeHasBuy"), 2)
+end
+
+---开箱点击
+function OnCommand_ClickOpenBox()
+    if lastRandomId == noAction then
+        return
+    end
+    if lastBuyId == noAction and canBuyId ~= noAction then
+        BuyLotteryGiftBag()
+        return
+    end
+    CsBridge.hintUILayer:ShowHintBox(Language:getStr("CycleChargeHasBuy"), 2)
+end
+
+function DoOnExit()
+    noAction = nil
+    randomPackageData = nil
+    lastRandomId = nil
+    lastBuyId = nil
+    canBuyId = nil
+    SpineNameArr = nil
+end

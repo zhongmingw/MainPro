@@ -1,0 +1,115 @@
+--[[
+	file: LeagueChampionView.lua
+	author: hangang
+	description: Show league champion details
+]]
+
+local championNameTxt
+local modelRoot, platformSpine
+local playerBaseRoot
+local nameTxt, idText, unionTxt, powerTxt, zoneTxt
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 0     --shadow type
+	InitUI()            --cache UI items
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	local path = "Center/championNameTxt"
+	championNameTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Center/HeroModel/Model/FloorSpine"
+	platformSpine = selfTrans:GetComponentAtPath(path, CLS_SKELETONGRAPHIC)
+
+	path = "Center/HeroModel/Model/ModelRoot"
+	modelRoot = selfTrans:Find(path)
+
+	path = "Bottom/PlayerBase"
+	playerBaseRoot = selfTrans:Find(path)
+
+	path = "Bottom/powerTxt"
+	powerTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Bottom/IDTxt"
+	idText = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Bottom/zoneTxt"
+	zoneTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Bottom/unionTxt"
+	unionTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Bottom/nameTxt"
+	nameTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+end
+
+--UIController events handlers-------------------------------------------------------
+function OnNotification_RefreshChampionView(objs)
+	if self.gameObject.activeInHierarchy then
+		local viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function RefreshView(data)
+	championNameTxt.text = data.name
+	nameTxt.text = data.name
+	idText.text = data.ID
+	unionTxt.text = data.union
+	powerTxt.text = data.power
+	zoneTxt.text = data.zone
+
+	local heroName = data.heroName
+	BindPlayerBaseInfoValue(playerBaseRoot, data.baseInfo)
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			local model = CsBridge.objectCache:CreateObject(heroName, true)
+			model.transform:SetParent(modelRoot, false)
+			CsBridge.UnityHelper.SetAnchoredPosition(model.gameObject, 0, 0)
+			CsBridge.UnityHelper.SetlocalScale(model.gameObject, -1, 1, 1)
+			local skeleton = model.transform:GetChild(0):GetComponent("Spine.Unity.SkeletonGraphic")
+			skeleton:PlayAnimation("stand", true)
+			platformSpine:PlayAnimation(data.platformAnim, true)
+		end, 
+		heroName)
+end
+
+function GetModelGrpName()
+	return self.gameObject.name
+end
+
+--UI event handlers-------------------------------------------------------------------
+function OnPlayerBaseClick(obj)
+    self:SendCommand("ChampionViewPlayerClick")
+end
+
+--On closing--------------------------------------------------------------------------
+function OnNotification_CloseLeagueView(obj)
+	ClearView()
+	self:HideView("LeagueChampionView")
+end
+
+function ClearView()
+	local groupName = GetModelGrpName()
+	local modelIdx = 0
+	if modelRoot.childCount > modelIdx then	
+		local model = modelRoot:GetChild(modelIdx).gameObject
+		modelRoot:DetachChildren()
+		DestroyModel(model, groupName)
+	end
+end
+
+function DoExit()
+	championNameTxt = nil
+	modelRoot = nil 
+	platformSpine = nil
+	playerBaseRoot = nil
+	nameTxt = nil 
+	idText = nil 
+	unionTxt = nil 
+	powerTxt = nil 
+	zoneTxt = nil
+end

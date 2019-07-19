@@ -1,0 +1,94 @@
+package ConditionPackageData;
+import "stage.proto";
+
+message CheckConditionPackageReq
+{
+    repeated ConditionReq reqList = 1; //多个条件
+}
+
+message CheckConditionPackageResp
+{
+    required ConditionPackageConfig packageConfig = 1;
+}
+
+message ConditionReq
+{
+    required int32 type = 1; //礼包类型
+    required string param = 2; //协议参数，根据具体的义务而定
+}
+
+message ConditionPackageConfig
+{
+    required int32 id = 1;
+    required int32 packageType = 2;
+    required string icon = 3;
+    required string packageReward = 4;
+    required int32 payId = 5;
+    required string condictionParm = 6;
+    required int32 limitTime = 7;
+    required int32 isOpen = 8;
+    repeated stage.RewardItem rewards = 9;
+    required int32 packagePrice = 10;
+    required int32 continuedTime = 11;
+    required int64 time = 12;
+    required string packageName = 13;
+    required string packageSlogen = 14;
+}
+
+message ConditionPackageInfo
+{
+    repeated ConditionPackage packages = 1;
+}
+
+
+message CheckAllConditionPackageReq
+{
+    required int32 useless = 1;
+}
+
+message CheckAllConditionPackageResp
+{
+    repeated ConditionPackage packages = 1;
+}
+
+message ConditionPackage 
+{
+    required int32 id = 1;
+    required int32 packageType = 2;
+    required string icon = 3;
+    required string packageReward = 4;
+    required int32 payId = 5;
+    required string condictionParm = 6;
+    required int32 limitTime = 7;
+    required int32 isOpen = 8;
+    repeated stage.RewardItem rewards = 9;
+    required int32 packagePrice = 10;
+    required int32 continuedTime = 11;
+    required int64 time = 12;
+    required string packageName = 13;
+    required string packageSlogen = 14;
+}
+
+message RemoveConditionPackageRecordReq
+{
+    required int32 id = 1; //条件礼包id
+}
+
+message RemoveConditionPackageRecordResp
+{
+    required int32 result = 1;
+}
+
+// 玩家升级请求一系列的东西
+// url = "checkLevelUp"
+message PlayerLevelUpPopDataReq
+{
+    repeated ConditionReq reqList = 1; //多个条件
+}
+
+message PlayerLevelUpPopDataResp
+{
+    required bool isAuth = 1;//是否实名认证
+    required ConditionPackageConfig packageConfig = 2;//条件礼包
+    required bool isAlert = 3; // 是否弹出实名认证
+}

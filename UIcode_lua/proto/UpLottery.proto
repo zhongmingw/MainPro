@@ -1,0 +1,38 @@
+import "stage.proto";
+package UpLottery;
+
+message GetSummonUpActivityReq 
+{
+    required int32 acId = 1;//活动id
+}
+
+message GetSummonUpActivityResp 
+{      
+    required int32 summonUpCall = 1;//抽取道具id
+    required int32 summonUpCallPrice = 2;//抽取道具购买价格      
+    required int32 summonUpRefreshPrice = 3;//刷新价格
+    required stage.RewardItem up = 4;
+    repeated stage.RewardItem pool = 5;    
+}
+
+message SummonUpCallReq 
+{
+    required int32 acId = 1;//活动id
+    required int32 count = 2;
+}
+
+message SummonUpCallResp 
+{
+    repeated stage.RewardItem rewardItems = 1;    
+    required stage.RewardItem up = 2;
+}
+
+message SummonUpRefreshReq 
+{
+    required int32 acId = 1;//活动id
+}
+
+message SummonUpRefreshResp 
+{
+    required stage.RewardItem up = 1;    
+}

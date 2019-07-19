@@ -1,0 +1,104 @@
+--[[
+	file: UnionFoundationView.lua
+	author: hangang
+	description: View for union foundation
+]]
+
+local banerImgObj, priceTxt
+local nameInput, noticeInput
+local bannerGrid
+
+local viewData
+local selectedIconID
+
+function DoInit()
+	self.Shadow = 0
+	InitUI()
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	local path = "Top/BaseInfo/bannerImg"
+	banerImgObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "Top/BaseInfo/nameInput"
+	nameInput = CsBridge.GetInputFromView(self, path)
+
+	path = "Top/BaseInfo/noticeInput"
+	noticeInput = CsBridge.GetInputFromView(self, path)
+
+	path = "Bottom/priceTxt"
+	priceTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Top/bannerSV/ScrollRect/Viewport/Grid"
+	bannerGrid = selfTrans:GetComponentAtPath(path ,CLS_UI_ITEM_GRID)
+end
+
+function OnNotification_RefreshUnionFoundationView(objs)
+	viewData = objs[0]
+	selectedIconID = viewData.iconID
+	RefreshView(viewData)
+end
+
+function RefreshView(data)
+	priceTxt.text = data.price
+	noticeInput.text = data.defaultNotice
+	local IDX_R, IDX_G, IDX_B = 1, 2, 3
+	local fontColor = data.priceColor
+	local r, g, b = fontColor[IDX_R], fontColor[IDX_G], fontColor[IDX_B]
+	CsBridge.UnityHelper.SetTextColor(priceTxt, r, g, b)
+	CsBridge.IconData.SetIconByName(banerImgObj, data.icon)
+	bannerGrid:RefreshItemSlots(data.bannerData, self.gameObject, "UnionBannerItemSlot")
+end
+
+function OnUnionBannerItemSlotBindValue(slot, data)
+	local imageObj = slot.transform:Find("iconImg").gameObject
+	CsBridge.IconData.SetIconByName(imageObj, data.icon)
+	local selectionObj = slot.transform:Find("selectionImg").gameObject
+	selectionObj:SetActive(data.selected or false)
+end
+
+function OnGridUnionBannerItemSlotClick(obj, itemIndex)
+	local slotData = obj.m_data
+	CsBridge.IconData.SetIconByName(banerImgObj,slotData.icon)
+	selectedIconID = slotData.id 
+	
+	local slotTrans = obj.transform
+	local gridTrans = bannerGrid.transform
+	for i = 0, gridTrans.childCount - 1 do
+		local itemTrans = gridTrans:GetChild(i)
+		local selectionObj = itemTrans:Find("selectionImg").gameObject
+		selectionObj:SetActive(itemTrans == slotTrans)
+	end
+end
+
+function OnConfirmBtnClick(sender)
+	local unionName = nameInput.text
+	if unionName == nil or unionName == "" then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("EmptyUnionName"))
+		return
+	end
+
+	local notice = noticeInput.text
+	if notice == nil or notice == "" then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("EmptyUnionNotice"))
+		return
+	end
+
+	self:SendCommand("FoundUnion", unionName, notice, selectedIconID)
+end
+
+function OnNotification_CloseUnionApplyView(obj)
+	self:HideView("UnionFoundationView")
+end
+
+function DoExit()
+	banerImgObj = nil
+	priceTxt = nil
+	nameInput = nil
+	noticeInput = nil
+	bannerGrid = nil
+
+	viewData = nil
+	selectedIconID = nil
+end

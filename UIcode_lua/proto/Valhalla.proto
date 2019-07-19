@@ -1,0 +1,53 @@
+import "playerData.proto";
+import "stage.proto";
+import "ArenaData.proto";
+
+package Valhalla;
+
+message FightValhallaReq 
+{
+	repeated stage.FormationPos formationPos= 1;
+}
+
+message GetValhallaExtraRewardReq
+{
+    required int32 id=1; //无用
+}
+
+message GetValhallaExtraRewardResp
+{
+	repeated stage.RewardItem rewardItems = 1;
+}
+
+message StageInfo
+{
+	required int32 id = 1; //关卡号
+	repeated ArenaData.FormationPosAdv formation = 2; //阵容信息
+	required playerData.PlayerBaseInfo playerBaseInfo = 3; //对手的玩家基本信息
+	required int64 combat = 4; //对手战力
+	required bool robot = 5; //是否是机器人
+	required bool passed = 6; //是否已通过
+}
+
+message ExtraReward
+{
+	required int32 id = 1; 
+	required int32 count = 2; 
+	required bool taken = 3;
+}
+
+message TBCInfo
+{
+    required int64 lastRenewTime = 1; //结束时间
+    repeated StageInfo stageInfos = 2; //本轮关卡信息
+    required int32 passedStage = 3; //当前通过的关卡号
+    repeated HeroInfo heroInfos = 4; //本轮已死亡的英雄
+    repeated ExtraReward extraRewards = 5; //已领取的宝箱id
+}
+
+message HeroInfo 
+{
+	required int32 uid = 1;
+	required int64 curHp = 2;
+	required int64 maxHp = 3;
+}

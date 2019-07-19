@@ -1,0 +1,28 @@
+
+local feedbackInput
+
+function DoInit()
+	feedbackInput = self.transform:Find("ContentInput"):GetComponent("UnityEngine.UI.InputField")
+end
+
+function OnSendBtnClick(sender)
+    local feedbackContent = feedbackInput.text
+    if(string.len(feedbackContent) == 0) then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("Feedback_CheckContent"))
+    else
+        self:SendCommand("SendFeedback", feedbackContent)
+    end
+end
+
+function OnCloseBtnClick(sender)
+	self:HideView(self.gameObject.name)
+end
+
+function OnNotification_SendSuccess(objs)
+    feedbackInput.text = ""
+    CsBridge.messageManager:PopMsgBox("", Language:getStr("Feedback_Success"), Language:getStr("local_confirm"), nil, "", nil)
+end
+
+function DoExit()
+    feedbackInput = nil
+end

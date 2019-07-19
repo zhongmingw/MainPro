@@ -1,0 +1,18 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2018-12-27 20:59:14
+]]
+
+function OnShopTypeItemSlotBindValue(slot, data)
+    local bgImg = slot:GetGameObjectAtPath("BgImg")
+    local selectImg = slot:GetGameObjectAtPath("SelectImg")
+    local nameTxt = slot:GetComponentAtPath("NameTxt",CLS_TEXT)
+    local iconImg = slot:GetGameObjectAtPath("IconImg")
+
+    bgImg:SetSelfActive(not data.selected)
+    selectImg:SetSelfActive(data.selected)
+    nameTxt.text = data.name
+    CsBridge.IconData.SetIconByName(iconImg, data.icon)
+end

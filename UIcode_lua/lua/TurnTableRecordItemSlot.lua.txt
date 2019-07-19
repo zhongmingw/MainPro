@@ -1,0 +1,13 @@
+
+
+function OnTurnTableRecordItemSlotBindValue(slot,data)
+	local slotTrans = slot.transform
+    local nickTxt = slotTrans:GetComponentAtPath("NickTxt" ,CLS_TEXT)
+    local numTxt = slotTrans:GetComponentAtPath("NumTxt" ,CLS_TEXT)
+    local itemBaseTF = slotTrans:Find("ItemSlot")
+    local bgImg = slotTrans:GetGameObjectAtPath("bgImg").gameObject
+    BindItemBaseValue(itemBaseTF,data.reward)
+    nickTxt:SetText(FormatWorldPlayerName(data.nick, data.zone))
+    numTxt:SetText("×"..GetValueAbbreviation(data.count))
+    bgImg:SetSelfActive(slot.m_index % 2 == 0)
+end

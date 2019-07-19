@@ -1,0 +1,132 @@
+
+---获取英雄背包数量
+local CheckHeroBagNum = function()
+    local extendHeroBagAddNum = GetConstValue("heroBagExtendNum") or 0
+    local capacity = GetConstValue("maxHeroCount") or 0
+    local heroBagInfo = appData:checkData("HeroBagInfo")
+    if heroBagInfo ~= nil then
+        capacity = capacity + heroBagInfo.extendTimes * extendHeroBagAddNum
+    end
+    local vip = appData:checkData("PlayerInfo").vip
+    capacity = capacity + ResTblContainer:GetPropToInt(vip, VipTbl.heroBagAdd, VipTbl.tblName)
+    return capacity
+end
+
+---切换英雄类型和重新排序
+local ScreenHero = function(raceId, sortId, curBagHeroArr, allBagHeroArr)
+    if curBagHeroArr == nil or allBagHeroArr == nil or #allBagHeroArr == 0 then
+        return
+    end
+    for _, hero in ipairs(allBagHeroArr) do
+        if raceId == 0 then
+            table.insert(curBagHeroArr, hero)
+        elseif raceId == hero.race then
+            table.insert(curBagHeroArr, hero)
+        end
+    end
+
+    if sortId == HeroSortEnum.SortHeroByLevel then
+        table.sort(curBagHeroArr, SortHeroByLevel)
+    elseif sortId == HeroSortEnum.SortHeroByQuality then
+        table.sort(curBagHeroArr, SortHeroByQuality)
+    end
+end
+
+---获取背包扩展的花费
+local GetExtendPrice = function(times)
+    local tbl = ResTblContainer:GetTable(HeroBag.tblName)
+    if tbl:HasKey(times) then
+        return tonumber(tbl:Get(times, HeroBag.price))
+    end
+    return nil
+end
+
+---扩展英雄背包大小
+local ExtendHeroBag = function(successCallBack)
+    local heroBagTbl = ResTblContainer:GetTable(HeroBag.tblName)
+    local maxHeroBagTimesLength = heroBagTbl:GetCol(HeroBag.count).Length
+    local times = appData:checkData("HeroBagInfo").extendTimes
+    if times >= maxHeroBagTimesLength then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("ExtendHeroBag_Max"))
+        return
+    end
+    CsBridge.messageManager:FristConfirmBox("ExtendHeroBag", Language:getStr("ExtendHeroBag"),
+            string.format(Language:getStr("ExtendHeroBag_Check"), GetExtendPrice(times + 1)),
+            Language:getStr("local_cancel"), nil, Language:getStr("local_confirm"), function()
+                local playerInfo = appData:checkData("PlayerInfo")
+                local times = appData:checkData("HeroBagInfo").extendTimes
+                if not CheckResEnough(2, GetExtendPrice(times + 1), true) then
+                    return
+                end
+                local req = {
+                    useless = 1
+                }
+                HttpRequest("extendHeroBag", "ExtendHeroBagReq", "ExtendHeroBagResp", req, function(resp)
+                    if resp.result ~= nil and successCallBack ~= nil then
+                        successCallBack(resp)
+                    end
+                end)
+            end)
+end
+
+---获取自己的英雄列表
+local GetMyHeroList = function(allBagHeroArr, starLevel, conditionFunction, dutyFunc)
+    local starLevel = starLevel or 1
+    ---@type table 英雄表
+    local heroBaseTbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    local pbs = appData:checkAllItems("HeroItem")
+    if pbs == nil then
+        return
+    end
+    for i = 0, pbs.Length - 1 do
+        local pbHero = pbs[i]
+        local curGroup = heroBaseTbl:GetInt(pbHero.heroId, HeroBase.group)
+        local curStar = pbHero.distillationStar
+        local curQuality = heroBaseTbl:GetInt(pbHero.heroId, HeroBase.quality)
+        local condition = curStar + curQuality
+        local pass = true
+        if conditionFunction then
+            pass = conditionFunction(pbHero)
+        end
+        if condition >= starLevel and pass then
+            local hero = {
+                uid = pbHero.uid,
+                heroId = pbHero.heroId,
+                grade = pbHero.grade,
+                level = pbHero.level,
+                weaponId = pbHero.weaponId or 0,
+                hatId = pbHero.hatId or 0,
+                clothId = pbHero.clothId or 0,
+                shoesId = pbHero.shoesId or 0,
+                distillationStar = curStar,
+                distillationLevel = pbHero.distillationLevel,
+                breakLevel = pbHero.breakLevel,
+                race = curGroup,
+                relicId = pbHero.relicId,
+                runeData = pbHero.rune,
+                dutyInPve = CheckHeroDutyInPve(pbHero.duty),
+                lock = CheckHeroInDuty(pbHero, HeroDuty.LOCK),
+                quality = curQuality,
+                model = heroBaseTbl:Get(pbHero.heroId, HeroBase.model),
+                name = heroBaseTbl:Get(pbHero.heroId, HeroBase.title),
+                jewelIds = pbHero.jewelIds,
+            }
+            if dutyFunc then
+                hero.showDuty = CheckHeroInDuty(pbHero, dutyFunc())
+            else
+                hero.showDuty = CheckHeroInDuty(pbHero, GetHeroAllDuty())
+            end
+            hero.job = heroBaseTbl:GetInt(hero.heroId, HeroBase.job)
+            hero.skill = GetHeroSkillArr(hero)
+            hero.distillation = GetHeroDistillation(hero)
+            table.insert(allBagHeroArr, hero)
+        end
+    end
+end
+
+return {
+    CheckHeroBagNum = CheckHeroBagNum,
+    ScreenHero = ScreenHero,
+    GetMyHeroList = GetMyHeroList,
+    ExtendHeroBag = ExtendHeroBag,
+}

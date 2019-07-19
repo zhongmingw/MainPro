@@ -1,0 +1,563 @@
+require "HeroItemSlot"
+require "MiningRobHeroItemSlot"
+
+---@type UnityEngine.TextMesh 标题
+local titleNameTxt
+---@type UnityEngine.TextMesh 战力
+local fightTxt
+---@type Client.Library.UIItemGrid 英雄itemGrid
+local heroGrid
+---@type Client.Library.UIItemGrid 被选择的英雄itemGrid
+local upHeroGrid
+---@type UnityEngine.GameObject 开战按钮
+local startBtnObj
+---@type UnityEngine.TextMesh 开战按钮上面的文字
+local startBtnTxt
+---@type UnityEngine.GameObject 保存按钮
+local saveBtnObj
+---@type UnityEngine.GameObject 恢复按钮
+local recoverBtnObj
+---@type Client.Library.ButtonArchly
+local recoverBtn
+---@type UnityEngine.UI.Image
+local recoverResImg
+---@type UnityEngine.TextMesh
+local recoverResTxt
+
+---@type Client.Library.ToggleGroupArchly
+local togGroup
+---@type table 分页标签集合
+local togs
+---@type UnityEngine.Transform 分页光圈
+local raceFlagTrans
+---@type UnityEngine.GameObject 跳过战斗安妮
+local skipBtnObj
+---@type UnityEngine.GameObject 跳过战斗的勾选框
+local skipCheckObj
+---@type UnityEngine.GameObject 光环图标
+local auraImgObj
+---@type UnityEngine.Transform
+local heroEffectTrans
+---@type UnityEngine.GameObject 没有任何东西的提示
+local noneObj
+
+---@type UnityEngine.Transform
+local selfTrans
+
+---@type table 下面的所有英雄
+local downHeroArray = {}
+---@type table 当前光环
+local curAura
+---@type number 英雄类型分页id
+local raceId = 0
+---@type boolean 跳过战斗是否勾选
+local skipChecked = false
+---@type boolean 是否战斗过
+local battled = false
+
+---@type UnityEngine.Transform 拖动中的英雄
+local draggingHeroItemTrans
+---@type Client.Library.ItemSlot 落下的英雄组件
+local dropItemSlot
+---是否可以播放上下阵动画
+local enableHeroEffect = true
+
+local viewData
+
+function DoInit()
+    self.Shadow = 1
+    selfTrans = self.transform
+    MsgCenter:Subscribe(Notify_OnBattle, DoEnterBattle);
+    titleNameTxt = self:GetComponentAtPath("BGS/TitleTxt", CLS_TEXT)
+    fightTxt = self:GetComponentAtPath("UP/numberTxt", CLS_TEXT)
+    heroGrid = self:GetComponentAtPath("heroSV/ScrollRect/Viewport/Grid", CLS_UI_ITEM_GRID)
+    upHeroGrid = self:GetComponentAtPath("UP/UpHeroGrid", CLS_UI_ITEM_GRID)
+    startBtnObj = self:GetGameObjectAtPath("StartBtn")
+    startBtnTxt = self:GetComponentAtPath("StartBtn/nameTxt", CLS_TEXT)
+    saveBtnObj = self:GetGameObjectAtPath("SaveBtn")
+    recoverBtnObj = self:GetGameObjectAtPath("RecoverBtn")
+    recoverBtn = self:GetComponentAtPath("RecoverBtn", CLS_BUTTON_ARCHLY)
+    recoverResImg = self:GetComponentAtPath("RecoverBtn/resIconImg", CLS_IMAGE)
+    recoverResTxt = self:GetComponentAtPath("RecoverBtn/resNumberTxt", CLS_TEXT)
+
+    local typeTog = selfTrans:Find("TOG")
+    togGroup = typeTog:GetComponent("ToggleGroupArchly")
+    togs = {}
+    for i = 0, typeTog.childCount - 1 do
+        local type = typeTog:GetChild(i):GetComponent("ToggleArchly")
+        table.insert(togs, type)
+    end
+    skipBtnObj = self:GetGameObjectAtPath("SkipBtn")
+    skipCheckObj = self:GetGameObjectAtPath("SkipBtn/iconImg")
+    raceFlagTrans = selfTrans:Find("TOG/raceTog")
+    auraImgObj = self:GetGameObjectAtPath("UP/AureoleBtn/icon01Img")
+    heroEffectTrans = selfTrans:Find("HeroBase")
+    noneObj = self:GetGameObjectAtPath("None")
+end
+
+---切换英雄类型
+local function ScreenHeroView(race)
+    if not togs[race + 1].isOn then
+        local offset = 10
+        if raceId > race then
+            offset = -offset
+        end
+        raceId = race
+        togs[raceId + 1].isOn = true
+        local targetX = togs[raceId + 1].transform.localPosition.x
+        local t1 = CsBridge.TweenUtils.MoveTo(raceFlagTrans, targetX + offset, raceFlagTrans.localPosition.y, 0.15, function()
+            local t2 = CsBridge.TweenUtils.MoveTo(raceFlagTrans, targetX, raceFlagTrans.localPosition.y, 0.05)
+            t2:DoPlay()
+        end)
+        t1:DoPlay()
+        self:SendCommand("ScreenHero", raceId)
+    end
+end
+
+---显示标题
+local function ShowTitleAndBtn()
+    recoverBtnObj:SetActive(viewData.btnAndTitleState.showRecoverBtn)
+    startBtnObj:SetSelfActive(viewData.btnAndTitleState.showStartBtn)
+    saveBtnObj:SetSelfActive(viewData.btnAndTitleState.showSaveBtn)
+    titleNameTxt.text = viewData.btnAndTitleState.titleNameTxt
+    startBtnTxt.text = viewData.btnAndTitleState.startBtnTxt
+end
+
+---显示对应的光环
+local function ShowAura()
+    if (curAura == nil) then
+        CsBridge.IconData.SetIconByName(auraImgObj, "new_com_guanghuan11")
+    else
+        CsBridge.IconData.SetIconByName(auraImgObj, curAura.icon)
+    end
+end
+
+---一个英雄被改变了
+local function ChangedHeros(changedHero, changedUpHero, fight, validAura)
+    curAura = validAura
+    fightTxt.text = tostring(fight)
+    upHeroGrid:SingleRefreshSlot(changedUpHero)
+    for i = 1, #changedHero do
+        heroGrid:SingleRefreshSlot(changedHero[i])
+    end
+    ShowAura()
+end
+
+---检测上阵位是否已经满了
+local function CheckUpFull()
+    local isCanUp = false
+    for i, data in pairs(viewData.upHeroArray) do
+        if (data.heroId == 0) then
+            isCanUp = true
+            break
+        end
+    end
+    return isCanUp
+end
+
+---获取对应已上阵英雄数据
+local function GetUpHeroInfo(_uid)
+    for i, data in pairs(viewData.upHeroArray) do
+        if (data.srcUid == _uid) then
+            return data
+        end
+    end
+    return nil
+end
+
+---播放上下阵动画
+local function ShowHeroEffect(hero, startPos, endPos, onFinish)
+    enableHeroEffect = false
+    heroEffectTrans.gameObject:SetSelfActive(true)
+    heroEffectTrans.position = startPos
+    BindHeroBaseValue(heroEffectTrans, hero)
+    local t = CsBridge.TweenUtils.MoveToByWorld(heroEffectTrans, endPos.x, endPos.y, 0.2,
+            function()
+                enableHeroEffect = true
+                heroEffectTrans.gameObject:SetSelfActive(false)
+                onFinish()
+            end)
+    t:DoPlay()
+end
+
+---检测是否至少有一个上阵英雄
+local function CheckOwnUpHero()
+    local isOwnUpHero = false
+    if viewData.upHeroArray == nil then
+        return isOwnUpHero
+    end
+    for i, data in pairs(viewData.upHeroArray) do
+        if (data.heroId ~= 0)
+        then
+            isOwnUpHero = true
+            break
+        end
+    end
+    return isOwnUpHero
+end
+
+---绑定英雄数据
+local function SetDragItem(obj, data)
+    local heroBaseObj = obj.transform:GetGameObjectAtPath("HeroBase")
+    BindHeroBaseValue(heroBaseObj, data)
+end
+
+---初始化model的数据
+local function InitModelData()
+    viewData.raceId = raceId
+    self:SendCommand("InitData", viewData)
+    self:SendCommand("InitBuyRecover", viewData.caveInfo, viewData.btnAndTitleState.titleType)
+end
+
+function SetParamDataList(objs)
+    viewData = objs[0]
+end
+
+function OnAnimationFinished()
+    InitModelData()
+end
+
+function Active()
+    InitModelData()
+end
+
+function IsSetAnchor()
+    return true
+end
+
+---初始化界面
+function OnNotification_InitData(objs)
+    local initData = objs[0]
+    viewData.upHeroArray = initData.upHeroArray
+    downHeroArray = initData.downHeroArray
+    local fight = initData.fight
+    curAura = initData.curAura
+    if (viewData.canSkip) then
+        skipBtnObj:SetActive(true)
+        if (skipChecked) then
+            skipCheckObj:SetActive(true)
+        else
+            skipCheckObj:SetActive(false)
+        end
+    else
+        skipBtnObj:SetActive(false)
+    end
+    fightTxt.text = tostring(fight)
+    noneObj:SetSelfActive(downHeroArray == nil or #downHeroArray == 0)
+    heroGrid:RefreshItemSlots(downHeroArray, self.gameObject, "MiningRobHeroItemSlot")
+    upHeroGrid:RefreshItemSlots(viewData.upHeroArray, self.gameObject, "HeroItemSlot")
+    ShowAura()
+    ShowTitleAndBtn()
+end
+
+---初始化购买恢复
+function OnNotification_InitBuyRecover(objs)
+    local selfConsume = objs[0]
+    local consume = objs[1]
+    local gray = objs[2]
+    ShowOneConsume(recoverResImg, recoverResTxt, consume.costConsume)
+    recoverBtn.Gray = gray
+    SetFontColorWithEnough(recoverResTxt, function()
+        return selfConsume.count >= consume.costConsume.count
+    end, color2)
+end
+
+---类型切换成功
+function OnNotification_ScreenHero(objs)
+    downHeroArray = objs[0]
+    heroGrid:RefreshItemSlots(downHeroArray, self.gameObject, "MiningRobHeroItemSlot")
+    noneObj:SetSelfActive(downHeroArray == nil or #downHeroArray == 0)
+end
+
+---英雄下阵
+function OnNotification_DownHero(objs)
+    local downData = objs[0]
+    ChangedHeros(downData.changedHero, downData.upHero, downData.fight, downData.curAura)
+end
+
+---英雄上阵
+function OnNotification_SelectHeroEffect(objs)
+    local uid = objs[0]
+    local pos = objs[1]
+    local slot = objs[2]
+    if enableHeroEffect then
+        ShowHeroEffect(slot.m_data, slot.transform.position, upHeroGrid.transform:GetChild(pos - 1).position,
+                function()
+                    self:SendCommand("UpHero", slot.m_data)
+                end)
+    end
+end
+
+---上阵成功
+function OnNotification_UpHero(objs)
+    local upData = objs[0]
+    local changedUpHero = upData.changedHero
+    changedUpHero.anim = true
+    ChangedHeros(changedUpHero, upData.upHero, upData.fight, upData.curAura)
+    changedUpHero.anim = false
+end
+
+---所有类型点击
+function OnTogallClick(sender)
+    ScreenHeroView(HeroGroupType.AllGroupType)
+end
+
+---水类型点击
+function OnTog01Click(sender)
+    ScreenHeroView(HeroGroupType.Water)
+end
+
+---点类型点击
+function OnTog02Click(sender)
+    ScreenHeroView(HeroGroupType.Electric)
+end
+
+---土类型点击
+function OnTog03Click(sender)
+    ScreenHeroView(HeroGroupType.Soil)
+end
+
+---火类型点击
+function OnTog04Click(sender)
+    ScreenHeroView(HeroGroupType.Fire)
+end
+
+---光类型点击
+function OnTog05Click(sender)
+    ScreenHeroView(HeroGroupType.Light)
+end
+
+---暗类型点击
+function OnTog06Click(sender)
+    ScreenHeroView(HeroGroupType.Night)
+end
+
+---遮罩点击
+function OnMaskClick(sender)
+    self:HideView(self.gameObject.name, true)
+end
+
+---关闭按钮点击
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name, true)
+end
+
+---点击上面格子
+function OnUpHeroGridHeroItemSlotClick(obj)
+    local data = obj:GetItemData().data
+    if (data.heroId ~= 0) then
+        self:SendCommand("DownHero", data.pos)
+    end
+end
+
+---点击下面格子
+function OnGridMiningRobHeroItemSlotClick(obj)
+    local data = obj:GetItemData().data
+    if ShowSoulImprintedTip(data) then
+        return
+    end
+    if (data.IsSelected == false) then
+        if data.dead == true then
+            CsBridge.ShowHintBoxTwo(Language:getStr("Hero_Dead"))
+            return
+        end
+        local isCanUp = CheckUpFull()
+        if (isCanUp == false) then
+            CsBridge.ShowHintBoxTwo(Language:getStr("heroFull"))
+            return
+        end
+        local result = CheckHeroInLockStateName(data, HeroDuty.Mining)
+        if result ~= nil then
+            CsBridge.ShowHintBoxTwo(Language:getStr(result))
+            return
+        end
+        if (data.isRepeat == true) then
+            --重复英雄
+            CsBridge.ShowHintBoxTwo(Language:getStr("heroRepeat"))
+            return
+        end
+        self:SendCommand("SelectHeroEffect", data.uid, obj)
+    else
+        --已经上阵,点击下阵
+        local upHero = GetUpHeroInfo(data.uid)
+        if (upHero ~= nil) then
+            self:SendCommand("DownHero", upHero.pos)
+        end
+    end
+end
+
+---点击进入战斗
+function OnStartBtnClick(sender)
+    local isOwnUpHero = CheckOwnUpHero()
+    if (isOwnUpHero == false) then
+        CsBridge.ShowHintBoxTwo(Language:getStr("noUpHero"))
+        return
+    end
+
+    local heroIds = {}
+    for i, data in pairs(viewData.upHeroArray) do
+        if (data.heroId ~= 0) then
+            local newData = {}
+            newData.pos = data.pos
+            newData.uid = data.srcUid
+            newData.heroId = data.heroId
+            table.insert(heroIds, newData)
+        end
+    end
+    if _G.ShowLoadResCount then
+        _G.LoadResCount = 2.1
+        CsBridge.messageManager:FristConfirmBox("LoadConfirm", Language:getStr("LoadConfirm"), string.format(Language:getStr("Load_Confirm"), tostring(_G.LoadResCount)), Language:getStr("local_cancel"), function()
+            CS.UnityEngine.Application.Quit()
+        end, Language:getStr("local_confirm"), function()
+            self:SendCommand("GoToBattle", heroIds)
+        end)
+    else
+        self:SendCommand("GoToBattle", heroIds)
+    end
+end
+
+---保存按钮点击
+function OnSaveBtnClick(sender)
+    local isOwnUpHero = CheckOwnUpHero()
+    if (isOwnUpHero == false) then
+        CsBridge.ShowHintBoxTwo(Language:getStr("noUpHero"))
+        return
+    end
+
+    local heroIds = {}
+    for i, data in pairs(viewData.upHeroArray) do
+        if (data.heroId ~= 0) then
+            local newData = {}
+            newData.pos = data.pos
+            newData.uid = data.srcUid
+            newData.heroId = data.heroId
+            table.insert(heroIds, newData)
+        end
+    end
+    self:SendCommand("SaveFormation", heroIds)
+end
+
+---购买恢复点击
+function OnRecoverBtnClick()
+    self:SendCommand("BuyRecover")
+end
+
+---光环点击
+function OnAureoleBtnClick(sender)
+    self:SendCommand("ShowAureoleView")
+end
+
+---跳过战斗点击
+function OnSkipBtnClick(sender)
+    if (viewData.canSkip) then
+        skipChecked = not skipChecked
+        skipCheckObj:SetActive(skipChecked)
+    end
+end
+
+---上方阵容英雄拖动
+function OnHeroItemSlotBeginDrag(obj)
+    local btn = obj:GetComponent(CLS_BUTTON_ARCHLY)
+    btn:StopRunningClickAnim()
+    btn.ClickAnim = false
+
+    local data = obj:GetComponent("ItemSlot"):GetItemData().data
+    if data.heroId == 0 then
+        return
+    end
+    local dragObj = obj:GetComponent("TestDrag").dragObj
+    SetDragItem(dragObj, data)
+    CsBridge.UnityHelper.SetAnchoredPosition(dragObj.gameObject, obj.transform.localPosition.x, obj.transform.localPosition.y)
+    dragObj:SetActive(true)
+    BindHeroBaseValue(obj.transform:Find("HeroBase").gameObject, nil)
+    draggingHeroItemTrans = obj
+end
+
+---上方英雄拖动结束
+function OnHeroItemSlotEndDrag(obj)
+    local btn = obj:GetComponent(CLS_BUTTON_ARCHLY)
+    btn.ClickAnim = true
+
+    local data = obj:GetComponent("ItemSlot").m_data
+    if data.heroId == 0 then
+        return
+    end
+    if draggingHeroItemTrans ~= nil then
+        draggingHeroItemTrans = nil
+    end
+    if dropItemSlot ~= nil then
+        local dragIndex = obj:GetComponent("ItemSlot").m_index
+        local dragData = obj:GetComponent("ItemSlot").m_data
+        local dropIndex = dropItemSlot.m_index
+        local dropData = dropItemSlot.m_data
+
+        upHeroGrid:RefreshSlot(dragData, dropIndex)
+        upHeroGrid:RefreshSlot(dropData, dragIndex)
+        local temp = dragData.pos
+        dragData.pos = dropData.pos
+        dropData.pos = temp
+        viewData.upHeroArray[dropIndex + 1] = dragData
+        viewData.upHeroArray[dragIndex + 1] = dropData
+        dropItemSlot = nil
+    else
+        BindHeroBaseValue(obj.transform:Find("HeroBase").gameObject, data)
+    end
+end
+
+---落下
+function OnHeroItemSlotDrop(obj)
+    if obj.name == "HeroItemSlot" then
+        if obj ~= draggingHeroItemTrans then
+            dropItemSlot = obj:GetComponent("ItemSlot")
+        end
+    end
+end
+
+function OnClose()
+
+end
+
+function DoExit()
+    MsgCenter:Unsubscribe(Notify_OnBattle, DoEnterBattle);
+    self.Module = nil
+
+    titleNameTxt = nil
+    fightTxt = nil
+    heroGrid = nil
+    upHeroGrid = nil
+    startBtnObj = nil
+    startBtnTxt = nil
+    saveBtnObj = nil
+    recoverBtnObj = nil
+    recoverResImg = nil
+    recoverResTxt = nil
+    togGroup = nil
+    togs = nil
+    raceFlagTrans = nil
+    skipBtnObj = nil
+    skipCheckObj = nil
+    auraImgObj = nil
+    heroEffectTrans = nil
+    noneObj = nil
+    selfTrans = nil
+    downHeroArray = nil
+    curAura = nil
+    raceId = nil
+    skipChecked = nil
+    battled = nil
+    draggingHeroItemTrans = nil
+    dropItemSlot = nil
+    enableHeroEffect = nil
+end
+
+function DoEnterBattle(obj)
+    battled = true
+end
+
+function ResetBattleStatus()
+    battled = false
+end
+
+function FinishStartBattle()
+    return battled
+end

@@ -1,0 +1,473 @@
+
+ÖJ
+Union.protoUnionstage.protoplayerData.proto"%
+RecommendUnionsReq
+useless ("3
+RecommendUnionsResp
+unions (2.Union.Union"9
+AddUnionReq
+name (	
+icon (
+notice (	"
+AddUnionResp
+status ("
+SearchUnionReq
+name (	".
+SearchUnionResp
+union (2.Union.Union"
+ApplyUnionReq
+
+id (" 
+ApplyUnionResp
+status ("
+
+MyUnionReq
+useless ("p
+MyUnionResp
+union (2.Union.Union
+myAuthority (
+	canSignIn (
+rank (
+combat ("%
+UnionMemberListReq
+useless ("K
+UnionMemberListResp4
+
+memberList (2 .Union.UnionMemberWithCombatResp"!
+MemberToViceReq
+userId (	""
+MemberToViceResp
+status ("!
+ViceToMemberReq
+userId (	""
+ViceToMemberResp
+status ("&
+PresidentTransferReq
+userId (	"'
+PresidentTransferResp
+status ("
+FireMemberReq
+userId (	" 
+FireMemberResp
+status ("$
+ApplyUnionListReq
+useless ("I
+ApplyUnionListResp3
+	applyList (2 .Union.UnionMemberWithCombatResp"5
+ApprovalUnionReq
+decision (
+userIds (	"#
+ApprovalUnionResp
+status ("
+UnionRankReq
+useless ("Z
+UnionRankResp
+rankList (2.Union.Union
+union (2.Union.Union
+rank ("
+QuitUnionReq
+useless ("
+QuitUnionResp
+status (""
+DismissUnionReq
+useless (""
+DismissUnionResp
+status ("(
+CancelDismissUnionReq
+useless ("(
+CancelDismissUnionResp
+status ("&
+UpdateUnionNoticeReq
+notice (	"'
+UpdateUnionNoticeResp
+status (")
+UpdateUnionApplyLevelReq
+level ("+
+UpdateUnionApplyLevelResp
+status ("*
+UpdateUnionAutoApprovalReq
+open ("-
+UpdateUnionAutoApprovalResp
+status (""
+UpdateUnionNameReq
+name (	"%
+UpdateUnionNameResp
+status (""
+UpdateUnionIconReq
+icon ("%
+UpdateUnionIconResp
+status (".
+UnionTechUpgradeReq
+job (
+
+id ("&
+UnionTechUpgradeResp
+status (""
+CheckMyUnionReq
+useless ("C
+CheckMyUnionResp/
+unionUserRecord (2.Union.UnionUserRecord""
+UnionDungeonReq
+useless ("O
+UnionDungeonResp
+	currentId (
+	isPassAll (
+seasonEndTime (" 
+UnionTradeReq
+useless ("E
+UnionTradeResp
+lastTradeTime (
+trades (2.Union.Trade"#
+UnionTradeGetReq
+useless ("#
+UnionTradeGetResp
+status (" 
+UnionTradeStartReq
+
+id ("%
+UnionTradeStartResp
+status ("
+UnionTradePayReq
+
+id ("7
+UnionTradePayResp"
+rewards (2.stage.RewardItem"
+UnionMillReq
+useless ("=
+UnionMillResp
+level (
+exp (
+maxLevel ("/
+UnionMillDonateReq
+
+id (
+count ("%
+UnionMillDonateResp
+status ("#
+UnionMillRankReq
+useless ("I
+UnionMillRankResp4
+
+donateList (2 .Union.UnionMemberWithDonateResp""
+UnionTradeUpgradeReq
+
+id ("'
+UnionTradeUpgradeResp
+status ("
+UnionLogsReq
+useless (")
+UnionLogsResp
+logs (2
+.Union.Log"%
+DungeonChallengeInfoReq
+
+id ("Â
+DungeonChallengeInfoResp
+curHpPercentage (
+combat ('
+trialRewards (2.stage.RewardItem"
+rewards (2.stage.RewardItem0
+hurtList (2.Union.UnionMemberWithHurtResp"L
+DungeonChallengeReq)
+formationPos (2.stage.FormationPos
+
+id ("2
+GmUnionDungeonChallengeResetReq
+useless ("2
+ GmUnionDungeonChallengeResetResp
+status ("
+CheckUnionReq
+
+id ("†
+CheckUnionResp
+union (2.Union.Union4
+
+memberList (2 .Union.UnionMemberWithCombatResp
+unionCombat (
+rank ("%
+UnionAttendanceReq
+useless ("9
+UnionAttendanceResp"
+rewards (2.stage.RewardItem"-
+CancelPresidentTransferReq
+useless ("-
+CancelPresidentTransferResp
+status ("á
+Union
+version (
+
+id (
+name (	
+icon (
+memberCount (
+	memberMax (
+level (
+notice (	
+exp	 (
+status
+ (
+dismissStartTime ("
+prisidentTransferStartTime (
+transferRecord (	
+dungeonOpenTime (
+
+activeTime (
+
+applyLevel (
+autoApproval (
+combat ("Ù
+UnionMemberBasicResp
+userId (	
+name (	
+icon (
+level (
+vip (
+	authority (
+
+lastOnline (
+isOnline (
+isSignIn	 ( 
+box
+ (2.playerData.BoxItem
+zone (	"[
+UnionMemberWithCombatResp.
+	basicInfo (2.Union.UnionMemberBasicResp
+combat ("g
+UnionMemberWithHurtResp.
+	basicInfo (2.Union.UnionMemberBasicResp
+hurt (
+combat ("i
+UnionMemberWithDonateResp.
+	basicInfo (2.Union.UnionMemberBasicResp
+donate (
+rank ("0
+UnionUserRecord
+
+id (
+	authority ("ý
+PlayerUnionRecord
+challengeCount (
+millDonateCount ( 
+reinforcementDonateCount (
+lastAttendanceTime (
+lastQuitUnionTime (
+lastChallengeTime (
+lastTradeTime (
+lastMillDonateTime ($
+lastRequestReinforcementTime	 (#
+lastReinforcementDonateTime
+ ("
+
+unionTechs (2.Union.JobTech
+trades (2.Union.Trade'
+lastRequestReinforcementQuality (
+lastKickoutTime (
+lastMailUnionTime (#
+firstFreeResetUnionTechUsed (
+battleChallengeCount (
+battlePayCount (
+lastBattleMatchTime (
+battlePayCountTotal (
+	mailCount ("2
+JobTech
+job (
+techs (2.Union.Tech"!
+Tech
+
+id (
+level ("V
+Trade
+
+id (
+tradeId (
+level (
+	startTime (
+status ("0
+Log
+content (	
+time (
+
+id ("ž
+Reinforcement
+userId (	
+itemId (
+requestCount (
+receivedCount (
+	startTime (
+nick (	
+	authority (
+zone (	"(
+UnionReinforcementReq
+useless ("W
+UnionReinforcementResp-
+requestList (2.Union.ReinforcementResp
+status ("J
+ReinforcementResp"
+info (2.Union.Reinforcement
+	canDonate (")
+RequestReinforcementReq
+itemId ("*
+RequestReinforcementResp
+status ("F
+DonateReinforcementReq
+userId (	
+itemId (
+time (")
+DonateReinforcementResp
+status ("$
+UnionTechResetReq
+useless ("$
+UnionTechResetResp
+status ("1
+GmUnionResetReinforcementCdReq
+useless ("1
+GmUnionResetReinforcementCdResp
+status ("7
+$GmUnionResetReinforcementDonationReq
+useless ("7
+%GmUnionResetReinforcementDonationResp
+status ("2
+GmUnionTechUpgradeReq
+
+id (	
+level ("(
+GmUnionTechUpgradeResp
+status ("&
+GmUnionTechCleanReq
+useless ("&
+GmUnionTechCleanResp
+status (")
+GmUnionDungeonAccomplishReq
+
+id (	".
+GmUnionDungeonAccomplishResp
+status ("%
+GmUnionDungeonRewardReq
+
+id (">
+GmUnionDungeonRewardResp"
+rewards (2.stage.RewardItem"'
+GmUnionTradeAccomplishReq
+
+id (",
+GmUnionTradeAccomplishResp
+status (")
+GmUnionTradeResetCdReq
+useless (")
+GmUnionTradeResetCdResp
+status ("'
+GmUnionTradeUpgradeReq
+level (")
+GmUnionTradeUpgradeResp
+status ("/
+GmUnionTradeResetDonationReq
+useless ("/
+GmUnionTradeResetDonationResp
+status (""
+GmUnionUpgradeReq
+level ("$
+GmUnionUpgradeResp
+status ("%
+GmUnionCleanExpReq
+useless ("%
+GmUnionCleanExpResp
+status ("
+GmUnionAddExpReq
+exp ("#
+GmUnionAddExpResp
+status ("$
+GmUnionDismissReq
+useless ("$
+GmUnionDismissResp
+status (".
+GmUnionPresidentTransferReq
+useless (".
+GmUnionPresidentTransferResp
+status ("(
+GmUnionResetSignInReq
+useless ("(
+GmUnionResetSignInResp
+status ("&
+DungeonDailyRankReq
+useless ("Q
+DungeonDailyRankResp9
+	rankResps (2&.Union.UnionMemberDailyDungeonRankResp"~
+UnionMemberDailyDungeonRankResp.
+	basicInfo (2.Union.UnionMemberBasicResp
+hurt (
+count (
+combat ("#
+MillDailyRankReq
+useless ("H
+MillDailyRankResp3
+	rankResps (2 .Union.UnionMemberWithDonateResp"^
+UnionMemberDailyMillRankResp.
+	basicInfo (2.Union.UnionMemberBasicResp
+donate ("
+MailUnionReq
+content (	"
+MailUnionResp
+status ("Œ
+BattleTarget(
+info (2.playerData.PlayerBaseInfo
+robot (
+combat (
+	unionInfo (2.Union.Union
+
+leaderName (	"!
+GetBattleTargetsReq
+
+id ("<
+GetBattleTargetsResp$
+targets (2.Union.BattleTarget"a
+ChallengeInGuildWarReq
+zone (	
+userId (	)
+formationPos (2.stage.FormationPos"}
+CheckGuildWarResp
+seasonEndTime (
+canFight ('
+opponent (2.Union.GuildWarTarget
+seasonFinished ("Â
+GuildWarTarget
+
+id (
+baseInfo (2.Union.Union
+zone (	&
+members (2.Union.GuildWarMember
+winScore (
+maxPower (
+score (
+defeatedMemberCount	 (" 
+GuildWarMember,
+baseInfo (2.playerData.PlayerBaseInfo
+	authority (
+power (
+defeated (
+challengCount (
+defeatedScore ("€
+UnionRankItem#
+unionBaseInfo (2.Union.Union
+score (
+rank (
+zone (	
+count (
+defeated (" 
+GetUnionRankReq
+count ("j
+GetUnionScoreRankResp'
+	rankItems (2.Union.UnionRankItem(
+
+myRankItem (2.Union.UnionRankItem"@
+GetUnionDailyRankResp'
+	rankItems (2.Union.UnionRankItem"}
+MemberWarRankInfo,
+baseInfo (2.playerData.PlayerBaseInfo
+score (
+count (
+rank (
+combat ("s
+GetUnionMemberRankResp+
+	rankItems (2.Union.MemberWarRankInfo,
+
+myRankItem (2.Union.MemberWarRankInfo

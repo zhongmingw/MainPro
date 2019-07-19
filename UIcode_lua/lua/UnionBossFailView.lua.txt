@@ -1,0 +1,78 @@
+--[[
+	file: UnionBossFailView.lua
+	author: hangang
+	description:View to show when union dungeon challenge failed
+]]
+
+local luaHeroShowUtils = require "HeroShowUtils"
+require "RewardUtils"
+
+local failSpine, hpTxt, dropGrid
+local battleInfo={}
+
+function DoInit()
+	self.Shadow = 2
+	failSpine=self:GetComponentAtPath("SpineGO/FailSpine" ,"SkeletonGraphic")
+	failSpine.gameObject:SetActive(false)
+	hpTxt = self:GetComponentAtPath("Center/contentTxt" ,CLS_TEXT)
+	dropGrid = self:GetComponentAtPath("Center/DropGrid" ,CLS_UI_ITEM_GRID)
+end
+
+function SetData(data)
+	battleInfo=data
+end
+
+function OnOpen()
+	failSpine.gameObject:SetActive(true)
+
+	failSpine:PlayAnimation("apear",false,nil,
+	function ()
+		failSpine:PlayAnimation("stand",true,nil,nil)
+	end)
+	CsBridge.audioManager:PlayUI(ResTblContainer:GetPropToStr(2,sound.name,sound.tblName))
+end
+
+function OnAnimationFinished()
+	if battleInfo.battleEndInfo==nil then
+		return 
+	end
+	local hurtValue = battleInfo.battleEndInfo.hurt
+	hpTxt.text = GetValueAbbreviation(hurtValue)
+	if battleInfo.battleEndInfo.dropItems~=nil then
+		dropGrid:RefreshItemSlots(MergeRewards(battleInfo.battleEndInfo.dropItems),self.gameObject,"ItemSlot")
+	end
+
+	if battleInfo.battleEndInfo.randomReward~=nil and battleInfo.isRecord~=true then
+		CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			local view = CsBridge.OpenView("RandomRewardView", "WinModel",false,true)
+			view:SetData(battleInfo.battleEndInfo.randomReward)
+		end,"RandomRewardView")
+	end
+end
+
+function OnDetailBtnClick(sender)
+	ShowBattleRecordView({battleInfo},self)
+end
+
+local function Close(onClose)
+	self:HideView(self.gameObject.name)
+	if onClose then
+		onClose()
+	end
+end
+
+function OnConfirmBtnClick(sender)
+	Close(battleInfo.onClose)
+end
+
+function OnMaskClick()
+	Close(battleInfo.onClose)
+end
+
+function DoExit()
+	failSpine = nil
+	hpTxt = nil
+	dropGrid = nil
+	battleInfo = nil
+end

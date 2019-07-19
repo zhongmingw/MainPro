@@ -1,0 +1,94 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-10-23 15:40:40
+
+require "LimitTurnTableRecordItemSlot"
+
+local nothingObj
+local recordGrid
+local luckyCoinTxt
+
+local closeCallback
+
+local isInit = false
+
+function DoInit()
+    self.Shadow = 1
+end
+
+function InitUI()
+    nothingObj = self:GetGameObjectAtPath("Center/Nothing")
+    recordGrid = self:GetComponentAtPath("Center/RecordSV/ScrollRect/Viewport/RecordGrid" ,CLS_UI_ITEM_GRID)
+    luckyCoinTxt = self.transform:GetComponentAtPath("Center/LuckyCoin/NumTxt" ,CLS_TEXT)
+end
+
+function SetParamDataList(objs)
+    closeCallback = objs[0]
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitTurnTableRecordData")
+end
+
+function OnClose() 
+    recordGrid:ClearItems()
+    if closeCallback ~= nil then
+        closeCallback()
+    end
+end
+
+function OnNotification_RefreshTurnTableRecordView(objs)
+    local recordArr = objs[0]
+    if #recordArr == 0 then
+        nothingObj:SetSelfActive(true)
+    else
+        nothingObj:SetSelfActive(false)
+        recordGrid:RefreshItemSlots(recordArr, self.gameObject, "LimitTurnTableRecordItemSlot")
+    end
+end
+
+function OnNotification_UpdateLuckyCoin(objs)
+    RefreshLuckyCoin(objs[0])
+end
+
+function RefreshLuckyCoin(luckyCoin)
+    luckyCoinTxt.text = luckyCoin
+end
+
+function OnRecordGridItemSlotClick(obj)
+    ShowRewardTip(self,obj.m_data.reward)
+end
+
+function OnAddBtnClick(sender)
+    self:SendCommand("BuyLuckyCoin")
+end
+
+function OnShopBtnClick(sender)
+    if idleTweener then
+        idleTweener:DoPause()
+    end
+    self:SendCommand("OpenActivityShop")
+end
+
+function OnMaskClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+    nothingObj = nil
+    recordGrid = nil
+    luckyCoinTxt = nil
+
+    closeCallback = nil
+
+    isInit = nil
+end

@@ -1,0 +1,523 @@
+local loadedStageItemSlot=require "StageItemSlot"
+local loadedChapterItemSlot=require "ChapterItemSlot"
+
+local bg_Sprite
+local trans_Sprite
+local scroll 
+local stageGrid_TF
+local stageGrid
+local viewport
+local content
+local verticalLayout
+local contentSizeFitter
+local curDifficult = 1
+local chapterId = 0
+local slotsData = {}
+local friendCampaignInfos
+
+local waiting = true
+local isFirst = true
+local showMap = false
+
+local TICKER_NAME = "ticker_StageView"
+
+function DoInit()
+    self.Anim = 0
+	self.Shadow = 0
+	MsgCenter:Subscribe(Notify_ShowMap,ShowMap)
+	MsgCenter:Subscribe(Notify_HideMap,HideMap)
+end 
+
+function InitUI()
+	bg_Sprite = self:GetComponentAtPath("BGS/BGSprite" ,CLS_IMAGE)
+    trans_Sprite = self:GetComponentAtPath("BGS/TransSprite" ,CLS_IMAGE)
+	scroll = self:GetComponentAtPath("Center/ScrollRect" ,"UnityEngine.UI.ScrollRect")
+	viewport=scroll.viewport
+	content=scroll.content
+	verticalLayout = content:GetComponent("UnityEngine.UI.VerticalLayoutGroup")
+	contentSizeFitter = content:GetComponent("UnityEngine.UI.ContentSizeFitter")
+	stageGrid_TF = self.transform:Find("Center/ScrollRect/Viewport/StageGrid")
+	stageGrid = stageGrid_TF:GetComponent("UIItemGrid")	
+
+	for i=0,stageGrid_TF.childCount-1 do
+		local chapterSlot = stageGrid_TF:GetChild(i):GetComponent("ItemSlot")
+		if chapterSlot.gameObject.name=="ChapterItemSlot" then
+			local slotData = {}
+			slotData.chapter=chapterSlot
+			slotData.stages={}
+			table.insert(slotsData, slotData)
+			for k=1,20 do
+				local stageSlot = stageGrid_TF:GetChild(i+k):GetComponent("ItemSlot")
+				table.insert(slotData.stages, stageSlot)
+			end
+		end
+	end
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		self:SendCommand("InitStageData")
+	else
+		self:SendCommand("RefreshUpHeroCount")
+		LoadOtherViews()
+	end
+	scroll.enabled = false
+end 
+
+function OnOpen()
+	self:PlayBg("music_campaign")
+end
+
+function OnDoUnhide()
+	self:PlayBg("music_campaign")
+	self:SendCommand("RefreshMap")
+end
+
+function Active()
+	self:SendCommand("RefreshMap")
+end
+
+function ShowMap(obj)
+	showMap=true
+	scroll.enabled = true
+	self:SendCommand("ChangeMapState")
+	local target_y = content.anchoredPosition.y
+	local max_y = (content.rect.size.y-viewport.rect.size.y)/2
+
+	if target_y>max_y then
+		CsBridge.TweenUtils.MoveToByAnchored(content,content.anchoredPosition.x,max_y,0.3)
+	end
+	if chapterId==0 then
+		return 
+	end
+	local slotData = slotsData[chapterId]
+	local lockFlag_GO = slotData.chapter.transform:Find("LockFlagGO").gameObject
+	local lockFlag_Sprite = slotData.chapter.transform:Find("LockFlagGO"):GetComponent("UnityEngine.UI.Image")
+	lockFlag_GO:DoEaseScale(CsBridge.Ease.OutElastic,10,0.8,1.2,false,
+		function()
+			CsBridge.TweenUtils.DOImageAlphaValue(lockFlag_Sprite,0,0.4)
+			CsBridge.TweenUtils.MoveTo(lockFlag_GO.transform,0,50,0.4,
+				function()
+					slotData.chapter.m_data.state=0
+					slotData.chapter:OnReset(slotData.chapter.m_data)
+					local stageSlot=slotData.stages[1]
+					stageSlot.m_data.isOnStage=stageSlot.m_data.state==1
+					stageSlot:OnReset(stageSlot.m_data)
+				end)
+
+		end)
+
+end
+
+function HideMap()
+	showMap=false
+	scroll.enabled = false
+	self:SendCommand("ChangeMapState")
+end
+
+function OnNotification_ChangeMapState(objs)
+    local stageItem = objs[0]
+	local onHookStageItem = objs[1]
+	ShowStages(stageItem,onHookStageItem)
+end
+
+function OnNotification_PlayerRename(objs)
+	local stageItem = objs[0]
+	local onHookStageItem = objs[1]
+	ShowStages(stageItem,onHookStageItem)
+end
+
+function OnNotification_HeadIconChanged(objs)
+	local stageItem = objs[0]
+	local onHookStageItem = objs[1]
+	ShowStages(stageItem,onHookStageItem)
+end
+
+function OnNotification_InitFriendCampaignInfos(objs)
+	local data = objs[0]
+	friendCampaignInfos = data.infos
+end
+
+function OnNotification_InitStageData(objs)
+    local stageItem = objs[0]
+	local onHookStageItem = objs[1]
+	curDifficult=onHookStageItem.difficulty
+	local bg=ResTblContainer:GetPropToStr(curDifficult,Difficulty.bg,Difficulty.tblName)
+	trans_Sprite.gameObject:SetSelfActive(false)
+	CsBridge.IconData.SetIconByName(bg_Sprite.gameObject,bg)
+	CsBridge.IconData.SetIconByName(trans_Sprite.gameObject,bg)
+	ShowStages(stageItem,onHookStageItem)
+end
+
+function OnNotification_InitDataFinished(objs)
+	if not isInit then
+		isInit = true
+	end
+end
+
+function OnNotification_DifficultChanged(objs)
+	curDifficult = objs[0]
+	local stageItem = objs[1]
+	local onHookStageItem = objs[2]
+	local bg=ResTblContainer:GetPropToStr(curDifficult,Difficulty.bg,Difficulty.tblName)
+	trans_Sprite.gameObject:SetSelfActive(true)
+	CsBridge.IconData.SetIconByName(bg_Sprite.gameObject,bg)
+	CsBridge.TweenUtils.DOImageAlphaValue(trans_Sprite,0,0.5,
+		function()
+			trans_Sprite.gameObject:SetSelfActive(false)
+			CsBridge.IconData.SetIconByName(trans_Sprite.gameObject,bg)
+			trans_Sprite.gameObject:SetImageAlpha(1)
+		end)
+	if isInit then
+		ShowStages(stageItem,onHookStageItem)
+	end
+end
+
+function OnNotification_ChapterChanged(objs)
+	local stageItem = objs[0]
+	local onHookStageItem = objs[1]
+	ShowStages(stageItem,onHookStageItem)
+end
+
+local function GetFriendData(stageData)
+	local friendInfos={}
+	if showMap
+		and friendCampaignInfos~=nil 
+		and #friendCampaignInfos~=0 
+	then
+		for i,info in ipairs(friendCampaignInfos) do
+			local friendId = info.difficulty*10000+info.chapter*100+info.stage
+			if stageData.id==friendId and #friendInfos<=4 then
+				local data={}
+				data.playerBaseInfo = info.playerBaseInfo
+				data.isSelf = false
+				data.isLast = false
+				table.insert(friendInfos,data)
+			end
+		end
+	end
+	if stageData.isOnStage then
+		local data = {}
+		data.playerBaseInfo = appData:checkData("PlayerInfo")
+		data.isSelf = true
+		data.isLast = false
+		table.insert(friendInfos,data)
+	end
+	if #friendInfos~=0 then
+		friendInfos[#friendInfos].isLast = true
+	end
+	
+	return friendInfos
+end
+
+function ShowStages(stageItem,onHookStageItem)
+	chapterId = 0
+    local stageId = stageItem.difficulty*10000+stageItem.chapter*100+stageItem.stage
+	local nextStageId = GetNextStageId(stageId) or stageId
+	local onHookStageId = onHookStageItem.difficulty*10000+onHookStageItem.chapter*100+onHookStageItem.stage
+	local nextOnHookStageId = GetNextStageId(onHookStageId)
+	local nextDifficulty=math.floor(nextStageId/10000)
+	local nextChapter=math.floor((nextStageId-nextDifficulty*10000)/100)
+	local onHookDifficulty=math.floor(onHookStageId/10000)
+	local onHookChapter=math.floor((onHookStageId-onHookDifficulty*10000)/100)
+	local playerInfo = appData:checkData("PlayerInfo")
+	local onHookTime = stageItem.onHookTime
+	local tbl=ResTblContainer:GetTable(Chapter.tblName)
+	local campTbl=ResTblContainer:GetTable(Campaign.actorTbl)
+	local level = campTbl:GetInt(nextStageId,Campaign.level)
+	for i,slotData in pairs(slotsData) do
+		local chapterData = {}
+		chapterData.id = i
+		if nextDifficulty<curDifficult or (nextDifficulty==curDifficult and nextChapter<i and onHookStageId%100~=1) then
+			chapterData.state = 2
+		elseif nextDifficulty==curDifficult and nextChapter==i and nextStageId%100==1 and onHookTime==0 and stageItem.stage~=0 then
+			chapterData.state = 1
+			chapterId = chapterData.id
+		else 
+			chapterData.state = 0
+		end
+		chapterData.name = tbl:Get(chapterData.id,Chapter.name)
+		chapterData.icon = tbl:Get(chapterData.id,Chapter.icon)
+		slotData.chapter:OnReset(chapterData)
+		for k,stage in pairs(slotData.stages) do
+			local stageData = {} 
+			local id = curDifficult*10000+i*100+k
+			if onHookStageItem.difficulty==0 and onHookStageItem.chapter==0 then
+				id=id+10100
+			end
+			stageData.id = id
+			if campTbl:HasKey(id) then
+				if id<nextStageId or (id ==nextStageId and playerInfo.level>=level) then
+					stageData.state = 1 
+				else
+					stageData.state = 2 
+				end
+				stageData.isOnHook=id == onHookStageId 
+				stageData.isOnStage=((id == nextStageId and playerInfo.level>=level) or (id == stageId and playerInfo.level<level)) --and chapterData.state ~= 1
+				stageData.isNext= nextOnHookStageId and (id == nextOnHookStageId and nextStageId%100~=1)
+				stageData.name = campTbl:Get(id,Campaign.name)
+			else
+				stageData.state = 0
+			end
+			
+			stageData.friendInfos=GetFriendData(stageData)
+			stage:OnReset(stageData)
+		end
+	end
+	Timer:AddTicker(TICKER_NAME,0.1*1000+CsBridge.timeManager.ServerTime,nil,function()
+		if self == nil or self.Module == nil then
+			return
+		end
+		ScrollToCenter(onHookStageItem,
+				function()
+					CheckSlotVisiable(onHookStageItem)
+				end)
+	end,nil)
+	LoadOtherViews()
+end
+
+function LoadOtherViews()
+	if not showMap then
+		self:SendCommand("LoadSimulateBattle")
+	end
+	self:OpenView("StageBottomView","StageModel",true,false)
+	self:SendCommand("FightBtnChanged")
+end
+
+function LoadSimulateBattle(onHookStageId)
+	local redHeroList = {}
+	local blackHeroList = {}
+	local view=self:OpenView("SimulateBattleView","SimulateBattleModel",true,false)
+	if not ResTblContainer:TblHasId(onHookStageId,Campaign.actorTbl) then
+		return 
+	end
+	local formationHeros=appData:checkItem("Formation","3")
+	if formationHeros==nil or formationHeros.heroIds==nil or next(formationHeros.heroIds)==nil then
+		return
+	end
+	for i,hero in ipairs(formationHeros.heroIds) do
+		local heroInfo = {}
+		heroInfo.isMonster=0
+		heroInfo.camp=0
+		heroInfo.uid=hero.uid
+		heroInfo.pos=hero.pos
+		heroInfo.templateid=hero.heroId
+		table.insert(redHeroList,heroInfo)
+	end
+	local monsterStr=ResTblContainer:GetPropToStr(onHookStageId,Campaign.monsterStr,Campaign.actorTbl)
+	local strs = SplitString(monsterStr,";")
+	for i=0,strs.Length-1 do
+		local subStrs = SplitString(strs[i],",")
+		local heroInfo = {}
+		heroInfo.isMonster=1
+		heroInfo.camp=1
+		heroInfo.uid=onHookStageId*10000+tonumber(subStrs[0])*1000+tonumber(subStrs[1])
+		heroInfo.pos=tonumber(subStrs[0])
+		heroInfo.templateid=tonumber(subStrs[1])
+		table.insert(blackHeroList,heroInfo)
+	end
+	MsgCenter:Broadcast(Notify_LoadSimulateBattle,{[0]=redHeroList,[1]=blackHeroList,[2]=onHookStageId})
+	--view:SetParamDataList(redHeroList,blackHeroList,onHookStageId)
+end
+
+function OnNotification_StageChanged(objs)
+	local stageItem = objs[0]
+    local onHookStageItem = objs[1]
+	local lastOnHookStageItem = objs[2]
+	--print(onHookStageItem.difficulty,lastOnHookStageItem.difficulty)
+	if onHookStageItem.difficulty~=curDifficult then
+		curDifficult=onHookStageItem.difficulty
+		self:SendCommand("SwitchDifficult",curDifficult)
+		local stageSlot = slotsData[onHookStageItem.chapter].stages[onHookStageItem.stage]
+		if stageSlot~=nil then
+			stageSlot.m_data.isOnHook=true
+			stageSlot:OnReset(stageSlot.m_data)
+		end
+		--ShowStages(stageItem,onHookStageItem)
+	else
+		RefreshStageSlot(stageItem,onHookStageItem,lastOnHookStageItem)
+	end
+	--TweenUtils.StopAllTweener()
+	ScrollToCenter(onHookStageItem)
+	if not showMap then
+		self:SendCommand("LoadSimulateBattle")
+	end
+end
+
+function OnNotification_RefreshSingleItem(objs)
+	local stageSlot = GetOnStageItem()
+	if stageSlot~=nil then
+		stageSlot:OnReset(stageSlot.m_data)
+	end
+end
+
+function GetOnStageItem()
+	for i,chapterData in ipairs(slotsData) do
+		for i,stage in ipairs(chapterData.stages) do
+			if stage.m_data.isOnStage then
+				return stage
+			end
+		end
+	end
+	return nil
+end
+
+function ScrollToCenter(onHookStageItem,onFinished)
+	local offset = 200
+	local center_y = viewport.anchoredPosition.y+offset
+	local index = curDifficult==onHookStageItem.difficulty and onHookStageItem.stage+(onHookStageItem.chapter-1)*21 or 0
+	local slot = content:GetChild(index)
+	local slot_y = content.anchoredPosition.y + slot.anchoredPosition.y + content.rect.size.y/2
+	local delta =center_y - slot_y
+	local target_y = content.anchoredPosition.y+delta
+	local max_y = (content.rect.size.y-viewport.rect.size.y)/2
+	local min_y = -max_y
+
+	if showMap and target_y>max_y then
+		target_y = max_y
+	end
+	if target_y<min_y then
+		target_y = min_y
+	end
+	CsBridge.TweenUtils.MoveToByAnchored(content,content.anchoredPosition.x,target_y,0.3,onFinished)
+end
+
+function CheckSlotVisiable(onHookStageItem)
+	scroll.vertical=showMap
+	contentSizeFitter.enabled=showMap
+	verticalLayout.enabled=showMap
+	if showMap then
+		return 
+	end
+	local offset = 200
+	local size_y = viewport.rect.size.y/2
+	local center_y = viewport.anchoredPosition.y
+	local content_y = content.anchoredPosition.y
+	for i,slotData in pairs(slotsData) do
+		local chapterSlot_y = content_y + slotData.chapter.transform.anchoredPosition.y + content.rect.size.y/2
+		slotData.chapter.gameObject:SetSelfActive((chapterSlot_y<size_y+offset and chapterSlot_y>-size_y) and slotData.chapter.gameObject.activeSelf)
+		for k,stage in pairs(slotData.stages) do
+			local stageSlot_y = content_y + stage.transform.anchoredPosition.y + content.rect.size.y/2
+			stage.gameObject:SetSelfActive((stageSlot_y<size_y+offset and stageSlot_y>-size_y) and stage.gameObject.activeSelf)
+		end
+	end
+end
+
+function OnNotification_LoadSimulateBattle(objs)
+	if showMap then
+		return 
+	end
+	local onHookStageItem=objs[0]
+	local onHookStageId = onHookStageItem.difficulty*10000+onHookStageItem.chapter*100+onHookStageItem.stage
+	LoadSimulateBattle(onHookStageId)
+
+end
+
+function RefreshStageSlot(stageItem,onHookStageItem,lastOnHookStageItem)
+	if onHookStageItem.stage==0 then
+		return
+	end
+    local stageId = stageItem.difficulty*10000+stageItem.chapter*100+stageItem.stage
+    local nextStageId = GetNextStageId(stageId) or (stageId + 1)
+	local onHookStageId = onHookStageItem.difficulty*10000+onHookStageItem.chapter*100+onHookStageItem.stage
+	local nextOnHookStageId = GetNextStageId(onHookStageId)
+	local onHookStageSlot = slotsData[onHookStageItem.chapter].stages[onHookStageItem.stage]
+	local data = onHookStageSlot.m_data
+
+	data.isOnHook=true
+	data.isNext=false
+	onHookStageSlot:OnReset(data)
+
+	--todo:
+	if nextOnHookStageId then
+		local nextOnHookStageSlot = slotsData[math.floor((nextOnHookStageId-math.floor(nextOnHookStageId/10000)*10000)/100)].stages[nextOnHookStageId%100]
+
+		local nextData = nextOnHookStageSlot.m_data
+		nextData.isNext=nextData.id%100~=1 
+		nextOnHookStageSlot:OnReset(nextData)
+	end
+
+
+	if lastOnHookStageItem.stage==0 then
+		return
+	end
+	local lastOnHookStageId = lastOnHookStageItem.difficulty*10000+lastOnHookStageItem.chapter*100+lastOnHookStageItem.stage
+	local nextLastOnHookStageId = GetNextStageId(lastOnHookStageId)
+	local lastOnHookStageSlot = slotsData[lastOnHookStageItem.chapter].stages[lastOnHookStageItem.stage]
+	local lastData = lastOnHookStageSlot.m_data
+	lastData.isOnHook=false
+	lastData.isNext=lastData.id == nextOnHookStageId and nextStageId%100~=1 and data.id<=nextStageId
+	lastOnHookStageSlot:OnReset(lastData)
+
+	if nextLastOnHookStageId then
+		local nextLastOnHookStageSlot = slotsData[math.floor((nextLastOnHookStageId-math.floor(nextLastOnHookStageId/10000)*10000)/100)].stages[nextLastOnHookStageId%100]
+		local nextLastData = nextLastOnHookStageSlot.m_data
+		nextLastData.isNext=false
+		nextLastOnHookStageSlot:OnReset(nextLastData)
+	end
+
+	local chapterSlot = slotsData[onHookStageItem.chapter].chapter
+	local chapterData = chapterSlot.m_data
+	if chapterData.state~=0 then
+		chapterData.state=0
+		chapterSlot:OnReset(chapterData)
+	end
+end
+
+
+function OnStageGridStageBtnClick(obj)
+	local data = obj.m_data
+	if data.state == 1 then 
+		local stageId = data.id
+		self:SendCommand("OpenStageDetailView",stageId)
+	end
+end
+
+function OnOnStageGridPlayerBaseClick(obj)
+	local data = obj.m_data
+	CsBridge.CacheAssetsByModule(self.Module,
+	function()
+		CsBridge.textureRender:RendererScreen(self.Module.rawImage,
+		function ()
+			local view = self:OpenView("PlayerInfoView", "PlayerInfoModel",true,true)
+			view.transform.parent:SetAsLastSibling()
+			local isLocal = false
+			local uid = data.playerBaseInfo.userId
+			local zone = data.playerBaseInfo.zone
+			view:SetParamDataList(isLocal, uid, zone)
+		end)
+	end, "PlayerInfoView","AchievementItemSlot")
+end
+
+function OnClose()
+	self:HideView("SimulateBattleView",false)
+	self:HideView("StageBottomView",false)
+	Timer:StopTicker(TICKER_NAME)
+end
+
+
+function DoExit()
+	MsgCenter:Unsubscribe(Notify_ShowMap,ShowMap)
+	MsgCenter:Unsubscribe(Notify_HideMap,HideMap)
+	Timer:StopTicker(TICKER_NAME)
+	self.Module=nil
+	bg_Sprite = nil
+	trans_Sprite = nil
+	scroll  = nil
+	stageGrid_TF = nil
+	stageGrid = nil
+	viewport = nil
+	content = nil
+	verticalLayout = nil
+	contentSizeFitter = nil
+	curDifficult = nil
+	chapterId = nil
+	slotsData = nil
+	friendCampaignInfos = nil
+
+	waiting = nil
+	isFirst = nil
+	showMap = nil
+	TICKER_NAME = nil
+end

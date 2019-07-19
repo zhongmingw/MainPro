@@ -1,0 +1,98 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-05-05 11:57:39
+
+local MazeDef = require "MazeDef"
+local MazeUtils = require "MazeUtils"
+
+local MazeItem = MazeDef.MazeItem
+local svrData
+
+local function GetBagItemDataBySvrData(itemMap)
+    local data = {}
+    for k,v in pairs(itemMap) do
+        if v ~= 0 then
+            local item = {
+                id = k,
+                count = v
+            }
+            table.insert(data, item)
+        end
+    end
+    return data
+end
+
+local function GetMazeBagData(itemMap)
+    local data = {}
+    local tbl = ResTblContainer:GetTable(MazeItem.tblName)
+    for k,v in pairs(itemMap) do
+        if v ~= 0 then
+            local item = {
+                id = k,
+                count = v,
+                name = tbl:Get(k,MazeItem.itemName),
+                icon = tbl:Get(k,MazeItem.itemIcon),
+                desp = tbl:Get(k,MazeItem.itemDescription),
+                type = tbl:GetInt(k,MazeItem.type),
+                tips = tbl:Get(k,MazeItem.useItemTips)
+            }
+            table.insert(data, item)
+        end
+    end
+    table.sort(data, function(a,b)
+        return a.id < b.id
+    end)
+    return data
+end
+
+function DoOnExit()
+    MazeDef = nil
+    MazeUtils = nil
+
+    MazeItem = nil
+    svrData = nil
+end
+
+function OnCommand_InitData(objs)
+    local data = objs[0]
+    svrData = {
+        itemMap = data.itemMap or {},
+        row = data.row or 0,
+        col = data.col or 0
+    }
+end
+
+function OnCommand_InitMazeBagData(objs)
+    local data = GetMazeBagData(svrData.itemMap)
+    self:SendNotification("RefreshMazeBagView",data)
+end
+
+function OnCommand_OpenTip(objs)
+    local item = objs[0]
+    local useFinished = function(HideView)
+        HideView()
+        local data = {
+            itemId = item.id,
+            row = -1,
+            col = -1
+        }
+        local onFinished = function(resp)
+            local NormalLevel = 1
+            MazeUtils.ShowHintBox(item.tips,NormalLevel)
+            local newData = MazeUtils.JsonDecode(resp.labyrinthResp)
+            svrData.itemMap = newData.itemMap
+            local data = GetMazeBagData(svrData.itemMap)
+            self:SendNotification("RefreshMazeBagView",data)
+            newData.row = svrData.row
+            newData.col = svrData.col
+            MsgCenter:Broadcast(Notify_UpdateMazeData,newData)
+        end
+        MazeUtils.RequestUseItem(data,onFinished)
+    end
+    local data = {
+        item = item,
+        useFinished = useFinished
+    }
+    MazeUtils.ShowMazeItemTip(self.Module,data)
+end

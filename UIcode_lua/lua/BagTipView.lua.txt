@@ -1,0 +1,219 @@
+local data
+local DirtyFun
+
+local img_icon
+local img_quality
+local txt_name
+local txt_type--装备类型或物品说明
+local txt_order
+local go_debrisFlag
+local go_noSellFlag
+local txt_des
+
+local attrArr={}
+local suitArr={}
+local txt_suitName
+
+local starListObj
+local starArr={}
+local star_6
+local star_7
+
+local img_race
+
+local go_Btns
+local go_SellBtn
+local go_ComposeBtn
+local go_JumpBtn
+local go_UseBtn
+
+function DoInit()
+	for i = 1, 4 do
+		local attr = self.transform:Find("Content/BigBG/attr"..i):GetComponent(CLS_TEXT)
+		table.insert(attrArr, attr)
+	end
+	for i = 1, 6 do
+		local suit = self.transform:Find("Content/BigBG/suit"..i):GetComponent(CLS_TEXT)
+		table.insert(suitArr,suit)
+	end
+	txt_suitName = self.transform:Find("Content/BigBG/suitName"):GetComponent(CLS_TEXT)
+
+	img_icon = self.transform:Find("Content/normal/item/iconImg"):GetComponent("UnityEngine.UI.Image")
+	img_quality = self.transform:Find("Content/normal/item/qualityImg"):GetComponent("UnityEngine.UI.Image")
+	txt_type = self.transform:Find("Content/normal/equipType"):GetComponent(CLS_TEXT)
+	txt_order = self.transform:Find("Content/normal/item/order"):GetComponent(CLS_TEXT)
+	txt_name = self.transform:Find("Content/normal/equipName"):GetComponent(CLS_TEXT)
+	go_debrisFlag = self.transform:Find("Content/normal/item/debrisFlag").gameObject
+
+	go_noSellFlag = self.transform:Find("Content/normal/noSell").gameObject
+	txt_des = self.transform:Find("Content/BigBG/des"):GetComponent(CLS_TEXT)
+
+	go_Btns = self.transform:Find("Content/BigBG/Btns").gameObject
+	go_SellBtn = go_Btns.transform:Find("SellBtn").gameObject
+	go_ComposeBtn = go_Btns.transform:Find("ComposeBtn").gameObject
+	go_JumpBtn = go_Btns.transform:Find("JumpBtn").gameObject
+	go_UseBtn = go_Btns.transform:Find("UseBtn").gameObject
+
+	starListObj = self.transform:Find("Content/normal/item/Stars/starList").gameObject
+	star_6 = self.transform:Find("Content/normal/item/Stars/star6").gameObject
+	star_7 = self.transform:Find("Content/normal/item/Stars/star7").gameObject
+	for i = 1, 5 do
+		local obj = starListObj.transform:Find("star"..i).gameObject
+		table.insert(starArr, obj)
+	end
+
+	img_race = self.transform:Find("Content/normal/item/race"):GetComponent("UnityEngine.UI.Image")
+end
+
+function SetParamDataList(obj)
+	data=obj[0]
+	DirtyFun=obj[1]
+	OnReset()
+end
+
+function OnReset()
+	ShowBaseInfo() 	--基础信息
+	ShowContent()	--主要内容
+	ShowBtns()		--按钮
+end
+
+function ShowBaseInfo()
+	SetIconByItemId(img_icon.gameObject,data.itemId)
+	SetQualityByItemId(img_quality.gameObject,data.itemId)
+
+	SetItemSpecial(txt_order,go_debrisFlag,data.itemId)
+	SetItemSummary(txt_type,data.itemId)
+	SetItemColorName(txt_name,data.itemId)
+	SetDebrisInfo(img_race,starListObj,starArr,star_6,star_7,data.itemId,110)
+end
+
+function ShowContent()
+	local bagType = ResTblContainer:GetPropToInt(data.itemId,ItemBase.category,ItemBase.actorTbl)
+	if(bagType==1)then--装备
+		ShowEquipAttrObj(txt_des,attrArr,txt_suitName,suitArr,true)
+		--装备内容
+		SetEquipAttr(attrArr,data.itemId)--装备动态属性
+		SetSuitAttr(txt_suitName,suitArr,nil,data.itemId)--套装属性，这里默认全灰色
+	else
+		ShowEquipAttrObj(txt_des,attrArr,txt_suitName,suitArr,false)
+	end
+	--物品描述内容
+	local desp = ResTblContainer:GetPropToStr(data.itemId,ItemBase.desp,ItemBase.actorTbl)
+	txt_des.text=tostring(desp)
+end
+
+function ShowBtns()
+	local btnCount=0
+	go_SellBtn:SetActive(false)
+	go_JumpBtn:SetActive(false)
+	go_ComposeBtn:SetActive(false)
+	go_UseBtn:SetActive(false)
+
+	local isSell = ResTblContainer:GetPropToInt(data.itemId,ItemBase.sellable,ItemBase.actorTbl)
+	if(isSell==0)then
+		go_noSellFlag:SetActive(true)
+	else
+		go_noSellFlag:SetActive(false)
+
+		go_SellBtn:SetActive(true)
+		btnCount=btnCount+1
+	end
+
+	--物品类型
+	local itemType = ResTblContainer:GetPropToInt(data.itemId,ItemBase.type,ItemBase.actorTbl)
+	if(itemType==2)then--道具
+		go_JumpBtn:SetActive(true)
+		btnCount=btnCount+1
+	elseif(itemType==3)then--英雄碎片
+		local val=ResTblContainer:GetPropToInt(data.itemId,PiecesComposition.count,PiecesComposition.actorTbl)
+		if(data.count>=val)then--至少能合成一个才行合成按钮
+			go_ComposeBtn:SetActive(true)
+			btnCount=btnCount+1
+		end
+	elseif(itemType==4)then--宝箱
+		go_UseBtn:SetActive(true)
+		btnCount=btnCount+1
+	end
+
+	--至少有一个按钮才显示按钮区域
+	if(btnCount>=1)then
+		go_Btns:SetActive(true)
+	else
+		go_Btns:SetActive(false)
+	end
+end
+
+function OnSellBtnClick(sender)
+	local view=CsBridge.OpenView("SellItemView","SellItemModel",false,true)
+	view:SetParamDataList(data,DirtyFun,true)
+end
+function OnUseBtnClick(sender)
+	local view=CsBridge.OpenView("SellItemView","SellItemModel",false,true)
+	view:SetParamDataList(data,DirtyFun,false)
+end
+function OnComposeBtnClick(sender)
+	local view=CsBridge.OpenView("SellItemView","SellItemModel",false,true)
+	view:SetParamDataList(data,DirtyFun,false)
+end
+
+function OnCloseBtnClick(sender)
+	self:HideView(self.gameObject.name)
+end
+
+--跳转按钮
+function OnJumpBtnClick(sender)
+	local systemId = ResTblContainer:GetPropToInt(data.itemId,ItemBase.systemId,ItemBase.actorTbl)
+	if(systemId==0)then
+		return 
+	end
+	--是否达到开发等级
+	if not UIOpen(systemId) then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("1034"))	
+		return 
+	end
+	--具体跳转流程
+	if(systemId==5)then--抽将
+		self:ShowModule("LotteryModule",nil,true)
+	elseif(systemId==9)then--金币挑战本
+		 self:ShowModule("ChallengeModule",{true,"ChallengeLevelView","ChallengeModel","ChallengeUpdateView",1},true)
+	elseif(systemId==10)then--战魂挑战本
+		self:ShowModule("ChallengeModule",{true,"ChallengeLevelView","ChallengeModel","ChallengeUpdateView",2},true)
+	elseif(systemId==11)then--碎片挑战本
+		self:ShowModule("ChallengeModule",{true,"ChallengeLevelView","ChallengeModel","ChallengeUpdateView",3},true)
+	elseif(systemId==18)then--竞技场
+		self:ShowModule("APArenaModule",nil,true)
+	elseif(systemId==13)then--挂机任务
+		self:ShowModule("AutoTaskModule",nil,true)
+	elseif(systemId==16)then--通天塔
+		self:ShowModule("SkyscraperModule",nil,true)
+	end
+   
+
+	OnCloseBtnClick(nil)
+end
+
+function DoExit()
+	data = nil
+	DirtyFun = nil
+	img_icon = nil
+	img_quality = nil
+	txt_name = nil
+	txt_type = nil
+	txt_order = nil
+	go_debrisFlag = nil
+	go_noSellFlag = nil
+	txt_des = nil
+	attrArr = nil
+	suitArr = nil
+	txt_suitName = nil
+	starListObj = nil
+	starArr = nil
+	star_6 = nil
+	star_7 = nil
+	img_race = nil
+	go_Btns = nil
+	go_SellBtn = nil
+	go_ComposeBtn = nil
+	go_JumpBtn = nil
+	go_UseBtn = nil
+end

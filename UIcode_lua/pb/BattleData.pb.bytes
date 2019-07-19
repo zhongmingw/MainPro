@@ -1,0 +1,150 @@
+
+ã
+BattleData.proto
+BattleDatastage.protoplayerData.proto"È
+
+BattleInfo%
+redHeroList (2.BattleData.Hero'
+blackHeroList (2.BattleData.Hero
+maxRound (6
+startBattleEffected (2.BattleData.SoldierStatus%
+rounds (2.BattleData.RoundInfo
+	redAuraId (
+blackAuraId (
+result (0
+battleEndInfo	 (2.BattleData.BattleEndInfo
+sceneId
+ ("ç
+Hero
+camp (
+pos (
+uid (
+
+templateid (
+name (	
+maxHp (
+maxAnger (
+
+startAnger (
+grade	 (
+level
+ (
+heroUID (
+	isMonster (
+startHp (
+distillationStar (
+distillationLevel (
+	skillStar (
+
+skillLevel (
+gloryRoadPassiveSkill (
+
+breakLevel ("µ
+	RoundInfo
+roundid (+
+actionInfos (2.BattleData.ActionInfo5
+startRoundEffected (2.BattleData.SoldierStatus3
+endRoundEffected (2.BattleData.SoldierStatus"°
+
+ActionInfo5
+startActionEffects (2.BattleData.SoldierStatus3
+endActionEffects (2.BattleData.SoldierStatus6
+attackActionEffects (2.BattleData.SoldierStatus"Å
+SoldierStatus
+uid (
+	targetPos (
+
+dataChange (
+curHp (
+curAnger (
+
+attackType (
+attackSkillId (
+
+defendType (
+defendSkillId	 (&
+hurtInfoList
+ (2.BattleData.Hurt.
+stateInfoList (2.BattleData.StateStatus
+isRevive (
+maxHp (
+beKilled ("6
+Hurt
+hurtType (
+hurtNum (
+uid ("p
+StateStatus
+
+templateid (
+uid (
+
+statusType (,
+statusValue (2.BattleData.StatusValue"*
+StatusValue
+type (
+value ("Ê
+BattleEndInfo
+result ($
+	dropItems (2.stage.RewardItem
+type (0
+apArenaResult (2.BattleData.APArenaResult8
+targetPlayerBaseInfo (2.playerData.PlayerBaseInfo)
+upLevelRewards (2.stage.RewardItem
+hurt ('
+randomReward (2.stage.RewardItem6
+selfPlayerBaseInfo	 (2.playerData.PlayerBaseInfo
+score
+ (D
+multipleTeamArenaResult (2#.BattleData.MultipleTeamArenaResult
+pass (
+uuid (	"I
+APArenaResult
+redScore (
+
+blackScore (
+
+deltaScore ("`
+TestBattleReq$
+heroIds (2.stage.FormationPos
+diff (
+chapter (
+
+id ("L
+BattleInfosResp
+type (+
+battleInfos (2.BattleData.BattleInfo"u
+MultipleTeamArenaResult
+redScore (
+
+blackScore (
+
+deltaScore (
+redWin (
+blackWin (":
+LikeCommentReq
+uuid (	
+time (
+like ("!
+LikeCommentResp
+result (",
+
+CommentReq
+uuid (	
+comments (	"
+CommentResp
+result ("F
+CheckCommentsReq
+uuid (	
+
+beginIndex (
+endIndex ("T
+CheckCommentsResp+
+comments (2.BattleData.NormalComment
+
+totalCount ("]
+NormalComment
+time (
+nick (	
+content (	
+like (
+	likeCount (

@@ -1,0 +1,21 @@
+function DoInit()
+
+end
+
+function AssetNames(objs)
+	local arr={"GiftActivityView","activityItemSlot","ItemSlot"}
+	return arr
+end
+
+function OnEnter(objs,onFinished)
+	local view = self:OpenView("GiftActivityView","ActivityModel")
+
+	if objs and objs.Length > 0 then
+		local activityType = objs[0]
+		view:SetParamDataList(activityType) 
+	end 
+
+	if(onFinished ~= nil)then
+		onFinished()  
+	end
+end

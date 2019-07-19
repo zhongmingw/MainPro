@@ -1,0 +1,107 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-06-19 17:06:29
+]]
+
+local yield_return = (require 'cs_coroutine').yield_return
+local QueueAction = class("QueueAction")
+
+local function ExcuteAction(self, action)
+    local function exit()
+        if self.curIdx == self.allIdx then
+            self.isStart = false
+            self:Reset()
+        else
+            self:Next()
+        end
+    end
+    if action then action(exit) end
+end
+
+function QueueAction:Ctor()
+    return self:Reset()
+end
+
+function QueueAction:Add(action)
+    if self.isStart then
+        print("actions has start excute......")
+        return self
+    end
+    table.insert(self.actionList,action)
+    self.allIdx = self.allIdx + 1
+    return self
+end
+
+function QueueAction:Start()
+    if self.isStart then
+        print("actions has start excute......")
+        return self
+    end
+    self.isStart = true
+    self.curIdx = 1
+    local action = self.actionList[self.curIdx]
+    ExcuteAction(self,action)
+    return self
+end
+
+function QueueAction:Condition(condition)
+    local function conditionAction(exit)
+        local co = coroutine.create(function()
+            local cond = true
+            if condition ~= nil then
+                cond = condition()
+            end
+            while not cond do
+                yield_return(1)
+                if condition ~= nil then
+                    cond = condition()
+                end
+            end
+            exit()
+        end)
+        assert(coroutine.resume(co))
+    end
+    self:Add(conditionAction)
+    return self
+end
+
+function QueueAction:Next()
+    if not self.isStart then
+        return
+    end
+    self.curIdx = self.curIdx + 1
+    local action = self.actionList[self.curIdx]
+    ExcuteAction(self,action)
+    return self
+end
+
+function QueueAction:Reset()
+    if self.isStart then
+        print("actions has start excute......")
+        return
+    end
+    self.actionList = {}
+    self.isStart = false
+    self.curIdx = 0
+    self.allIdx = 0
+    return self
+end
+
+function QueueAction:HaveNext()
+    return (self.actionList ~= nil and self.actionList[self.curIdx] ~= nil)
+end
+
+function QueueAction:IsEmpty( )
+    return #self.actionList == 0
+end
+
+function QueueAction:Finalize()
+    self.actionList = nil
+    self.isStart = nil
+    self.curIdx = nil
+    self.allIdx = nil
+end
+
+return QueueAction

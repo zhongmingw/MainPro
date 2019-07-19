@@ -1,0 +1,323 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-07-23 17:25:12
+
+local CampRaceBg = {
+    "ui_bg10",
+    "ui_bg6",
+    "ui_bg9",
+    "ui_bg4",
+    "ui_bg7",
+    "ui_bg8"
+}
+
+local CampTitleIcon = {
+    "Image_ElementFusionView_titleImg_Extra206",
+    "Image_ElementFusionView_titleImg_Extra207",
+    "Image_ElementFusionView_titleImg_Extra208",
+    "Image_ElementFusionView_titleImg_Extra209",
+    "Image_ElementFusionView_titleImg_Extra210",
+    "Image_ElementFusionView_titleImg_Extra211"
+}
+
+local LevelUpStage = {4,7,10}
+local isChangeLevelUpStage = false
+
+--camp select
+local curRace
+
+--camp element fusion
+local curCamp
+
+--hero element fusion
+local curHero
+local curSelectElementCrystal
+local ownElementCrystalArr
+
+-----------------------------outer select----------------------
+function OnCommand_LinkUISelectCamp(objs)
+    curRace = objs[0]
+end
+
+-----------------------------red flag ------------------------------
+
+function RefreshElementFusionCampRedFlag()
+    local result = CheckHeroCanElementFusionRedFlag(true)
+    MsgCenter:Broadcast(Notify_ElementFusionCampRedFlagChanged,result.redRaceArr)
+end
+
+function RefreshElementFusionHeroRedFlag()
+    local result = CheckHeroCanElementFusionRedFlag(true)
+    local redHeros = {}
+    for i,hero in ipairs(curCamp.heroArr) do
+        if hero.flag ~= (result.redHeroArr[hero.heroId] ~= nil) then
+            hero.flag = result.redHeroArr[hero.heroId]
+            AddNoRepeatItem(redHeros,hero)
+        end
+    end
+    self:SendNotification("RefreshElementFusionHeroRedFlag",redHeros)
+end
+
+--------------------------------------------------------------------
+
+-----------------------------first view----------------------------
+function OnCommand_InitElementFusionData(objs)
+    RefreshElementFusionCampRedFlag()
+end
+
+-----------------------------camp select --------------------------
+function OnCommand_SelectCamp(objs)
+    curRace = objs[0]
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        CsBridge.OpenView("CampElementFusionView","ElementFusionModel",true,true)
+    end,"CampElementFusionView","HeroItemSlot")
+end
+
+-----------------------------camp element fusion--------------------
+function OnCommand_InitCampElementFusionData(objs)
+    UpdateCampElementFusion()
+    RefreshElementFusionHeroRedFlag()
+    self:SendNotification("RefreshCampElementFusionView",curCamp)
+end
+
+function OnCommand_SelectHero(objs)
+    if objs[0].isNotOwn then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("NotOwnHero"))
+        return
+    end
+    curHero = objs[0]
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        CsBridge.OpenView("HeroElementFusionView","ElementFusionModel",true,true)
+    end,"HeroElementFusionView")
+end
+
+function UpdateCampElementFusion()
+    curCamp = GetCampElementFusion(curRace)
+end
+
+function GetCampElementFusion(raceId)
+    local camp = {}
+    camp.id = raceId
+    camp.bg = CampRaceBg[raceId]
+    camp.fg = Language:getStr(CampTitleIcon[raceId]) --CampTitleIcon[raceId]
+    camp.heroArr = {}
+    local campInfoPb = appData:checkItem("ElementCampInfo",raceId)  
+    camp.level = campInfoPb and campInfoPb.level or 0
+    camp.exp = campInfoPb and campInfoPb.exp or 0
+    local tbl=ResTblContainer:GetTable(HeroBase.actorTbl)
+    for i,data in pairs(global_heroBaseArr) do
+        local hero = {
+            heroId = data.id
+        }
+        local isOpen = CheckHeroOpen(hero.heroId)
+        local quality = tbl:GetInt(hero.heroId, HeroBase.quality)
+        if isOpen and quality <= 5 then
+            local race = tbl:GetInt(hero.heroId, HeroBase.group)
+            if race == raceId then
+                hero.isNotOwn = campInfoPb == nil and true or CheckHeroNotOwn(hero.heroId)
+                hero.quality = quality
+                local heroInfoPb = appData:checkItem("HeroCrystalInfo",hero.heroId)
+                hero.elementLevel = heroInfoPb and heroInfoPb.level or 0
+                hero.elementExp = heroInfoPb and heroInfoPb.exp or 0
+                table.insert(camp.heroArr, hero)
+            end
+        end
+    end
+    table.sort(camp.heroArr, function(a,b)
+        if a.quality ~= b.quality then
+            return a.quality > b.quality 
+        end
+        return a.heroId < b.heroId
+    end)
+
+    local data = global_campaignArr[camp.level]
+    camp.hasMax = global_campaignArr[camp.level+1] == nil
+    camp.levelUpExp = camp.hasMax and data.exp or global_campaignArr[camp.level+1].exp
+    camp.attrs = data.attrs
+    return camp
+end
+
+--------------------hero element fusion-----------------------
+function OnCommand_InitHeroElementFusionData(objs)
+    UpdateHeroElementFusion()
+    ownElementCrystalArr = GetOwnElementCrystal(curRace)
+    self:SendNotification("RefreshHeroElementFusionView",curHero,ownElementCrystalArr)
+end
+
+function OnCommand_SelectElementCrystal(objs)
+    if curSelectElementCrystal then
+        self:SendNotification("CancelSelectElementCrystal",curSelectElementCrystal)
+    end
+    curSelectElementCrystal = objs[0]
+    self:SendNotification("SelectElementCrystal",curSelectElementCrystal)
+end
+
+function OnCommand_UseElementCrystal(objs)
+    if curHero.elementFusion.hasMax then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("HeroElementFusion_HasMax"),2)
+        return
+    end
+    local count = objs[0]
+    if not CheckPackItemEnough(curSelectElementCrystal.id,count,true) then
+        return
+    end
+    local req = {
+        heroId = curHero.heroId,
+        items = {
+            {
+                id = curSelectElementCrystal.id,
+                count = count
+            }
+        }
+    }
+    HttpRequest("useElementCrystal","UseElementCrystalReq","UseElementCrystalResp",req,function(resp)
+        if resp.result == 0 then
+            local oldLevel = curHero.elementLevel
+            UpdateCurHero()
+            local newLevel = curHero.elementLevel
+            UpdateSingleElementCrystal(curSelectElementCrystal)
+            UpdateHeroElementFusion(oldLevel)
+            self:SendNotification("ShowHeroElementFusionLevelUpEffect",curHero.elementFusion.hasMax and 0 or curHero.elementExp/curHero.elementFusion.levelUpExp,newLevel-oldLevel,curSelectElementCrystal,function()
+                self:SendNotification("RefreshHeroElementFusionView",curHero,nil)
+                self:SendNotification("UpdateSingleElementCrystal",curSelectElementCrystal)
+                if oldLevel ~= newLevel then
+                    CsBridge.CacheAssetsByModule(self.Module,function()
+                        CsBridge.OpenView("HeroElementFusionLevelUpView","ElementFusionModel",false,true)
+                    end,"HeroElementFusionLevelUpView")
+                else
+                    CheckAndShowConditionPackageView(self,GetConditionReqData(ConditionPackageType.ElementFusion,curHero.elementLevel))
+                end    
+            end)
+        end
+    end)
+end
+
+function OnCommand_InitHeroElementFusionLevelUpData(objs)
+    --curHero.elementFusion.levelAnim = isChangeLevelUpStage
+    self:SendNotification("RefreshHeroElementFusionLevelUpView",curHero)
+end
+
+function OnCommand_CheckCampLevelUp(objs)
+    if curCamp.level ~= appData:checkItem("ElementCampInfo",curRace).level then
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            CsBridge.OpenView("CampElementFusionLevelUpView","ElementFusionModel",false,true)
+        end,"CampElementFusionLevelUpView")
+    else
+        CheckAndShowConditionPackageView(self,GetConditionReqData(ConditionPackageType.ElementFusion,curHero.elementLevel))
+    end
+end
+
+function OnCommand_InitCampElementFusionLevelUpData(objs)
+    local oldAttrs = curCamp.attrs
+    UpdateCampElementFusion()
+    curCamp.oldAttrs = oldAttrs
+    self:SendNotification("RefreshCampElementFusionLevelUpView",curCamp) 
+end
+
+function OnCommand_CampElementFusionLevelUpEnd(objs)
+    CheckAndShowConditionPackageView(self,GetConditionReqData(ConditionPackageType.ElementFusion,curHero.elementLevel))
+end
+
+function OnCommand_CloseHeroElementFusion(objs)
+    curHero = nil
+    UpdateCampElementFusion()
+    RefreshElementFusionHeroRedFlag()
+    RefreshElementFusionCampRedFlag()
+    self:SendNotification("RefreshCampElementFusionView",curCamp)
+end
+
+function UpdateCurHero()
+    local newHeroInfo = appData:checkItem("HeroCrystalInfo",curHero.heroId)
+    curHero.elementLevel = newHeroInfo.level
+    curHero.elementExp = newHeroInfo.exp
+end
+
+function UpdateHeroElementFusion(oldLevel)
+    curHero.elementFusion = GetHeroElementFusion(curHero.elementLevel)
+    curHero.oldElementFusion = GetHeroElementFusion(oldLevel or curHero.elementLevel-1)
+    curHero.newElementFusion = GetHeroElementFusion(curHero.elementLevel+1)
+end
+
+function GetHeroElementFusion(elementLevel)
+    local elementFusion = {}
+    if global_elementFusionDic[elementLevel] ~= nil then
+        elementFusion.hasMax = global_elementFusionDic[elementLevel+1] == nil
+        local data = global_elementFusionDic[elementLevel]
+        elementFusion.raceId = curRace
+        elementFusion.icon = Language:getStr(data.icon)
+        elementFusion.bg = data.bg
+        elementFusion.raceBg = CampRaceBg[curRace]
+        elementFusion.levelUpExp = elementFusion.hasMax and data.exp or global_elementFusionDic[elementLevel+1].exp
+        elementFusion.attrs = data.attrs
+    end
+    return elementFusion
+end
+
+function GetOwnElementCrystal(raceId)
+    local data = global_elementCrystalDic[raceId]
+    local ownArr = {}
+    for id,crystal in pairs(data) do
+        local mat = {}
+        local itemPb = appData:checkItem("PackItem",id)
+        mat.id = id 
+        mat.count = itemPb ~= nil and itemPb.count or 0
+        mat.typeId = ItemTypeEnum.Item
+        mat.supplyExp = crystal.exp
+        table.insert(ownArr,mat)
+    end
+    table.sort(ownArr,function(a,b)
+        return a.id < b.id
+    end)
+    return ownArr
+end
+
+function UpdateSingleElementCrystal(elementCrystal)
+    local itemPb = appData:checkItem("PackItem",elementCrystal.id)
+    elementCrystal.count = itemPb ~= nil and itemPb.count or 0
+end
+
+function CheckLevelUpStage(oldLevel,newLevel)
+    return GetLevelUpStage(oldLevel) ~= GetLevelUpStage(newLevel)
+end
+
+function GetLevelUpStage(level)
+    for i,v in ipairs(LevelUpStage) do
+        if level < v then
+            return i
+        end
+    end
+    return -1
+end
+
+---------------------hero element fusion info----------------------
+function OnCommand_InitHeroElementFusionInfoData(objs)
+    self:SendNotification("RefreshHeroElementFusionInfoView",GetHeroElementFusionInfo())
+end
+
+function GetHeroElementFusionInfo()
+    local info = {}
+    info.raceId = curRace
+    info.campExpArr = {}
+    for i=1,table.count(global_elementFusionDic)-1 do
+        local data = global_elementFusionDic[i]
+        local campExp = {
+            name = data.name,
+            exp = data.campExp
+        }
+        table.insert(info.campExpArr,campExp)
+    end
+    return info
+end
+
+function DoOnExit()
+    CampRaceBg = nil
+    CampTitleIcon = nil
+    LevelUpStage = nil
+    isChangeLevelUpStage = nil
+    curRace = nil
+    curCamp = nil
+    curHero = nil
+    curSelectElementCrystal = nil
+    ownElementCrystalArr = nil
+end

@@ -1,0 +1,100 @@
+import "stage.proto";
+import "Union.proto";
+import "playerData.proto";
+
+package WorldBossData;
+
+message GetWorldBossReq
+{
+    required int32 useless = 1;
+}
+
+message GetWorldBossResp
+{
+    required WorldBoss worldBoss = 1;    
+    required int32 status = 2; //0-can challenge;1-wait next boss
+    required int64 endTime = 3;//购买价格  
+    required int32 payCount = 4;//购买次数 
+    required int64 rewardTime = 5;
+}
+
+message WorldBoss
+{
+    required int32 id = 2;
+	required int32 buff = 3;
+	required int64 curHp = 4;
+	required int64 hp = 5;
+}
+
+message ChallengeBossReq 
+{
+    repeated stage.FormationPos formationPos = 1;
+    required int32 sixManPos = 2;
+}
+
+message GetRankReq
+{
+    required int32 count = 1; //需要前多少名
+}
+
+message GetUnionScoreRankResp
+{
+    repeated Union.UnionRankItem rankItems = 1; //前N名
+    required Union.UnionRankItem myRankItem = 2; //自己公会排名
+    required int64 endTime = 3;//关闭时间
+}
+
+message GetUnionMemberRankResp
+{
+    repeated Union.MemberWarRankInfo rankItems = 1; //前N名
+    required Union.MemberWarRankInfo myRankItem = 2; //自己排名
+}
+
+message GmReq
+{
+    required int64 parm = 1;
+}
+
+message GmResp
+{
+    required int32 status = 1;//0.成功;
+}
+
+message WorldBossPlayerInfo
+{
+    required int64 lastChallengeTime = 1;
+    required int32 payCount = 3;
+    required int32 dailyChallengeCount = 4;//每日挑战次数
+    required int32 dailyChallengeRecoveryCount = 5;//每日挑战恢复次数
+    required int64 dailyChallengeRecoveryTime = 6;//每日挑战次数开始恢复时间
+    required playerData.HeroItem sixMan = 7;
+	required int64 sixManCombat = 8;
+    required int64 sixManCount = 9;//邀请次数
+    required int32 sixManPos = 10;
+}
+
+//@url:sixManList
+message SixManListReq 
+{
+    repeated stage.FormationPos formationPos = 1;
+    required int32 sixManPos = 2;
+}
+    
+message SixManListResp 
+{
+    repeated Union.UnionMemberWithCombatResp list = 1;
+}
+
+
+//@url:sixMan
+message SixManReq 
+{
+    required string zone = 1; 
+    required string userid = 2;
+    required int32 sixManPos = 3;
+}
+    
+message SixManResp 
+{
+    required int32 status = 1;  	
+}

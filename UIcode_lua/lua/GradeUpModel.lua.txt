@@ -1,0 +1,124 @@
+local utils = require "HeroBagUtils"
+local HeroAttrData = require "HeroAttrData"
+
+local curHero
+local curOpenSkill
+
+function DoInit()
+
+end
+
+function DoOnExit()
+    utils = nil
+    HeroAttrData = nil
+
+    curHero = nil
+    curOpenSkill = nil
+end
+
+function OnCommand_InitData(objs)
+    curHero = objs[0]
+end
+
+local function InitGradeTopData()
+    local playerInfo = appData:checkData("PlayerInfo")
+    self:SendNotification("RefreshGradeTopView",playerInfo.coin,playerInfo.stepStoneCoin)
+end
+
+local function InitGradeConsumeData()
+    local nextGrade = curHero.grade+1
+    local gradeCoinConsume = ResTblContainer:GetPropToInt(nextGrade,HeroEvelution.coin,HeroEvelution.actorTbl)
+    local gradeStepStoneCoinConsume = ResTblContainer:GetPropToInt(nextGrade,HeroEvelution.stepStoneCoin,HeroEvelution.actorTbl)
+    self:SendNotification("RefreshGradeConsumeView",gradeCoinConsume,gradeStepStoneCoinConsume)
+end
+
+local function InitGradeAttrData()
+    local curAttrArr = {}
+
+    local attrName = Language:getStr("levelMaxStr")..":"
+    local curAttr = GetHeroAllMaxLevel(curHero.grade,curHero.distillationStar,curHero.quality)
+    local nextAttr = GetHeroAllMaxLevel(curHero.grade+1,curHero.distillationStar,curHero.quality)
+    table.insert(curAttrArr,{name = attrName,curValue = curAttr, nextValue = nextAttr})
+
+    local attrs = HeroAttrData.GetHeroAttrsByHero(curHero, true)
+    local nextCurHero = table.copy(curHero)
+    nextCurHero.grade = nextCurHero.grade+1
+    nextCurHero.level = 1
+    local nextAttrs = HeroAttrData.GetHeroAttrsByHero(nextCurHero)
+
+    attrName = attrs[HeroAttrEnum.HP].name..":"
+    curAttr = attrs[HeroAttrEnum.HP].val
+    nextAttr = nextAttrs[HeroAttrEnum.HP].val
+    table.insert(curAttrArr,{name = attrName,curValue = curAttr, nextValue = nextAttr})
+
+    attrName = attrs[HeroAttrEnum.ATK].name..":"
+    curAttr = attrs[HeroAttrEnum.ATK].val
+    nextAttr = nextAttrs[HeroAttrEnum.ATK].val
+    table.insert(curAttrArr,{name = attrName,curValue = curAttr, nextValue = nextAttr})
+
+    attrName = attrs[HeroAttrEnum.DEF].name..":"
+    curAttr = attrs[HeroAttrEnum.DEF].val
+    nextAttr = nextAttrs[HeroAttrEnum.DEF].val
+    table.insert(curAttrArr,{name = attrName,curValue = curAttr, nextValue = nextAttr})
+
+    attrName = attrs[HeroAttrEnum.SPEED].name..":"
+    curAttr = attrs[HeroAttrEnum.SPEED].val
+    nextAttr = nextAttrs[HeroAttrEnum.SPEED].val
+    table.insert(curAttrArr,{name = attrName,curValue = curAttr, nextValue = nextAttr})
+
+    return curAttrArr
+end
+
+local function InitGradeSkillData()
+    curOpenSkill = nil
+    for i,skill in ipairs(curHero.skill) do
+        if skill.isPassive then
+            if skill.openGrade == curHero.grade+1 then
+                curOpenSkill = skill
+            end
+        end
+    end
+    self:SendNotification("RefreshOpenSkill",curOpenSkill)
+end
+
+local function HeroGradeUp()
+    if utils.CheckGradeUpConditionPkg(self, curHero) then
+        local req = {
+            uid = curHero.uid
+        }
+        HttpRequest("upgradeHeroGrade", "HeroGradeUpReq", "HeroGradeUpResp", req, function(resp)
+            if resp.status == 0 then
+                CsBridge.CacheAssetsByModule(self.Module,function()
+                    self:SendNotification("CloseGradeUpView")
+                    local view = self:OpenView("HeroGradeUpView","GradeUpModel")
+                    MsgCenter:Broadcast(Notify_UpdateCurHero)
+                    MsgCenter:Broadcast(Notify_HeroGradeUp)
+                    MsgCenter:Broadcast(Notify_UpdatehHeroShowView_TopRes,{false,true})
+                    MsgCenter:Broadcast(Notify_UpdateHeroInfoRedTip)
+                    CsBridge.audioManager:PlayUI("advance")
+                end, "HeroGradeUpView")
+            end
+        end)
+    end
+end
+
+function OnCommand_InitGradeUpShowData(objs)
+    local data = InitGradeAttrData()
+    self:SendNotification("RefreshGradeUpShow",data)
+end
+
+function OnCommand_InitGradeUpData(objs)
+    InitGradeTopData()
+    InitGradeConsumeData()
+    local data = InitGradeAttrData()
+    self:SendNotification("RefreshAttr",data)
+    InitGradeSkillData()
+end
+
+function OnCommand_InitGradeOpenSkillTip(objs)
+    utils.OpenSkillTipView(self, curOpenSkill)
+end
+
+function OnCommand_HeroGradeUp(objs)
+    HeroGradeUp()
+end

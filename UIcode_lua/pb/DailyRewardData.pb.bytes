@@ -1,0 +1,24 @@
+
+²
+DailyRewardData.protoDailyRewardDatastage.proto"c
+DailyRewardInfo
+round (
+takenIds (
+maxAvaliableId (
+lastRefreshTime ("#
+RefreshDailyRewardReq
+
+id ("(
+RefreshDailyRewardResp
+result (" 
+TakeDailyRewardReq
+
+id ("=
+TakeDailyRewardResp&
+rewardItems (2.stage.RewardItem"7
+GMResetDailyRewardRoundReq
+round (
+
+id ("-
+GMResetDailyRewardRoundResp
+result (

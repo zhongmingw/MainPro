@@ -1,0 +1,21 @@
+--[[
+	file: WeeklyTaskModule.lua
+	author: hangang
+	description:Weekly task context
+]]
+
+function AssetNames(objs)
+	local arr={
+		"WeeklyActivityView",
+        "WeeklyTaskItemSlot",
+	}
+	return arr
+end
+
+function OnEnter(objs,onFinished)
+	self:OpenView("WeeklyActivityView", "WeeklyActivityModel", true, true)
+
+	if onFinished then
+		onFinished()
+	end
+end

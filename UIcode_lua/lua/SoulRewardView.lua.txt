@@ -1,0 +1,82 @@
+require "APArenaRewardItemSlot"
+require "RewardItemSlot"
+require "SoulReachRewardItemSlot"
+
+local rewardGroup
+
+function DoInit()
+	self.Shadow = 1
+end 
+
+function InitUI()
+	rewardGroup = self:GetComponentAtPath("Center/RewardGroup",CLS_TOGGLE_GROUP_ARCHLY)
+
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+	end 
+    self:SendCommand("InitSoulRewardData")
+end 
+
+function OnNotification_InitSoulRewardData(objs)
+	rewardGroup:SetAllTogglesOff()
+    rewardGroup:SetToggleOn(0)
+end
+
+function OnRewardGroupClick(isOn,index)
+    if not isOn then
+        return 
+	end
+	if index == 0 then
+		CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			CsBridge.OpenView("SoulDailyRewardView","SoulPalaceModel",false,false)
+		end, "SoulDailyRewardView","APArenaRewardItemSlot")
+	else
+		self:HideView("SoulDailyRewardView",false)
+	end
+	if index == 1 then
+		CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			CsBridge.OpenView("SoulSeasonRewardView","SoulPalaceModel",false,false)
+		end, "SoulSeasonRewardView","APArenaRewardItemSlot")
+	else
+		self:HideView("SoulSeasonRewardView",false)
+	end
+	if index == 2 then
+		CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			CsBridge.OpenView("SoulReachRewardView","SoulPalaceModel",false,false)
+		end, "SoulReachRewardView","SoulReachRewardItemSlot")
+	else
+		self:HideView("SoulReachRewardView",false)
+	end
+end
+
+
+function CloseView()
+	self:HideView("SoulDailyRewardView",false)
+	self:HideView("SoulSeasonRewardView",false)
+	self:HideView("SoulReachRewardView",false)
+	self:HideView(self.gameObject.name)
+end
+
+function OnClose()
+
+end
+
+function OnCloseBtnClick(sender)
+	CloseView()
+end
+
+function OnMaskClick(sender)
+	CloseView()
+end
+
+function DoExit()
+	self.Module=nil
+	rewardGroup = nil
+end

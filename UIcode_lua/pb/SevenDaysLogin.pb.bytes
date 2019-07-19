@@ -1,0 +1,18 @@
+
+¢
+SevenDaysLogin.protoSevenDaysLoginstage.proto"%
+SevenLoginActivityReq
+acId ("t
+SevenLoginActivityResp?
+sevenLoginRewards (2$.SevenDaysLogin.SevenLoginRewardInfo
+day (
+days ("l
+SevenLoginRewardInfo
+day (&
+rewardItems (2.stage.RewardItem
+icon (	
+	backgroud (	""
+SevenLoginRewardReq
+day (">
+SevenLoginRewardResp&
+rewardItems (2.stage.RewardItem

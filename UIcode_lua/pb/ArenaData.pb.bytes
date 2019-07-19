@@ -1,0 +1,116 @@
+
+¢
+ArenaData.proto	ArenaDatastage.protoplayerData.protoBattleData.proto"t
+ArenaBasicInfo
+type (
+remains (
+lastRenewTime (
+extraRemains (
+hisHighestRank ("(
+GetAPArenaDefBattleInfoReq
+
+id ("o
+ChallengeInAPArenaReq
+zone (	
+userId (	
+robot ()
+formationPos (2.stage.FormationPos""
+GetAPArenaRankReq
+count ("ˆ
+GetAPArenaRankResp+
+	rankInfos (2.ArenaData.ArenaRankItem.
+selfRankInfo (2.ArenaData.ArenaRankItem
+seasonEndTime ("Ÿ
+ArenaRankItem2
+playerBaseInfo (2.playerData.PlayerBaseInfo
+score (
+rank (
+combat (-
+	formation (2.ArenaData.FormationPosAdv"Ò
+FormationPosAdv)
+formationPos (2.stage.FormationPos
+	heroGrade (
+	heroLevel (
+distillationStar (
+distillationLevel (
+	skillStar (
+
+skillLevel (
+
+breakLevel ("$
+GetAPArenaDefRecordReq
+
+id ("C
+GetAPArenaDefRecordResp(
+
+defRecords (2.ArenaData.DefRecord"z
+	DefRecord
+
+id (2
+playerBaseInfo (2.playerData.PlayerBaseInfo
+time (
+win (
+
+deltaScore (""
+GetAPArenaTargetsReq
+
+id ("Y
+GetAPArenaTargetsResp)
+targets (2.ArenaData.APArenaTarget
+seasonEndTime ("q
+APArenaTarget2
+playerBaseInfo (2.playerData.PlayerBaseInfo
+robot (
+score (
+combat ("_
+$UpdateMultipleTeamSingleFormationReq
+type ()
+formationPos (2.stage.FormationPos"7
+%UpdateMultipleTeamSingleFormationResp
+result ("•
+UpdateMultipleTeamFormationReq%
+formation_1 (2.stage.Formation%
+formation_2 (2.stage.Formation%
+formation_3 (2.stage.Formation"1
+UpdateMultipleTeamFormationResp
+result (",
+GetMulTeamArenaTargetsReq
+useless ("b
+GetMulTeamArenaTargetsResp3
+targets (2".ArenaData.MultipleTeamArenaTarget
+useless ("{
+MultipleTeamArenaTarget2
+playerBaseInfo (2.playerData.PlayerBaseInfo
+robot (
+score (
+combat ("¾
+ChallengeInMulTeamArenaReq
+userId (	
+robot (%
+formation_1 (2.stage.Formation%
+formation_2 (2.stage.Formation%
+formation_3 (2.stage.Formation
+zone (	"'
+GetMulTeamArenaRankReq
+count ("¥
+GetMulTeamArenaRankResp7
+	rankInfos (2$.ArenaData.MultipleTeamArenaRankItem:
+selfRankInfo (2$.ArenaData.MultipleTeamArenaRankItem
+seasonEndTime ("˜
+MultipleTeamArenaRankItem2
+playerBaseInfo (2.playerData.PlayerBaseInfo
+score (
+rank (
+combat (2
+formationPos_1 (2.ArenaData.FormationPosAdv2
+formationPos_2 (2.ArenaData.FormationPosAdv2
+formationPos_3 (2.ArenaData.FormationPosAdv")
+GetMulTeamArenaDefRecordReq
+
+id ("H
+GetMulTeamArenaDefRecordResp(
+
+defRecords (2.ArenaData.DefRecord"-
+GetMulTeamArenaDefBattleInfoReq
+
+id (

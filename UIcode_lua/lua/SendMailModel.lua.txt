@@ -1,0 +1,20 @@
+
+
+function DoInit()
+end
+
+function InitProperties()
+end
+
+function OnCommand_SendMail(objs)
+    local req={}
+    req.reveiver=objs[0]
+    req.content=objs[1]
+    HttpRequest("sendMail", "SendMailReq", "SendMailResp", req,OnSendMail)
+end
+
+function OnSendMail(resp)
+    if resp~= nil then  
+        self:SendNotification("SendMail",resp)
+    end
+end

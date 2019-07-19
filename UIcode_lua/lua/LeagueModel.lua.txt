@@ -1,0 +1,1455 @@
+--[[
+	file: LeagueModel.lua
+	author: hangang
+	description: League logics
+]]
+
+require "LeagueUtils"
+
+local TICKER_LEAGUE = "League_Ticker"
+local RIBBON_IDX_MAX = 3
+local ICON_NAME_RIBBON = "new_com_paiming"
+
+--enums and configs
+local InstructionIDs = 
+{
+	["LeagueKnockoutView"] = 41,
+	["LeagueFinalMatchView"] = 41,
+	["LeagueSignupView"] = 41,
+	["LeagueAuditionView"] = 41,
+}
+
+local ChildViewIdx =
+{
+	KnockoutView = 1,
+	FinalView = 2,
+	RewardView = 3,
+	ChampionView = 4,
+	SignUpView = 5,
+	AuditionView = 6,
+}
+
+--fields
+local cachedLeagueData = 
+{
+	matchList = nil,
+	currentRound = 1,
+	finished = true,
+	roundCount = 4,
+	state = LeagueState.Finished,
+	signUpEndTime = 0,
+	seasonEndTime = 0,
+}
+local cachedOwnPlayerInfo, cachedChampionPlayerCard
+local currentMatch, childViewIdx
+
+------initialization-----------------------------------------------------------------------
+function DoInit()
+	cachedOwnPlayerInfo = appData:checkData("PlayerInfo")
+	MsgCenter:Subscribe(Notify_OnBattleEnd, RefreshActivatedView)
+end
+
+function DoOnExit()
+	self.Module = nil
+	MsgCenter:Unsubscribe(Notify_OnBattleEnd, RefreshActivatedView)
+	Timer:StopTicker(TICKER_LEAGUE)
+	TICKER_LEAGUE = nil
+	RIBBON_IDX_MAX = nil
+	ICON_NAME_RIBBON  = nil
+	InstructionIDs  = nil
+
+	ChildViewIdx = nil
+	cachedLeagueData  = nil
+	cachedOwnPlayerInfo = nil
+	cachedChampionPlayerCard = nil
+	currentMatch = nil 
+	childViewIdx = nil
+end
+
+------Updating------------------------------------------------------------------------------
+function Updating()
+	if cachedLeagueData.state ~= LeagueState.Finished then
+		local now = CsBridge.timeManager.ServerTime
+		local endTime = now * 2;
+		local onLooping = UpdateLeagueState
+		local onFinished = nil
+		local interval = 0.5
+		Timer:AddTicker(TICKER_LEAGUE, endTime, onLooping, onFinished, interval)
+	end
+end
+
+function UpdateLeagueState()
+	local now = CsBridge.timeManager.ServerTime
+	local currentState = cachedLeagueData.state
+	local newState = CaculateLeagueState(cachedLeagueData.signUpEndTime, cachedLeagueData.seasonEndTime)
+	if newState ~= currentState then	--Switch league state
+		cachedLeagueData.state = newState
+		OnLeagueStateChanged(currentState, newState)
+	else															--Looping
+		if currentState == LeagueState.Preparing then
+			RefreshSignUpCD()
+		elseif currentState == LeagueState.Processing then
+			RefreshMatch()
+		end
+	end
+end
+
+function OnLeagueStateChanged(oldState, newState)
+	Timer:StopTicker(TICKER_LEAGUE)
+	FetchLeagueData(RefreshActivatedView, true)
+end
+
+function RefreshSignUpCD()
+	self:SendNotification("RefreshSignUpCD", CheckTimeRemain(cachedLeagueData.signUpEndTime))
+end
+
+function RefreshMatch()
+	local lastState
+	local stateChanged = false
+	for k, match in pairs(cachedLeagueData.matchList) do
+		if match.state ~= LeagueMatchState.Finished then
+			lastState = match.state
+			UpdateMatchState(match)
+			if not stateChanged then
+				if match.state ~= lastState then
+					stateChanged = true
+				end
+			end
+			if match.state == LeagueMatchState.Processing then
+				UpdateMatchProcess(match)
+			elseif match.state > LeagueMatchState.Processing then
+				match.process = MATCH_BATTLE_COUNT
+				match.fightProcess = MATCH_BATTLE_COUNT
+			end
+		end
+	end
+	
+	if stateChanged then
+		Timer:StopTicker(TICKER_LEAGUE)
+		FetchLeagueData(RefreshActivatedView, true)
+	else	
+		RefreshMatchCountdown()
+	end
+end
+
+function RefreshActivatedView()
+	if childViewIdx == ChildViewIdx.FinalView then
+		RefreshFinalView()
+	elseif childViewIdx == ChildViewIdx.KnockoutView then
+		RefreshKnockView()
+	elseif childViewIdx == ChildViewIdx.AuditionView then
+		RefreshAuditionView()
+	end
+end
+
+function RefreshMatchCountdown()
+	if not cachedLeagueData.finished then
+		local progress = cachedLeagueData.progress
+		if progress == LeagueMatchLevel.Knockout then
+			local viewData = GetKnockoutViewData()
+			self:SendNotification("RefreshKnockoutViewCD", viewData)
+		elseif progress == LeagueMatchLevel.Audition then
+			local viewData = GetAuditionViewData()
+			self:SendNotification("RefreshAuditionViewCD", viewData)
+		else
+			local viewData = {}
+			viewData.countdownData = GetFinalViewCountdownData()
+			viewData.nodeData = GetFinalViewNodeData()
+			self:SendNotification("RefreshFinalViewCD", viewData)
+		end
+	end
+end
+
+------Commands----------------------------------------------------------------------------------
+function OnCommand_GetMatchList(objs)
+	TryGetMatchList(ChildViewIdx.KnockoutView)
+end
+
+function OnCommand_InitLeagueMatchView(objs)
+	local onFinished = function(resp)
+		self:SendNotification("RefershLeagueMatchView", GetLeagueMatchViewData())
+	end
+	FetchLeagueData(onFinished, false)
+end
+
+function OnCommand_OnKnockoutViewPlayerClicked(objs)
+	local playerData = objs[0]
+	if not IsNilOrEmpty(playerData.userId) then
+		OpenPlayerInfoView(self, playerData, "LeagueKnockoutView")
+	end
+end
+
+function OnCommand_OnKnockoutViewMatchItemClicked(objs)
+	local itemData = objs[0]
+	OpenMatchDetailsView(itemData.roundID, itemData.turnID, "LeagueKnockoutView")
+end
+
+function OnCommand_OpenHelpView(objs)
+	local parentViewName = objs[0]
+	local instuctionID = InstructionIDs[parentViewName]
+	CsBridge.CacheAssetsByModule( self.Module,
+		function()
+			local view = CsBridge.OpenView("HelpView","LeagueModel", false, true)
+			view:SetData(instuctionID)
+		end,
+		"HelpView")
+end
+
+function OnCommand_FinalViewPlayerClicked(objs)
+	local itemName = objs[0]
+	local playerIdx = string.sub(itemName, -1, -1)
+	local turnID = math.floor((playerIdx + 1) / 2)
+	local match = GetMatch(LeagueMatchLevel.QuaterFinal, turnID)
+
+	local isRedPlayer = math.fmod(playerIdx, 2) == 1
+	local playerData = isRedPlayer
+		and match.redPlayer or match.blackPlayer
+
+	OpenPlayerInfoView(self, playerData.baseInfo, "LeagueFinalMatchView", playerData.formation)
+end
+
+function OnCommand_FinalViewWinnerClicked(objs)
+	local playerData = GetChampionData()	
+	OpenPlayerInfoView(self, playerData.baseInfo, "LeagueFinalMatchView", playerData.formation)
+end
+
+function OnCommand_FinalViewLeftPlayerClicked(objs)
+	local playerData = currentMatch.redPlayer	
+	OpenPlayerInfoView(self, playerData.baseInfo, "LeagueFinalMatchView", playerData.formation)
+end
+
+function OnCommand_FinalViewRightPlayerClicked(objs)
+	local playerData = currentMatch.blackPlayer	
+	OpenPlayerInfoView(self, playerData.baseInfo, "LeagueFinalMatchView", playerData.formation)
+end
+
+function OnCommand_FinalViewReplayBtnClicked(objs)
+	OpenFinalListView()
+end
+
+function OnCommand_FinalViewDetailsBtnClick(objs)
+	OpenMatchDetailsView(currentMatch.roundID, currentMatch.turnID, "LeagueFinalMatchView")
+end
+
+function OnCommand_GetFinalListViewData(objs)
+	RefreshFinalListView()
+end
+
+function OnCommand_FinalListViewPlayerClicked(objs)
+	local playerData = objs[0]
+	OpenPlayerInfoView(self, playerData, "LeagueFinalListView", playerData.formation)
+end
+
+function OnCommand_FinalListViewMatchItemClicked(objs)
+	local itemData = objs[0]
+	local match = GetMatchByRound(itemData.roundID, itemData.turnID)
+	OpenReplayView(self, match, "LeagueFinalListView")
+end
+
+function OnCommand_FinalViewSwitch(objs)
+	local dir = objs[0]
+	local newTurnID = currentMatch.turnID + dir
+	currentMatch = GetMatchByRound(currentMatch.roundID, newTurnID)
+	RefreshFinalViewPlayer()
+end
+
+function OnCommand_OpenTipView(objs)
+	local data = objs[0]
+	local itemType = data.typeId
+	if itemType == ItemTypeEnum.Hero then
+		ShowHeroTip(self, data.id, 1, 1)
+	else
+		ShowTip(self, itemType, data.id)
+	end
+end
+
+function OnCommand_ChampionViewPlayerClick(objs)
+	OpenPlayerInfoView(self, cachedChampionPlayerCard.playerInfo, "LeagueChampionView")
+end
+
+function OnCommand_SignUpBtnClicked(objs)
+		OpenFormationView(self, DoSignUp)
+end
+
+function OnCommand_SignupViewFormationBtnClicked(objs)
+		OpenFormationView(self, UpdateFormations)
+end
+
+function OnCommand_SignupViewListBtnClicked(objs)
+	OpenAuditionListView()
+end
+
+------Logics-------
+function FetchLeagueData(onFinished, isUpdating)
+		local finishedCbk = function(resp)
+				CacheLeagueData(resp)
+				onFinished()
+				Updating()
+		end
+		FetchSchedule(finishedCbk)
+end
+
+function TryGetMatchList(childViewIdx)
+	FetchLeagueData(RefreshActivatedView, false)
+end
+
+function CacheLeagueData(svrData, isUpdating)
+	cachedLeagueData.currentRound = svrData.currentRound
+	cachedLeagueData.seasonEndTime = svrData.seasonEndTime
+	cachedLeagueData.signUpEndTime = svrData.signUpEndTime
+	cachedLeagueData.signed = svrData.signed
+	cachedLeagueData.state = CaculateLeagueState(cachedLeagueData.signUpEndTime, cachedLeagueData.seasonEndTime)
+	cachedLeagueData.finished = svrData.gameOver
+	cachedLeagueData.roundCount = svrData.totalRoundNum
+	cachedLeagueData.progress = CaculateLevel(cachedLeagueData.roundCount, cachedLeagueData.currentRound)
+	cachedLeagueData.rankingOfAuditions = svrData.rankingOfAuditions
+	
+	local matchList = {}
+	local matchDataList = svrData.matches
+	if matchDataList and #matchDataList > 0 then
+		local match
+		local prevMatchFinished = false
+		for k, matchData in pairs(matchDataList) do
+			match = CacheMatchData(matchData, prevMatchFinished)
+			table.insert(matchList, match)
+			prevMatchFinished = match.state == LeagueMatchState.Finished
+		end
+	end
+
+	if not isUpdating then
+		cachedLeagueData.matchList = matchList
+	else
+		UpdateMatchList(matchList, cachedLeagueData.matchList)
+	end
+	
+
+	if currentMatch then
+		if currentMatch.level ~= cachedLeagueData.progress then
+			currentMatch = nil
+		end
+	end
+
+	for k, match in pairs(matchList) do
+		if currentMatch then
+			if currentMatch.roundID == match.roundID 
+				and currentMatch.turnID == match.turnID 
+			then
+				currentMatch = match
+				break
+			end
+		elseif cachedLeagueData.progress > LeagueMatchLevel.Knockout then
+			if match.level == cachedLeagueData.progress then
+				currentMatch = match
+				break
+			end
+		end
+	end
+end
+
+function UpdateMatchList(sourceList, targetList)
+	for k, sourceMatch in pairs(sourceList) do
+		local roundID, turnID = sourceMatch.roundID, sourceMatch.turnID
+		for l, match in pairs(targetList) do
+			if match.roundID == roundID and match.turnID == turnID then
+				match.winner = sourceMatch.winner
+				match.winRewards = sourceMatch.winRewards
+				match.lostRewards = sourceMatch.loseRewards
+				match.state = sourceMatch.state
+				match.process = sourceMatch.process
+				match.fightProcess = sourceMatch.fightProcess
+				match.redPlayer = sourceMatch.redPlayer
+				match.blackPlayer = sourceMatch.blackPlayer
+				match.ownBetting = sourceMatch.ownBetting
+				match.redWinBattleIDs = sourceMatch.redWinBattleIDs
+				match.battleCount = sourceMatch.battleCount
+				match.blackWinBattleIDs = sourceMatch.blackWinBattleIDs
+				break
+			end
+		end
+	end
+end
+
+function CacheMatchData(matchData, prevMatchFinished)
+	match = {}
+	match.group = matchData.group
+	match.roundID = matchData.round
+	match.turnID = CaculateTurnID(match.roundID, matchData.id)
+	match.IDOnServer = matchData.id
+	match.level = CaculateLevel(cachedLeagueData.roundCount, match.roundID)
+	match.winner = matchData.redWin and LeagueMatchPlayer.RedPlayer or LeagueMatchPlayer.BlackPlayer
+	match.winRewards = matchData.winRewards
+	match.loseRewards = matchData.lostRewards
+	
+	match.time = matchData.time
+	local dateTimeStamp = match.time - GetMiniSeconds(MatchTimeConfig.BattleTime)
+	match.lineupTime = dateTimeStamp + GetMiniSeconds(MatchTimeConfig.LineupTime)
+	match.betTime = dateTimeStamp + GetMiniSeconds(MatchTimeConfig.BetTime)
+	match.settleTime = dateTimeStamp + GetMiniSeconds(MatchTimeConfig.SettleTime)
+	match.winnerHeroId = matchData.winnerHeroId
+
+	if matchData.done then
+		match.state = LeagueMatchState.Finished
+		match.process = MATCH_BATTLE_COUNT
+		match.fightProcess = MATCH_FIGHT_COUNT
+	else
+		UpdateMatchState(match)
+	
+		match.process = 0
+		if match.state == LeagueMatchState.Processing then
+			UpdateMatchProcess(match)
+		end
+	end
+
+	local redPlayer = {}
+	redPlayer.baseInfo = matchData.redPlayer or CreatEmptyPlayerInfo()
+	UpdateOwnPlayerInfo(redPlayer.baseInfo)
+	redPlayer.power = matchData.redCombat
+	redPlayer.rank = matchData.redRank
+	redPlayer.odds = matchData.redOdds
+	redPlayer.betAmount = matchData.redTotalStake
+	redPlayer.winTimes = matchData.redWinTimes or 0
+	redPlayer.betLocked = matchData.redStakeLocked
+	redPlayer.formation = {
+		[1] = matchData.redFormation1,
+		[2] = matchData.redFormation2,
+		[3] = matchData.redFormation3,
+	}
+	match.redPlayer = redPlayer
+
+	local blackPlayer = {}
+	blackPlayer.baseInfo = matchData.blackPlayer or CreatEmptyPlayerInfo()
+	UpdateOwnPlayerInfo(blackPlayer.baseInfo)
+	blackPlayer.power = matchData.blackCombat
+	blackPlayer.rank = matchData.blackRank
+	blackPlayer.odds = matchData.blackOdds
+	blackPlayer.betAmount = matchData.blackTotalStake
+	blackPlayer.winTimes = matchData.blackWinTimes or 0
+	blackPlayer.betLocked = matchData.blackStakeLocked
+	blackPlayer.formation = {
+		[1] = matchData.blackFormation1,
+		[2] = matchData.blackFormation2,
+		[3] = matchData.blackFormation3,
+	}
+	match.blackPlayer = blackPlayer
+
+	match.ownBetting = matchData.selfStakeRecord
+	if match.ownBetting then
+		match.ownBetting.bettedPlayerID = match.ownBetting.redWin 
+			and redPlayer.baseInfo.userId or blackPlayer.baseInfo.userId
+		match.ownBetting.bettedPlayerZone = match.ownBetting.redWin 
+			and redPlayer.baseInfo.zone or blackPlayer.baseInfo.zone
+	end
+
+	if match.state >= LeagueMatchState.Processing then
+		local matchIDs = matchData.redWinMatchIds or {}
+		if matchData.blackPlayer == nil then
+			matchIDs = {1, 2, 3}
+		end
+
+		local redWinBattleIDs = {}
+		for k, id in pairs(matchIDs) do
+			table.insert(redWinBattleIDs, tonumber(id))
+		end
+		match.redWinBattleIDs = redWinBattleIDs
+		match.battleCount = redPlayer.winTimes + blackPlayer.winTimes
+		local blackWinIDs = {}
+		local redWin = false
+		for idx = 1, match.battleCount do
+			redWin = false
+			for k, redID in pairs(match.redWinBattleIDs) do
+				if redID == idx then
+					redWin = true
+				end
+			end
+
+			if not redWin then
+				table.insert(blackWinIDs, idx)
+			end
+		end
+		match.blackWinBattleIDs = blackWinIDs
+	end
+	return match
+end
+
+function UpdateOwnPlayerInfo(playerInfo)
+	if playerInfo.userId == cachedOwnPlayerInfo.userId and
+		playerInfo.zone == cachedOwnPlayerInfo.zone 
+	then
+		playerInfo.name = cachedOwnPlayerInfo.nick
+		playerInfo.icon = cachedOwnPlayerInfo.icon
+		playerInfo.level = cachedOwnPlayerInfo.level
+		playerInfo.vip = cachedOwnPlayerInfo.vip
+	end
+end
+
+function CreatEmptyPlayerInfo()
+	local tbl = {}
+	tbl.userId = ""
+	tbl.name = ""
+	tbl.icon = 0
+	tbl.level = 0
+	tbl.zone = ""
+	tbl.union = ""
+	tbl.vip = 0
+	tbl.haveGroup = false
+	tbl.box = nil
+
+	return tbl
+end
+
+function GetLeagueMatchViewData()
+	local viewData = {}
+
+	local availableTabs = {}
+	local defaultTab = 1
+	local leagueState = cachedLeagueData.state
+	if leagueState == LeagueState.Preparing then
+		availableTabs = {
+			ChildViewIdx.SignUpView,
+			ChildViewIdx.AuditionView,
+			ChildViewIdx.RewardView,
+		}
+		defaultTab = ChildViewIdx.SignUpView
+	elseif leagueState == LeagueState.Finished then
+		availableTabs = {
+			ChildViewIdx.ChampionView,
+			ChildViewIdx.KnockoutView,
+			ChildViewIdx.FinalView,
+			ChildViewIdx.RewardView,
+		}
+		defaultTab = ChildViewIdx.ChampionView
+	else
+			if cachedLeagueData.progress == LeagueMatchLevel.Audition then
+				availableTabs = {
+					ChildViewIdx.SignUpView,
+					ChildViewIdx.AuditionView,
+					ChildViewIdx.RewardView,
+				}
+				defaultTab = ChildViewIdx.AuditionView
+			elseif cachedLeagueData.progress == LeagueMatchLevel.Knockout then
+				availableTabs = {
+					ChildViewIdx.KnockoutView,
+					ChildViewIdx.FinalView,
+					ChildViewIdx.RewardView,
+				}
+				defaultTab = ChildViewIdx.KnockoutView
+			else
+				availableTabs = {
+					ChildViewIdx.KnockoutView,
+					ChildViewIdx.FinalView,
+					ChildViewIdx.RewardView,
+				}
+				defaultTab = ChildViewIdx.FinalView
+			end
+	end
+	viewData.availableTabs = availableTabs
+	viewData.defaultTab = defaultTab
+
+	return viewData
+end
+
+function RefreshAuditionView()
+	if cachedLeagueData.state == LeagueState.Processing then
+		local viewData = GetAuditionViewData()
+		self:SendNotification("RefreshAuditionView", viewData)
+	else
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("Coming_Soon_Common"))
+	end
+end
+
+function RefreshKnockView()
+	local viewData = GetKnockoutViewData()
+	self:SendNotification("RefreshKnockoutView", viewData)
+end
+
+function RefreshFinalView()
+	local viewData = GetFinalViewData()
+	self:SendNotification("RefreshFinalView", viewData)
+end
+
+function GetAuditionViewData()
+	local viewData = {}
+	viewData.itemList = GetAuditionViewItemsData()
+	local currentMatch = GetCurrentAuditionMatch(cachedLeagueData.matchList)
+	viewData.countdownData = GetAuditionViewCountdownData(currentMatch)
+	return viewData
+end
+
+function GetAuditionViewItemsData()
+	local viewData = {}
+	local roundItemList = {}
+	viewData.round1ItemList = roundItemList
+	for k, match in pairs(cachedLeagueData.matchList) do
+		if match.level == LeagueMatchLevel.Audition then
+			local itemData = GetMatchItemViewData(match)
+			table.insert(roundItemList, itemData)
+		end
+	end
+
+	SortKnockItemViewData(roundItemList)	
+	return viewData
+end
+
+function GetKnockoutViewData()
+	local viewData = {}
+	viewData.itemList = GetKnockoutViewItemsData()
+	local match = GetCurrentKnockoutMatch(cachedLeagueData.matchList)
+	viewData.countdownData = GetKnockoutViewCountdownData(match)
+	return viewData
+end
+
+function GetKnockoutViewItemsData()
+	local viewData = {}
+	local round1ItemList = {}
+	local round2ItemList = {}
+	viewData.round1ItemList = round1ItemList
+	viewData.round2ItemList = round2ItemList
+	for k, match in pairs(cachedLeagueData.matchList) do
+		if match.level == LeagueMatchLevel.Knockout then
+			local itemData = GetMatchItemViewData(match)
+			if match.roundID == 1 then
+				table.insert(round1ItemList, itemData) 
+			else
+				table.insert(round1ItemList, itemData) 
+				table.insert(round2ItemList, itemData)
+			end
+		end
+	end
+
+	SortKnockItemViewData(round1ItemList)
+	SortKnockItemViewData(round2ItemList)
+	
+	return viewData
+end
+
+function SortKnockItemViewData(itemViewData)
+	local viewData = itemViewData
+	table.sort(viewData, function(a, b)
+		if a.finished and b.finished then
+			if a.roundID == b.roundID then
+				return a.turnID < b.turnID 
+			else
+				return a.roundID < b.roundID
+			end
+		elseif not a.finished and not b.finished then
+			return a.time < b.time
+		else
+			return b.finished
+		end
+	end)
+end
+
+function GetKnockoutViewCountdownData(currentMatch)
+	local countdownData = {}
+	local match = currentMatch
+	countdownData.countdownVisible = match.state < LeagueMatchState.Finished
+	local isMatchPlayer = IsMatchPlayer(match, cachedOwnPlayerInfo.userId, cachedOwnPlayerInfo.name)
+	if countdownData.countdownVisible then
+		if isMatchPlayer then
+			countdownData.countdownHeader = Language:getStr(CountdownHeaders_Player[match.state])
+		else
+			countdownData.countdownHeader = Language:getStr(CountdownHeaders_Audience[match.state])
+		end
+
+		local targetTime = CsBridge.timeManager.ServerTime
+		if match.state == LeagueMatchState.Lineup then
+			if isMatchPlayer then
+				targetTime = match.lineupTime
+			else
+				targetTime = match.betTime
+			end
+		elseif match.state == LeagueMatchState.Preparing then
+			targetTime = match.time + MATCH_DELAY
+		elseif match.state == LeagueMatchState.Processing then
+			targetTime = match.settleTime + MATCH_DELAY
+		end
+
+		countdownData.countdownText = CheckTimeRemain(targetTime, false)
+	else
+		countdownData.tipsText = Language:getStr("MatchEndedTips")
+	end
+
+	return countdownData
+end
+
+function GetAuditionViewCountdownData(currentMatch)
+	local countdownData = {}
+	local match = currentMatch
+	countdownData.countdownVisible = match.state < LeagueMatchState.Finished
+	local isMatchPlayer = IsMatchPlayer(match, cachedOwnPlayerInfo.userId, cachedOwnPlayerInfo.name)
+	if countdownData.countdownVisible then
+			if isMatchPlayer then
+				countdownData.countdownHeader = Language:getStr(CountdownHeaders_Player[match.state])
+			else
+				countdownData.countdownHeader = Language:getStr(CountdownHeaders_Audition[match.state])
+			end
+
+			local targetTime = CsBridge.timeManager.ServerTime
+			if match.state == LeagueMatchState.Lineup then
+				if isMatchPlayer then
+					targetTime = match.lineupTime
+				else
+					targetTime = match.time + MATCH_DELAY
+				end
+			elseif match.state == LeagueMatchState.Preparing then
+				targetTime = match.time + MATCH_DELAY
+			elseif match.state == LeagueMatchState.Processing then
+				targetTime = match.settleTime + MATCH_DELAY
+			end
+
+			countdownData.countdownText = CheckTimeRemain(targetTime, false)
+	else
+			countdownData.tipsText = Language:getStr("MatchEndedTips")
+	end
+
+	return countdownData
+end
+
+function GetFinalViewData()
+	local viewData = {}
+	viewData.showMask = cachedLeagueData.progress == LeagueMatchLevel.Knockout
+	if viewData.showMask then
+		return viewData
+	end
+
+	viewData.countdownData = GetFinalViewCountdownData()
+	viewData.playerData = GetFinalViewAllPlayerData()
+	viewData.leftPlayerData, viewData.rightPlayerData = GetFinalViewCurrentPlayers()
+	viewData.championData = GetChampionViewData()
+	viewData.pathsData = GetFinalPathsData()
+	viewData.nodeData = GetFinalViewNodeData()
+
+	local showPrevBtn, showNextBtn = GetFinalViewBtnData()
+	viewData.showPrevBtn = showPrevBtn
+	viewData.showNextBtn = showNextBtn
+
+	return viewData 
+end
+
+function GetFinalViewBtnData()
+	local showPrevBtn, showNextBtn = false, false
+
+	local firstTurnID, lastTurnID = 1, 1
+	local level = cachedLeagueData.progress
+	local turnID = currentMatch.turnID
+	if level < LeagueMatchLevel.Final then
+		lastTurnID = 2 ^ (LeagueMatchLevel.Final - level)
+		showPrevBtn = turnID > firstTurnID
+		showNextBtn = turnID < lastTurnID
+	end
+
+	return showPrevBtn, showNextBtn
+end
+
+function GetFinalViewCountdownData()
+	local countdownData = {}
+	local match = currentMatch
+	countdownData.countdownVisible = match.state < LeagueMatchState.Finished
+	local isMatchPlayer = IsMatchPlayer(currentMatch, cachedOwnPlayerInfo.userId, cachedOwnPlayerInfo.name)
+	if countdownData.countdownVisible then
+		if isMatchPlayer then
+			countdownData.countdownHeader = Language:getStr(CountdownHeaders_Player[match.state])
+		else
+			countdownData.countdownHeader = Language:getStr(CountdownHeaders_Audience[match.state])
+		end
+
+		local targetTime = CsBridge.timeManager.ServerTime
+		if match.state == LeagueMatchState.Lineup then
+			if isMatchPlayer then
+				targetTime = match.lineupTime
+			else
+				targetTime = match.betTime
+			end
+		elseif match.state == LeagueMatchState.Preparing then
+			targetTime = match.time + MATCH_DELAY
+		elseif match.state == LeagueMatchState.Processing then
+			targetTime = match.settleTime + MATCH_DELAY
+		end
+
+		countdownData.countdownText = CheckTimeRemain(targetTime, false)
+	else
+		countdownData.tipsText = cachedLeagueData.finished 
+			and Language:getStr("SeasonEndedTips")
+			or Language:getStr("MatchEndedTips")
+	end
+
+	return countdownData
+end
+
+function GetFinalViewAllPlayerData()
+	local itemViewDataTbl = {}
+	local playerViewData
+	for k, match in pairs(cachedLeagueData.matchList) do
+		if match.level == LeagueMatchLevel.QuaterFinal then
+			local turnID = match.turnID
+
+			local bettingData = match.ownBetting			
+			local playerData = match.redPlayer
+			playerViewData = {}
+			playerViewData.idx = (turnID - 1) * 2 + 1
+			playerViewData.enabled = true
+			playerViewData.playerName = FormatPlayerName(playerData.baseInfo)
+			if match.state == LeagueMatchState.Finished then
+				playerViewData.showMask = match.winner == LeagueMatchPlayer.BlackPlayer
+					or GetPlayerEliminated(playerData.baseInfo.userId, playerData.baseInfo.name)
+				playerViewData.resultText = match.winner == LeagueMatchPlayer.RedPlayer
+					and ResultText.Win or ResultText.Lose
+				playerViewData.resultColor = match.winner == LeagueMatchPlayer.RedPlayer
+					and ResultText.WinColor or ResultText.LoseColor
+			end
+			playerViewData.showMask = false
+			playerViewData.playerBaseInfo = playerData.baseInfo
+			playerViewData.betted = bettingData and 
+				(playerData.baseInfo.userId == bettingData.bettedPlayerID and
+				playerData.baseInfo.zone == bettingData.bettedPlayerZone)
+			table.insert(itemViewDataTbl, playerViewData)
+			
+			playerData = match.blackPlayer
+			playerViewData = {}
+			playerViewData.idx = (turnID - 1) * 2 + 2
+			playerViewData.enabled = true
+			playerViewData.playerName = FormatPlayerName(playerData.baseInfo)
+			if match.state == LeagueMatchState.Finished then
+				playerViewData.showMask = match.winner == LeagueMatchPlayer.RedPlayer
+					or GetPlayerEliminated(playerData.baseInfo.userId, playerData.baseInfo.name)
+				playerViewData.resultText = match.winner == LeagueMatchPlayer.BlackPlayer
+					and ResultText.Win or ResultText.Lose
+				playerViewData.resultColor = match.winner == LeagueMatchPlayer.BlackPlayer
+					and ResultText.WinColor or ResultText.LoseColor
+			end
+			playerViewData.showMask = false
+			playerViewData.playerBaseInfo = playerData.baseInfo
+			playerViewData.betted = bettingData and 
+				(playerData.baseInfo.userId == bettingData.bettedPlayerID
+				and playerData.baseInfo.zone == bettingData.bettedPlayerZone)
+			table.insert(itemViewDataTbl, playerViewData)
+		end
+	end
+
+	return itemViewDataTbl
+end
+
+function GetPlayerEliminated(userID, playerName)
+	if cachedLeagueData.finished then
+		local championData = GetChampionData()
+		if userID == championData.baseInfo.userId 
+			and playerName == championData.baseInfo.name
+		then
+			return false
+		else
+			return true
+		end
+	else
+		local currentRoundID = currentMatch.roundID
+		local redPlayerData, blackPlayerData
+		for k, match in pairs(cachedLeagueData.matchList) do
+			if match.roundID == currentRoundID then
+				redPlayerData = match.redPlayer.baseInfo
+				blackPlayerData = match.blackPlayer.baseInfo
+				if IsMatchPlayer(match, userID, playerName) then
+					return false
+				end
+			end
+		end
+
+		return true
+	end
+end
+
+function GetFinalViewCurrentPlayers()
+	local leftPlayerData, rightPlayerData = {}, {}
+	local bettingData = currentMatch.ownBetting		
+
+	local playerData = currentMatch.redPlayer
+	leftPlayerData.playerName = FormatPlayerName(playerData.baseInfo)
+	leftPlayerData.playerBaseInfo = playerData.baseInfo
+	leftPlayerData.betted = bettingData and 
+		(playerData.baseInfo.userId == bettingData.bettedPlayerID and
+		playerData.baseInfo.zone == bettingData.bettedPlayerZone)
+
+	playerData = currentMatch.blackPlayer
+	rightPlayerData.playerName = FormatPlayerName(playerData.baseInfo)
+	rightPlayerData.playerBaseInfo = playerData.baseInfo
+	rightPlayerData.betted = bettingData and 
+		(playerData.baseInfo.userId == bettingData.bettedPlayerID and
+		playerData.baseInfo.zone == bettingData.bettedPlayerZone)
+
+	return leftPlayerData, rightPlayerData
+end
+
+function GetChampionViewData()
+	if not cachedLeagueData.finished then
+		return nil
+	else
+		local finalMatch = GetFinalMatch()
+		local viewData = {}
+		local playerData = GetWinnerData(finalMatch)
+		viewData.playerBaseInfo = playerData.baseInfo
+		viewData.playerName = FormatPlayerName(playerData.baseInfo)
+
+		return viewData
+	end
+end
+
+function GetFinalPathsData()
+	local viewData = {}
+	for k, match in pairs(cachedLeagueData.matchList) do
+		if match.level == LeagueMatchLevel.QuaterFinal then
+			if match.state ~= LeagueMatchState.Locked then
+				local playerViewData = GetPathViewData(match, match.redPlayer)
+				if playerViewData then
+					table.insert(viewData, playerViewData)
+				end
+
+				playerViewData = GetPathViewData(match, match.blackPlayer)
+				if playerViewData then
+					table.insert(viewData, playerViewData)
+				end
+			end
+		end
+	end
+
+	return viewData
+end
+
+function GetPathViewData(match, player)
+	local viewData = {}
+
+	local userID, playerName = player.baseInfo.userId, player.baseInfo.name
+	local turnID = match.turnID
+	if match.state == LeagueMatchState.Finished then
+		local winner = match.winner == LeagueMatchPlayer.RedPlayer
+			and match.redPlayer or match.blackPlayer
+		if player == winner then
+			viewData.idx = match.winner == LeagueMatchPlayer.RedPlayer
+				and (turnID - 1) * 2 + 1 or (turnID - 1) * 2 + 2
+			local lastMatch = GetLastMatch(userID, playerName)
+			local lastMatchWinnerData = GetWinnerData(lastMatch)
+			local lastMatchWon = lastMatchWinnerData ~= nil and 
+				(lastMatchWinnerData.baseInfo.userId == userID) and 
+				(lastMatchWinnerData.baseInfo.name == playerName)
+			viewData.lastLightIdx = GetLastLightIdx(lastMatch.level, 
+				lastMatch.state == LeagueMatchState.Finished,
+				lastMatchWon)
+		else
+			return nil
+		end
+	else
+		viewData.idx = player == match.redPlayer
+			and (turnID - 1) * 2 + 1 or (turnID - 1) * 2 + 2
+		viewData.lastLightIdx = GetLastLightIdx(match.level, false)
+	end
+
+	if cachedLeagueData.finished then
+		local championData = GetChampionData()
+		if player.baseInfo.userId == championData.baseInfo.userId
+			and player.baseInfo.name == championData.baseInfo.name
+		then
+			viewData.isChampion = true
+		end
+	end
+
+	return viewData
+end
+
+function GetLastLightIdx(level, matchFinished, isWon)
+	local idx = 1
+	if level == LeagueMatchLevel.QuaterFinal then
+		idx = 1
+	elseif level == LeagueMatchLevel.SemiFinal then
+		idx = 3		
+		if matchFinished then
+			idx = isWon and idx or (idx - 1)
+		end
+	elseif level == LeagueMatchLevel.Final then
+		idx = 4
+		if matchFinished then
+			idx = isWon and idx + 1 or (idx - 1)
+		end
+	end
+
+	return idx
+end
+
+function GetFinalViewNodeData()
+	local viewData = {}
+	for k, match in pairs(cachedLeagueData.matchList) do
+		if match.level == LeagueMatchLevel.QuaterFinal 
+			or match.level == LeagueMatchLevel.SemiFinal
+		then
+			local nodeIdx = match.turnID +  
+				(match.level == LeagueMatchLevel.SemiFinal and 4 or 0)
+			local nodeData = {}
+			nodeData.idx = nodeIdx
+			nodeData.showLock = match.state < LeagueMatchState.Processing
+			nodeData.showAnim = match.state == LeagueMatchState.Processing
+			viewData[nodeIdx] = nodeData
+		end
+
+		if match.level == LeagueMatchLevel.Final then
+			local nodeIdx = 7
+			local nodeData = {}
+			nodeData.idx = nodeIdx
+			nodeData.showLock = match.state < LeagueMatchState.Processing
+			nodeData.showAnim = match.state == LeagueMatchState.Processing
+			viewData[nodeIdx] = nodeData
+		end
+	end
+	return viewData
+end
+
+function RefreshFinalListView()
+	local viewData = GetFinalListViewData()
+	self:SendNotification("RefreshFinalListView", viewData)
+end
+
+function GetFinalListViewData()
+	local viewData = {}
+	local matchList = cachedLeagueData.matchList
+	local finalMatches = {}
+	local semifinalMatches = {}
+	local quaterfinalMatches = {}
+	for k, match in pairs(matchList) do
+		if match.state > LeagueMatchState.Preparing
+			and match.level >= LeagueMatchLevel.QuaterFinal 
+		then
+			local itemViewData = GetMatchItemViewData(match)
+			if match.level == LeagueMatchLevel.QuaterFinal then
+				table.insert(quaterfinalMatches, itemViewData)
+			elseif match.level == LeagueMatchLevel.SemiFinal then
+				table.insert(semifinalMatches, itemViewData)
+			elseif match.level == LeagueMatchLevel.Final then
+				table.insert(finalMatches, itemViewData)
+			end
+		end
+	end
+
+	viewData.finalMatches = finalMatches
+	viewData.semifinalMatches = semifinalMatches
+	viewData.quaterfinalMatches = quaterfinalMatches
+	return viewData
+end
+
+function GetMatchItemViewData(match)
+	local FORMAT_STRING_TIME = "yyyy-MM-dd HH:mm:ss"
+	local itemData = {}
+	itemData.match = match
+	itemData.roundID = match.roundID
+	itemData.turnID = match.turnID
+	itemData.time = match.time
+	itemData.finished = match.state == LeagueMatchState.Finished
+	itemData.selected = IsMatchPlayer(match, cachedOwnPlayerInfo.userId, cachedOwnPlayerInfo.nick)
+
+	itemData.player1Data = match.redPlayer.baseInfo
+	itemData.player2Data = match.blackPlayer.baseInfo
+	itemData.player1Formation = match.redPlayer.formation
+	itemData.player2Formation = match.blackPlayer.formation
+	itemData.player1Name = itemData.player1Data
+		and match.redPlayer.baseInfo.name or "-"
+	itemData.player2Name = itemData.player2Data
+		and match.blackPlayer.baseInfo.name or "-"
+	itemData.player1Zone = itemData.player1Data
+		and FormatZone(match.redPlayer.baseInfo.zone) or "-"
+	itemData.player2Zone = itemData.player2Data
+		and FormatZone(match.blackPlayer.baseInfo.zone) or "-"
+	local bettingData = match.ownBetting
+	itemData.player1Data.betted = bettingData and 
+		(match.redPlayer.baseInfo.userId == bettingData.bettedPlayerID
+		and match.redPlayer.baseInfo.zone == bettingData.bettedPlayerZone)
+	itemData.player2Data.betted = bettingData and 
+		(match.blackPlayer.baseInfo.userId == bettingData.bettedPlayerID
+		and match.blackPlayer.baseInfo.zone == bettingData.bettedPlayerZone)
+
+	itemData.showMask = match.state == LeagueMatchState.Locked
+	local matchFinished = match.state == LeagueMatchState.Finished
+	itemData.showResult = matchFinished
+	if matchFinished then
+		local redWin = match.winner == LeagueMatchPlayer.RedPlayer
+		itemData.leftResultText = redWin and ResultText.Win or ResultText.Lose
+		itemData.rightResultText = redWin and ResultText.Lose or ResultText.Win
+		itemData.leftResultColor = redWin and ResultText.WinColor or ResultText.LoseColor
+		itemData.rightResultColor = redWin and ResultText.LoseColor or ResultText.WinColor
+		itemData.timeText = GLuaFormatTime(match.time, FORMAT_STRING_TIME)
+	else
+		itemData.timeText = GLuaFormatTime(match.time, FORMAT_STRING_TIME)
+	end
+	
+	return itemData
+end
+
+function RefreshFinalViewPlayer()
+	local leftPlayerData, rightPlayerData = GetFinalViewCurrentPlayers()
+	local showPrevBtn, showNextBtn = GetFinalViewBtnData()
+	local viewData = {}
+	viewData.leftPlayerData = leftPlayerData
+	viewData.rightPlayerData = rightPlayerData
+	viewData.showPrevBtn = showPrevBtn
+	viewData.showNextBtn = showNextBtn
+
+	self:SendNotification("RefreshFinalViewPlayer", viewData)
+end
+
+function RefreshRewardView()
+		local finishedCbk = function(resp)
+			local viewData = GetRewardViewData(resp)
+			self:SendNotification("RefreshRewardView", viewData)
+		end
+		FetchRewards(finishedCbk)
+end
+
+function GetRewardViewData(data)
+	local viewData = {}
+	viewData.rewardList = data.rewards
+	viewData.description = Language:getStr("FTArenaRankReward")	
+	return viewData
+end
+
+function RefreshChampionView()
+	local finishedCbk = function(resp)
+		cachedChampionPlayerCard = resp
+		local viewData = GetWinnerViewData()
+		self:SendNotification("RefreshChampionView", viewData)
+	end
+	local winner = GetChampionData()
+	local playerInfo = winner.baseInfo
+	local formationType = FormationTypeEnum.FormationType_PVP
+	FetchPlayerCard(finishedCbk, playerInfo.userId, playerInfo.zone, formationType)
+end
+
+function GetWinnerViewData()
+	local viewData = {}
+
+	local championData = cachedChampionPlayerCard
+	local baseInfo = championData.playerInfo
+	viewData.baseInfo = baseInfo
+	viewData.name = baseInfo.nick
+	viewData.ID = tostring(baseInfo.userId)
+	viewData.union = championData.union
+	viewData.zone = "S" .. tostring(baseInfo.zone)
+	viewData.power = cachedChampionPlayerCard.combat
+
+	local heroName, platformAnim = GetStrongestHeroData()
+	viewData.heroName = heroName
+	viewData.platformAnim = platformAnim
+
+	return viewData
+end
+
+function GetStrongestHeroData()
+	local finalMatch = GetFinalMatch()
+	local heroID = finalMatch.winnerHeroId
+	local heroName = ResTblContainer:GetPropToStr(heroID, HeroBase.model, HeroBase.actorTbl)
+	local group = ResTblContainer:GetPropToInt(heroID, HeroBase.group, HeroBase.actorTbl)
+	local platformAnim = GetPlatformAnim(group)
+
+	return heroName, platformAnim
+end
+
+function RefreshSignUpView()
+	local viewData = GetSignUpViewData()
+	self:SendNotification("RefreshSignUpView", viewData)
+end
+
+function GetSignUpViewData()
+	local viewData = {}	
+	viewData.signed = cachedLeagueData.signed
+	viewData.signEnded = cachedLeagueData.state ~= LeagueState.Preparing
+	viewData.rank = tostring(cachedLeagueData.rankingOfAuditions)
+	viewData.countdown = CheckTimeRemain(cachedLeagueData.signUpEndTime)
+	
+	return viewData
+end
+
+function RefreshAuditionListView()
+	local finishedCbk = function(resp)
+		local viewData = GetAuditionListViewData(resp)
+		self:SendNotification("RefreshAuditionListView", viewData)
+	end
+	FetchAuditionPlayers(finishedCbk)
+end
+
+function GetAuditionListViewData(data)
+	local itemViewData
+	local viewData = {}
+	local playerList = {}
+	local selfID, selfZone = cachedOwnPlayerInfo.userId, cachedOwnPlayerInfo.zone
+	local ownItem
+	for k, itemData in ipairs(data.seededPlayers) do
+		itemViewData = GetAuditionItemViewData(itemData)
+		itemViewData.showMask = false
+		itemViewData.isSeed = true
+		table.insert(playerList, itemViewData)
+
+		local baseInfo = itemData.playerBaseInfo
+		if baseInfo.userId == selfID and baseInfo.zone == selfZone then
+			ownItem = itemData
+		end
+	end
+
+	if data.otherPlayers then
+		local promotedRanking = 64
+		for k, itemData in ipairs(data.otherPlayers) do
+			itemViewData = GetAuditionItemViewData(itemData)
+			itemViewData.showMask = itemData.rank > promotedRanking
+			itemViewData.isSeed = false
+			table.insert(playerList, itemViewData)
+
+			local baseInfo = itemData.playerBaseInfo
+			if baseInfo.userId == selfID and baseInfo.zone == selfZone then
+				ownItem = itemData
+			end
+		end
+	end
+
+	viewData.playerList = playerList
+	viewData.ownData = ownItem and GetAuditionItemViewData(ownItem) or nil
+	return viewData
+end
+
+function GetAuditionItemViewData(itemData)
+	local itemViewData = {}
+	itemViewData.baseInfo = itemData.playerBaseInfo
+	itemViewData.name = FormatPlayerName(itemData.playerBaseInfo)
+	itemViewData.power = tostring(itemData.combat)
+	itemViewData.zone = "S" .. itemData.playerBaseInfo.zone
+	local rank = itemData.rank
+	itemViewData.rankText = rank > 0 and tostring(rank) or "-"
+	itemViewData.showRibbon = rank <= RIBBON_IDX_MAX and rank > 0
+	itemViewData.ribbonIcon = ICON_NAME_RIBBON .. itemViewData.rankText
+	return itemViewData
+end
+
+------Open child view-------
+function OnCommand_OpenChildView(obj)
+	CloseLeagueMatchView()
+
+	local viewIdx = obj[0]
+	childViewIdx = viewIdx
+	local modelName, parentViewName = "LeagueModel", "LeagueMatchiew"
+	local groupName = self.Module.ModuleName
+	if viewIdx == ChildViewIdx.KnockoutView then
+		CsBridge.CacheAssetsByModule(self.Module,
+			function()
+				CsBridge.OpenView("LeagueKnockoutView",modelName, false, false)
+				TryGetMatchList(ChildViewIdx.KnockoutView)
+			end,
+			"LeagueKnockoutView", "KnockoutMatchItemSlot")
+	elseif viewIdx == ChildViewIdx.FinalView then
+		CsBridge.CacheAssetsByModule(self.Module,
+			function()
+				CsBridge.OpenView("LeagueFinalMatchView",modelName, false, false)
+				TryGetMatchList(ChildViewIdx.FinalView)
+			end,
+			"LeagueFinalMatchView")
+	elseif viewIdx == ChildViewIdx.RewardView then
+		CsBridge.CacheAssetsByModule(self.Module,
+			function()
+				CsBridge.OpenView("LeagueRewardView",modelName, false, false)
+				RefreshRewardView()
+			end,
+			"LeagueRewardView")
+	elseif viewIdx == ChildViewIdx.ChampionView then
+		CsBridge.CacheAssetsByModule(self.Module,
+			function()
+				CsBridge.OpenView("LeagueChampionView",modelName, false, false)
+				RefreshChampionView()
+			end,
+			"LeagueChampionView")
+	elseif viewIdx == ChildViewIdx.SignUpView then
+		CsBridge.CacheAssetsByModule(self.Module,
+			function()
+				CsBridge.OpenView("LeagueSignupView",modelName, false, false)
+				RefreshSignUpView()
+			end,
+			"LeagueSignupView")
+	elseif viewIdx == ChildViewIdx.AuditionView then
+		CsBridge.CacheAssetsByModule(self.Module,
+			function()
+				CsBridge.OpenView("LeagueKnockoutView",modelName, false, false)
+				RefreshAuditionView()
+			end,
+			"LeagueKnockoutView", "KnockoutMatchItemSlot")
+	end
+end
+
+function OpenMatchDetailsView(roundID, turnID, parentViewName)
+	local match = GetMatchByRound(roundID, turnID)
+	local redPlayerID = match.redPlayer.baseInfo.userId
+	local blackPlayerID = match.blackPlayer.baseInfo.userId
+	if IsNilOrEmpty(redPlayerID) or IsNilOrEmpty(blackPlayerID) then
+			CsBridge.hintUILayer:ShowHintBox(Language:getStr("League_EmptyOpponentTips"))
+	else
+			local view = CsBridge.OpenView("LeagueMatchDetailsView", "LeagueMatchModel", false, true)
+			view:SetParamDataList(match, RefreshActivatedView)
+	end
+end
+
+function OpenFinalListView()
+	CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			CsBridge.OpenView("LeagueFinalListView","LeagueModel", false, true)
+		end,
+		"LeagueFinalListView", "KnockoutMatchItemSlot")
+end
+
+function OpenWinView()
+	CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			local view = CsBridge.OpenView("LeagueWinView","LeagueMatchModel", false, false)
+			view:SetData(GetLeagueWinViewData())
+		end,
+		"LeagueWinView")
+end
+
+function GetLeagueWinViewData()
+	local viewData = {}
+	local winner = GetChampionData()
+	viewData.playerName = FormatPlayerName(winner.baseInfo)
+	viewData.playerInfo = winner.baseInfo
+	return viewData
+end
+
+function OpenAuditionListView()
+	CsBridge.CacheAssetsByModule( self.Module,
+		function()
+			local view = CsBridge.OpenView("LeagueAuditionPlayersView","LeagueModel", false, true)
+			RefreshAuditionListView()
+		end,
+		"LeagueAuditionPlayersView",
+		"AuditionPlayerItemSlot")
+end
+
+------Hide all views-------
+function OnCommand_CloseLeagueMatchView(obj)
+	CloseLeagueMatchView()
+	updatingCtrnFinished = true	
+end
+
+function CloseLeagueMatchView()
+	self:SendNotification("CloseLeagueView")
+end
+
+------Helpers-----------------------
+function GetLastLevel(userID, playerName)
+	local lastLevel = LeagueMatchLevel.QuaterFinal
+	local matchList = cachedLeagueData.matchList
+	for level = LeagueMatchLevel.SemiFinal, LeagueMatchLevel.Final do
+		for k, match in pairs(matchList) do
+			if match.level == level
+				and match.redPlayer.baseInfo
+				and IsMatchPlayer(match, userID, playerName)
+			then
+				lastLevel = level
+			end
+		end
+	end
+
+	return lastLevel
+end
+
+function GetLastMatch(userID, playerName)
+	local lastMatch
+	for level = LeagueMatchLevel.QuaterFinal, LeagueMatchLevel.Final do
+		for k, match in pairs(cachedLeagueData.matchList) do
+			if match.level == level
+				and match.redPlayer.baseInfo
+				and IsMatchPlayer(match, userID, playerName)
+			then
+				lastMatch = match
+			end
+		end
+	end
+
+	return lastMatch
+end
+
+function IsMatchPlayer(match, userID, playerName)
+	local isRedPlayer = match.redPlayer.baseInfo.userId == userID
+		and match.redPlayer.baseInfo.name == playerName
+	local isBlackPlayer = match.blackPlayer.baseInfo.userId == userID
+		and match.blackPlayer.baseInfo.name == playerName
+
+	return isRedPlayer or isBlackPlayer
+end
+
+
+function GetFinalMatch()
+	local matchList = cachedLeagueData.matchList
+	for k, match in pairs(matchList) do
+		if match.level == LeagueMatchLevel.Final then
+			return match
+		end
+	end
+
+	return nil
+end
+
+function GetMatches(level)
+	local matches = {}
+	local matchList = cachedLeagueData.matchList
+	for k, match in pairs(matchList) do
+		if match.level == level then
+			table.insert(matches, match)
+		end
+	end
+
+	return matches
+end
+
+function GetMatch(level, turnID)
+	local matchList = cachedLeagueData.matchList
+	for k, match in pairs(matchList) do
+		if match.level == level and match.turnID == turnID then
+			return match
+		end
+	end
+end
+
+function GetMatchByRound(roundID, turnID)
+	local matchList = cachedLeagueData.matchList
+	for k, match in pairs(matchList) do
+		if match.roundID == roundID and match.turnID == turnID then
+			return match
+		end
+	end
+end
+
+function GetChampionData()
+	local finalMatch = GetFinalMatch()
+	return GetWinnerData(finalMatch)
+end
+
+function DoSignUp(formations, isClose)
+	local cbk = function(resp)
+		local close = isClose == nil and true or isClose
+		if close then
+			self:HideView("CrossFormationView")
+			CsBridge.hintUILayer:ShowHintBox(Language:getStr("SignUpSucceeded"))
+			FetchLeagueData(RefreshSignUpView)
+			print(table.dump(cachedLeagueData))
+		end
+	end
+	SignUp(cbk, formations)
+end
+
+function UpdateFormations(formations, isClose)
+	local cbk = function(resp)
+		local close = isClose == nil and true or isClose
+		if close then
+			self:HideView("CrossFormationView")
+			CsBridge.hintUILayer:ShowHintBox(Language:getStr("saveFormationOK"))
+		end
+	end
+	UpdateAllLeagueFormation(cbk, formations)
+end
+
+function CheckSetFormationEnabled()
+	local match = cachedMatch
+	local bettingFinished = match.state ~= LeagueMatchState.Lineup
+	if bettingFinished then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("UpdateFormationClosedTips"))
+		return false
+	end
+	
+	return true
+end

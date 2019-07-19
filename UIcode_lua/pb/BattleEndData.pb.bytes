@@ -1,0 +1,16 @@
+
+þ
+BattleEndData.protoBattleEndDatastage.protoplayerData.proto"í
+BattleEndInfo
+result ($
+	dropItems (2.stage.RewardItem
+type (3
+apArenaResult (2.BattleEndData.APArenaResult8
+targetPlayerBaseInfo (2.playerData.PlayerBaseInfo)
+upLevelRewards (2.stage.RewardItem"I
+APArenaResult
+redScore (
+
+blackScore (
+
+deltaScore (

@@ -1,0 +1,73 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-05-05 12:04:20
+
+require "MazeBagItemSlot"
+
+local isInit = false
+local bagGrid
+local nothingObj
+
+function DoInit()	
+    self.Shadow = 1
+end
+
+local function InitUI()
+    bagGrid = self:GetComponentAtPath("ScrollRect/Viewport/BagGrid",CLS_UI_ITEM_GRID)
+    nothingObj = self:GetGameObjectAtPath("Nothing")
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitMazeBagData")
+end
+
+function SetParamDataList(objs)
+    local svrData = objs[0]
+    self:SendCommand("InitData",svrData)
+end
+
+function OnClose()
+    bagGrid:ClearItems()
+    nothingObj:SetSelfActive(false)
+end
+
+function DoExit()
+    isInit = nil
+    bagGrid = nil
+    nothingObj = nil
+end
+
+local function HideView()
+    self:HideView(self.gameObject.name)
+end
+
+function OnNotification_RefreshMazeBagView(objs)
+    local items = objs[0]
+    nothingObj:SetSelfActive(#items == 0)
+    bagGrid:RefreshItemSlots(items,self.gameObject,"MazeBagItemSlot")
+end
+
+function OnMazeBagItemSlotBindValue(slot, data)
+    local iconImg = slot:GetGameObjectAtPath("IconImg")
+    local numTxt = slot:GetComponentAtPath("NumTxt",CLS_TEXT)
+    SetSpriteByModule(iconImg, data.icon, self.Module)
+    numTxt.text = data.count
+end
+
+function OnBagGridMazeBagItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("OpenTip",data)
+end
+
+function OnCloseBtnClick(sender)
+    HideView()
+end
+
+function OnMaskClick(sender)
+    HideView()
+end

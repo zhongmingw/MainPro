@@ -1,0 +1,35 @@
+
+Õ
+TurnTableData.protoTurnTableDatastage.proto"N
+DrawItem
+
+id (
+disable (%
+
+rewardItem (2.stage.RewardItem"j
+LotteryInfo*
+	drawItems (2.TurnTableData.DrawItem
+lastRefreshTime (
+hasFreeRefresh ("Z
+Record
+type (
+
+id (
+count (
+nick (	
+ext (
+zone (	"
+RefreshLotteryReq
+
+id ("$
+RefreshLotteryResp
+result ("
+DrawLotteryReq
+count ("9
+DrawLotteryResp&
+rewardItems (2.stage.RewardItem"$
+GetLotteryHitRecordReq
+
+id ("A
+GetLotteryHitRecordResp&
+records (2.TurnTableData.Record

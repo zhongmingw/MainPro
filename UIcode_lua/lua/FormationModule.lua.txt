@@ -1,0 +1,19 @@
+
+function DoInit()
+
+end
+
+function AssetNames(objs)
+  local arr={"HeroItemSlot", "FormationView"}
+  return arr
+end
+
+function OnEnter(objs,onFinished)
+	local view=self:OpenView("FormationView","FormationModel")
+	if(objs~=nil)then
+		view:SetParamDataList(objs[0],objs[1])
+	end
+	if(onFinished ~= nil)then
+		onFinished()  
+	end
+end

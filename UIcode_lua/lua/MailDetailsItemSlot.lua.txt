@@ -1,0 +1,20 @@
+
+
+function OnMailDetailsItemSlotBindValue(slot,data)
+
+	local unread_Sprite=slot.transform:Find("UnreadSprite"):GetComponent("UnityEngine.UI.Image")
+	local attach_Sprite=slot.transform:Find("AttachSprite"):GetComponent("UnityEngine.UI.Image")
+
+	local title_Lab=slot.transform:Find("TitleTxt"):GetComponent(CLS_TEXT)
+	local time_Lab=slot.transform:Find("TimeTxt"):GetComponent(CLS_TEXT)
+	local newFlag = slot.transform:Find("NewFlag").gameObject
+
+	CsBridge.UnityHelper.SetUIVisible(unread_Sprite.gameObject,not data.mailItem.read)
+	CsBridge.UnityHelper.SetUIVisible(attach_Sprite.gameObject,not data.attachTaken and data.attach~=nil)
+
+	newFlag:SetActive(not data.mailItem.read and data.attach~=nil and not data.attachTaken)
+
+	title_Lab.text=data.mailItem.title
+
+	time_Lab.text=CsBridge.timeManager:checkTimePass(data.mailItem.sendTime)
+end

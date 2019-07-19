@@ -1,0 +1,19 @@
+
+function OnAttrUpItemSlotBindValue(slot,data)
+	local txt_name
+	local txt_num
+	txt_name=slot:GetComponentAtPath("name",CLS_TEXT)
+	txt_num=slot:GetComponentAtPath("num",CLS_TEXT)
+
+	if(data.addType==1)then --属性增加,绿色
+		txt_num.text=tostring("+"..data.DoNum) 
+		CsBridge.UnityHelper.SetTextColor(txt_name,0,255,0)
+		CsBridge.UnityHelper.SetTextColor(txt_num,0,255,0)
+	elseif(data.addType==2)then --属性减少,红色
+		txt_num.text=tostring("-"..data.DoNum) 
+		CsBridge.UnityHelper.SetTextColor(txt_name,255,0,0)
+		CsBridge.UnityHelper.SetTextColor(txt_num,255,0,0)
+	end
+	txt_name.text=tostring(data.name..":") 
+end
+

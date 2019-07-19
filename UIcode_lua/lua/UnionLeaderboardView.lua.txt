@@ -1,0 +1,89 @@
+--[[
+	file: UnionLeaderboardView.lua
+	author: hangang
+	description: View for union Leaderboard
+]]
+
+
+local bottomRoot
+local unionGrid
+
+local viewData
+
+function DoInit()
+	self.Shadow = 0
+	InitUI()
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	local path = "Bottom"
+	bottomRoot = selfTrans:Find(path)
+
+	path = "unionSV/ScrollRect/Viewport/Grid"
+	unionGrid = self:GetComponentAtPath(path ,CLS_UI_ITEM_GRID)
+end
+
+function OnNotification_RefreshLeaderboardView(objs)
+	viewData = objs[0]
+	RefreshView(viewData)
+end
+
+function RefreshView(data)
+	BindViewData(bottomRoot, data.myUnionData)
+	unionGrid:RefreshItemSlots(data.unions, self.gameObject, "UnionRankItemSlot")
+end
+
+function OnUnionRankItemSlotBindValue(slot, data)
+	BindViewData(slot.transform, data)
+end
+
+function BindViewData(slotTrans, data)
+	local selfTrans = slotTrans
+
+	local path = "iconImg"
+	local bannerImage = selfTrans:GetGameObjectAtPath(path)
+	CsBridge.IconData.SetIconByName(bannerImage, data.icon)
+    
+	path = "levelTxt"
+	local lvlText = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+	lvlText.text = data.levelText
+
+	path = "nameTxt"
+	local nameText = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+	nameText.text = data.name
+
+	path = "memberCountTxt"
+	local memberCountText = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+	memberCountText.text = data.memeberText
+
+	path = "Ribbon/rankTxt"
+	local rankTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+	rankTxt.text = data.rankText
+
+	path = "Ribbon/ribbonImg"
+	local ribbonImageObj = selfTrans:GetGameObjectAtPath(path)
+	ribbonImageObj:SetActive(data.showRibbon)
+	if data.showRibbon then
+		CsBridge.IconData.SetIconByName(ribbonImageObj, data.ribbonIcon)
+	end
+
+	path = "powerTxt"
+	local powerTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+	powerTxt.text = data.powerText
+end
+
+function OnGridPlayerBaseClick(obj, itemIndex)
+	local slotData = obj.m_data
+end
+
+function OnNotification_CloseUnionView(obj)
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	bottomRoot = nil
+	unionGrid = nil
+
+	viewData = nil
+end

@@ -1,0 +1,807 @@
+--[[
+	file: UnionBattleModel.lua
+	author: hangang
+	description: Union battle view controller
+]]
+
+require "UnionBattleUtils"
+
+local MAX_CHALLENGE_COUNT_EXTRA = 0
+local RIBBON_IDX_MAX = 3
+local ICON_NAME_RIBBON = "new_com_paiming"
+local SEARCH_CD = 1
+local TICKER_NAME = "UnionBattleModel"
+local SHOW_COUNT = GetConstValue("Guildwar30")
+
+local cachedStatusData
+local cachedLeaderboardData
+
+
+------initialization----------------------------------------------------------------
+function DoInit()
+    MAX_CHALLENGE_COUNT_EXTRA = tonumber(GetConstValue("Guildwar4"))
+	SEARCH_CD = tonumber(GetConstValue("Guildwar2"))
+	MsgCenter:Subscribe(Notify_OnBattleEnd, TryRefreshBattleView)
+	CsBridge.MsgCenter.Subscribe(CsBridge.SysMsgDef.Notify_WrongUnionAuthority, OnAuthorityError)
+end
+
+function DoOnExit()
+	MsgCenter:Unsubscribe(Notify_OnBattleEnd, TryRefreshBattleView)
+	CsBridge.MsgCenter.Unsubscribe(CsBridge.SysMsgDef.Notify_WrongUnionAuthority, OnAuthorityError)
+	Timer:StopTicker(TICKER_NAME)
+	MAX_CHALLENGE_COUNT_EXTRA = nil
+	RIBBON_IDX_MAX = nil
+	ICON_NAME_RIBBON = nil
+	SEARCH_CD = nil
+	TICKER_NAME = nil
+
+	cachedStatusData = nil
+	cachedLeaderboardData = nil
+end
+
+------Server error handler------------------------------------------------------------
+function OnAuthorityError()
+	CsBridge.hintUILayer:ShowHintBox(Language:getStr("OpponentDead"))
+	self:HideView("UnionBattleOpponentView")
+	TryRefreshBattleView()
+end
+
+------Updating------------------------------------------------------------------------------
+function Updating()
+	local endTime = GetCountdownEndTime()
+	Timer:AddTicker(TICKER_NAME, endTime, RefreshCountdown, TryRefreshBattleView)
+end
+
+function RefreshCountdown()
+	if not cachedStatusData.seasonFinished 
+		and cachedStatusData.opponent 
+	then
+		if CsBridge.timeManager.ServerTime > cachedStatusData.challengeEndTime then
+			TryRefreshBattleView()
+			return
+		end
+	end
+
+	RefreshBattleViewCD()
+	RefreshRewardViewCD()
+end
+
+function GetCountdownEndTime()
+	local endTime = cachedStatusData.seasonFinished
+		and cachedStatusData.nextSeasonTime
+		or cachedStatusData.seasonEndTime
+	local delay = 10000
+	endTime = endTime + delay
+
+	return endTime
+end
+
+------View events handler-----------------------------------------------------------------
+function OnCommand_GetBattleViewData(objs)
+    TryRefreshBattleView()
+end
+
+function OnCommand_ShowOpponentDetails(objs)
+	OpenOpponentView()
+end
+
+function OnCommand_OnHelpBtnClick(objs)
+	local instuctionID = 45
+	local parentViewName = objs[0]
+	CsBridge.CacheAssetsByModule( self.Module,
+		function()
+			local view = CsBridge.OpenView("HelpView","UnionBattleModel", false, true)
+			view:SetData(instuctionID)
+		end,
+		"HelpView")
+end
+
+function OnCommand_OnBuyBtnClick(objs)
+	if GetTicketInventory() <= 0 then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("HasMaxCount"))
+		return
+	end
+
+	if cachedStatusData.seasonFinished then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("SeasonEndedTips"))
+		return
+	end
+
+	TryToBuyTicket()
+end
+
+function OnCommand_OnRankBtnClick(objs)
+	OpenRankView()
+end
+
+function OnCommand_CloseUnionBattleRankView(objs)
+	self:SendNotification("CloseUnionBattleRankView")
+end
+
+function OnCommand_OpenLeaderboardViewData(objs)
+	OpenLeaderboardView()
+end
+
+function OnCommand_OpenRewardViewData(objs)
+	OpenRewardView()
+end
+
+function OnCommand_OpenTipView(objs)
+	local data = objs[0]
+	local itemType = data.typeId
+	if itemType == ItemTypeEnum.Hero then
+		ShowHeroTip(self, data.id, 1, 1)
+	else
+		ShowTip(self, itemType, data.id)
+	end
+end
+
+function OnCommand_OnDetailsBtnClick(objs)
+	OpenStatView()
+end
+
+function OnCommand_CloseUnionBattleStatView(objs)
+	self:SendNotification("CloseUnionBattleStatView")
+end
+
+function OnCommand_OpenChallengeStatView(objs)
+	OpenChallengeStatView()
+end
+
+function OnCommand_OpenBeChallengedStatView(objs)
+	OpenBeChallengedStatView()
+end
+
+function OnCommand_OpenMemberStatView(objs)
+	OpenMemberStatView()
+end
+
+function OnCommand_OpenMemberDetailView(objs)
+	local baseInfo = objs[0]
+	local uid = tostring(baseInfo.userId)
+	local parentView = objs[1]
+	local zone = tostring(baseInfo.zone)
+	local isLocal = false
+	local showUnionInfoBtn = false
+	local siblingIdx = -1
+	CsBridge.CacheAssetsByModule( self.Module,
+		function()
+			local view = CsBridge.OpenView("PlayerInfoView", "PlayerInfoModel", true, true)
+			view:SetParamDataList(isLocal, uid, zone, siblingIdx, showUnionInfoBtn)
+		end, 
+		"PlayerInfoView","AchievementItemSlot")
+end
+
+function OnCommand_UpdateFormation(objs)
+	OpenDefendFormationView()
+end
+
+function OnCommand_TryToChallenge(objs)
+	TryToChallenge(objs[0])
+end
+
+function OnCommand_OpenRewardDetailsView(objs)
+	OpenRewardDetailsView()
+end
+
+------Helpers-----------------------------------------------------------------------------
+function GetNewMembersData(oldMembers,newMembers)
+	local members = clone(newMembers)
+	if oldMembers then
+		for _,old in pairs(oldMembers) do
+			for k,new in pairs(members) do
+				if old.baseInfo.userId == new.baseInfo.userId and old.baseInfo.zone == new.baseInfo.zone then
+					if old.challengCount >= SHOW_COUNT and old.defeatedScore > 0 and 
+						(new.defeatedScore <= 0 or (not old.defeated and new.defeated))	then
+						members[k].isBlast = true
+					end
+					break
+				end
+			end
+		end
+	end
+	return members
+end
+
+function TryRefreshBattleView()
+	local finishedCallback = function(resp)
+		if resp.opponent then
+			local oldMembers = cachedStatusData and cachedStatusData.opponent.members or nil
+			local newMembers = GetNewMembersData(oldMembers,resp.opponent.members)
+			cachedStatusData = resp
+			cachedStatusData.opponent.members = newMembers
+		else
+			cachedStatusData = resp
+		end
+		cachedStatusData.battleEndTime = cachedStatusData.seasonEndTime
+		cachedStatusData.nextSeasonTime = cachedStatusData.seasonEndTime
+		if cachedStatusData.opponent then
+			local delay = 5000
+			cachedStatusData.challengeEndTime = CaculateChallengeEndTime(CsBridge.timeManager.ServerTime) + delay
+			self:SendNotification("RefreshOpponentView", GetOpponentViewData())
+		end
+
+		RefreshBattleView()
+		Updating()
+	end
+    FetchBattleStatusData(finishedCallback)
+end
+
+function RefreshBattleView()
+	local viewData = GetBattleViewData(cachedStatusData)
+	self:SendNotification("RefreshBattleView", viewData)
+end
+
+function GetBattleViewData(data)
+	local viewData = {}
+	viewData.ticketCount = tostring(GetTicketCount())
+	local seasonCD, challengeCD, seasonCDHeader, seasonCDColor = GetBattleCDTexts(data)
+	viewData.seasonCD = seasonCD
+	viewData.challengeCD = challengeCD
+	viewData.seasonCDHeader = seasonCDHeader
+	viewData.seasonCDColor = seasonCDColor
+	viewData.tipsText = data.seasonFinished
+		and	Language:getStr("SeasonEndedTips")
+		or Language:getStr("UnionBattleMatchTips")
+
+	viewData.showOpponentPanel = not data.seasonFinished and data.opponent ~= nil
+	if viewData.showOpponentPanel then
+		local opponentData = data.opponent
+		viewData.opponentName = opponentData.baseInfo.name
+		viewData.opponentBanner = ResTblContainer:GetPropToStr(
+			opponentData.baseInfo.icon, GuildBanner.banner, GuildBanner.tblName)
+		viewData.opponentLevel = tostring(opponentData.baseInfo.level)
+		viewData.power = tostring(opponentData.maxPower)
+		local memberCount = #opponentData.members
+		local liveMemberCount = memberCount - opponentData.defeatedMemberCount
+		viewData.memberCountText = liveMemberCount .. "/" .. memberCount
+		viewData.score = tostring(opponentData.score)
+	end
+
+	return viewData
+end
+
+function GetBattleCDTexts(data)
+	local seasonCD, challengeCD = "", ""
+	local seasonCDHeader
+	local seasonCDColor
+
+	if data.seasonFinished then
+		seasonCD = CheckTimeRemain(data.nextSeasonTime, false)
+		seasonCDHeader = Language:getStr("ToNextSeasonBegin")
+		seasonCDColor = color26
+	else
+		seasonCD = CheckTimeRemain(data.battleEndTime, false)
+		seasonCDHeader = Language:getStr("ToSeasonEnd")
+		seasonCDColor = color13
+		if cachedStatusData.opponent then
+			challengeCD = CheckTimeRemain(data.challengeEndTime, false)
+		end
+	end
+
+	return seasonCD, challengeCD, seasonCDHeader, seasonCDColor
+end
+
+function RefreshBattleViewCD()
+	local seasonCD, challengeCD = GetBattleCDTexts(cachedStatusData)
+	self:SendNotification("RefreshBattleViewCD", seasonCD, challengeCD)
+end
+
+function TryToBuyTicket()
+	local title = ""
+	local text = string.format(Language:getStr("Challenge_Count_Check"), GetTicketPrice())
+	local cancelText = Language:getStr("local_cancel")
+	local cancelCbk = nil
+	local confirmText = Language:getStr("local_confirm")
+
+	local finishedCallback = function(resp)
+		RefreshBattleView()
+	end
+	local confirmCbk = function()
+		TryAddTicket(finishedCallback)
+	end
+
+	local staticName = "UnionBattleTicket"
+	CsBridge.messageManager:FristConfirmBox(staticName, title, text, cancelText, cancelCbk, confirmText, confirmCbk)
+end
+
+function GetTicketPrice()
+	local unionPB = appData:checkData("PlayerUnionRecord")
+	local boughtCount = unionPB.battlePayCountTotal + 1
+	local price = ResTblContainer:GetPropToInt(boughtCount, GuildwarPrice.price, GuildwarPrice.tblName)
+
+	return price
+end
+
+function TryToChallenge(playerData)
+	if not AssertChallengeEnabled() then
+		return
+	end
+
+	if GetTicketCount() <= 0 then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("GloryRoadNotCount"))
+	else
+		local formation = appData:checkItem("Formation",
+			tostring(FormationTypeEnum.FormationType_Union))
+		OpenFormationView(playerData)
+	end	
+end
+
+function OpenFormationView(playerData)
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			local view = CsBridge.OpenView("FormationView", "FormationModel",true,true)
+			local formationType = FormationTypeEnum.FormationType_Union
+			local battleCbk = function(heroIds)
+				DoChallenge(heroIds, playerData)
+			end
+			local formView = 0
+			local canSkip = false
+			local hideCbk = nil
+			view:SetParamDataList(formationType, battleCbk , nil , formView, canSkip, nil)
+		end, 
+		"FormationView",
+		"HeroItemSlot")
+end
+
+function OpenDefendFormationView()
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			local view = CsBridge.OpenView("FormationView", "FormationModel",true,true)
+			local formationType = FormationTypeEnum.FormationType_Union
+			local battleCbk = nil
+			local formView = 1
+			local canSkip = false
+			local hideCbk = function(formation)
+				UpdateUnionBattleFormation(
+					function()
+						CsBridge.hintUILayer:ShowHintBox(Language:getStr("saveFormationOK"))
+						self:SendNotification("ClearOpponents")
+					end
+					,formation)
+			end
+			view:SetParamDataList(formationType, battleCbk , hideCbk, formView, canSkip, nil)
+		end, 
+		"FormationView",
+		"HeroItemSlot")
+end
+
+function DoChallenge(heroIds, playerData)
+	local battleCbk = function(battleInfo)
+		if battleInfo then
+			ShowBattleModule(battleInfo, self)
+		end
+	end
+	
+	local userID = playerData.baseInfo.userId
+	local zone = playerData.baseInfo.zone
+	UnionBattle(battleCbk, userID, zone, heroIds)
+end
+
+function AssertMatchEnabled()
+	if not cachedStatusData.canFight then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionBattleDisabledTips"))
+		return false
+	end
+
+	if CsBridge.timeManager.ServerTime > cachedStatusData.battleEndTime then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("SeasonEndedTips"))
+		return false
+	end
+
+	return true
+end
+
+function AssertChallengeEnabled()
+	local matchEnabled = AssertMatchEnabled()
+	if matchEnabled then 
+		local formationHeros = appData:checkItem("Formation",tostring(FormationTypeEnum.FormationType_Union))
+		if formationHeros == nil or formationHeros.heroIds == nil then
+			CsBridge.hintUILayer:ShowHintBox(Language:getStr("CrossFormation_NoReady"))
+			return false
+		end
+	end
+
+	return true
+end
+
+function OpenRankView()
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			local view = CsBridge.OpenView("UnionBattleRankView", "UnionBattleModel",true,true)
+		end, 
+		"UnionBattleRankView")
+end
+
+function OpenLeaderboardView()
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			self:SendNotification("CloseUnionBattleRankView")
+			local view = CsBridge.OpenView("UnionBattleLeaderboardView", "UnionBattleModel", false, false)
+			RefreshLeaderboardView()
+		end, 
+		"UnionBattleLeaderboardView",
+		"UnionBattleRankItemSlot")
+end
+
+function RefreshLeaderboardView()
+	local finishedCallback = function(resp)
+		cachedLeaderboardData = resp
+		local viewData = GetLeaderboardViewData(cachedLeaderboardData)
+		self:SendNotification("RefreshLeadersView", viewData)
+	end
+	FetchLeaderboards(finishedCallback)
+end
+
+function GetLeaderboardViewData(data)
+	local viewData = {}
+	local unionList = {}
+	viewData.unionList = unionList
+	if data.rankItems then
+		local rankItems = data.rankItems
+		for k, itemData in pairs(rankItems) do
+			table.insert(unionList, GetRankItemViewData(itemData))
+		end
+	end
+
+	if data.myRankItem then
+		viewData.ownUnionData = GetRankItemViewData(data.myRankItem)
+	end
+	
+	return viewData
+end
+
+function GetRankItemViewData(itemData)
+	local itemViewData = {}
+	local unionData = itemData.unionBaseInfo
+	itemViewData.icon = ResTblContainer:GetPropToStr(unionData.icon, GuildBanner.banner, GuildBanner.tblName)
+	itemViewData.name = unionData.name
+	itemViewData.power = GetValueAbbreviation(unionData.combat)
+	itemViewData.score = itemData.score
+	local rank = itemData.rank
+	itemViewData.rankText = rank > 0 and tostring(rank) or "-"
+	itemViewData.showRibbon = rank <= RIBBON_IDX_MAX and rank > 0
+	itemViewData.ribbonIcon = ICON_NAME_RIBBON .. itemViewData.rankText
+	return itemViewData
+end
+
+function OpenRewardDetailsView()
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			local view = CsBridge.OpenView("UnionBattleRewardDetailsView", "UnionBattleModel", true, true)
+			self:SendNotification("RefreshRewardDetailsView", GetRewardDetailsViewData())
+		end, 
+		"UnionBattleRewardDetailsView",
+		"ItemSlot",
+		"UnionBattleRewardDetailsItem")
+end
+
+function OpenRewardView()
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			self:SendNotification("CloseUnionBattleRankView")
+			local view = CsBridge.OpenView("UnionBattleRewardView", "UnionBattleModel", false, false)
+			self:SendNotification("RefreshRewardView", GetRewardViewData(cachedLeaderboardData))
+		end, 
+		"UnionBattleRewardView",
+		"ItemSlot",
+		"UnionBattleRewardItemSlot")
+end
+
+function GetRewardViewData(data)
+	local viewData = {}
+	viewData.rules = Language:getStr("FTArenaRankReward")
+	viewData.cdText = GetRewardCDText()
+	viewData.curRank = ""
+	viewData.rewards = GetSeasonRewards()
+	if data.myRankItem then
+		local ranking = data.myRankItem.rank
+		viewData.curRank = ranking > 0 and tostring(ranking) or "-"
+		viewData.ownSharedRewards, viewData.ownGenRewards = GetRewards(ranking)
+	end
+
+	return viewData
+end
+
+function GetRewards(ranking)
+	if ranking < 1 then
+		return  {}, {}
+	end
+
+	local rankingList = ResTblContainer:GetCol(
+		GuildwarRankReward.tblName, GuildwarRankReward.min)
+	local prevRanking
+	local rewardStr, genRewardStr
+	local curRanking
+	for i = 0, rankingList.Length - 1 do
+		local rankingStr = rankingList[i]
+		curRanking = tonumber(rankingStr)
+		if ranking < curRanking then		
+			rewardStr = ResTblContainer:GetPropToStr(
+				prevRanking, GuildwarRankReward.seasonRewardStr, GuildwarRankReward.tblName)
+			genRewardStr = ResTblContainer:GetPropToStr(
+				prevRanking, GuildwarRankReward.seasonOtherReward, GuildwarRankReward.tblName)
+			break
+		end
+
+		prevRanking = rankingStr
+	end
+
+	return GetRewardFromTbl(rewardStr), GetRewardFromTbl(genRewardStr)
+end
+
+function RefreshRewardViewCD()
+	self:SendNotification("RefreshRewardViewCD", GetRewardCDText())
+end
+
+function GetRewardCDText()
+	return CheckTimeRemain(cachedStatusData.seasonEndTime, false)
+end
+
+function GetSeasonRewards()
+	local rewardList = {}
+	local tblName = GuildwarRankReward.tblName
+	local itemIds = ResTblContainer:GetCol(tblName, GuildwarRankReward.min)
+	local tbl=ResTblContainer:GetTable(tblName)
+	local itemViewData
+	for  i = 0, itemIds.Length - 1 do
+        local id = tonumber(itemIds[i])
+		itemViewData = {}
+		itemViewData.id = id
+		local maxRanking = tonumber(tbl:Get(id, GuildwarRankReward.max))
+		itemViewData.rankText = maxRanking == id
+			and tostring(id)
+			or (tostring(id) .. "-" .. tostring(maxRanking))
+		itemViewData.rankText = maxRanking > 10000
+			and (tostring(id) .. "+")
+			or itemViewData.rankText
+		itemViewData.sharedRewards = GetRewardFromTbl(
+			tbl:Get(id, GuildwarRankReward.seasonRewardStr))
+		itemViewData.genRewards = GetRewardFromTbl(
+			tbl:Get(id, GuildwarRankReward.seasonOtherReward))
+			
+		itemViewData.showRibbon = id <= RIBBON_IDX_MAX
+			and maxRanking <= RIBBON_IDX_MAX
+		itemViewData.ribbonIcon = ICON_NAME_RIBBON .. itemViewData.rankText
+
+		table.insert(rewardList, itemViewData)
+    end
+	table.sort(rewardList, function(a, b)
+		return a.id < b.id
+	end)
+
+	return rewardList
+end
+
+function OpenStatView()
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			local view = CsBridge.OpenView("UnionBattleStatView", "UnionBattleModel",true,true)
+		end, 
+		"UnionBattleStatView")
+end
+
+function OpenChallengeStatView()
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			self:SendNotification("CloseUnionBattleStatView")
+			local view = CsBridge.OpenView("UnionBattleChallengeStatView", "UnionBattleModel", false, false)
+			RefreshChallengeStatView()
+		end, 
+		"UnionBattleChallengeStatView",
+		"UnionChallengeStatItemSlot")
+end
+
+function RefreshChallengeStatView()
+	local finishedCallback = function(resp)
+		if resp then
+			self:SendNotification("RefreshChallengeStatView", GetChallengeStatViewData(resp, true))
+		end
+	end
+	FetchChallengeStatData(finishedCallback)
+end
+
+function GetChallengeStatViewData(data, isChallengeView)
+	local viewData = {}
+	local unionList = {}
+	viewData.unionList = unionList
+	if data.rankItems then
+		for k, itemData in pairs(data.rankItems) do
+			local itemViewData = {}
+			local unionData = itemData.unionBaseInfo
+			itemViewData.icon = ResTblContainer:GetPropToStr(unionData.icon, GuildBanner.banner, GuildBanner.tblName)
+			itemViewData.name = unionData.name
+			itemViewData.power = GetValueAbbreviation(unionData.combat)
+			itemViewData.score = tostring(itemData.score)
+			itemViewData.timesHeader = isChallengeView
+				and Language:getStr("ChallengedText")
+				or Language:getStr("BeChallengedText")
+			itemViewData.times = tostring(itemData.count)
+
+			if isChallengeView then
+				itemViewData.showWonIcon = itemData.defeated
+				itemViewData.showLoseIcon = false
+			else
+				itemViewData.showLoseIcon = itemData.defeated
+				itemViewData.showWonIcon = false
+			end
+
+			local rank = itemData.rank
+			itemViewData.rankText = tostring(itemData.rank)
+			itemViewData.showRibbon = rank <= RIBBON_IDX_MAX
+			itemViewData.ribbonIcon = ICON_NAME_RIBBON .. itemViewData.rankText
+
+			table.insert(unionList, itemViewData)
+		end
+	end
+
+	return viewData
+end
+
+function OpenBeChallengedStatView()
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			self:SendNotification("CloseUnionBattleStatView")
+			local view = CsBridge.OpenView("UnionBattleChallengeStatView", "UnionBattleModel", false, false)
+			RefreshBeChallengedStatView()
+		end, 
+		"UnionBattleChallengeStatView",
+		"UnionChallengeStatItemSlot")
+end
+
+function RefreshBeChallengedStatView()
+	local finishedCallback = function(resp)
+		if resp then
+			self:SendNotification("RefreshChallengeStatView", GetChallengeStatViewData(resp, false))
+		end
+	end
+	FetchBeChallengedStatData(finishedCallback)
+end
+
+function OpenMemberStatView()
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			self:SendNotification("CloseUnionBattleStatView")
+			local view = CsBridge.OpenView("UnionBattleMemberStatView", "UnionBattleModel", false, false)
+			RefreshMemberStatView()
+		end, 
+		"UnionBattleMemberStatView",
+		"UnionMemberBattleStatItemSlot")
+end
+
+function RefreshMemberStatView()
+	local finishedCallback = function(resp)
+		if resp then
+			self:SendNotification("RefreshMemberStatView", GetMemberStatViewData(resp))
+		end
+	end
+	FetchMemberStatData(finishedCallback)
+end
+
+function GetMemberStatViewData(data)
+	local viewData = {}
+	local memberList = {}
+	viewData.memberList = memberList
+	if data.rankItems then
+		for k, itemData in pairs(data.rankItems) do
+			local itemViewData = {}
+			local memberData = itemData.baseInfo
+			itemViewData.playerInfo = memberData
+			itemViewData.name = memberData.name
+			itemViewData.times = tostring(itemData.count)
+			itemViewData.score = tostring(itemData.score)
+			itemViewData.power = GetValueAbbreviation(itemData.combat)
+
+			table.insert(memberList, itemViewData)
+		end
+	end
+
+	return viewData
+end
+
+function OpenOpponentView()
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			local view = CsBridge.OpenView("UnionBattleOpponentView", "UnionBattleModel", false, true)
+			self:SendNotification("RefreshOpponentView", GetOpponentViewData())
+		end, 
+		"UnionBattleOpponentView",
+		"UnionBattleOpponentItemSlot")
+end
+
+function GetOpponentViewData()
+	local viewData = {}
+	local opponentData = cachedStatusData.opponent
+	local opponentBaseInfo = opponentData.baseInfo
+	viewData.name = opponentBaseInfo.name
+	viewData.id = opponentBaseInfo.id
+	viewData.power = GetValueAbbreviation(opponentData.maxPower)
+	viewData.zone = opponentData.zone
+	viewData.score = string.format(Language:getStr("Income"), opponentData.winScore)
+	viewData.cdText = ""
+	viewData.unionBanner = ResTblContainer:GetPropToStr(
+			opponentBaseInfo.icon, GuildBanner.banner, GuildBanner.tblName)
+	
+	local memberCount = #opponentData.members
+	local liveMemberCount = memberCount - opponentData.defeatedMemberCount
+	viewData.memberCountText = liveMemberCount .. "/" .. memberCount
+	viewData.memberList = GetOpponentMembers()
+
+	return viewData
+end
+
+function GetOpponentMembers()
+	local viewData = {}
+	local members = cachedStatusData.opponent.members
+	for k, memberData in pairs(members) do
+		local itemViewData = {}
+		itemViewData.name = memberData.baseInfo.name
+		itemViewData.baseInfo = memberData.baseInfo
+		itemViewData.power = GetValueAbbreviation(memberData.power)
+		itemViewData.available = not memberData.defeated
+		itemViewData.challengCount = memberData.challengCount
+		itemViewData.defeatedScore = memberData.defeatedScore
+		itemViewData.isBlast = memberData.isBlast
+		table.insert(viewData, itemViewData)
+	end
+	return viewData
+end
+
+function GetRewardDetailsViewData()
+	local viewData = {}
+	viewData.rules = Language:getStr("FTArenaRankReward")
+	viewData.cdText = GetRewardCDText()
+	viewData.curRank = ""
+	viewData.items = FormatSharedRewards()
+
+	return viewData
+end
+
+function FormatSharedRewards()
+	local itemList = {}
+	local tblName = GuildwarPersonalReward.tblName
+	local itemIds = ResTblContainer:GetCol(tblName, GuildwarPersonalReward.rankMax)
+	local tbl=ResTblContainer:GetTable(tblName)
+	local itemViewData
+	local baseShareIdx = 1
+	local baseShare = ResTblContainer:GetPropToInt(baseShareIdx, GuildwarPersonalReward.rate, tblName)
+	for  i = 0, itemIds.Length - 1 do
+        local id = tonumber(itemIds[i])
+		itemViewData = {}
+		itemViewData.id = id
+		local maxRanking = tonumber(tbl:Get(id, GuildwarPersonalReward.rankMin))
+		itemViewData.rankText = maxRanking == id
+			and tostring(id)
+			or (tostring(id) .. "-" .. tostring(maxRanking))
+		itemViewData.rankText = maxRanking > 10000
+			and (tostring(id) .. "+")
+			or itemViewData.rankText
+		local share = tonumber(tbl:Get(id, GuildwarPersonalReward.rate))
+		itemViewData.proportion = share / baseShare
+		itemViewData.description = share .. "/" .. baseShare
+		itemViewData.percent = 
+			string.format("%.1f", share * 0.01) .. "%"
+			
+		itemViewData.showRibbon = id <= RIBBON_IDX_MAX
+			and maxRanking <= RIBBON_IDX_MAX
+		itemViewData.ribbonIcon = ICON_NAME_RIBBON .. itemViewData.rankText
+
+		table.insert(itemList, itemViewData)
+    end
+	table.sort(itemList, function(a, b)
+		return a.id < b.id
+	end)
+
+	return itemList
+end

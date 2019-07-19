@@ -1,0 +1,17 @@
+--[[
+	file: RewardReceivedModel.lua
+	author: hangang
+	description: Reward received view controller
+]]
+
+------initialization----------------------------------------------------------------
+function DoInit()
+end
+
+------View events handler-----------------------------------------------------------------
+function OnCommand_GetBaseViewData(objs)
+end
+
+------Helpers-----------------------------------------------------------------------------
+function DoOnExit()
+end

@@ -1,0 +1,69 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-04-25 11:27:30
+local MazeDef = require "MazeDef"
+local MazeUtils = require "MazeUtils"
+
+local svrData
+
+local function GetMazeEntryData(svrData,isFirst)
+    local RewardPreview = {
+        tblName = "RewardPreview",
+        id = "id",
+        itemStr = "itemStr"
+    }
+    local data = {}
+    local rewardStr = ResTblContainer:GetPropToStr(svrData.floor,RewardPreview.itemStr,RewardPreview.tblName)
+    data.rewards = GetRewardFromTbl(rewardStr)
+    for i,v in ipairs(data.rewards) do
+        v.count = nil
+    end
+    local MazeState = MazeDef.MazeState
+    local isEnd = svrData.status == MazeState.Complete or 
+                svrData.status == MazeState.Die
+    data.isEnd = isEnd
+    if isEnd then
+        data.name = Language:getStr("MazeOverExplore")
+    else
+        data.name = isFirst and Language:getStr("MazeStartExplore") or 
+                                Language:getStr("MazeContinueExplore")
+    end
+    data.curStageDesp = string.format(Language:getStr("FloorName"),svrData.floor)
+    return data
+end
+
+function OnCommand_InitMazeEntryData(objs)
+    local isFirst = objs[0]
+    MazeUtils.RequestEnterLabyrinth(false,function(resp)
+        local str = resp.labyrinthResp
+        svrData = MazeUtils.JsonDecode(str)
+        local data = GetMazeEntryData(svrData,isFirst)
+        self:SendNotification("RefreshMazeEntryView",data)    
+    end)
+end
+
+function DoOnExit()
+    MazeUtils = nil
+end
+
+function OnCommand_ShowTip(objs)
+    local data = objs[0]
+    ShowTip(self,data.typeId,data.id)
+end
+
+function OnCommand_Explore(objs)
+    local MazeState = MazeDef.MazeState
+    if svrData.status == MazeState.Die then
+        MazeUtils.ShowHintBox(Language:getStr("MazePlayerDie"))
+        return
+    end
+    if svrData.status == MazeState.Complete then
+        MazeUtils.ShowHintBox(Language:getStr("MazeHasOver"))
+        return
+    end
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("MazeStageView","MazeStageModel",true,true)
+        view:SetParamDataList(svrData)
+    end,"MazeStageView","MazeGridItemSlot")
+end

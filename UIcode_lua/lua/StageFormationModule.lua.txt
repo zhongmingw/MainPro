@@ -1,0 +1,22 @@
+http=CS.Client.Library.HttpBehaviour.instance
+local loadUIMgr=CS.Client.Library.LoadUIMgr.instance
+local msgCenter=CS.Client.Library.MsgCenter
+local cache=CS.Client.Library.ObjectCache.instance
+ 
+local isFirst=true
+
+function DoInit()
+	self.bgm=false
+end 
+
+function AssetNames(objs)
+	local arr={"StageFormationView","HeroItemSlot"}
+	return arr
+end
+
+function OnEnter(objs,onFinished)
+    self:OpenView("StageFormationView","StageFormationModel")
+    if(onFinished ~= nil)then
+        onFinished()  
+    end
+end

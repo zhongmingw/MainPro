@@ -1,0 +1,1020 @@
+local battleModelRoot
+local battleBGRoot
+local battleEffectRoot
+local battlePopNumRoot
+
+local lastRoundState = 0
+local lastActionState = 0
+local curRoundState = 0
+local curActionState = 0
+
+local OnTrigger = false
+local isFirst = false
+
+-----------状态常量-----------
+local BattleState =
+{
+	idleBattleState = 0,
+	enterBattleState = 1,
+	enterRoundState = 2,
+	doRoundState = 3,
+	exitRoundState = 4,
+	exitBattleState = 5,
+	changeBattleSceneState = 6
+}
+local ActionState =
+{
+	idleActionState = 0,
+	enterActionState = 1,
+	doActionState = 2,
+	exitActionState = 3
+}
+-------------END----------------
+local redHeroList={}
+local blackHeroList={}
+
+local heroesDataMap = {}
+local heroesDataArr = {}
+local heroPosMap = {}
+local simulateHeroPosConst =
+{
+	[1]={x=-88,y=-231},
+	[2]={x=-88,y=-485},
+	[3]={x=-252,y=-90},
+	[4]={x=-252,y=-364},
+	[5]={x=-417,y=-231},
+	[6]={x=-417,y=-485},
+	[7]={x=320,y=-364},
+
+}
+local redUpHeroCount = 0
+
+local onHookStageId = 0
+local roundIndex = 1
+local actionIndex = 1
+local deadlineIndex = 1
+local maxAttackedCount = 7
+local monsterIndex = 1
+local maxRound
+local maxAction
+local simulateHeroUidList = {}
+
+local curAttackHeroData = {}
+local curDefendHeroData = {}
+local curMonsterData = {}
+
+local dieSfxName
+local dieSfxSoundName
+local hurtMaterialName
+local startSfxName
+local startSfxSoundName
+
+local inBattle = false
+
+-----------Spine动画常量-----------
+local SpineAnimState =
+{
+	idleAnim = "stand",
+	runForwardAnim = "walk",
+	dieAnim = "stun",
+	stunAnim = "stun",
+	jumpBackAnim = "walk",
+	walk = "walk",
+	hurtAnim = "hurt",
+	attackAnim = "attack_1",
+	skillAnim = "attack_2"
+}
+-------------END-------------------
+
+-----------Spine骨骼常量-----------
+local SpineBone =
+{
+	hurtPos = "scale",
+	bloodPos = "p_o",
+	dotPos = "p_h",
+	shadowPos = "p_s",
+	attackPos = "p_l"
+}
+-------------END-------------------
+
+-----------Spine动画事件常量-----------
+local SpineEvent =
+{
+	sound = "e_gjsy",
+	attack = "e_gj",
+}
+-------------END--------------------
+
+-----------英雄攻击方式-----------
+local AttackType=
+{
+	Melee = 1,      --近战
+	Ranged = 2      --远程
+}
+-------------END-------------------
+
+-----------英雄攻击方式-----------
+local DefendType=
+{
+	Direct = 1,        --直接作用于受击者，直接播放攻击效果
+	Missile = 2,       --飞行器
+	Ray = 3,           --激光
+	Indirect = 4,      --间接作用于受击者，通过攻击特效的e_zp事件触发攻击效果
+	Unique = 5,        --唯一的攻击效果   
+	Parabola = 6,      --抛物线
+}
+-------------END-------------------
+
+-----------声音阵营-----------
+local SoundCamp=
+{
+	player = 2,
+	enemy = 3
+}
+-------------END-------------------
+
+local waiting = true
+local exiting = false
+
+local TICKER_EXITROUND = "ticker_ExitRound_SimulateBattleModel"
+local TICKER_EXITACTION = "ticker_ExitAction_SimulateBattleModel"
+local TICKER_HEROMODELAPPEAR = "ticker_HeroModelAppear_SimulateBattleModel"
+local ticker_HeroModelAppear_Arr = {}
+local TICKER_EXITING = "ticker_HeroModelAppear_exiting_SimulateBattleModel"
+
+function DoInit()
+	MsgCenter:Subscribe(Notify_OnBattleStart,OnBattleStart)
+	MsgCenter:Subscribe(Notify_OnBattleEnd,OnBattleEnd)
+end
+
+function OnBattleStart(obj)
+	inBattle=true
+end
+
+function OnBattleEnd(obj)
+	inBattle=false
+end
+
+function OnCommand_IsFirst(objs)
+	isFirst=objs[0]
+end
+
+function OnCommand_InitBattle(objs)
+	CsBridge.objectCache.CanGCCollect=false
+	battleModelRoot=objs[0]
+	battleEffectRoot=objs[1]
+	redHeroList=objs[2]
+	blackHeroList=objs[3]
+	onHookStageId=objs[4]
+
+	exiting = false
+	for i=1,6 do
+		GetSimulateHero(redHeroList,i)
+		if #redHeroList==0 then
+			break
+		end
+	end
+	local assetsName = GetAssetsName()
+	redUpHeroCount=0
+	for k,v in pairs(heroesDataMap) do
+		redUpHeroCount = redUpHeroCount + 1
+	end
+	curRoundState=BattleState.idleBattleState
+	curActionState=ActionState.idleActionState
+	CsBridge.UnityHelper.LuaCallCacheCacheAssets(false,tostring(onHookStageId),nil,OnCachFinished,assetsName)
+end
+
+
+
+
+function GetSimulateHero(heroList,pos)
+	local index = CsBridge.UnityHelper.GetRandomInt(1,#heroList)
+	if heroList==nil or #heroList==0 then
+		return
+	end
+	local uid = heroList[index].uid
+	local heroData = GetSingleHeroData(heroList[index],pos)
+	if heroData~=nil then
+		heroesDataMap[uid]=heroData
+		table.insert(heroesDataArr,heroData)
+	end
+	table.remove(heroList,index)
+end
+
+function GetSingleHeroData(hero,pos)
+	local heroData = {}
+	local actorId = 0
+	local assets = {}
+	if hero.isMonster == 1 then --怪物
+		actorId = ResTblContainer:GetPropToInt(hero.templateid, Monster.actorId, Monster.actorTbl)
+	else --英雄
+		actorId = ResTblContainer:GetPropToInt(hero.templateid, Hero.soldierId, Hero.actorTbl)
+	end
+	if actorId == 0 then
+		return nil
+	end
+	--英雄模型资源
+	heroData.assetsName={}
+	local infos = ResTblContainer:GetRowFromTbl(HeroBase.actorTbl,tostring(actorId),HeroBase.model,HeroBase.attackId,HeroBase.sfxFactor)
+	if infos[0]~=nil and infos[0]~="" then
+		heroData.assetsName.modelName=infos[0]
+		table.insert(assets,infos[0])
+	end
+	heroData.assetsName.subskillMap={}
+	--普攻资源
+	heroData.assetsName.attackSkillId=infos[1]
+	GetHeroAttackAssets(infos[1],assets,heroData)
+	--角色材质球
+	local materialName = string.gsub(infos[0],"p","Material")
+	if materialName~=nil then
+		heroData.assetsName.materialName = materialName
+		table.insert(assets,materialName)
+	end
+	local sfxFactor = infos[2]
+	heroData.assetsName.assets=assets
+	--------------HeroData数据结构----------------
+	heroData.heroInfo={}
+	heroData.heroInfo.uid=hero.uid
+	heroData.heroInfo.actorId=actorId
+	heroData.heroInfo.templateid=hero.templateid
+	heroData.heroInfo.camp=hero.camp
+	heroData.heroInfo.isMonster=hero.isMonster
+	heroData.heroInfo.sfxFactor=sfxFactor
+	heroData.heroInfo.pos=pos
+
+	heroData.bone={}
+	heroData.bone.bonePosDic={}
+	--------------------END-----------------------
+	return heroData
+end
+
+function GetHeroAttackAssets(id,assets,heroData)
+	local skillId = id
+	if skillId~=nil and skillId~="" then
+		local subIdStr = ResTblContainer:GetPropToStr(skillId, SkillBase.subIdStr, SkillBase.actorTbl)
+		local subIds = SplitString(subIdStr,",")
+		local skillTbl=ResTblContainer:GetTable(Subskill.tblName)
+		local weaponTbl=ResTblContainer:GetTable(WeaponSfx.tblName)
+		for i=0,subIds.Length-1 do
+			local subInfos = skillTbl:GetRow(subIds[i],Subskill.attackSfx,Subskill.hurtSfx,Subskill.attackType)
+			local subskillData = {}
+			if subInfos[0]~=nil and subInfos[0]~=""  then
+				local attackSfxId = tonumber(subInfos[0])
+				local res_attackSfx = weaponTbl:Get(attackSfxId, WeaponSfx.sfxName)
+				local sound = weaponTbl:Get(attackSfxId, WeaponSfx.sound)
+				local attackBoneName = weaponTbl:Get(attackSfxId, WeaponSfx.pos)
+				table.insert(assets,res_attackSfx)
+				table.insert(assets,sound)
+				subskillData.attackSfx={name=res_attackSfx,boneName=attackBoneName,soundName=sound}
+			end
+			if subInfos[1]~=nil and subInfos[1]~="" then
+				local hurtSfxId = tonumber(subInfos[1])
+				local res_hurtSfx = weaponTbl:Get(hurtSfxId, WeaponSfx.sfxName)
+				local sound = weaponTbl:Get(hurtSfxId, WeaponSfx.sound)
+				local hurtBoneName = weaponTbl:Get(hurtSfxId, WeaponSfx.pos)
+				table.insert(assets,res_hurtSfx)
+				table.insert(assets,sound)
+				subskillData.hurtSfx={name=res_hurtSfx,boneName=hurtBoneName,soundName=sound}
+			end
+			local defendType = subInfos[2]
+			subskillData.defendType=defendType
+			heroData.assetsName.subskillMap[tonumber(subIds[i])]=subskillData
+		end
+	end
+end
+
+function GetAssetsName()
+	local sources = {}
+	local tbl=ResTblContainer:GetTable(OtherRes.tblName)
+	dieSfxName=tbl:Get(6, OtherRes.res)
+	table.insert(sources,dieSfxName)
+	hurtMaterialName=tbl:Get(8, OtherRes.res)
+	table.insert(sources,hurtMaterialName)
+	startSfxName=tbl:Get(11, OtherRes.res)
+	table.insert(sources,startSfxName)
+	startSfxSoundName=tbl:Get(12, OtherRes.res)
+	table.insert(sources,startSfxSoundName)
+	dieSfxSoundName=tbl:Get(13, OtherRes.res)
+	table.insert(sources,dieSfxSoundName)
+	GetHeroesAssetsName(sources)
+	return sources
+end
+
+
+function GetHeroesAssetsName(sources)
+	for i,heroData in pairs(heroesDataMap) do
+		for k,asset in pairs(heroData.assetsName.assets) do
+			table.insert(sources,asset)
+		end
+	end
+end
+
+function OnCachFinished()
+	self:SendNotification("OnCachFinished")
+	if exiting then
+		return
+	end
+	InitHeroes(
+			function ()
+				SetState(BattleState.enterBattleState,ActionState.idleActionState)
+			end)
+end
+
+
+function InitHeroes(onFinished)
+	for uid,heroData in pairs(heroesDataMap) do
+		LoadHero(heroData)
+	end
+	if onFinished~=nil then
+		onFinished()
+	end
+end
+
+function LoadHero(heroData)
+	heroData.entity={}
+	heroData.entity.skeleton,heroData.entity.model=LoadSpine(heroData)
+	table.insert(simulateHeroUidList,heroData.heroInfo.uid)
+	GetBone(heroData,SpineBone.hurtPos)
+	GetBone(heroData,SpineBone.attackPos)
+end
+
+function LoadSpine(heroData)
+	local skeleton = CsBridge.SpineHelper.CreatSpineModelWithoutCache(heroData.assetsName.modelName,battleModelRoot)
+	skeleton.gameObject:SetActive(false)
+	local modelRect = skeleton.transform.parent:GetComponent("RectTransform")
+	local x = simulateHeroPosConst[heroData.heroInfo.pos].x
+	local y = simulateHeroPosConst[heroData.heroInfo.pos].y
+	local scale = tonumber(ResTblContainer:GetGameBaseInfo("commonScale"))
+	CsBridge.UnityHelper.SetAnchoredPosition(skeleton.rectTransform.parent.gameObject,x,y)
+	if heroData.heroInfo.camp==0 then
+		CsBridge.UnityHelper.SetUIReverse(modelRect)
+	else
+		scale=scale*1.5
+	end
+	heroPosMap[heroData.heroInfo.pos+heroData.heroInfo.camp*10]=modelRect.localPosition
+	CsBridge.UnityHelper.SetUILocalScale(modelRect,scale)
+	return skeleton,modelRect
+end
+
+function GetBone(heroData,boneName)
+	if heroData == nil or heroData.bone == nil then
+		return
+	end
+	local bonePos = heroData.bone.bonePosDic[boneName]
+	if 	bonePos~=nil then
+		return bonePos
+	else
+		local go = CsBridge.UnityHelper.CreateNewUIGameObject(boneName,heroData.entity.model)
+		local rect=go:GetComponent("RectTransform")
+		local bf = CsBridge.UnityHelper.GetOrAddComponent(go,"Spine.Unity.BoneFollowerGraphic")
+		if not heroData.entity.model.gameObject.activeSelf then
+			return
+		end
+		bf.SkeletonGraphic = heroData.entity.skeleton
+		bf.followBoneRotation = false
+		bf:SetBone(boneName)
+		if heroData.heroInfo.sfxFactor~= nil and heroData.heroInfo.sfxFactor~="" then
+			CsBridge.UnityHelper.SetUILocalScale(rect,heroData.heroInfo.sfxFactor/100)
+		end
+		heroData.bone.bonePosDic[boneName]=rect
+		return rect
+	end
+end
+
+--------------流程控制----------------
+function OnCommand_DeactiveView(objs)
+	exiting = true
+	SetState(BattleState.idleBattleState,ActionState.idleActionState)
+end
+
+function OnCommand_SkipBattle(objs)
+	exiting = true
+	Timer:StopTicker(TICKER_EXITROUND)
+	Timer:StopTicker(TICKER_EXITACTION)
+	for i = 1, #ticker_HeroModelAppear_Arr do
+		Timer:StopTicker(ticker_HeroModelAppear_Arr[i])
+	end
+	Timer:StopTicker(TICKER_EXITING)
+	ExitBattle()
+end
+
+function Update()
+	if exiting then
+		return
+	end
+	if not OnTrigger then
+		return
+	end
+	OnTrigger=false
+	if curRoundState==BattleState.enterBattleState then
+		EnterBattle()
+	elseif curRoundState==BattleState.enterRoundState then
+		EnterRound()
+	elseif curRoundState==BattleState.doRoundState then
+		DoRound()
+	elseif curRoundState==BattleState.exitRoundState then
+		ExitRound()
+	elseif curRoundState==BattleState.exitBattleState then
+		ExitBattle()
+	elseif curRoundState==BattleState.changeBattleSceneState then
+		GoToAnotherScene()
+	end
+end
+
+function SetState(local_roundstate,local_actionState)
+	OnTrigger=true
+	if curRoundState~=local_roundstate then
+		lastRoundState=curRoundState
+		curRoundState=local_roundstate
+	end
+	if curActionState~=local_actionState then
+		lastActionState=curActionState
+		curActionState=local_actionState
+	end
+end
+
+function EnterBattle()
+	ResetHeroPos()
+	roundIndex = 1
+	actionIndex = 1
+	deadlineIndex = 1
+	monsterIndex = 1
+	EnterAnim(
+			function()
+				SetState(BattleState.enterRoundState,ActionState.idleActionState)
+			end)
+end
+
+function EnterRound()
+	actionIndex = 1
+	if deadlineIndex==1 then
+		maxAction = redUpHeroCount+1
+		maxAttackedCount = CsBridge.UnityHelper.GetRandomInt(3,8)
+		maxAction = math.min(maxAction,maxAttackedCount+1-deadlineIndex)
+		--TODO 加载下一个敌人
+		monsterIndex=monsterIndex+1
+		local index=monsterIndex%(#blackHeroList)
+		if index==0 then
+			index=#blackHeroList
+		end
+		local hero = blackHeroList[index]
+		curMonsterData = heroesDataMap[hero.uid]
+		if curMonsterData==nil then
+			curMonsterData = GetSingleHeroData(hero,7)
+			if curMonsterData~=nil then
+				heroesDataMap[hero.uid]=curMonsterData
+			end
+		end
+		CsBridge.UnityHelper.LuaCallCacheCacheAssets(false,tostring(onHookStageId),nil,
+				function()
+					if inBattle then
+						return
+					end
+					if exiting then
+						return
+					end
+					LoadHero(curMonsterData)
+					curMonsterData.entity.skeleton.gameObject:SetActive(false)
+					local skeleton_GO = CsBridge.objectCache:CreateObject(startSfxName,true,GetBone(curMonsterData,SpineBone.shadowPos))
+					local skeleton = skeleton_GO:GetComponent("SkeletonGraphic")
+					skeleton:SetSpineDefaultRectTransform()
+					skeleton:PlayFirstAnim(false,
+							function (e)
+								if e==SpineEvent.sound then
+									if startSfxSoundName~=nil and startSfxSoundName~="" then
+										CsBridge.audioManager:PlaySound(SoundCamp.player,startSfxSoundName)
+									end
+								end
+								if e=="e_zp" then
+									curMonsterData.entity.skeleton.gameObject:SetActive(true)
+									curMonsterData.entity.skeleton:PlayAnimation(SpineAnimState.idleAnim,true)
+								end
+							end,
+							function ()
+								SetState(BattleState.doRoundState,ActionState.enterActionState)
+								skeleton:RecyclSpineModel()
+							end)
+				end,curMonsterData.assetsName.assets)
+	else
+		maxAction = math.min(maxAction,maxAttackedCount+1-deadlineIndex)
+		SetState(BattleState.doRoundState,ActionState.enterActionState)
+	end
+end
+
+function DoRound()
+	if maxAction<0 then
+		SetState(BattleState.exitRoundState,ActionState.idleActionState)
+		return
+	end
+	if curActionState==ActionState.enterActionState then
+		EnterAction()
+	elseif curActionState==ActionState.doActionState then
+		DoAction()
+	elseif curActionState==ActionState.exitActionState then
+		ExitAction()
+
+	end
+end
+
+function ExitRound()
+	Timer:AddTicker(TICKER_EXITROUND,tonumber(ResTblContainer:GetGameBaseInfo("roundDelay"))*1000+CsBridge.timeManager.ServerTime,nil,
+			function ()
+				if exiting or self == nil or self.Module == nil then
+					return
+				end
+				roundIndex=roundIndex+1
+				if deadlineIndex==maxAttackedCount+1 then
+					deadlineIndex=1
+					if curMonsterData~=nil and next(curMonsterData)~=nil then
+						CsBridge.SpineHelper.ClearSpineModel(tostring(curMonsterData.heroInfo.uid),curMonsterData.entity.model.gameObject)
+						simulateHeroUidList[#simulateHeroUidList]=nil
+						heroesDataMap[curMonsterData.heroInfo.uid]=nil
+						curMonsterData={}
+					end
+					if not isFirst then
+						SetState(BattleState.changeBattleSceneState,ActionState.idleActionState)
+					else
+						SetState(BattleState.enterRoundState,ActionState.idleActionState)
+					end
+				else
+					SetState(BattleState.enterRoundState,ActionState.idleActionState)
+				end
+			end,nil)
+end
+
+function ExitBattle()
+	for i,uid in ipairs(simulateHeroUidList) do
+		local heroData = heroesDataMap[uid]
+		if heroData.entity.model~=nil then
+			CsBridge.SpineHelper.ClearSpineModel(tostring(heroData.heroInfo.uid),heroData.entity.model.gameObject)
+		end
+	end
+	CsBridge.objectCache:ClearGroup(tostring(onHookStageId))
+	curMonsterData={}
+	simulateHeroUidList={}
+	heroesDataMap={}
+	heroesDataArr={}
+	OnTrigger=false
+	CsBridge.objectCache.CanGCCollect=true
+	self:SendNotification("ExitBattle")
+end
+
+function GoToAnotherScene()
+	for uid,heroData in pairs(heroesDataMap) do
+		heroData.entity.skeleton:PlayAnimation(SpineAnimState.walk,true,nil,nil)
+	end
+	local interval = 1.5
+	MsgCenter:Broadcast(Notify_BGMoveInit,{interval})
+	CsBridge.timeManager:UpdateFrame(interval,
+			function(t)
+				if self == nil or self.Module == nil then
+					return
+				end
+				MsgCenter:Broadcast(Notify_BGMoveStart,{[0]=interval,[1]=t})
+			end,
+			function()
+
+				if exiting or self == nil or self.Module == nil then
+					return
+				end
+
+				MsgCenter:Broadcast(Notify_BGMoveEnd)
+				for uid,heroData in pairs(heroesDataMap) do
+					heroData.entity.skeleton:PlayAnimation(SpineAnimState.idleAnim,true,nil,nil)
+				end
+				if inBattle then
+					return
+				end
+				SetState(BattleState.enterRoundState,ActionState.idleActionState)
+			end,
+			function ()
+
+				return exiting or self == nil or self.Module == nil
+			end)
+end
+
+function EnterAction()
+	curAttackHeroData=heroesDataMap[simulateHeroUidList[actionIndex]]
+	curDefendHeroData=actionIndex~=#simulateHeroUidList and curMonsterData or heroesDataMap[simulateHeroUidList[CsBridge.UnityHelper.GetRandomInt(1,redUpHeroCount)]]
+	SetState(curRoundState,ActionState.doActionState)
+end
+
+function DoAction()
+	if curAttackHeroData ~= nil then
+		local attackerRect = curAttackHeroData.entity.model
+		attackerRect:SetSiblingIndex(curDefendHeroData.entity.model:GetSiblingIndex()+1)
+		local attackType = ResTblContainer:GetPropToInt(curAttackHeroData.assetsName.attackSkillId, SkillBase.attackType, SkillBase.actorTbl)
+		--print(attackType)
+		if attackType==AttackType.Melee then
+			DoAttack_Melee(curAttackHeroData,curDefendHeroData,OnAttackFinished)
+		elseif attackType==AttackType.Ranged then
+			DoAttack_Ranged(curAttackHeroData,curDefendHeroData,OnAttackFinished)
+		end
+	end
+end
+
+function ExitAction()
+	if curAttackHeroData.heroInfo.uid~=curMonsterData.heroInfo.uid then
+		deadlineIndex=deadlineIndex+1
+	end
+	curAttackHeroData={}
+	curDefendHeroData={}
+	Timer:AddTicker(TICKER_EXITACTION,tonumber(ResTblContainer:GetGameBaseInfo("actionDelay"))*1000+CsBridge.timeManager.ServerTime,nil,
+			function ()
+				if self == nil or self.Module == nil then
+					return
+				end
+				actionIndex=actionIndex+1
+				if actionIndex<=maxAction then
+					SetState(BattleState.doRoundState,ActionState.enterActionState)
+				else
+					SetState(BattleState.exitRoundState,ActionState.idleActionState)
+				end
+			end,nil)
+end
+
+--------------------END-----------------------
+
+function EnterAnim(onFinished)
+	for index,heroData in pairs(heroesDataArr) do
+		heroData.entity.skeleton.gameObject:SetActive(false)
+	end
+	local index = next(heroesDataArr)
+	HeroModelAppear(index,onFinished)
+end
+
+function HeroModelAppear(index,onFinished)
+	local heroData = heroesDataArr[index]
+	if heroData~=nil then
+		if heroData.heroInfo.camp==0 then
+			heroData.entity.skeleton.gameObject:SetActive(false)
+			local skeleton_GO = CsBridge.objectCache:CreateObject(startSfxName,true,GetBone(heroData,SpineBone.shadowPos))
+			local skeleton = skeleton_GO:GetComponent("SkeletonGraphic")
+			skeleton:SetSpineDefaultRectTransform()
+			skeleton:PlayFirstAnim(false,
+					function (e)
+						if e==SpineEvent.sound then
+							if startSfxSoundName~=nil and startSfxSoundName~="" then
+								CsBridge.audioManager:PlaySound(SoundCamp.player,startSfxSoundName)
+							end
+						end
+						if e=="e_zp" then
+							heroData.entity.skeleton.gameObject:SetActive(true)
+							heroData.entity.skeleton:PlayAnimation(SpineAnimState.idleAnim,true)
+						end
+					end,
+					function()
+						skeleton:RecyclSpineModel()
+					end)
+			Timer:AddTicker(TICKER_HEROMODELAPPEAR..index,0.1*1000+CsBridge.timeManager.ServerTime,nil,
+					function ()
+						if exiting or self == nil or self.Module == nil then
+							return
+						end
+						local nextIndex = next(heroesDataArr,index)
+						HeroModelAppear(nextIndex,onFinished)
+					end,nil)
+			table.insert(ticker_HeroModelAppear_Arr,TICKER_HEROMODELAPPEAR..index)
+		else
+			local nextIndex = next(heroesDataArr,index)
+			HeroModelAppear(nextIndex,onFinished)
+		end
+	else
+		Timer:AddTicker(TICKER_EXITING,0.5*1000+CsBridge.timeManager.ServerTime,nil,onFinished,nil)
+	end
+end
+
+function DoAttack_Melee(attackHeroData,defendHeroData,OnAttackFinished)
+	local attacker_model = attackHeroData.entity.model
+	local attacker_Skeleton = attackHeroData.entity.skeleton
+	local off = tonumber(ResTblContainer:GetGameBaseInfo("reachOff"))
+	if attackHeroData.heroInfo.camp == 0 then
+		off=-off
+	end
+	local reachTime = tonumber(ResTblContainer:GetGameBaseInfo("reachTime"))
+	if defendHeroData.entity==nil then
+		return
+	end
+	local defender_model = defendHeroData.entity.model
+	local defender_Skeleton = defendHeroData.entity.skeleton
+	local x = defender_model.localPosition.x
+	local y = defender_model.localPosition.y
+	local tweener = CsBridge.TweenUtils.MoveTo(attacker_model,x+off,y,reachTime,
+			function ()
+				attacker_Skeleton:PlayAnimation(SpineAnimState.attackAnim,false,
+						function (e)
+							if e==SpineEvent.attack then
+								ChooseDefendType(attackHeroData,defendHeroData)
+							end
+						end,
+						function ()
+							local lastPosition = heroPosMap[curAttackHeroData.heroInfo.pos+curAttackHeroData.heroInfo.camp*10]
+							local lastX=lastPosition.x
+							local lastY=lastPosition.y
+							local returnBackTweener = CsBridge.TweenUtils.MoveTo(attacker_model,lastX,lastY,reachTime,
+									function ()
+										OnAttackFinished()
+									end)
+							returnBackTweener:DoPlay()
+						end)
+			end)
+	--tweener:SetEase(1)
+	tweener:DoPlay()
+end
+
+function DoAttack_Ranged(attackHeroData,defendHeroData,OnAttackFinished)
+	local attacker_model = attackHeroData.entity.model
+	local attacker_Skeleton = attackHeroData.entity.skeleton
+	attacker_Skeleton:PlayAnimation(SpineAnimState.attackAnim,false,
+			function (e)
+				if e==SpineEvent.attack then
+					ChooseDefendType(attackHeroData,defendHeroData)
+				end
+			end,
+			function ()
+				OnAttackFinished()
+			end)
+end
+
+function OnAttackFinished()
+	if curAttackHeroData~=nil and next(curAttackHeroData)~=nil then
+		local attacker_Skeleton = curAttackHeroData.entity.skeleton
+		attacker_Skeleton:PlayAnimation(SpineAnimState.idleAnim,true,nil,nil)
+		ResetHeroPos()
+		SetState(curRoundState,ActionState.exitActionState)
+	end
+end
+
+function ResetHeroPos()
+	table.sort(heroesDataArr,
+			function (a,b)
+				if a.entity.model.localPosition.y<b.entity.model.localPosition.y then
+					return true
+				elseif a.entity.model.localPosition.y==b.entity.model.localPosition.y then
+					if a.heroInfo.pos<b.heroInfo.pos then
+						return true
+					elseif a.heroInfo.pos==b.heroInfo.pos then
+						if a.heroInfo.camp<b.heroInfo.camp then
+							return true
+						end
+					end
+				end
+				return false
+			end)
+	for k,heroData in pairs(heroesDataArr) do
+		heroData.entity.model:SetAsFirstSibling()
+	end
+end
+
+function ChooseDefendType(attackHeroData,defendHeroData)
+	local subIdStr = ResTblContainer:GetPropToStr(attackHeroData.assetsName.attackSkillId, SkillBase.subIdStr, SkillBase.actorTbl)
+	local subIds = SplitString(subIdStr,",")
+	local defendSubskillId=tonumber(subIds[0])
+	local defendType = ResTblContainer:GetPropToInt(defendSubskillId, Subskill.attackType, Subskill.tblName)
+	local subskillData = attackHeroData.assetsName.subskillMap[defendSubskillId]
+	--print(defendSubskillId,defendType)
+	if defendType==DefendType.Direct then
+		DoDefend_Direct(attackHeroData,defendHeroData,subskillData)
+	elseif defendType==DefendType.Missile then
+		DoDefend_Missile(attackHeroData,defendHeroData,subskillData)
+	elseif defendType==DefendType.Ray then
+		DoDefend_Ray(attackHeroData,defendHeroData,subskillData)
+	elseif defendType==DefendType.Indirect then
+		DoDefend_Indirect(attackHeroData,defendHeroData,subskillData)
+	elseif defendType==DefendType.Parabola then
+		DoDefend_Parabola(attackHeroData,defendHeroData,subskillData)
+	end
+end
+
+function DoDefend_Direct(attackHeroData,defendHeroData,subskillData)
+	local skeleton_GO = CsBridge.objectCache:CreateObject(subskillData.attackSfx.name,true,GetBone(defendHeroData,subskillData.attackSfx.boneName))
+	local skeleton = skeleton_GO:GetComponent("SkeletonGraphic")
+	if skeleton~= nil then
+		skeleton:SetSpineDefaultRectTransform()
+		skeleton:SetSpineReverse()
+		if subskillData.attackSfx.soundName~=nil and subskillData.attackSfx.soundName~= "" then
+			CsBridge.audioManager:PlaySound(SoundCamp.player,subskillData.attackSfx.soundName)
+		end
+		skeleton:PlayFirstAnim(false,nil,
+				function ()
+					if skeleton_GO.activeSelf then
+						skeleton:RecyclSpineModel()
+					end
+				end)
+	end
+	DoActionHurt(attackHeroData,defendHeroData,subskillData)
+end
+
+function DoDefend_Missile(attackHeroData,defendHeroData,subskillData)
+	local skeleton_GO = CsBridge.objectCache:CreateObject(subskillData.attackSfx.name,true,GetBone(attackHeroData,SpineBone.attackPos))
+	local skeleton = skeleton_GO:GetComponent("SkeletonGraphic")
+	skeleton:SetSpineDefaultRectTransform()
+	local hurtPos = GetBone(defendHeroData,SpineBone.hurtPos)
+	if subskillData.attackSfx.soundName~=nil and subskillData.attackSfx.soundName~= "" then
+		CsBridge.audioManager:PlaySound(SoundCamp.player,subskillData.attackSfx.soundName)
+	end
+	skeleton:PlayFirstAnim(true,nil,nil)
+	CsBridge.BattleUtils.SetSpineMissile(skeleton.rectTransform,hurtPos,
+			function()
+				skeleton:RecyclSpineModel()
+				DoActionHurt(attackHeroData,defendHeroData,subskillData)
+			end)
+
+end
+
+function DoDefend_Ray(attackHeroData,defendHeroData,subskillData)
+	local attackPos = GetBone(attackHeroData,SpineBone.attackPos)
+	local hurtPos = GetBone(defendHeroData,SpineBone.hurtPos)
+	CsBridge.audioManager:PlaySound(SoundCamp.player,subskillData.attackSfx.soundName)
+	CsBridge.BattleUtils.SetSpineRay(subskillData.attackSfx.name,attackPos,hurtPos)
+	DoActionHurt(attackHeroData,defendHeroData,subskillData)
+end
+
+function DoDefend_Indirect(attackHeroData,defendHeroData,subskillData)
+	local skeleton_GO = CsBridge.objectCache:CreateObject(subskillData.attackSfx.name,true,GetBone(attackHeroData,subskillData.attackSfx.boneName))
+	local skeleton = skeleton_GO:GetComponent("SkeletonGraphic")
+	skeleton:SetSpineDefaultRectTransform()
+	skeleton:SetSpineReverse()
+	skeleton:PlayFirstAnim(false,
+			function (e)
+				if e==SpineEvent.sound then
+					if subskillData.attackSfx.soundName~=nil and subskillData.attackSfx.soundName~= "" then
+						CsBridge.audioManager:PlaySound(SoundCamp.player,subskillData.attackSfx.soundName)
+					end
+				end
+				if e=="e_zp" then
+					DoActionHurt(attackHeroData,defendHeroData,subskillData)
+				end
+			end,
+			function ()
+				skeleton:RecyclSpineModel()
+			end)
+end
+
+function DoDefend_Parabola(attackHeroData,defendHeroData,subskillData)
+	local skeleton_GO = CsBridge.objectCache:CreateObject(subskillData.attackSfx.name,true,GetBone(attackHeroData,SpineBone.attackPos))
+	local skeleton = skeleton_GO:GetComponent("SkeletonGraphic")
+	skeleton:SetSpineDefaultRectTransform()
+	local hurtPos = GetBone(defendHeroData,SpineBone.hurtPos)
+	if subskillData.attackSfx.soundName~=nil and subskillData.attackSfx.soundName~= "" then
+		CsBridge.audioManager:PlaySound(SoundCamp.player,subskillData.attackSfx.soundName)
+	end
+	skeleton:PlayFirstAnim(true,nil,nil)
+	CsBridge.BattleUtils.SetSpineParabola(skeleton.rectTransform,hurtPos,
+			function()
+				if exiting then
+					return
+				end
+				DoActionHurt(attackHeroData,defendHeroData,subskillData)
+				skeleton:RecyclSpineModel()
+			end)
+end
+
+function DoActionHurt(attackHeroData,defendHeroData,subskillData)
+	if defendHeroData.heroInfo.uid~=curMonsterData.heroInfo.uid or deadlineIndex<maxAttackedCount then
+		if defendHeroData==nil or defendHeroData.entity==nil then
+			return
+		end
+		local skeleton=defendHeroData.entity.skeleton
+		--BattleUtils.AttackedMaterialShow(skeleton)
+		skeleton:PlayAnimation(SpineAnimState.hurtAnim,false,nil,
+				function ()
+					--skeleton:ChangeMaterial(defendHeroData.assetsName.materialName)
+					skeleton:PlayAnimation(SpineAnimState.idleAnim,true,nil,nil)
+				end)
+		if subskillData.hurtSfx ~= nil then
+			local skeleton_GO = CsBridge.objectCache:CreateObject(subskillData.hurtSfx.name,true,GetBone(defendHeroData,subskillData.hurtSfx.boneName))
+			local skeleton = skeleton_GO:GetComponent("SkeletonGraphic")
+			skeleton:SetSpineDefaultRectTransform()
+			skeleton:SetSpineReverse()
+			if skeleton==nil then
+				return
+			end
+			skeleton:PlayFirstAnim(false,
+					function()
+						if e==SpineEvent.sound then
+							if subskillData.hurtSfx.soundName~=nil and subskillData.hurtSfx.soundName~= "" then
+								CsBridge.audioManager:PlaySound(SoundCamp.enemy,subskillData.hurtSfx.soundName)
+							end
+						end
+					end,
+					function ()
+						skeleton:RecyclSpineModel()
+					end)
+		end
+	else
+		local skeleton_GO = CsBridge.objectCache:CreateObject(dieSfxName,true,GetBone(defendHeroData,SpineBone.shadowPos))
+		if skeleton_GO==nil then
+			return
+		end
+		local skeleton = skeleton_GO:GetComponent("SkeletonGraphic")
+		skeleton:SetSpineDefaultRectTransform()
+		defendHeroData.entity.skeleton.gameObject:SetActive(false)
+		self:SendNotification("OnDie",skeleton.transform.position)
+		skeleton:PlayFirstAnim(false,
+				function()
+					if e==SpineEvent.sound then
+						if dieSfxSoundName~=nil and dieSfxSoundName~= "" then
+							CsBridge.audioManager:PlaySound(SoundCamp.enemy,dieSfxSoundName)
+						end
+					end
+				end,
+				function ()
+					skeleton:RecyclSpineModel()
+				end)
+	end
+end
+
+function DoOnExit()
+	MsgCenter:Unsubscribe(Notify_OnBattleStart,OnBattleStart)
+	MsgCenter:Unsubscribe(Notify_OnBattleEnd,OnBattleEnd)
+	self.Module = nil
+	Timer:StopTicker(TICKER_EXITROUND)
+	Timer:StopTicker(TICKER_EXITACTION)
+	for i = 1, #ticker_HeroModelAppear_Arr do
+		Timer:StopTicker(ticker_HeroModelAppear_Arr[i])
+	end
+	Timer:StopTicker(TICKER_EXITING)
+	battleModelRoot = nil
+	battleBGRoot = nil
+	battleEffectRoot = nil
+	battlePopNumRoot = nil
+
+	lastRoundState = nil
+	lastActionState = nil
+	curRoundState = nil
+	curActionState = nil
+
+	OnTrigger = nil
+	isFirst = nil
+
+	-----------状态常量-----------
+	BattleState = nil
+
+	ActionState = nil
+
+	-------------END----------------
+	redHeroList = nil
+	blackHeroList = nil
+
+	heroesDataMap = nil
+	heroesDataArr = nil
+	heroPosMap = nil
+	simulateHeroPosConst = nil
+	redUpHeroCount = nil
+
+	onHookStageId = nil
+	roundIndex = nil
+	actionIndex = nil
+	deadlineIndex = nil
+	maxAttackedCount = nil
+	monsterIndex = nil
+	maxRound = nil
+	maxAction = nil
+	simulateHeroUidList = nil
+
+	curAttackHeroData = nil
+	curDefendHeroData = nil
+	curMonsterData = nil
+
+	dieSfxName = nil
+	dieSfxSoundName = nil
+	hurtMaterialName = nil
+	startSfxName = nil
+	startSfxSoundName = nil
+
+	inBattle = nil
+
+	-----------Spine动画常量-----------
+	SpineAnimState = nil
+	-------------END-------------------
+
+	-----------Spine骨骼常量-----------
+	SpineBone = nil
+	-------------END-------------------
+
+	-----------Spine动画事件常量-----------
+	SpineEvent = nil
+	-------------END--------------------
+
+	-----------英雄攻击方式-----------
+	AttackType = nil
+	-------------END-------------------
+
+	-----------英雄攻击方式-----------
+	DefendType = nil
+	-------------END-------------------
+
+	-----------声音阵营-----------
+	SoundCamp = nil
+	-------------END-------------------
+
+	waiting = nil
+	exiting = nil
+	TICKER_EXITROUND = nil
+	TICKER_EXITACTION = nil
+	TICKER_HEROMODELAPPEAR = nil
+	ticker_HeroModelAppear_Arr = nil
+	TICKER_EXITING = nil
+end
+

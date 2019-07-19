@@ -1,0 +1,88 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-02-19 15:22:19
+]]
+local function SetAuraIconById(obj, id)
+    local icon = ""
+    if id <= 0 then
+        icon = "new_com_guanghuan11"
+    else
+        icon = ResTblContainer:GetPropToStr(id,AuraBase.icon,AuraBase.actorTbl)
+    end
+    CsBridge.IconData.SetIconByName(obj, icon)
+end
+
+local function SetAuraIcon(obj, aura)
+    SetAuraIconById(obj, aura and aura.id or 0)
+end
+
+local function GetAuraCondArrFromStr(condStr)
+    local condArr = {}
+    local result = SplitString(condStr, ";")
+    for i=0,result.Length-1 do
+        local str = SplitString(result[i], ",")
+        local raceId = tonumber(str[0])
+        local num = tonumber(str[1])
+        table.insert(condArr, {raceId = raceId, num = num})
+    end
+    return condArr
+end
+
+local function CheckAuraCondActive(cond, heroArr)
+    local num = 0
+    for i,v in ipairs(heroArr) do
+        local raceId = v.raceId or ResTblContainer:GetPropToInt(v.heroId,HeroBase.group,HeroBase.actorTbl)
+        if raceId == cond.raceId then
+            num = num+1
+        end
+    end
+    return num >= cond.num
+end
+
+local function CheckAuraActive(aura, heroArr)
+    local condArr = aura.condArr or GetAuraCondArrFromStr(aura.condition)
+    for i,cond in ipairs(condArr) do
+        if not CheckAuraCondActive(cond, heroArr) then
+            return false
+        end
+    end
+    return true
+end
+
+local function CalcAura(auraArr, heroArr)
+    local validAura = nil
+    for i,v in ipairs(auraArr) do
+        if CheckAuraActive(v, heroArr) then
+            v.isOn = true
+            validAura = v
+            break
+        end
+    end
+    return validAura
+end
+
+local function GetAuraArr()
+    local auraArr={}
+	for i, data in pairs(global_auraArr) do  
+		local newData={}
+		newData.id=data.id
+		newData.title=data.title
+		newData.icon=data.icon
+		newData.des=data.desp
+		newData.condition=data.cond
+		newData.isOn=false
+		newData.pos=i
+		newData.condDesp=data.condDesp
+		table.insert(auraArr,newData)
+    end
+    return auraArr
+end
+
+return {
+    SetAuraIconById = SetAuraIconById,
+    SetAuraIcon = SetAuraIcon,
+    GetAuraArr = GetAuraArr,
+    CalcAura = CalcAura,
+}

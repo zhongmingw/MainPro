@@ -1,0 +1,167 @@
+local callHeroInfo={}
+local playerInfo={}
+local summonData = {}
+local const_MultiCallDiscount
+local const_HeroSummonRewardCost
+
+function DoInit()
+
+end
+
+function InitProperties()
+end
+
+function OnCommand_InitSummonData(objs)
+    const_MultiCallDiscount=GetConstValue("multiCallDiscount")
+    const_HeroSummonRewardCost=GetConstValue("heroSummonRewardCost")
+    callHeroInfo=appData:checkData("CallHeroInfo")
+    playerInfo=appData:checkData("PlayerInfo")
+    if next(summonData)==nil then
+        local ids=GetIds(HeroSummon.tblName)
+        local tbl=ResTblContainer:GetTable(HeroSummon.tblName)
+        for  i = 0,ids.Length-1 do
+            local id=tonumber(ids[i])
+            local tmp={}
+            tmp.summonType=id
+            tmp.consume1=GetRewardFromTbl(tbl:Get(id,HeroSummon.consume1))[1]
+            tmp.have1Count=GetConsumeCount(tmp.consume1)
+            local consume2Str = tbl:Get(id,HeroSummon.consume2)
+            if consume2Str~="" then
+                tmp.consume2=GetRewardFromTbl(consume2Str)[1]
+                tmp.have2Count=GetConsumeCount(tmp.consume2)
+            end
+            tmp.free=tbl:GetInt(id,HeroSummon.free)
+            tmp.cd=tbl:GetInt(id,HeroSummon.cd)
+            table.insert(summonData,tmp)
+        end
+    end
+    self:SendNotification("InitSummonData",summonData,callHeroInfo,playerInfo,const_MultiCallDiscount,const_HeroSummonRewardCost)
+end
+
+function GetConsumeCount(reward)
+    local count = 0
+    if reward.typeId==1 then
+        if reward.id==2 then
+            count = playerInfo.payGem+playerInfo.rewardGem
+        elseif reward.id==7 then
+            count = playerInfo.friendCoin
+        end
+    elseif reward.typeId==2 then
+        local itemData = appData:checkItem("PackItem",tostring(reward.id))
+        if itemData~=nil then
+            count = itemData.count
+        end
+    else
+    end
+    if count==nil then
+        count=0 
+    end
+    return count
+end
+
+function OnCommand_Summon(objs)
+    local type = objs[0]
+    local count = objs[1]
+    local free = objs[2]
+    local DoSummon = objs[3]
+	local req={}
+	req.type=type
+    req.count=count
+    if  CheckSummon(free,type,count)  then
+        DoSummon(type,
+        function ()
+            HttpRequest("callHero", "CallHeroReq", "CallHeroResp", req,
+            function (resp)
+                CsBridge.CacheAssetsByModule(self.Module,function()
+                    local hideOtherView = false
+                    local view = CsBridge.OpenView("RewardReceivedView","LotteryModel",hideOtherView)
+                    view:SetParamDataList(resp.heroIds,function()
+                        if type == 2 then
+                            local heroIds = {}
+                            for i,v in ipairs(resp.heroIds) do
+                                table.insert(heroIds,v.id)
+                            end
+                            CheckAndShowConditionPackageView(self,GetConditionReqData(ConditionPackageType.Summon,table.arrtostring(heroIds)),GetConditionReqData(ConditionPackageType.TotalRecru,table.arrtostring(heroIds)))
+                        end
+                    end,true)
+                    callHeroInfo=appData:checkData("CallHeroInfo")
+                    playerInfo=appData:checkData("PlayerInfo")
+                    local data = summonData[type]
+                    data.have1Count=GetConsumeCount(data.consume1)
+                    if data.consume2~=nil then
+                        data.have2Count=GetConsumeCount(data.consume2)
+                    end
+                    self:SendNotification("OnGachaUpdate",type,data,callHeroInfo,playerInfo)
+                end, "RewardReceivedView","ItemSlot")
+            end)
+        end,
+        function()
+            -- body
+        end)
+    end
+end
+
+function CheckSummon(free,type,count)
+    local data = summonData[type]
+    local have1 = data.have1Count
+    local cost1 = data.consume1.count*count
+    if not CheckHeroBagEnough(count,true) then
+        return false
+    end
+    if free then
+        return true
+    end
+    if cost1 >have1 then
+        if data.consume2 ==nil then
+            if type==1 then
+                CsBridge.hintUILayer:ShowHintBox(Language:getStr("normalSummonDisable"))
+            elseif type==3 then
+                CsBridge.hintUILayer:ShowHintBox(Language:getStr("1039"))
+            end
+            return false
+        else
+            local have2 = data.have2Count
+            local cost2 = data.consume2.count*count
+            if count==10 then
+                local vip = playerInfo.vip
+                local drawDiscount = ResTblContainer:GetPropToInt(vip,VipTbl.drawDiscount,VipTbl.tblName)/10000
+                cost2=cost2*const_MultiCallDiscount/100*(1-drawDiscount)
+            end
+            if cost2 >have2 then
+                CsBridge.hintUILayer:ShowHintBox(Language:getStr("1001"))
+                return false
+            end
+        end
+    end
+    return true
+end
+
+function OnCommand_SummonReward(objs)
+    local exchangeCoin = playerInfo.exchangeCoin
+    if exchangeCoin<const_HeroSummonRewardCost then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("HeroSummonPowerReward"))
+    elseif UIOpen(UI_OPEN_TYPE_SOMMONENERGY) then
+        if not CheckHeroBagEnough(1,true) then
+            return
+        end
+        local req = {}
+        req.id=1
+        HttpRequest("getHeroSummonRewardHero", "GetHeroSummonRewardHeroReq", "GetHeroSummonRewardHeroResp", req,
+            function (resp)
+                local rewards = {[1]=resp.heroId}
+                local confirmCbk = function()
+                    playerInfo=appData:checkData("PlayerInfo")
+                    self:SendNotification("SummonProcess",playerInfo)  
+                end
+                ShowRewardReceivedTip(self, rewards, confirmCbk)              
+            end)
+    end
+end
+
+function DoOnExit()
+    callHeroInfo = nil
+    playerInfo = nil
+    summonData = nil
+    const_MultiCallDiscount = nil
+    const_HeroSummonRewardCost = nil
+end

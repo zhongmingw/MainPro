@@ -1,0 +1,36 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-05-30 14:51:45
+
+local contentInput
+
+local isInit = false
+
+function DoInit()
+	self.Anim = 0
+end
+
+function InitUI()
+    contentInput = CsBridge.GetInputFromView(self, "Center/ContentInput")
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+	end
+end
+
+
+function OnSubmitBtnClick(sender)
+    self:SendCommand("SubmitFeedback",contentInput.text)
+end
+
+function OnNotification_FeedbackSuccess(objs)
+    contentInput.text = ""
+end
+
+function DoExit()
+	contentInput = nil
+	isInit = nil
+end

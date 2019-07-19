@@ -1,0 +1,59 @@
+
+è
+JewelData.proto	JewelDatastage.proto"3
+	JewelItem
+uid (
+
+id (
+owner ("C
+PutOnJewelReq
+heroUid (
+jewelId (
+jewelPos (" 
+PutOnJewelResp
+status ("4
+TakeOffJewelReq
+heroUid (
+jewelPos (""
+TakeOffJewelResp
+status ("`
+JewelRefineReq
+
+id (
+mainIds (
+subIds1 (
+subIds2 (
+subIds3 ("!
+JewelRefineResp
+status ("%
+JewelDecomposeReq
+jewelIds ("7
+JewelDecomposeResp!
+result (2.stage.RewardItem"
+DrawJewelReq
+count ("2
+DrawJewelResp!
+result (2.stage.RewardItem"#
+GetJewelBonusReq
+useless ("5
+GetJewelBonusResp 
+jewel (2.stage.RewardItem"%
+TakeOffAllJewelReq
+heroUid ("%
+TakeOffAllJewelResp
+status ("#
+PutOnAllJewelReq
+heroUid ("#
+PutOnAllJewelResp
+status ("/
+GmGetJewelReq
+jewelId (
+count (" 
+GmGetJewelResp
+status ("4
+JewelComposeReq
+	jewelUids (
+mainId ("9
+JewelComposeResp%
+
+jewelItems (2.stage.RewardItem

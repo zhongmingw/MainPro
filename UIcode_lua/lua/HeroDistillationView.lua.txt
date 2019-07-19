@@ -1,0 +1,226 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-07-04 10:42:34
+
+require "HeroMatItemSlot"
+
+local utils = require "HeroBagUtils"
+
+local isInit = false
+
+local StarIcon = {
+    Back = "ui_com_star8",--灰色
+    Front = "ui_com_star9",--蓝色
+    Front2 = "ui_com_star6",--紫色
+}
+
+local HeroDistillSkillType = utils.HeroDistillSkillType
+
+local oldStarArr
+local newStarArr
+local maxStarArr
+
+local oldSkillTF
+local newSkillTF
+
+local levelUpTxt 
+local attrUpTxt
+local UpColor = {0,169,24}
+
+local costResTxt
+
+local heroMatGrid
+
+local normalObj
+local maxObj
+local maxSkillTF
+
+local distillBtn
+
+local function OnCloseHeroShowView(obj)
+	self:HideView(self.gameObject.name)
+end
+
+local function GetStarArr(starRoot)
+    local starArr = {}
+    for i=0,starRoot.childCount-1 do
+        local star = starRoot:GetChild(i).gameObject
+        table.insert(starArr, star)
+    end
+    return starArr
+end
+
+function DoInit()
+    self.Anim = 0
+    MsgCenter:Subscribe(Notify_CloseHeroShowView,OnCloseHeroShowView)
+end
+
+function DoExit()
+    MsgCenter:Unsubscribe(Notify_CloseHeroShowView,OnCloseHeroShowView)
+    utils = nil
+
+    isInit = nil
+
+    StarIcon = nil
+
+    HeroDistillSkillType = nil
+
+    oldStarArr = nil
+    newStarArr = nil
+    maxStarArr = nil
+    oldSkillTF = nil
+    newSkillTF = nil
+
+    levelUpTxt  = nil
+    attrUpTxt = nil
+    UpColor = nil
+
+    costResTxt = nil
+
+    heroMatGrid = nil
+
+    normalObj = nil
+    maxObj = nil
+    maxSkillTF = nil
+
+    distillBtn = nil
+end
+
+function InitUI()
+    local selfTrans = self.transform
+    normalObj = self:GetGameObjectAtPath("OTHER/Normal")
+    maxObj = self:GetGameObjectAtPath("OTHER/Max")
+
+    local oldStarRoot = selfTrans:Find("OTHER/Normal/OldStar")
+    oldStarArr = GetStarArr(oldStarRoot)
+    local newStarRoot = selfTrans:Find("OTHER/Normal/NewStar")
+    newStarArr = GetStarArr(newStarRoot)
+
+    local maxStarRoot = selfTrans:Find("OTHER/Max/Star")
+    maxStarArr = GetStarArr(maxStarRoot)
+
+    oldSkillTF = self.transform:Find("OTHER/Normal/OldSkill")
+    newSkillTF = self.transform:Find("OTHER/Normal/NewSkill")
+
+    levelUpTxt = self:GetComponentAtPath("OTHER/LevelUpTxt" ,CLS_TEXT)
+    attrUpTxt = self:GetComponentAtPath("OTHER/AttrUpTxt" ,CLS_TEXT)
+
+    costResTxt = self:GetComponentAtPath("OTHER/CostResTxt" ,CLS_TEXT)
+
+    heroMatGrid = self:GetComponentAtPath("OTHER/Normal/HeroMatGrid" ,CLS_UI_ITEM_GRID)
+    maxSkillTF = self.transform:Find("OTHER/Max/MaxSkill")
+
+    distillBtn = self:GetComponentAtPath("BUTTON/DistillationBtn" ,CLS_BUTTON_ARCHLY)
+end
+
+function SetParamDataList(objs)
+	local data = objs[0]
+	self:SendCommand("InitData", data)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitHeroDistillationData")
+end
+
+function OnClose()
+	self:SendCommand("OnClose")
+end
+
+local function RefreshStar(icon, star,starArr)
+    local over = star
+    for i,star in ipairs(starArr) do
+        local icon = over >= i and icon or StarIcon.Back
+        SetSpriteByModule(star,icon)
+    end
+end
+
+local function RefreshSkill(skill,skillBaseTF)
+    BindSkillBaseValue(skillBaseTF,skill)
+end
+
+local function RefreshOldAndNewStar(heroDistill)
+    RefreshStar(heroDistill.sillStarIcon, heroDistill.skillStar, oldStarArr)
+    RefreshStar(heroDistill.sillStarIcon,heroDistill.skillStar+1, newStarArr)
+end
+
+local function RefreshOldAndNewSkill(heroDistill)
+    RefreshSkill(heroDistill.oldSkill,oldSkillTF)
+    RefreshSkill(heroDistill.newSkill,newSkillTF)
+end
+
+local function RefreshAttrUp(heroDistill)
+    attrUpTxt.text = math.floor((heroDistill.attrUp / 100)).."%"
+    SetFontColor(attrUpTxt,UpColor)
+end
+
+local function RefreshMaxLevelUp(heroDistill)
+    levelUpTxt.text = heroDistill.levelUp
+    SetFontColor(levelUpTxt,UpColor)
+end
+
+local function RefreshHeroMaterial(heroDistill)
+    heroMatGrid:RefreshItemSlots(heroDistill.heroMatArr, self.gameObject, "HeroMatItemSlot")
+end
+
+local function RefreshConsume(heroDistill)
+    costResTxt.text = ShowConsumeCount(heroDistill.consume.count)
+    SetFontColorWithEnough(costResTxt,function()
+        return CheckResEnough(heroDistill.consume.id,heroDistill.consume.count,false)
+    end,color25)
+end
+
+function OnNotification_RefreshHeroDistillationView(objs)
+    local heroDistill = objs[0]
+    if not heroDistill.hasMax then
+        normalObj:SetSelfActive(true)
+        maxObj:SetSelfActive(false)
+        RefreshOldAndNewStar(heroDistill)
+        RefreshOldAndNewSkill(heroDistill)
+        RefreshAttrUp(heroDistill)
+        RefreshMaxLevelUp(heroDistill)
+        RefreshHeroMaterial(heroDistill)
+        RefreshConsume(heroDistill)
+        distillBtn.Gray = false
+    else
+        normalObj:SetSelfActive(false)
+        maxObj:SetSelfActive(true)
+        RefreshStar(heroDistill.sillStarIcon, heroDistill.skillStar, maxStarArr)
+        BindSkillBaseValue(maxSkillTF,heroDistill.maxSkill)
+        attrUpTxt.text = heroDistill.attrUp
+        levelUpTxt.text = heroDistill.levelUp
+        costResTxt.text = ShowConsumeCount(heroDistill.consume.count)
+        SetFontColor(costResTxt,color25)
+        SetFontColor(attrUpTxt,UpColor)
+        SetFontColor(levelUpTxt,UpColor)
+        distillBtn.Gray = true
+    end
+end
+
+function OnNotification_RefreshHeroMaterial(objs)
+    RefreshHeroMaterial(objs[0])
+end
+
+function OnHeroMatGridHeroMatItemSlotClick(obj)
+    self:SendCommand("OpenMaterialSelect",obj.m_index)
+end
+
+function OnOldSkillClick(sender)
+    self:SendCommand("ShowSkillTip",HeroDistillSkillType.Old)
+end
+
+function OnNewSkillClick(sender)
+    self:SendCommand("ShowSkillTip",HeroDistillSkillType.New)
+end
+
+function OnMaxSkillClick(sender)
+    self:SendCommand("ShowSkillTip",HeroDistillSkillType.Max)
+end
+
+function OnDistillationBtnClick(sender)
+    self:SendCommand("Distillation")
+end

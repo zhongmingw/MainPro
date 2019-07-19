@@ -1,0 +1,133 @@
+import "stage.proto";
+package MailData;
+
+message PlayerMailItem   
+{
+    required MailItem mailItem = 1;
+}
+
+message SystemMailItem    
+{
+    required MailItem mailItem = 1;
+    required bool attachTaken=2; //附件是否领取
+    repeated stage.RewardItem attach=3; //附件
+}
+
+message MailItem  
+{
+    required int64 id=1; //唯一标识
+    required string fromUserId=2; //发件人id
+    required string fromNickName=3; //发件人名字
+    required string toUserId=4; //收件人
+    required string title=5; //标题
+    required string content=6; //正文
+    required int64 sendTime=7; //发送时间
+    required int64 receiveTime=8; //收件时间
+    required bool read=9; //已读
+	required string zone = 10;
+}
+
+
+message SendMailReq 
+{
+	required string reveiver =1;
+	required string content = 2;
+}
+message SendMailResp 
+{
+	required int32 result =1;
+}
+
+message ReadMailReq 
+{
+	required int64 id = 1;
+	required int32 type = 2;
+}
+message ReadMailResp 
+{
+	required int32 result =1;
+}
+
+message DeleteMailReq 
+{
+	required int64 id = 1;
+	required int32 type = 2;
+}
+message DeleteMailResp 
+{
+	required int32 result =1;
+}
+
+message TakeMailAttachReq 
+{
+	required int64 id = 1;
+}
+message TakeMailAttachResp 
+{
+	repeated stage.RewardItem rewardItems =1;
+}
+
+message TakeAllMailAttachReq 
+{
+	required int64 id =1;
+}
+message TakeAllMailAttachResp 
+{
+	repeated stage.RewardItem rewardItems =1;
+}
+
+message DeleleAllReadMailReq 
+{
+	required int32 type =1;
+}
+message DeleleAllReadMailResp 
+{
+	required int32 result =1;
+}
+
+message GMSendMailReq
+{
+	required string zone = 1;
+	required string nick = 2;
+	required string content = 3;
+	repeated stage.RewardItem attachment = 4;
+	required string title = 5;
+}
+
+message GMSendMailResp
+{
+	required int32 result =1;
+}
+
+message PlayerMailCd
+{
+    required string nick = 1;
+    required int64 lastSendTime = 2;
+	required string zone = 3;
+}
+
+message ReadAllMailReq 
+{
+	required int32 type = 1; //邮件类型
+}
+
+message ReadAllMailResp 
+{
+	required int32 result = 1;
+}
+
+message AddMailBlackListReq
+{
+	required string userId = 1;
+	required bool add = 2; //添加还是解除
+}
+
+message AddMailBlackListResp
+{
+	required int32 result = 1;
+}
+
+message PlayerMailBlackListInfo
+{
+	repeated string blackList = 1;
+}

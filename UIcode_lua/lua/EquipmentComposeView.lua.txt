@@ -1,0 +1,255 @@
+local composeEquipQualityImgObj
+local composeEquipIconImgObj
+local composeEquipStarRoot
+local composeEquipCountInput
+local consumeEquipQualityImgObj
+local consumeEquipIconImgObj
+local consumeEquipStarRoot
+local consumeEquipSlider
+local consumeEquipSliderNumTxt
+local consumeEquipSliderFillImgObj
+local consumeEquipSliderOverImgObj
+
+local consumeCoinCountTxt
+
+local effectObj 
+
+local composeBtn
+
+local equipTogArr
+local togFlag
+local equipTogRedFlagArr
+
+local equipGrid 
+
+local isInit = false
+
+function DoInit()
+	self.Shadow = 1
+end 
+
+function IsSetAnchor()
+	return true
+end
+
+function InitUI()
+
+	composeEquipQualityImgObj = self:GetGameObjectAtPath("Center/ComposeItem/frameImg")
+	composeEquipIconImgObj = self:GetGameObjectAtPath("Center/ComposeItem/iconImg")
+	composeEquipStarRoot = self.transform:Find("Center/ComposeItem/StarRoot")
+	composeEquipCountInput = CsBridge.GetInputFromView(self, "Center/ComposeNumInput")
+	consumeEquipQualityImgObj = self:GetGameObjectAtPath("Center/ConsumeItem/frameImg")
+	consumeEquipIconImgObj = self:GetGameObjectAtPath("Center/ConsumeItem/iconImg")
+	consumeEquipStarRoot = self.transform:Find("Center/ConsumeItem/StarRoot")	
+	consumeEquipSlider = self:GetComponentAtPath("Center/ConsumeSlider" ,CLS_SLIDER)
+	consumeEquipSliderNumTxt = consumeEquipSlider.transform:GetComponentAtPath("number02Txt" ,CLS_TEXT)
+	consumeEquipSliderFillImgObj = consumeEquipSlider.transform:GetGameObjectAtPath("up02Img")
+	consumeEquipSliderOverImgObj = consumeEquipSlider.transform:GetGameObjectAtPath("up01Img")
+	consumeCoinCountTxt = self:GetComponentAtPath("Center/ConsumeCoinTxt" ,CLS_TEXT)
+	composeBtn = self:GetComponentAtPath("Center/ComposeBtn" ,CLS_BUTTON_ARCHLY)
+	effectObj = self:GetGameObjectAtPath("Effect")
+	local togGroup = self.transform:Find("Bottom/TogGroup")
+	equipTogArr = {}
+	equipTogRedFlagArr = {}
+	for i=1,togGroup.childCount-1 do
+		local tog = togGroup:GetChild(i):GetComponent("ToggleArchly")
+		local redFlag = tog.transform:GetGameObjectAtPath("RedFlag")
+		tog.ClickAnim = true
+		if i >= 2 then
+			tog.SubImg = tog.transform:GetComponentAtPath("iconImg" ,CLS_IMAGE)
+		end 
+		table.insert(equipTogArr,tog)
+		table.insert(equipTogRedFlagArr,redFlag)
+	end 
+	togFlag = togGroup:Find("Flag")
+
+	equipGrid = self:GetComponentAtPath("Bottom/EquipSV/ScrollRect/Viewport/EquipGrid" ,CLS_UI_ITEM_GRID)
+
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+	end 
+	self:SendCommand("InitComposeData")
+end  
+
+function OnNotification_InitScreen(objs)
+	equipTogArr[objs[0]].isOn = false  --1 start
+    equipTogArr[1].isOn = true
+    CsBridge.UnityHelper.SetAnchoredPosition(togFlag.gameObject,equipTogArr[1].transform.localPosition.x,togFlag.localPosition.y)
+end 
+
+function OnNotification_ScreenAnim(objs)
+	local curScreenId = objs[0]
+	local direct = objs[1]
+	local offset = 10
+	if direct then
+		offset = -offset
+	end 
+	equipTogArr[curScreenId].isOn = true
+	local targetX = equipTogArr[curScreenId].transform.localPosition.x
+    local t1 = CsBridge.TweenUtils.MoveTo(togFlag,targetX+offset,togFlag.localPosition.y,0.15,function()
+        local t2 = CsBridge.TweenUtils.MoveTo(togFlag,targetX,togFlag.localPosition.y,0.05)
+        t2:DoPlay()
+    end)
+    t1:DoPlay()
+end
+
+function OnNotification_Screen(objs)
+	local curComposeEquipArr = objs[0]
+	equipGrid:RefreshItemSlots(curComposeEquipArr, self.gameObject, "ItemSlot")
+end
+
+function OnNotification_RefreshRedFlag(objs)
+	local redEquipArr = objs[0]
+	local redTypes = objs[1]
+	for i,flag in ipairs(equipTogRedFlagArr) do
+		flag:SetSelfActive(false)
+	end
+	for i,type in ipairs(redTypes) do
+		equipTogRedFlagArr[type]:SetSelfActive(true)
+	end
+	for i,redEquip in ipairs(redEquipArr) do
+		equipGrid:SingleRefreshSlot(redEquip)
+	end
+end 
+
+function OnNotification_RefreshComposeEquip(objs)
+	local composeEquip = objs[0]
+	--compose
+	SetIconByItemId(composeEquipIconImgObj,composeEquip.id)
+	SetQualityByItemId(composeEquipQualityImgObj,composeEquip.id)
+	SetEquipOrder(composeEquip.id,composeEquipStarRoot)
+	composeEquipIconImgObj:SetSelfActive(true)
+	composeEquipCountInput.text = tostring(objs[1])
+	SetUpdateEffect(composeEquipIconImgObj.transform.parent)
+
+	--consume
+	SetIconByItemId(consumeEquipIconImgObj,composeEquip.consumeEquip.id)
+	SetQualityByItemId(consumeEquipQualityImgObj,composeEquip.consumeEquip.id)
+	SetEquipOrder(composeEquip.consumeEquip.id,consumeEquipStarRoot)
+	SetSliderProgress(consumeEquipSliderNumTxt,consumeEquipSlider,objs[2],objs[3],consumeEquipSliderFillImgObj,consumeEquipSliderOverImgObj)
+	consumeEquipIconImgObj:SetSelfActive(true)
+	consumeCoinCountTxt.text = composeEquip.consumeCoin.count*objs[1]
+	composeBtn.Gray = objs[4]
+end 
+
+function OnNotification_RefreshConsume(objs)
+	composeEquipCountInput.text = objs[0]
+	consumeCoinCountTxt.text = objs[1]
+	SetSliderProgress(consumeEquipSliderNumTxt,consumeEquipSlider,objs[2],objs[3],consumeEquipSliderFillImgObj,consumeEquipSliderOverImgObj)
+	composeBtn.Gray = objs[4]
+end 
+
+function OnNotification_SelectEquip(objs)
+	local selectData = objs[0]
+	local itemData = equipGrid:GetItemDataByData(selectData)
+	if itemData~=nil then
+		-- itemData.IsSelected=true
+		equipGrid:SingleRefreshSlot(itemData.data)
+	end
+end
+
+function OnNotification_CancelSelectEquip(objs)
+	local cancelData = objs[0]
+	local itemData = equipGrid:GetItemDataByData(cancelData)
+	if itemData~=nil then
+		-- itemData.IsSelected=false
+		-- print(itemData.data.IsSelected)
+		equipGrid:SingleRefreshSlot(itemData.data)
+	end
+end
+
+function OnEquipGridItemSlotClick(obj)
+	if not obj.m_data.IsSelected then
+		self:SendCommand("SelectEquip", obj.m_data)
+	end 
+end
+
+function OnComposeItemClick(sender) 
+	self:SendCommand("ComposeItemTip")
+end 
+
+function OnConsumeItemClick(sender)
+	self:SendCommand("ConsumeItemTip")
+end 
+
+function OnComposeBtnClick(sender)
+	self:SendCommand("Compose")
+end 
+
+function OnNotification_ComposeEnd(objs)
+	ShowComposeEffect(function()
+		objs[0]()
+	end)
+end 
+
+function ShowComposeEffect(onFinish)
+	effectObj:SetSelfActive(true)
+	CsBridge.CacheAssetsByGroup("EquipmentComposeSpine",function()
+		local obj = CsBridge.objectCache:CreateObject("EquipmentComposeSpine", true)
+		obj.transform:SetParent(effectObj.transform:GetChild(0),false)
+		obj:GetComponent("SkeletonGraphic"):PlayAnimation("a_1",false,function()
+			local name = obj.name
+			CS.UnityEngine.GameObject.Destroy(obj)
+			CsBridge.objectCache:ClearGroup(name, true)
+			effectObj:SetSelfActive(false)
+			onFinish()
+		end)
+	end,"EquipmentComposeSpine")
+end 
+
+function OnTogGroupClick(isOn,index)
+	if not isOn then
+		return
+	end
+	self:SendCommand("Screen",index)
+end 
+
+function OnComposeNumInputInputValChanged(sender,val)
+	self:SendCommand("ChangeNum",val)
+end
+
+function OnReduceBtnClick(sender)
+	self:SendCommand("ReduceNum")
+end
+
+function OnAddBtnClick(sender)
+	self:SendCommand("AddNum")
+end
+
+function OnRuleBtnClick(sender)
+	CsBridge.CacheAssetsByModule(self.Module,
+	function()
+		local view = CsBridge.OpenView("HelpView","EquipmentComposeModel",false,true)
+		view:SetData(INSTRUCTION_EQUIPCOMPOSE)
+	end, "HelpView")
+end
+
+function OnCloseBtnClick(sender)
+	self:ReturnBack()
+end
+
+function DoExit()
+	composeEquipQualityImgObj = nil
+	composeEquipIconImgObj = nil
+	composeEquipStarRoot = nil
+	composeEquipCountInput = nil
+	consumeEquipQualityImgObj = nil
+	consumeEquipIconImgObj = nil
+	consumeEquipStarRoot = nil
+	consumeEquipSlider = nil
+	consumeEquipSliderNumTxt = nil
+	consumeEquipSliderFillImgObj = nil
+	consumeEquipSliderOverImgObj = nil
+	consumeCoinCountTxt = nil
+	effectObj  = nil
+	composeBtn = nil
+	equipTogArr = nil
+	togFlag = nil
+	equipTogRedFlagArr = nil
+	equipGrid  = nil
+	isInit = nil
+end

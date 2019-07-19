@@ -1,0 +1,48 @@
+---绑定数据
+function OnMiningRobHeroItemSlotBindValue(slot, data)
+    ---@type UnityEngine.Transform
+    local slotTrans = slot.transform
+    slot.m_SelectSprite = slotTrans:GetGameObjectAtPath("CheckSprite")
+    ---@type UnityEngine.Transform
+    local heroBaseTrans = slotTrans:Find("HeroBase")
+    ---@type UnityEngine.GameObject
+    local heroBaseObj = heroBaseTrans.gameObject
+    ---@type UnityEngine.UI.Slider
+    local hpSlider = slotTrans:GetComponentAtPath("CurHPSlider", CLS_SLIDER)
+    ---@type UnityEngine.GameObject
+    local hpSliderObj = hpSlider.gameObject
+    ---@type UnityEngine.TextMesh
+    local sliderValueTxt = slotTrans:GetComponentAtPath("CurHPSlider/SliderValueTxt", CLS_TEXT)
+    ---@type UnityEngine.GameObject
+    local newFlagObj = slotTrans:GetGameObjectAtPath("NewFlag")
+    ---@type UnityEngine.GameObject
+    local repeatObj = slotTrans:GetGameObjectAtPath("repeat")
+    ---@type UnityEngine.GameObject
+    local notOwnObj = slotTrans:GetGameObjectAtPath("notOwn")
+    ---@type UnityEngine.GameObject
+    local lockObj = slotTrans:GetGameObjectAtPath("LockGO")
+    ---@type UnityEngine.GameObject
+    local taskLockObj = slotTrans:GetGameObjectAtPath("TaskLockGO")
+    ---@type UnityEngine.GameObject
+    local posLockObj = slotTrans:GetGameObjectAtPath("PosLockGO")
+
+    if data == nil or data.srcUid == 0 or data.heroId == 0 then
+        BindHeroBaseValue(heroBaseTrans, nil)
+        hpSliderObj:SetActive(false)
+        hpSlider.value = 1
+        sliderValueTxt.text = ""
+        newFlagObj:SetActive(false)
+        repeatObj:SetActive(false)
+        notOwnObj:SetActive(false)
+        lockObj:SetActive(false)
+        taskLockObj:SetActive(false)
+        posLockObj:SetActive(false)
+    else
+        HeroItemSlotBindValue(slot, data)
+        BindHeroBaseValue(heroBaseTrans, data)
+        heroBaseObj:SetSelfAndChildrenGray(false)
+        hpSliderObj:SetActive(data.showHpSlider)
+        hpSlider.value = data.sliderValue
+        sliderValueTxt.text = data.showHpStr
+    end
+end

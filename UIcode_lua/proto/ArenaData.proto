@@ -1,0 +1,189 @@
+import "stage.proto";
+import "playerData.proto";
+import "BattleData.proto";
+package ArenaData;
+
+message ArenaBasicInfo 
+{
+    required int32 type=1; //竞技场类型：1/积分，2/交换，3/组队
+    required int32 remains=2; //剩余次数
+    required int64 lastRenewTime=3;//上次自然恢复时间
+    required int32 extraRemains=4; //道具增加的次数
+    required int32 hisHighestRank = 5; //历史最高排名
+}
+
+message GetAPArenaDefBattleInfoReq 
+{
+    required int32 id=1;//无意义
+}
+
+message ChallengeInAPArenaReq 
+{
+    required string zone=1;
+    required string userId=2; 
+    required int32 robot=3; //是否是机器人
+    repeated stage.FormationPos formationPos= 4;
+}
+
+message GetAPArenaRankReq 
+{
+    required int32 count=1;
+}
+
+message GetAPArenaRankResp 
+{
+    repeated ArenaRankItem rankInfos=1;
+    required ArenaRankItem selfRankInfo=2;
+    required int64 seasonEndTime=3;  //赛季结束时间
+}
+
+message ArenaRankItem 
+{
+    required playerData.PlayerBaseInfo playerBaseInfo=1; //玩家基本信息
+    required int32 score=2;//分数
+    required int32 rank=3;
+    required int32 combat=4;
+    repeated FormationPosAdv formation= 5;
+}
+
+message FormationPosAdv 
+{
+    required stage.FormationPos formationPos=1; //玩家基本信息
+    required int32 heroGrade=2;//分数
+    required int32 heroLevel=3;
+    required int32 distillationStar=4;//觉醒星级 1,2,3
+    required int32 distillationLevel=5;//觉醒等级 初始0级
+    required int32 skillStar = 6;
+    required int32 skillLevel = 7;
+	required int32 breakLevel = 8;
+}
+
+
+message GetAPArenaDefRecordReq 
+{
+    required int32 id=1;
+}
+
+message GetAPArenaDefRecordResp 
+{
+    repeated DefRecord defRecords=1;
+}
+
+message DefRecord 
+{
+    required int32 id=1;
+    required playerData.PlayerBaseInfo playerBaseInfo=2;
+    required int64 time=3; //挑战时间
+    required int32 win=4; //是否防守成功:0失败，1成功
+    required int32 deltaScore=5; //积分变化
+}
+
+message GetAPArenaTargetsReq 
+{
+    required int32 id=1;//记录的Id(从0开始)
+}
+
+message GetAPArenaTargetsResp 
+{
+    repeated APArenaTarget targets=1;
+    required int64 seasonEndTime=2;
+}
+
+
+message APArenaTarget 
+{
+    required playerData.PlayerBaseInfo playerBaseInfo=1;
+    required int32 robot=2; //是否是机器人
+    required int32 score=3; //积分
+    required int32 combat=4; //战力
+}
+
+message UpdateMultipleTeamSingleFormationReq 
+{
+    required int32 type=1;
+    repeated stage.FormationPos formationPos=2;
+}
+
+message UpdateMultipleTeamSingleFormationResp 
+{
+    required int32 result=1;
+}
+
+message UpdateMultipleTeamFormationReq 
+{
+    required stage.Formation formation_1=1;
+    required stage.Formation formation_2=2;
+    required stage.Formation formation_3=3;
+}
+
+message UpdateMultipleTeamFormationResp 
+{
+    required int32 result=1;
+}
+
+message GetMulTeamArenaTargetsReq 
+{
+    required int32 useless=1;
+}
+
+message GetMulTeamArenaTargetsResp 
+{
+    repeated MultipleTeamArenaTarget targets=1;
+    required int32 useless=2;
+}
+
+message MultipleTeamArenaTarget 
+{
+    required playerData.PlayerBaseInfo playerBaseInfo = 1;
+    required int32 robot = 2; //是否是机器人
+    required int32 score = 3; //积分
+    required int32 combat = 4; //战力
+}
+
+message ChallengeInMulTeamArenaReq 
+{
+    required string userId=1;
+    required int32 robot=2; //是否是机器人
+    required stage.Formation formation_1=3;
+    required stage.Formation formation_2=4;
+    required stage.Formation formation_3=5;
+    required string zone=6;
+}
+
+message GetMulTeamArenaRankReq 
+{
+    required int32 count=1;
+}
+
+message GetMulTeamArenaRankResp 
+{
+    repeated MultipleTeamArenaRankItem rankInfos=1;
+    required MultipleTeamArenaRankItem selfRankInfo=2;
+    required int64 seasonEndTime=3;  //赛季结束时间
+}
+
+message MultipleTeamArenaRankItem 
+{
+    required playerData.PlayerBaseInfo playerBaseInfo=1; //玩家基本信息
+    required int32 score=2;//分数
+    required int32 rank=3;
+    required int32 combat=4;
+    repeated FormationPosAdv formationPos_1=5;
+    repeated FormationPosAdv formationPos_2=6;
+    repeated FormationPosAdv formationPos_3=7;
+}
+
+message GetMulTeamArenaDefRecordReq 
+{
+    required int32 id=1;
+}
+
+message GetMulTeamArenaDefRecordResp 
+{
+    repeated DefRecord defRecords=1;
+}
+
+message GetMulTeamArenaDefBattleInfoReq 
+{
+    required int32 id=1;//记录的Id(从0开始)
+}

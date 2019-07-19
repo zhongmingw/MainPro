@@ -1,0 +1,1346 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-01-21 19:58:49
+
+require "JewelUtils"
+require "RewardUtils"
+local ScreenUtils = require "ScreenUtils"
+
+local curHero
+local curJewelData
+
+local jewelDataFromTbl
+
+local NO_OWNER_UID = 0
+
+local SortType = {
+    Quality = 1,
+    Type = 2
+}
+local JewelBagPrice = {
+    tblName = "JewelBagPrice",
+    count = "count",
+    price = "price" 
+}
+local curJewelBag
+local curJewelBagSortType = SortType.Quality
+local curJewelBookSortType = SortType.Quality
+local MaxJewelBagTimes
+
+local SelectType = {
+    SelectUpStarJewel = 0,
+    SelectUpStarJewelMat = 1
+}
+local curSelectType
+local curUpStarJewel
+local curJewelUpStarMatArr
+local curJewelUpStarConsumeArr
+local curOwnUpStarJewelArr
+local tmpSelectUpStarJewel
+local tmpSelectUpStarJewelMatArr
+local curMatPos
+
+local jewelLottryItemId
+local jewelLottryGemCount
+local jewelLotteryConsumes
+local JewelLotteryBonus
+local JEWEL_LOTTERY_ONCE = 1
+local JEWEL_LOTTERY_TENTH = 10
+
+local curOwnDecomposeJewelArr
+local curDecomposeJewelArr
+local curSelectDecomposeJewelArr
+local MAX_SELECT_DECOMPOSE_JEWEL_COUNT = 10
+local curSelectDecomposeJewelCount = 0
+local DecomposeJewelSelectOption = {
+    Add = 1,
+    Remove = 2
+}
+local JEWEL_HIGHT_QUALITY = 4
+
+local JewelDecompose = {
+    tblName = "JewelDecompose",
+    quality = "quality",
+    product = "product"
+}
+
+local JewelPageType = {
+    Lottery = 1,
+    UpStar = 2,
+    Bag = 3,
+    Decompose = 4,
+    Compose = 5,
+}
+
+local curView
+local curPageType = JewelPageType.Lottery
+
+local JewelIdIndexByQuliatyAndTypeData
+local JewelRefineTbl
+
+local function ShowHintBox(desp, level)
+    CsBridge.hintUILayer:ShowHintBox(desp, level or 2)
+end
+
+local function ShowMsgBox(desp, confirmCallback)
+    CsBridge.messageManager:PopMsgBox(Language:getStr("local_confirm"),
+    desp,
+    Language:getStr("local_cancel"),nil,
+    Language:getStr("local_confirm"),confirmCallback)
+end
+
+local function ShowFirstMsgBox(name, desp, confirmCallback)
+    CsBridge.messageManager:FristConfirmBox(name,
+    Language:getStr("local_confirm"),
+    desp,
+    Language:getStr("local_cancel"),
+    nil,
+    Language:getStr("local_confirm"),
+    confirmCallback)
+end
+
+local function GetJewelDataFromTbl()
+    local data = {}
+    local tbl = ResTblContainer:GetTable(Jewel.tblName)
+    local ids = tbl:GetCol(Jewel.id)
+    for i = 0, ids.Length - 1 do
+        local id = tonumber(ids[i])
+        local infos = tbl:GetRow(id, Jewel.name, Jewel.icon, Jewel.quality, Jewel.star, Jewel.type)
+        data[id] = {
+            id = id,
+            typeId = ItemTypeEnum.Jewel,
+            name = infos[0],
+            icon = infos[1],
+            quality = tonumber(infos[2]),
+            star = tonumber(infos[3]),
+            type = tonumber(infos[4])
+        }
+    end
+    return data
+end
+
+local function CheckJewelViewRedFlag()
+    local redFlag = CheckHeroJewelUpStarRedFlag().redFlag
+    local composeFlag = CheckJewelComposeRedFlag()
+    self:SendNotification("RefreshJewelViewRedFlag",redFlag)
+    self:SendNotification("RefreshComposeRedFlag",composeFlag)
+end
+
+local function OpenPage(viewName, ...)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        curView = CsBridge.OpenView(viewName, self.ModelName)
+    end,viewName, ...)
+end
+
+local function OpenPageByType(type)
+    if curView then
+        self:HideView(curView.gameObject.name)
+    end
+    if type == JewelPageType.Bag then
+        OpenPage("JewelBagView","ItemSlot")
+    elseif type == JewelPageType.UpStar then
+        OpenPage("JewelUpStarView","JewelItemSlot","ItemMatItemSlot","JewelDespItemSlot")
+    elseif type == JewelPageType.Lottery then
+        OpenPage("JewelLotteryView")
+    elseif type == JewelPageType.Decompose then
+        OpenPage("JewelDecomposeView", "DecomposeJewelItemSlot")
+    elseif type == JewelPageType.Compose then
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            curView = CsBridge.OpenView("JewelComposeView", "JewelComposeModel")
+            curView:SetParamDataList(CheckJewelViewRedFlag)
+        end,"JewelComposeView", "JewelComposeSlot")
+    end
+end
+
+local function GetJewelEquipViewData(jewelData, jewel)
+    if jewel.id == 0 then
+        return
+    end
+    local tbl = ResTblContainer:GetTable(Jewel.tblName)
+    jewelData.name = jewelDataFromTbl[jewel.id].name
+    jewelData.icon = jewelDataFromTbl[jewel.id].icon
+    jewelData.quality = jewelDataFromTbl[jewel.id].quality
+    jewelData.star = jewelDataFromTbl[jewel.id].star
+    jewelData.type = jewelDataFromTbl[jewel.id].type
+    jewelData.effects = JewelUtils.GetJewelEffectsById(jewel.id,JewelIdIndexByQuliatyAndTypeData)
+    jewelData.typeId = ItemTypeEnum.Jewel
+end
+
+local function GetJewelEquipData(jewel)
+    local jewelData = table.copy(jewel)
+    GetJewelEquipViewData(jewelData, jewel)
+    return jewelData
+end
+
+local function UpdateCurJewelData()
+    curJewelData = {}
+    if curHero == nil then
+        return
+    end
+    local pb = appData:checkItem("HeroItem", curHero.uid)
+    if pb and pb.jewelIds then
+        for i,v in ipairs(pb.jewelIds) do
+            local jewelPb = appData:checkItem("JewelItem", v)
+            local jewel = nil
+            if jewelPb then
+                jewel = {
+                    uid = jewelPb.uid,
+                    id = jewelPb.id,
+                    owner = jewelPb.owner,
+                    pos = i
+                }
+            end
+            curJewelData[i] = jewel
+        end
+    end
+end
+
+local function CheckJewelUpStarMatRedFlag(mat)
+    local compareFunc = nil
+    local tbl = ResTblContainer:GetTable(Jewel.tblName)
+    if mat.type == JewelMatType.FixedQualityAndStar then
+        compareFunc = function(data)
+            if data.uid ~= curUpStarJewel.uid then
+                local quality = tbl:GetInt(data.id, Jewel.quality)
+                local star = tbl:GetInt(data.id, Jewel.star)
+                if quality == mat.quality and star == mat.star then
+                    return true
+                end
+            end
+        end
+    elseif mat.type == JewelMatType.FiexedAll then
+        compareFunc = function(data)
+            if data.uid ~= curUpStarJewel.uid then
+                local quality = tbl:GetInt(data.id, Jewel.quality)
+                local star = tbl:GetInt(data.id, Jewel.star)
+                if data.id == mat.id and quality == mat.quality and star == mat.star then
+                    return true
+                end
+            end
+        end
+    end
+    mat.redFlag = mat.count <= CheckItemCountInTb(curOwnUpStarJewelArr,mat,compareFunc)
+end
+
+local function CheckOwnJewelUpStarRedFlag(oldJewel)
+    local redFlag = CheckHeroSingleJewelUpStarRedFlag(oldJewel,JewelIdIndexByQuliatyAndTypeData,JewelRefineTbl).redFlag
+    self:SendNotification("RefreshOldJewelUpStarRedFlag",redFlag)
+end
+
+local function CheckJewelUpStarMatsRedFlag(matArr)
+    for i,v in ipairs(matArr) do
+        CheckJewelUpStarMatRedFlag(v)
+    end
+end
+
+local function CheckSelectUpStarJewelRedFlag(arr)
+    local result = CheckHeroJewelUpStarRedFlag(true,nil,JewelIdIndexByQuliatyAndTypeData,JewelRefineTbl)
+    for i,v in ipairs(arr) do
+        v.redFlag = result[v.id]
+    end
+end
+
+local function UpdateCurJewelBag()
+    curJewelBag = {}
+    local pbs = appData:checkAllItems("JewelItem")
+    if pbs then
+        for i=0, pbs.Length-1 do
+            local pb = pbs[i]
+            local jewel = {
+                uid = pb.uid,
+                id = pb.id,
+                owner = pb.owner,
+                typeId = ItemTypeEnum.Jewel,
+                quality = jewelDataFromTbl[pb.id].quality,
+                type = jewelDataFromTbl[pb.id].type
+            }
+            table.insert(curJewelBag, jewel)
+        end
+    end
+    table.sort(curJewelBag, SortJewelByQualityAndStar)
+end
+
+local function ScreenJewelBag(sort)
+    local jewelBag = {}
+    sort = sort - 1
+    for i,v in ipairs(curJewelBag) do
+        local sortId = curJewelBagSortType == SortType.Quality and v.quality or v.type
+        if sort == 0 or sortId == sort then
+            table.insert(jewelBag, v)
+        end
+    end
+    self:SendNotification("RefreshJewelBagView", jewelBag)
+end
+
+local function GetJewelBookData(sort)
+    local data = {}
+    for k,v in pairs(jewelDataFromTbl) do
+        if v.type ~= JewelType.Common and v.star == 1 then
+            local sortId = curJewelBookSortType == SortType.Quality and v.quality or v.type
+            if sort == 0 or sortId == sort then
+                table.insert(data, table.copy(v))
+            end
+        end
+    end
+    return data
+end
+
+local function ScreenJewelBook(sort)
+    local jewelBookData = GetJewelBookData(sort - 1)
+    self:SendNotification("RefreshJewelBookView", jewelBookData)
+end
+
+local function UpdateCurUpStarJewel(newJewel)
+    if curUpStarJewel == nil then
+        curUpStarJewel = {}
+    end
+    curUpStarJewel.uid = newJewel.uid
+    curUpStarJewel.id = newJewel.id
+    curUpStarJewel.owner = newJewel.owner
+end
+
+local function GetJewelUpStarData(jewel)
+    if jewel == nil then
+        return nil
+    end
+    local jewelData = table.copy(jewel)
+    if jewelData.id ~= 0 then
+        GetJewelEquipViewData(jewelData, jewel)
+        jewelData.isEquip = jewel.owner and jewel.owner ~= NO_OWNER_UID or false
+    end
+    return jewelData
+end
+
+local function GetJewelUpStarDespArr(oldJewel, newJewel)
+    local despArr = {}
+    if oldJewel.id == 0 then
+        return despArr
+    end
+    for i=1,#oldJewel.effects do
+        local desp = {
+            showBg = i % 2 == 0
+        }
+        local oldEffect = oldJewel.effects[i]
+        local oldDesp = {
+            desp = #oldEffect.conds == 0 and oldEffect.desp or oldEffect.desp.."("..Language:getStr("CondActive")..JewelUtils.GetJewelCondDesp(oldEffect.conds)..")",
+            active =  oldEffect.active and JewelUtils.CheckJewelEffectCondsActive(nil,oldEffect.conds)
+        }
+        desp.oldDesp = oldDesp
+        if newJewel and newJewel.id ~= 0 then
+            local newEffect = newJewel.effects[i]
+            local newDesp = {
+                desp = #newEffect.conds == 0 and newEffect.desp or newEffect.desp.."("..Language:getStr("CondActive")..JewelUtils.GetJewelCondDesp(newEffect.conds)..")",
+                active = newEffect.active and JewelUtils.CheckJewelEffectCondsActive(nil,newEffect.conds)
+            }
+            desp.newDesp = newDesp
+        end
+        table.insert(despArr, desp)
+    end
+    return despArr
+end
+
+local function UpdateCurJewelUpStarMatData(jewel)
+    curJewelUpStarMatArr = {}
+    if jewel == nil or jewel.id == 0 then
+        curJewelUpStarConsumeArr = nil
+        return
+    end
+    local infos = ResTblContainer:GetRowFromTbl(JewelRefine.tblName,jewel.id,JewelRefine.sub1,JewelRefine.sub2,JewelRefine.sub3,JewelRefine.extra)
+    JewelUtils.GetJewelUpStarMatArrDataFromTbl(curJewelUpStarMatArr,infos[0])
+    JewelUtils.GetJewelUpStarMatArrDataFromTbl(curJewelUpStarMatArr,infos[1])
+    JewelUtils.GetJewelUpStarMatArrDataFromTbl(curJewelUpStarMatArr,infos[2])
+    curJewelUpStarConsumeArr = GetRewardFromTbl(infos[3])    
+end
+
+local function UpdateCurOwnUpStarJewelArr()
+    curOwnUpStarJewelArr = {}
+    local pbs = appData:checkAllItems("JewelItem")
+    if pbs then
+        for i=0, pbs.Length-1 do
+            local pb = pbs[i]
+            local jewel = {
+                uid = pb.uid,
+                id = pb.id,
+                owner = pb.owner
+            }
+            table.insert(curOwnUpStarJewelArr, jewel)
+        end
+    end
+end
+
+local function GetSelectUpStarJewelData(jewel)
+    if jewel == nil then
+        return nil
+    end
+    local jewelData = table.copy(jewel)
+    if jewelData.id ~= 0 then
+        local tbl = ResTblContainer:GetTable(Jewel.tblName)
+        jewelData.name = jewelDataFromTbl[jewel.id].name
+        jewelData.icon = jewelDataFromTbl[jewel.id].icon
+        jewelData.quality = jewelDataFromTbl[jewel.id].quality
+        jewelData.star = jewelDataFromTbl[jewel.id].star
+        jewelData.type = jewelDataFromTbl[jewel.id].type
+        jewelData.typeId = ItemTypeEnum.Jewel
+        jewelData.isEquip = jewel.owner and jewel.owner ~= NO_OWNER_UID or false
+    end
+    return jewelData
+end
+
+local function GetSelectUpStarJewelsData()
+    local arr = {}
+    for i,v in ipairs(curOwnUpStarJewelArr) do
+        if JewelUtils.GetJewelNextStarIdById(v.id,JewelIdIndexByQuliatyAndTypeData) then
+            local jewel = GetSelectUpStarJewelData(v)
+            jewel.IsSelected = jewel.uid == curUpStarJewel.uid
+            if jewel.IsSelected then
+                tmpSelectUpStarJewel = jewel
+            end
+            table.insert(arr, jewel)
+        end
+    end
+    table.sort(arr, SortJewelByQualityAndStar)
+    return arr
+end
+
+local function CancelSelectUpStarJewel(jewel)
+    jewel.IsSelected = false
+    self:SendNotification("RefreshSingleSelectItem", jewel)
+end
+
+local function SelectUpStarJewel(jewel)
+    if jewel.IsSelected then
+        CancelSelectUpStarJewel(jewel)
+        return
+    end
+    if tmpSelectUpStarJewel then
+        CancelSelectUpStarJewel(tmpSelectUpStarJewel)
+    end
+    jewel.IsSelected = true
+    tmpSelectUpStarJewel = jewel
+    self:SendNotification("RefreshSingleSelectItem", jewel)
+end
+
+local function ConfirmSelectUpStarJewel()
+    if tmpSelectUpStarJewel == nil then
+        ShowHintBox(Language:getStr("PleaseSelectUpStarJewel"),2)
+        return
+    end
+    if tmpSelectUpStarJewel.IsSelected then
+        -- curUpStarJewel
+        UpdateCurUpStarJewel(tmpSelectUpStarJewel)
+    else
+        UpdateCurUpStarJewel({id = 0})
+    end
+    tmpSelectUpStarJewel = nil
+end
+
+local function CancelConfirmSelectUpStarJewel()
+    tmpSelectUpStarJewel = nil
+end
+
+local function GetJewelMatPos(jewel)
+    for i,v in ipairs(curJewelUpStarMatArr) do
+        for j,k in ipairs(v.putList) do
+            if k.uid == jewel.uid then
+                return i
+            end
+        end
+    end
+    return 0
+end
+
+local function GetSelectUpStarJewelMatsData()
+    mat = curJewelUpStarMatArr[curMatPos]
+    tmpSelectUpStarJewelMatArr = {}
+    local arr = {}
+    for i,v in ipairs(mat.putList) do
+        table.insert(tmpSelectUpStarJewelMatArr, v)
+    end
+    local tbl = ResTblContainer:GetTable(Jewel.tblName)
+    for i,v in ipairs(curOwnUpStarJewelArr) do
+        if v.uid ~= curUpStarJewel.uid then
+            local selectPos = GetJewelMatPos(v)
+            if selectPos == 0 or selectPos == curMatPos then
+                if mat.type == JewelMatType.FixedQualityAndStar then
+                    local quality = tbl:GetInt(v.id, Jewel.quality)
+                    local star = tbl:GetInt(v.id, Jewel.star)
+                    if quality == mat.quality and star == mat.star then
+                        local jewel = GetJewelUpStarData(v)
+                        jewel.IsSelected = selectPos == curMatPos
+                        table.insert(arr, jewel)
+                    end
+                elseif mat.type == JewelMatType.FiexedAll then
+                    local quality = tbl:GetInt(v.id, Jewel.quality)
+                    local star = tbl:GetInt(v.id, Jewel.star)
+                    if v.id == mat.id and quality == mat.quality and star == mat.star then
+                        local jewel = GetJewelUpStarData(v)
+                        jewel.IsSelected = selectPos == curMatPos
+                        table.insert(arr, jewel)
+                    end
+                end
+            end
+        end
+    end
+    return arr
+end
+
+local function CancelSelectUpStarJewelMat(jewel)
+    table.removebyvalue(tmpSelectUpStarJewelMatArr, jewel, false, function(v)
+        return v.uid == jewel.uid
+    end)
+    jewel.IsSelected = false
+    self:SendNotification("RefreshSingleSelectItem", jewel)
+end
+
+local function SelectUpStarJewelMat(jewel)
+    if jewel.IsSelected then
+        CancelSelectUpStarJewelMat(jewel)
+        return
+    end
+    if #tmpSelectUpStarJewelMatArr + 1 > curJewelUpStarMatArr[curMatPos].count then
+        ShowHintBox(Language:getStr("HeroCompose_MatEnough"), 2)
+        return
+    end
+    jewel.IsSelected = true
+    table.insert(tmpSelectUpStarJewelMatArr, jewel)
+    self:SendNotification("RefreshSingleSelectItem", jewel)
+end
+
+local function ConfirmSelectUpStarJewelMat()
+    curJewelUpStarMatArr[curMatPos].anim = true
+    curJewelUpStarMatArr[curMatPos].putList = {}
+    for i,v in ipairs(tmpSelectUpStarJewelMatArr) do
+        if v.IsSelected then
+            table.insert(curJewelUpStarMatArr[curMatPos].putList, v)
+        end
+    end
+    tmpSelectUpStarJewelMatArr = nil
+end
+
+local function CancelConfirmSelectUpStarJewelMat()
+    tmpSelectUpStarJewelMatArr = nil
+end
+
+local function CheckJewelUpStarMatEnough()
+    for i,v in ipairs(curJewelUpStarMatArr) do
+        if #v.putList < v.count then
+            return false
+        end
+    end
+    return true
+end
+
+local function CheckHasEquipUpStarJewelMat()
+    for i,v in ipairs(curJewelUpStarMatArr) do
+        for j,k in ipairs(v.putList) do
+            if k.isEquip then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function AddJewelUpStarMatToReq(tb, mat)
+    if mat then
+        for i,v in ipairs(mat.putList) do
+            table.insert(tb, v.uid)
+        end
+    end
+end
+
+local function DoUpStarJewel()
+    local req = {}
+    local newJewelId = JewelUtils.GetJewelNextStarIdById(curUpStarJewel.id,JewelIdIndexByQuliatyAndTypeData)
+    req.id = newJewelId
+    req.mainIds = {}
+    req.subIds1 = {}
+    req.subIds2 = {}
+    req.subIds3 = {}
+    table.insert(req.mainIds, curUpStarJewel.uid)
+    AddJewelUpStarMatToReq(req.subIds1, curJewelUpStarMatArr[1])
+    AddJewelUpStarMatToReq(req.subIds2, curJewelUpStarMatArr[2])
+    AddJewelUpStarMatToReq(req.subIds3, curJewelUpStarMatArr[3])
+    HttpRequest("jewelRefine", "JewelRefineReq", "JewelRefineResp", req, function(resp)
+        self:SendNotification("ShowUpStarJewelEffect", function()
+            UpdateCurUpStarJewel(appData:checkItem("JewelItem", curUpStarJewel.uid))
+            local rewards = {}
+            table.insert(rewards, {
+                id = curUpStarJewel.id,
+                typeId = ItemTypeEnum.Jewel,
+                count = 1
+            })
+            
+            local confirmCallback = function()
+                local oldJewel = GetJewelUpStarData(curUpStarJewel)
+                local newJewelId = JewelUtils.GetJewelNextStarIdById(curUpStarJewel.id,JewelIdIndexByQuliatyAndTypeData)
+                local newJewel = GetJewelUpStarData(newJewelId and {id = newJewelId} or nil)
+                local despArr = GetJewelUpStarDespArr(oldJewel, newJewel)
+                UpdateCurJewelUpStarMatData(newJewel)
+                UpdateCurOwnUpStarJewelArr()
+                CheckJewelViewRedFlag()
+                CheckJewelUpStarMatsRedFlag(curJewelUpStarMatArr)
+                CheckOwnJewelUpStarRedFlag(oldJewel)
+                self:SendNotification("RefreshJewelUpStarView", oldJewel, newJewel, curJewelUpStarMatArr, curJewelUpStarConsumeArr, despArr)
+            end
+            ShowRewardReceivedTip(self, rewards, confirmCallback)
+        end)
+    end)
+end
+
+local function GetResData(id, typeId)
+    local data = {
+        typeId = typeId,
+        id = id,
+        count = GetCountByItemType(id, typeId)
+    }
+    return data
+end
+
+local function GetJewelLotteryConsume(count)
+    local itemCount = GetCountByItemType(jewelLottryItemId, ItemTypeEnum.Item)
+    if itemCount >= count then
+        return {
+            typeId = ItemTypeEnum.Item,
+            id = jewelLottryItemId,
+            count = count
+        }
+    else
+        return {
+            typeId = ItemTypeEnum.Resource,
+            id = ResourceEnum.Gem,
+            count = count * jewelLottryGemCount
+        }
+    end
+end
+
+local function GetJewelLotteryTopData()
+    local topData = {
+        GetResData(jewelLottryItemId, ItemTypeEnum.Item),
+        GetResData(ResourceEnum.Gem, ItemTypeEnum.Resource)
+    }
+    return topData
+end
+
+local function GetJewelLotteryConsumes()
+    local consumes = {}
+    consumes[JEWEL_LOTTERY_ONCE] = GetJewelLotteryConsume(JEWEL_LOTTERY_ONCE)
+    consumes[JEWEL_LOTTERY_TENTH] = GetJewelLotteryConsume(JEWEL_LOTTERY_TENTH)
+    return consumes
+end
+
+local function UpdateCurOwnCanDecomposeJewelArr()
+    curOwnDecomposeJewelArr = {}
+    local pbs = appData:checkAllItems("JewelItem")
+    if pbs then
+        for i = 0, pbs.Length - 1 do
+            local pb = pbs[i]
+            local jewel = {
+                uid = pb.uid,
+                id = pb.id,
+                owner = pb.owner,
+                typeId = ItemTypeEnum.Jewel,
+                count = 1,
+                quality = jewelDataFromTbl[pb.id].quality,
+                isEquip = pb.owner ~= nil and pb.owner ~= NO_OWNER_UID
+            }
+            table.insert(curOwnDecomposeJewelArr, jewel)
+        end
+        table.sort(curOwnDecomposeJewelArr,function(a,b)
+            if a.isEquip ~= b.isEquip then
+                return b.isEquip
+            end
+            if a.quality ~= b.quality then
+                return a.quality < b.quality
+            end
+            return a.id < b.id
+        end)
+    end
+end
+
+local function ScreenDecomposeJewel(quality)
+    curDecomposeJewelArr = {}
+    for i,v in ipairs(curOwnDecomposeJewelArr) do
+        if quality == 1 then
+            table.insert(curDecomposeJewelArr, v)
+        elseif v.quality == quality -1 then
+            table.insert(curDecomposeJewelArr, v)
+        end
+    end
+    self:SendNotification("RefreshDecomposeJewel",curDecomposeJewelArr)
+end
+
+local function GetDecomposeJewelByJewel(jewel)
+    return table.get(curOwnDecomposeJewelArr, function(v)
+        return v.uid == jewel.uid
+    end)
+end
+
+local function GetSelectDecomposeJewelIndexByJewel(jewel)    
+    for i,v in ipairs(curSelectDecomposeJewelArr) do
+        if v.uid == jewel.uid then
+            return i
+        end
+    end
+    return 0
+end
+
+local function UpdateSelectDecomposeJewelArr(updateJewel,updateIndex,option)
+    if curSelectDecomposeJewelArr == nil then
+        curSelectDecomposeJewelArr = {}
+        for i = 1,MAX_SELECT_DECOMPOSE_JEWEL_COUNT do
+            table.insert(curSelectDecomposeJewelArr,{
+                uid = 0,
+                id = 0,
+                owner = 0,
+                quality = 0,
+                isEquip = false,
+                typeId = ItemTypeEnum.Jewel,
+                count = 1
+            })
+        end
+    end
+    if updateJewel then
+        if option == DecomposeJewelSelectOption.Add then
+            curSelectDecomposeJewelCount = curSelectDecomposeJewelCount+1
+            local newSelcectJewel = curSelectDecomposeJewelArr[curSelectDecomposeJewelCount]
+            newSelcectJewel.uid = updateJewel.uid
+            newSelcectJewel.id = updateJewel.id
+            newSelcectJewel.owner = updateJewel.owner
+            newSelcectJewel.isEquip = updateJewel.isEquip
+            newSelcectJewel.quality = updateJewel.quality
+            newSelcectJewel.anim = true
+            self:SendNotification("UpdateSingleSelectDecomposeJewel",newSelcectJewel)
+        elseif option == DecomposeJewelSelectOption.Remove then
+            local index = updateIndex or GetSelectDecomposeJewelIndexByJewel(updateJewel)
+            for i=index,curSelectDecomposeJewelCount-1 do
+                curSelectDecomposeJewelArr[i].uid = curSelectDecomposeJewelArr[i+1].uid
+                curSelectDecomposeJewelArr[i].id = curSelectDecomposeJewelArr[i+1].id
+                curSelectDecomposeJewelArr[i].owner = curSelectDecomposeJewelArr[i+1].owner
+                curSelectDecomposeJewelArr[i].isEquip = curSelectDecomposeJewelArr[i+1].isEquip
+                curSelectDecomposeJewelArr[i].quality = curSelectDecomposeJewelArr[i+1].quality
+                curSelectDecomposeJewelArr[i].anim = false
+                self:SendNotification("UpdateSingleSelectDecomposeJewel",curSelectDecomposeJewelArr[i])
+            end
+            curSelectDecomposeJewelArr[curSelectDecomposeJewelCount].uid = 0
+            curSelectDecomposeJewelArr[curSelectDecomposeJewelCount].id = 0
+            curSelectDecomposeJewelArr[curSelectDecomposeJewelCount].anim = false
+            curSelectDecomposeJewelArr[curSelectDecomposeJewelCount].owner = 0
+            curSelectDecomposeJewelArr[curSelectDecomposeJewelCount].isEquip = false
+            curSelectDecomposeJewelArr[curSelectDecomposeJewelCount].quality = 0
+            self:SendNotification("UpdateSingleSelectDecomposeJewel",curSelectDecomposeJewelArr[curSelectDecomposeJewelCount])
+            curSelectDecomposeJewelCount = curSelectDecomposeJewelCount-1
+        end
+    end
+end
+
+local function UpdateDecomposeJewel(jewel, idx, selected, option)
+    UpdateSelectDecomposeJewelArr(jewel,idx,option)
+    if jewel then
+        jewel.selected = selected
+        self:SendNotification("UpdateSingleDecomposeJewel",jewel)
+    end
+end
+
+local function SelectDecomposeJewel(jewel)
+    if curSelectDecomposeJewelCount == 0 then
+        self:SendNotification("RefreshDecomposeBtn",false)
+    end
+    UpdateDecomposeJewel(jewel,nil,true,DecomposeJewelSelectOption.Add)
+    if curSelectDecomposeJewelCount >= MAX_SELECT_DECOMPOSE_JEWEL_COUNT then
+        self:SendNotification("RefreshQuickBtn",Language:getStr("HeroDecomposition_PutOffAll"))
+    end
+end
+
+local function CancelSelectDecomposeJewel(jewel,idx)
+    UpdateDecomposeJewel(jewel,idx,false,DecomposeJewelSelectOption.Remove)
+    if curSelectDecomposeJewelCount == 0 then
+        self:SendNotification("RefreshDecomposeBtn",true)
+    end
+    if curSelectDecomposeJewelCount < MAX_SELECT_DECOMPOSE_JEWEL_COUNT then
+        self:SendNotification("RefreshQuickBtn",Language:getStr("HeroDecomposition_PutOnAll"))
+    end
+end
+
+local function SelectDecomposeJewelEffect(jewel,pos)
+    if curSelectDecomposeJewelCount >= MAX_SELECT_DECOMPOSE_JEWEL_COUNT then
+        ShowHintBox(Language:getStr("JewelDecompose_MaxSelect"),2)
+        return
+    end
+    self:SendNotification("ShowSelectJewelEffect",jewel,pos,curSelectDecomposeJewelCount+1,function()
+        SelectDecomposeJewel(jewel)
+    end)
+end
+
+local function QuickSelectDecomposeJewel()
+    if curSelectDecomposeJewelCount >= MAX_SELECT_DECOMPOSE_JEWEL_COUNT then
+        ShowHintBox(Language:getStr("JewelDecompose_MaxSelect"),2)
+        return
+    end
+    local emptyNum = MAX_SELECT_DECOMPOSE_JEWEL_COUNT-curSelectDecomposeJewelCount
+    for i=1,#curDecomposeJewelArr do
+        if emptyNum <= 0 then
+            return
+        end
+        local jewel = curDecomposeJewelArr[i]
+        if not jewel.selected then
+            SelectDecomposeJewel(jewel)
+            emptyNum = emptyNum-1
+        end
+    end
+end
+
+local function QuickCancelSelectDecomposeJewel()
+    for i=curSelectDecomposeJewelCount,1,-1 do
+        CancelSelectDecomposeJewel(GetDecomposeJewelByJewel(curSelectDecomposeJewelArr[i]),i)
+    end
+end
+
+local function CheckHasEquipDecomposeJewel()
+    for i=1,curSelectDecomposeJewelCount do
+        if curSelectDecomposeJewelArr[i].isEquip then
+            return true
+        end
+    end
+    return false
+end
+
+local function CheckHasHighQuliatyDecomposeJewel()
+    for i=1,curSelectDecomposeJewelCount do
+        if curSelectDecomposeJewelArr[i].quality >= JEWEL_HIGHT_QUALITY then
+            return true
+        end
+    end
+    return false
+end
+
+local function ClearSelectDecomposeJewelArr()
+    for i=curSelectDecomposeJewelCount,1,-1 do
+        curSelectDecomposeJewelArr[i].uid = 0
+        curSelectDecomposeJewelArr[i].id = 0
+        curSelectDecomposeJewelArr[i].owner = 0
+        curSelectDecomposeJewelArr[i].isEquip = false
+        curSelectDecomposeJewelArr[i].quality = 0
+        curSelectDecomposeJewelArr[i].anim = false
+    end
+    curSelectDecomposeJewelCount = 0
+end
+
+local function DoDeCompose()
+    local jewelIds = {}
+    for i=1,curSelectDecomposeJewelCount do
+        table.insert(jewelIds, curSelectDecomposeJewelArr[i].uid)
+    end
+    local req = {
+        jewelIds = jewelIds
+    }
+    HttpRequest("jewelDecompose","JewelDecomposeReq","JewelDecomposeResp",req,function(resp)
+        local count = curSelectDecomposeJewelCount
+        UpdateCurOwnCanDecomposeJewelArr()
+        ClearSelectDecomposeJewelArr()
+        self:SendNotification("RefreshSelectDecomposeJewel",curSelectDecomposeJewelArr)
+        self:SendNotification("ShowDecomposeEffect",count,function()
+            local confirmCallback = function()
+                ScreenUtils.UpdateScreen()
+                local disabled = #curOwnDecomposeJewelArr == 0
+                self:SendNotification("RefreshPreviewBtn",disabled)
+                self:SendNotification("RefreshDecomposeBtn",true)
+                self:SendNotification("RefreshQuickBtn",Language:getStr("HeroDecomposition_PutOnAll"))
+                CheckJewelViewRedFlag()
+            end
+            ShowRewardReceivedTip(self,resp.result, confirmCallback)
+        end)
+    end)
+end
+
+local function RefreshHeroJewelRedFlag()
+    local redFlag = CheckHeroJewelUpStarRedFlag(false,nil,JewelIdIndexByQuliatyAndTypeData,JewelRefineTbl).redFlag
+    self:SendNotification("RefreshJewelRedFlag",redFlag)
+end
+
+local function ResetJewelDecompose()
+    UpdateCurOwnCanDecomposeJewelArr()
+    ClearSelectDecomposeJewelArr()
+    self:SendNotification("RefreshSelectDecomposeJewel",curSelectDecomposeJewelArr)
+    ScreenUtils.UpdateScreen()
+    local disabled = #curOwnDecomposeJewelArr == 0
+    self:SendNotification("RefreshPreviewBtn",disabled)
+    self:SendNotification("RefreshDecomposeBtn",true)
+    self:SendNotification("RefreshQuickBtn",Language:getStr("HeroDecomposition_PutOnAll"))
+    CheckJewelViewRedFlag()
+end
+
+function DoInit()
+    local tbl = ResTblContainer:GetTable(JewelBagPrice.tblName)
+    MaxJewelBagTimes = tbl:GetCol(JewelBagPrice.count).Length
+    jewelDataFromTbl = GetJewelDataFromTbl()
+    jewelLottryItemId = GetConstValue("JewelItem")
+    jewelLottryGemCount = GetConstValue("JewelDraw")
+    JewelLotteryBonus = GetConstValue("JewelBonus")
+    JewelIdIndexByQuliatyAndTypeData = JewelUtils.GetJewelIdIndexByQuliatyAndTypeData()
+    JewelRefineTbl = JewelUtils.GetJewelRefineTbl()
+end
+
+function DoOnExit()
+    curHero = nil
+    curJewelData = nil
+
+    jewelDataFromTbl = nil
+
+    NO_OWNER_UID  = nil
+
+    SortType  = nil
+    curJewelBag = nil
+    curJewelBagSortType  = nil
+    curJewelBookSortType  = nil
+    JewelBagPrice = nil
+    MaxJewelBagTimes = nil
+
+    SelectType  = nil
+    curSelectType = nil
+    curUpStarJewel = nil
+    curJewelUpStarMatArr = nil
+    curJewelUpStarConsumeArr = nil
+    curOwnUpStarJewelArr = nil
+    tmpSelectUpStarJewel = nil
+    tmpSelectUpStarJewelMatArr = nil
+    curMatPos = nil
+
+    jewelLottryItemId = nil
+    jewelLottryGemCount = nil
+    jewelLotteryConsumes = nil
+    JewelLotteryBonus = nil
+    JEWEL_LOTTERY_ONCE  = nil
+    JEWEL_LOTTERY_TENTH  = nil
+
+    curOwnDecomposeJewelArr = nil
+    curDecomposeJewelArr = nil
+    curSelectDecomposeJewelArr = nil
+    MAX_SELECT_DECOMPOSE_JEWEL_COUNT  = nil
+    curSelectDecomposeJewelCount = nil
+    DecomposeJewelSelectOption  = nil
+    JEWEL_HIGHT_QUALITY  = nil
+
+    JewelDecompose  = nil
+
+    JewelPageType  = nil
+
+    curView = nil
+    curPageType  = nil
+end 
+
+function InitProperties()
+end
+
+--------------------outer-------------------------------------
+function OnCommand_InitJewelPageType(objs)
+    curPageType = objs[0]
+end
+
+function OnCommand_InitCurHero(objs)
+    curHero = {uid = objs[0], heroId = appData:checkItem("HeroItem", objs[0]).heroId}
+end
+
+--------------------jewel view-------------------------------------
+function OnCommand_InitJewelData(objs)
+    UpdateCurJewelData()
+    CheckJewelViewRedFlag()
+    self:SendNotification("RefreshJewelView",curPageType)
+    self:SendNotification("IsOpenJewelCompose",UIOpen(UI_OPEN_TYPE_JEWEL_COMPOSE,false))
+    OpenPageByType(curPageType)
+end
+
+function OnCommand_OpenJewelPage(objs)
+    local type = objs[0]
+    if type == curPageType then
+        return
+    end
+    curPageType = type
+    OpenPageByType(curPageType)
+end
+
+function OnCommand_CloseJewelView(objs)
+    self:SendNotification("CloseJewelSubView")
+end
+
+-------------------------------bag view--------------------------
+function OnCommand_InitJewelBagData(objs)
+    UpdateCurJewelBag()
+    local name = curJewelBagSortType == SortType.Quality and Language:getStr("SortByType") or Language:getStr("SortByQuality")
+    local ownCount = #curJewelBag
+    local allCount = CheckJewelBagNum()
+    local countDesp = ownCount.."/"..allCount
+    self:SendNotification("RefreshJewelBagScreenView", curJewelBagSortType, name)
+    ScreenUtils.InitScreen(ScreenJewelBag)
+    self:SendNotification("RefreshJewelBagView", curJewelBag)
+    self:SendNotification("RefreshJewelBagCountDesp",countDesp)
+end
+
+local function GetExtendTimes()
+    local info = appData:checkData("JewelBagInfo")
+    return info.extendCount
+end 
+
+local function GetExtendPrice(times)
+    local tbl = ResTblContainer:GetTable(JewelBagPrice.tblName)
+    local str = ResTblContainer:GetPropToStr(times,JewelBagPrice.price,JewelBagPrice.tblName)
+    local prices = GetRewardFromTbl(str)
+    return prices[1].count
+end 
+
+function OnCommand_ExtendJewelBag(objs)
+    local times = GetExtendTimes()
+    if times >= MaxJewelBagTimes then
+        ShowHintBox(Language:getStr("ExtendHeroBag_Max"))
+        return 
+    end
+    local price = GetExtendPrice(times+1)
+    local desp = string.format(Language:getStr("ExtendJewelBag_Check"),price)
+    local confirmCallback = function()  
+        if not CheckResEnough(ResourceEnum.Gem,price,true) then
+            return
+        end
+        local req = {
+            useless = 0
+        }
+        HttpRequest("extendJewelBag","ExtendJewelBagReq","ExtendJewelBagResp",req,
+        function(resp)
+            local ownCount = #curJewelBag
+            local allCount = CheckJewelBagNum()
+            local countDesp = ownCount.."/"..allCount
+            self:SendNotification("ShowJewelBagCountEffect", countDesp)        
+        end)
+    end
+    ShowFirstMsgBox("ExtendJewelBag",desp,confirmCallback)
+end
+
+function OnCommand_RebindJewelBagScreen(objs)
+    local name = curJewelBagSortType == SortType.Quality and Language:getStr("SortByType") or Language:getStr("SortByQuality")
+    self:SendNotification("RefreshJewelBagScreenView", curJewelBagSortType, name)
+    ScreenUtils.InitScreen(ScreenJewelBag)
+    ScreenUtils.UpdateScreen()
+end
+
+function OnCommand_ChangeJewelBagSort(objs)
+    curJewelBagSortType = curJewelBagSortType == SortType.Quality and SortType.Type or SortType.Quality
+    local name = curJewelBagSortType == SortType.Quality and Language:getStr("SortByType") or Language:getStr("SortByQuality")
+    self:SendNotification("RefreshJewelBagScreenView", curJewelBagSortType, name)
+    ScreenUtils.InitScreen(ScreenJewelBag)
+    self:SendNotification("RefreshJewelBagView", curJewelBag)
+end
+
+function OnCommand_OpenJewelBagTipView(objs)
+    local jewel = objs[0]
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("ItemTipView", "ItemTipModel")
+        view:SetParamDataList(jewel,itemBaseIndex+itemBtnsIndex+PropsIndex)
+        if JewelUtils.GetJewelNextStarIdById(jewel.id,JewelIdIndexByQuliatyAndTypeData) then
+            local callFunc = {
+                upStar = function(callback)
+                    callback() 
+                    UpdateCurUpStarJewel(jewel)
+                    curPageType = JewelPageType.UpStar
+                    self:SendNotification("RefreshJewelView",curPageType)
+                end
+            }
+            view:SendCommand("InitEquipData", 3, callFunc)
+        end
+        view:SendCommand("InitItemData")
+    end, "ItemTipView")
+end
+
+function OnCommand_OpenJewelBookView(objs)
+    local viewName = "JewelBookView"
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        CsBridge.OpenView(viewName, self.ModelName, true, true)
+    end, viewName, "ItemSlot")
+end
+
+function OnCommand_InitJewelBookData(objs)
+    local jewelBookData = GetJewelBookData(0)
+    local name = curJewelBookSortType == SortType.Quality and Language:getStr("SortByType") or Language:getStr("SortByQuality")
+    self:SendNotification("RefreshJewelBookScreenView", curJewelBookSortType, name)
+    ScreenUtils.InitScreen(ScreenJewelBook)
+    self:SendNotification("RefreshJewelBookView", jewelBookData)
+end
+
+function OnCommand_ChangeJewelBookSort(objs)
+    curJewelBookSortType = curJewelBookSortType == SortType.Quality and SortType.Type or SortType.Quality
+    local name = curJewelBookSortType == SortType.Quality and Language:getStr("SortByType") or Language:getStr("SortByQuality")
+    self:SendNotification("RefreshJewelBookScreenView", curJewelBookSortType, name)
+    ScreenUtils.InitScreen(ScreenJewelBook)
+    local jewelBookData = GetJewelBookData(0)
+    self:SendNotification("RefreshJewelBookView", jewelBookData)
+end
+
+function OnCommand_OpenJewelBookTipView(objs)
+    local jewel = objs[0]
+    ShowTip(self, jewel.typeId, jewel.id)
+end
+
+--------------------------------up star view-----------------------------------
+function OnCommand_InitJewelUpStarData(objs)
+    if curUpStarJewel == nil then
+        UpdateCurUpStarJewel({id = 0})
+    end
+    local oldJewel = GetJewelUpStarData(curUpStarJewel)
+    local newJewel = GetJewelUpStarData(
+        {
+            id = JewelUtils.GetJewelNextStarIdById(curUpStarJewel.id,JewelIdIndexByQuliatyAndTypeData)
+        })
+    local despArr = GetJewelUpStarDespArr(oldJewel, newJewel)
+    UpdateCurJewelUpStarMatData(newJewel)
+    UpdateCurOwnUpStarJewelArr()
+    CheckOwnJewelUpStarRedFlag(oldJewel)
+    CheckJewelUpStarMatsRedFlag(curJewelUpStarMatArr)
+    self:SendNotification("RefreshJewelUpStarView", oldJewel, newJewel, curJewelUpStarMatArr, curJewelUpStarConsumeArr, despArr)
+end
+
+function OnCommand_OpenUpStarJewelSelectView(objs)
+    curSelectType = SelectType.SelectUpStarJewel
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        CsBridge.OpenView("ItemSelectView", "JewelModel")
+    end,"ItemSelectView", "ItemSlot")
+end
+
+function OnCommand_OpenUpStarJewelMatSelectView(objs)
+    local index = objs[0]
+    curMatPos = index + 1
+    curSelectType = SelectType.SelectUpStarJewelMat
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        CsBridge.OpenView("ItemSelectView", "JewelModel")
+    end,"ItemSelectView", "ItemSlot")
+end
+
+function OnCommand_UpStarJewel(objs)
+    if JewelUtils.GetJewelNextStarIdById(curUpStarJewel.id,JewelIdIndexByQuliatyAndTypeData) == nil then
+        ShowHintBox(Language:getStr("JewelUpStar_MaxTip"),2)
+        return 
+    end
+    if curUpStarJewel.id == 0 then
+        ShowHintBox(Language:getStr("PleaseSelectUpStarJewel"),2)
+        return 
+    end
+    if not CheckJewelUpStarMatEnough() then
+        ShowHintBox(Language:getStr("HeroCompose_MatNoEnough"),2)
+        return
+    end
+    if #CheckMulResEnough(curJewelUpStarConsumeArr, true) ~= 0 then
+        return
+    end
+    if CheckHasEquipUpStarJewelMat() then
+        ShowMsgBox(Language:getStr("JewelJewelUpStarHasEquip_Confirm"), function()
+            DoUpStarJewel()
+            return
+        end)
+    else
+        DoUpStarJewel()
+    end
+end
+
+function OnCommand_InitItemSelectData(objs)
+    if curSelectType == SelectType.SelectUpStarJewel then
+        local arr = GetSelectUpStarJewelsData()
+        CheckSelectUpStarJewelRedFlag(arr)
+        self:SendNotification("RefreshItemSelectView", arr, Language:getStr("Title_JewelSelect"))    
+    elseif curSelectType == SelectType.SelectUpStarJewelMat then
+        local arr = GetSelectUpStarJewelMatsData()
+        self:SendNotification("RefreshItemSelectView", arr, Language:getStr("Title_JewelMatSelect"))
+    end
+end
+
+function OnCommand_SelectItem(objs)
+    local jewel = objs[0]
+    if curSelectType == SelectType.SelectUpStarJewel then
+        SelectUpStarJewel(jewel)
+    elseif curSelectType == SelectType.SelectUpStarJewelMat then
+        SelectUpStarJewelMat(jewel)
+    end
+end
+
+function OnCommand_ConfirmSelectItem(objs)
+    if curSelectType == SelectType.SelectUpStarJewel then
+        ConfirmSelectUpStarJewel()
+        local oldJewel = GetJewelUpStarData(curUpStarJewel)
+        local newJewel = GetJewelUpStarData(
+            {
+                id = JewelUtils.GetJewelNextStarIdById(curUpStarJewel.id,JewelIdIndexByQuliatyAndTypeData)
+            })
+        local despArr = GetJewelUpStarDespArr(oldJewel, newJewel)
+        UpdateCurJewelUpStarMatData(newJewel)
+        CheckJewelViewRedFlag()
+        CheckJewelUpStarMatsRedFlag(curJewelUpStarMatArr)
+        CheckOwnJewelUpStarRedFlag(oldJewel)
+        self:SendNotification("RefreshJewelUpStarView", oldJewel, newJewel, curJewelUpStarMatArr, curJewelUpStarConsumeArr, despArr)
+    elseif curSelectType == SelectType.SelectUpStarJewelMat then
+        ConfirmSelectUpStarJewelMat()
+        CheckJewelUpStarMatRedFlag(curJewelUpStarMatArr[curMatPos])
+        self:SendNotification("RefreshSingleJewelUpStarMat", curJewelUpStarMatArr[curMatPos])
+    end
+end
+
+function OnCommand_CancelConfirmSelectItem(objs)
+    if curSelectType == SelectType.SelectUpStarJewel then
+        CancelConfirmSelectUpStarJewel()
+    elseif curSelectType == SelectType.SelectUpStarJewelMat then
+        CancelConfirmSelectUpStarJewelMat()
+    end
+end
+
+function OnCommand_CloseJewelUpStarView(objs)
+    curUpStarJewel = nil
+end
+
+-------------------------------lottry view--------------------------------------
+local function GetJewelBonusData()
+    return {
+        curNum = appData:checkData("PlayerInfo").jewelExchangeCoin,
+        allNum = JewelLotteryBonus
+    }
+end
+
+function OnCommand_InitJewelLotteryData(objs)
+    local topData = GetJewelLotteryTopData()
+    local bonusData = GetJewelBonusData()
+    jewelLotteryConsumes = GetJewelLotteryConsumes()
+    self:SendNotification("RefreshJewelLottryView", topData, bonusData, jewelLotteryConsumes)
+end
+
+function OnCommand_GetJewelBonus(objs)
+    local bonusData = GetJewelBonusData()
+    if bonusData.curNum < bonusData.allNum then
+        ShowHintBox(Language:getStr("GetJewelBonusNotEnoughPoint"),2)
+        return
+    end
+    if not CheckJewelBagEnough(1,true) then
+        return 
+    end
+    local req = {
+        useless = 0
+    }
+    HttpRequest("getJewelBonus","GetJewelBonusReq","GetJewelBonusResp",req,function(resp)
+        self:SendNotification("ShowJewelLotteryEffect", function()
+            local confirmCallback = function()
+                local topData = GetJewelLotteryTopData()
+                local bonusData = GetJewelBonusData()
+                jewelLotteryConsumes = GetJewelLotteryConsumes()
+                self:SendNotification("RefreshJewelLottryView", topData, bonusData, jewelLotteryConsumes)   
+            end 
+            ShowRewardReceivedTip(self, resp.jewel, confirmCallback)    
+        end)
+    end)
+end
+
+function OnCommand_ShowJewelLotteryConsumeTip(objs)
+    local topData = GetJewelLotteryTopData()
+    local data = topData[objs[0]]
+    ShowTip(self, data.typeId, data.id)
+end
+
+function OnCommand_LotteryJewel(objs)
+    local count = objs[0]
+    local consume = jewelLotteryConsumes[count]
+    if not CheckJewelBagEnough(count,true) then
+        return 
+    end
+    
+    if not CheckItemEnough(consume.id, consume.typeId, consume.count, true) then
+        return
+    end
+    local req = {
+        count = count
+    }
+    HttpRequest("drawJewel", "DrawJewelReq", "DrawJewelResp", req, function(resp)
+        self:SendNotification("ShowJewelLotteryEffect", function()
+            local confirmCallback = function()
+                local topData = GetJewelLotteryTopData()
+                local bonusData = GetJewelBonusData()
+                jewelLotteryConsumes = GetJewelLotteryConsumes()
+                CheckJewelViewRedFlag()
+                self:SendNotification("RefreshJewelLottryView", topData, bonusData, jewelLotteryConsumes)  
+            end      
+            ShowRewardReceivedTip(self, resp.result, confirmCallback)
+        end)
+    end)
+end
+
+-------------------------------decompose view-----------------------------------
+function OnCommand_InitJewelDecomposeData(objs)
+    UpdateCurOwnCanDecomposeJewelArr()
+    UpdateSelectDecomposeJewelArr()
+    ScreenUtils.InitScreen(ScreenDecomposeJewel)
+    curDecomposeJewelArr = curOwnDecomposeJewelArr
+    local disabled = #curOwnDecomposeJewelArr == 0
+    self:SendNotification("RefreshJewelDecomposeView", curDecomposeJewelArr, curSelectDecomposeJewelArr, true, disabled, Language:getStr("HeroDecomposition_PutOnAll"))
+end
+
+function OnCommand_UpdateDecomposeJewel(objs)
+    local jewel = objs[0]
+    local index = objs[1]
+    if jewel.selected then
+        CancelSelectDecomposeJewel(jewel)
+    else
+        SelectDecomposeJewelEffect(jewel, index)
+    end
+end
+
+function OnCommand_DownSelectedDecomposeJewel(objs)
+    local jewel = objs[0]
+    local index = objs[1]
+    if jewel.id == 0 then
+        return
+    end
+    CancelSelectDecomposeJewel(GetDecomposeJewelByJewel(jewel),index+1)
+end
+
+function OnCommand_QuickOperation(objs)
+    if curSelectDecomposeJewelCount >= MAX_SELECT_DECOMPOSE_JEWEL_COUNT then
+        QuickCancelSelectDecomposeJewel()
+    else
+        QuickSelectDecomposeJewel()
+    end
+end
+
+function OnCommand_OpenDecomposePreview(objs)
+    if #curOwnDecomposeJewelArr == 0 then
+        ShowHintBox(Language:getStr("NoJewelMulDecompose"))
+        return
+    end
+    CsBridge.CacheAssetsByModule(self.Module,
+	function()
+        CsBridge.OpenView("JewelMulDecomposeView", "JewelMulDecomposeModel", true, true)
+	end, "JewelMulDecomposeView", "JewelMulDecomposeItemSlot")
+end
+
+function OnCommand_Decompose(objs)
+    if curSelectDecomposeJewelCount==0 then
+        ShowHintBox(Language:getStr("JewelDecompose_NoPreview"))
+        return
+    end
+    if CheckHasEquipDecomposeJewel() then
+        ShowMsgBox(Language:getStr("JewelDecomposeHasEquip_Confirm"), function()
+            if CheckHasHighQuliatyDecomposeJewel() then
+                ShowMsgBox(Language:getStr("JewelDecomposeHasHighQuliaty_Confirm"),function()
+                    DoDeCompose()
+                end)
+            else
+                DoDeCompose()
+            end
+        end)
+    elseif CheckHasHighQuliatyDecomposeJewel() then
+        ShowMsgBox(Language:getStr("JewelDecomposeHasHighQuliaty_Confirm"),function()
+            DoDeCompose()
+        end)
+    else
+        DoDeCompose()
+    end
+end
+
+function OnCommand_CloseJewelDecomposeView(objs)
+    ClearSelectDecomposeJewelArr()
+end 
+
+function OnCommand_ResetJewelDecompose(objs)
+    ResetJewelDecompose()
+end

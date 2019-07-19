@@ -1,0 +1,690 @@
+local friendList
+local initedFriend=false
+local initedFriendApply=false
+local friendApplyList
+local appliedList
+local initedApplied=false
+local monsterData
+local initedMonster=false
+local initedFriendRank=false
+local friendRankData
+local friendRewardData
+local initedFriendReward=false
+local lastChallengeFriendTime = 0
+local TIME_DELTA
+
+local utils = require "FriendUtils"
+
+local FriendRewardTbl={}
+FriendRewardTbl.tblName="FriendRankReward"
+FriendRewardTbl.max="max"
+FriendRewardTbl.min="min"
+FriendRewardTbl.reward="reward"
+
+local friendAppliedRedFlag = false
+local helpBossRedFlag = false
+
+function DoInit()
+    TIME_DELTA = GetConstValue("friendFightingCD") * 1000
+end
+
+function OnCommand_SysStrength()
+    local req={}
+    req.useless=0
+    HttpRequest("refreshStrength", "RefreshStrengthReq", "RefreshStrengthResp", req, function(resp)
+        self:SendNotification("SysStrength")
+    end)
+    RefreshFriendAppliedRedFlag()
+    RefreshHelpBossRedFlag()
+end
+
+local function FetchFriends()
+    local req={}
+    req.useless=0
+    utils.FetchFriends(function(resp)
+        if resp ~= nil and resp.friends ~= nil then
+            friendList=resp
+            for i=1,#resp.friends do
+                local friend=resp.friends[i]
+                if friend.haveMonster and friend.monsterId > 0 then
+                    friend.monsterInfo=GetMonsterInfo(friend.monsterId)
+                end
+            end
+            lastChallengeFriendTime = CsBridge.timeManager.ServerTime-resp.fightingCdRemain
+        else
+            friendList={}
+            friendList.friends={}
+        end
+        self:SendNotification("InitFriendList",friendList)
+        initedFriend=true
+    end)
+end
+
+function OnCommand_InitFriendList()
+    FetchFriends()
+end
+
+function OnCommand_InitApply()
+    if not initedFriendApply then
+        DoRecommend()           
+    else
+        self:SendNotification("InitApply", friendApplyList)
+    end
+end
+
+function DoRecommend()
+    local req={}
+    req.useless=0
+    HttpRequest("recommendFriends", "RecommendFriendsReq", "RecommendFriendsResp", req, function(resp)
+        friendApplyList={}
+        if resp ~= nil and resp.recommends ~=nil then
+            friendApplyList.friends=resp.recommends
+        else
+            friendApplyList.friends={}
+        end
+        self:SendNotification("InitApply",friendApplyList)
+        initedFriendApply=true
+    end)   
+end
+
+function OnCommand_SearchFriend(objs)
+    local nick=objs[0]
+    if nick == nil or nick == "" then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("nullNick"))
+    else
+        local req={}
+        req.nick=nick
+        HttpRequest("searchFriends", "SearchFriendsReq", "SearchFriendsResp", req, function(resp)
+            friendApplyList={}
+            if resp ~= nil then
+                friendApplyList.friends=resp.results
+            else
+                friendApplyList.friends={}
+            end
+            self:SendNotification("InitApply",friendApplyList)
+        end)
+    end
+end
+
+function OnCommand_ApplyAll()
+    if #friendApplyList.friends > 0 then
+        local req={}
+        req.userIds={}
+        for i=1,#friendApplyList.friends do
+            local friendData = friendApplyList.friends[i]
+            local userId = FormatUserID(friendData.userId, friendData.zone)
+            table.insert(req.userIds, userId)
+        end
+        HttpRequest("approvalFriends", "ApprovalFriendsReq", "ApprovalFriendsResp", req, function(resp)
+            DoRecommend()
+        end)
+    else
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("NoFriendToApply"))
+    end
+end
+
+function OnCommand_ApplyFriend(objs)
+    local data=objs[0]
+    local req={}
+    req.userIds={}
+    table.insert(req.userIds,FormatUserID(data.userId, data.zone))
+    HttpRequest("applyFriends", "ApplyFriendsReq", "ApplyFriendsResp", req, function(resp)
+        if resp.status ~= 0 then
+            local str = resp.status == 1 and "Friend_ApplyFail_Common" or "Friend_ApplyFail_MyMax"
+            CsBridge.hintUILayer:ShowHintBox(Language:getStr(str),2)
+        else
+            local removed=RemoveApplies(req.userIds)
+            if(#friendApplyList.friends == 0) then
+                DoRecommend()
+            else
+                self:SendNotification("ApplyFriend",friendApplyList, removed)
+            end
+        end
+    end)
+end
+
+function RemoveApplies(userIds)
+    local list = {}
+    for k=1,#userIds do
+        for i=#friendApplyList.friends,1,-1 do
+            local friend=friendApplyList.friends[i]
+            local formatedUserID = FormatUserID(friend.userId, friend.zone)
+            if formatedUserID == userIds[k] then
+                table.insert(list,friendApplyList.friends[i])
+                table.remove(friendApplyList.friends,i)
+                break
+            end
+        end
+    end
+    return list
+end
+
+function OnCommand_InitApplied()
+    if not initedApplied then
+        local req={}
+        req.useless=0
+        HttpRequest("myApplys", "MyApplysReq", "MyApplysResp", req, function(resp)
+            appliedList={}
+            if resp ~= nil then
+                appliedList.friends=resp.applys
+            else
+                appliedList.friends={}
+            end
+            self:SendNotification("InitApplied",appliedList)
+            initedApplied=true            
+        end)
+    else
+        self:SendNotification("InitApplied",appliedList)
+    end
+end
+
+function OnCommand_AcceptFriend(objs)
+    local data=objs[0]
+    req={}
+    req.userIds={}
+    table.insert(req.userIds,FormatUserID(data.userId, data.zone))
+    req.decision=1
+    HttpRequest("approvalFriends", "ApprovalFriendsReq", "ApprovalFriendsResp", req, function(resp)
+        if resp.status ~= 0 then
+            local str = resp.status == 1 and "Friend_ApprovalFail_OtherMax" or "Friend_ApprovalFail_MyMax"
+            CsBridge.hintUILayer:ShowHintBox(Language:getStr(str),2)
+        end
+        local removed=RemoveApplied(req.userIds)
+        initedFriend=false
+        friendList={}
+        self:SendNotification("AcceptFriend", appliedList, removed)
+        RefreshFriendAppliedRedFlag()
+    end)
+end
+
+function RemoveApplied(userIds)
+    local list = {}
+    for k=1,#userIds do
+        for i=#appliedList.friends,1,-1 do
+            local friend=appliedList.friends[i]
+            local formatedUserID = FormatUserID(friend.userId, friend.zone)
+            if formatedUserID == userIds[k] then
+                table.insert(list,appliedList.friends[i])
+                table.remove(appliedList.friends,i)
+                break
+            end
+        end
+    end
+    return list
+end
+
+function OnCommand_RefuseFriend(objs)
+    local data=objs[0]
+    local req={}
+    req.userIds={}
+    table.insert(req.userIds, FormatUserID(data.userId, data.zone))
+    req.decision=2
+    HttpRequest("approvalFriends", "ApprovalFriendsReq", "ApprovalFriendsResp", req, function(resp)
+        if resp.status ~= 0 then
+            local str = resp.status == 1 and "Friend_ApprovalFail_OtherMax" or "Friend_ApprovalFail_MyMax"
+            CsBridge.hintUILayer:ShowHintBox(Language:getStr(str),2)
+        end
+        local removed=RemoveApplied(req.userIds)
+        initedFriend=false
+        friendList={}
+        self:SendNotification("RefuseFriend", appliedList, removed)
+        RefreshFriendAppliedRedFlag()
+    end)
+
+end
+
+function OnCommand_DeleteApplied()
+    req={}
+    req.userIds={}
+    for i=1,#appliedList.friends do
+        local friendData = appliedList.friends[i]
+        table.insert(req.userIds,FormatUserID(friendData.userId, friendData.zone))
+    end
+    req.decision=2
+    HttpRequest("approvalFriends", "ApprovalFriendsReq", "ApprovalFriendsResp", req, function(resp)
+        appliedList.friends={}
+        self:SendNotification("DeleteApplied", appliedList)
+        RefreshFriendAppliedRedFlag()
+    end)
+end
+
+function OnCommand_ReceivedFriendShip(objs)
+    local data=objs[0]
+    if data.canReceive then
+        local req={}
+        req.userIds={}
+        local formatedUserID = FormatUserID(data.friendBasicInfoResp.userId, data.friendBasicInfoResp.zone)
+        table.insert(req.userIds, formatedUserID)
+        HttpRequest("receiveFriendCoin", "ReceiveFriendCoinReq", "ReceiveFriendCoinResp", req, function(resp)
+            data.canReceive=false
+            if resp.receiveCount > 0 then
+                CsBridge.hintUILayer:ShowHintBox(Language:getStr("receiveFriendShip").."<color=#42ff00>+"..resp.receiveCount.."</color>")
+            end
+            self:SendNotification("ReceivedFriendShip", data)
+        end)
+    else
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("FriendShipReceived"))
+    end
+end
+
+function OnCommand_DonateFriendShip(objs)
+    local data=objs[0]
+    if data.canDonate then
+        local req={}
+        req.userIds={}
+        table.insert(req.userIds, FormatUserID(data.friendBasicInfoResp.userId, data.friendBasicInfoResp.zone))
+        HttpRequest("donateFriendCoin", "DonateFriendCoinReq", "DonateFriendCoinResp", req, function(resp)
+            data.canDonate=false
+            if resp.donateCount > 0 then
+                CsBridge.hintUILayer:ShowHintBox(Language:getStr("donateFriendShip").."<color=#42ff00>+"..resp.donateCount.."</color>")
+            end
+            self:SendNotification("DonateFriendShip", data)
+        end)
+    else
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("FriendShipDonated"))
+    end
+end
+
+function OnCommand_Auto()
+    local receivedReq={}
+    receivedReq.userIds={}
+    local donateReq={}
+    donateReq.userIds={}
+    local changedData={}
+    for i=1,#friendList.friends do
+        local friend=friendList.friends[i]
+        local formatedUserID = FormatUserID(friend.friendBasicInfoResp.userId, friend.friendBasicInfoResp.zone)
+        if friend.canReceive then
+            table.insert(receivedReq.userIds, formatedUserID)
+        end
+        if friend.canDonate then
+            table.insert(donateReq.userIds, formatedUserID)
+        end
+        if friend.canReceive or friend.canDonate then
+            table.insert(changedData, friend)
+        end
+    end
+    if #receivedReq.userIds > 0 and #donateReq.userIds > 0 then
+        HttpRequest("receiveFriendCoin", "ReceiveFriendCoinReq", "ReceiveFriendCoinResp", receivedReq, function(resp)
+            if resp.receiveCount > 0 then
+                CsBridge.hintUILayer:ShowHintBox(Language:getStr("receiveFriendShip").."<color=#42ff00>+"..resp.receiveCount.."</color>")
+            end
+            HttpRequest("donateFriendCoin", "DonateFriendCoinReq", "DonateFriendCoinResp", donateReq, function(resp1)
+                if resp1.donateCount > 0 then
+                    CsBridge.hintUILayer:ShowHintBox(Language:getStr("donateFriendShip").."<color=#42ff00>+"..resp1.donateCount.."</color>")
+                end
+                for i=1,#changedData do
+                    changedData[i].canReceive=false
+                    changedData[i].canDonate=false
+                end
+                self:SendNotification("Auto",changedData)
+            end)
+        end)
+    elseif #receivedReq.userIds > 0 then
+        HttpRequest("receiveFriendCoin", "ReceiveFriendCoinReq", "ReceiveFriendCoinResp", receivedReq, function(resp)
+            if resp.receiveCount > 0 then
+                CsBridge.hintUILayer:ShowHintBox(Language:getStr("receiveFriendShip").."<color=#42ff00>+"..resp.receiveCount.."</color>")
+            end
+            for i=1,#changedData do
+                changedData[i].canReceive=false
+                changedData[i].canDonate=false
+            end
+            self:SendNotification("Auto",changedData)
+        end)
+    elseif #donateReq.userIds > 0 then
+        HttpRequest("donateFriendCoin", "DonateFriendCoinReq", "DonateFriendCoinResp", donateReq, function(resp1)
+            if resp1.donateCount > 0 then
+                CsBridge.hintUILayer:ShowHintBox(Language:getStr("donateFriendShip").."<color=#42ff00>+"..resp1.donateCount.."</color>")
+            end
+            for i=1,#changedData do
+                changedData[i].canReceive=false
+                changedData[i].canDonate=false
+            end
+            self:SendNotification("Auto",changedData)
+        end)
+    end
+end
+
+function OnCommand_InitFriendBoss()
+    if not initedMonster then
+        local req = {}
+        req.useless=0
+        HttpRequest("refreshMonsterInfo", "RefreshMonsterInfoReq", "RefreshMonsterInfoResp", req, function(resp)
+            RefreshBoss(resp.playerMonsterSearch, resp.playerMonsterSearchRecord)
+            self:SendNotification("InitFriendBoss", monsterData)
+            initedMonster=true
+        end)
+    else
+        RefreshBossStatus()
+        self:SendNotification("InitFriendBoss", monsterData)
+    end
+end
+
+function GetMonsterInfo(monsterId)
+    local data={}
+    data.heroId = ResTblContainer:GetPropToInt(monsterId,Monster.actorId,Monster.actorTbl)
+    data.grade = 1
+    data.level = ResTblContainer:GetPropToInt(monsterId,Monster.level,Monster.actorTbl)
+    return data
+end
+
+function RefreshBossStatus()
+    local playerInfo=appData:checkData("PlayerInfo")
+    monsterData.power=playerInfo.strength
+    monsterData.canSearch=CsBridge.timeManager.ServerTime >= monsterData.nextSearchTime
+    monsterData.recovered=CsBridge.timeManager.ServerTime >= monsterData.nextRecoverTime
+end
+
+function RefreshBoss(monster, monsterRec)
+    monsterData={}
+    monsterData.monster=monster
+    if monster ~= nil and monster.monsterFaceId > 0 then
+        monsterData.monsterInfo=GetMonsterInfo(monster.monsterFaceId)
+    end
+    local searchPeriod = GetConstValue("friendHelpPeriod")
+    local powerRecoverPeroid=GetConstValue("physicalStrengthRecoveryPeriod")
+    if monsterRec ~= nil then
+        monsterData.nextSearchTime = monsterRec.lastSearchTime + searchPeriod * 1000
+    else
+        monsterData.nextSearchTime = 0
+    end
+    if monsterRec ~= nil then
+        monsterData.nextRecoverTime=monsterRec.strengthRecoveryStartTime + powerRecoverPeroid * 1000
+    else
+        monsterData.nextRecoverTime = 0
+    end
+    RefreshBossStatus()
+    return monsterData
+end
+
+function OnCommand_SearchBoss()
+    if monsterData.canSearch then
+        local req={}
+        req.useless=0
+        HttpRequest("searchMonster", "SearchMonsterReq", "SearchMonsterResp", req, function(resp)
+            local rewards={}
+            if resp ~= nil and resp.rewardItems ~= nil then
+                rewards.rewardItems=resp.rewardItems
+            else
+                rewards.rewardItems={}
+            end
+            rewards.monsterData=RefreshBoss(resp.playerMonsterSearch, resp.playerMonsterSearchRecord)
+            self:SendNotification("SearchBoss", rewards)
+            RefreshHelpBossRedFlag()
+        end)
+    else
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("CanNotSearchBoss"))
+    end
+end
+
+local function EnterBattle(battleInfo)
+    ShowBattleModule(battleInfo, self)
+end
+
+function OnCommand_ChallengeSelfBoss()
+    CsBridge.CacheAssetsByModule(self.Module,function()
+		local view=CsBridge.OpenView("FormationView","FormationModel",true,true)
+        view:SetParamDataList(1,
+        function (formationPos)
+            local req={}
+            req.formationPos=formationPos
+            HttpBattle("challengeMyBoss", "ChallengeMyBossReq", req, function(battleInfo)
+                if battleInfo ~= nil then
+                    initedMonster = false
+                    initedFriendRank = false
+                    EnterBattle(battleInfo)
+                end
+            end, true, true)
+        end,nil,0,false)
+	end, "FormationView","HeroItemSlot")    
+end
+
+function OnCommand_InitBossRank()
+    if not initedFriendRank then
+        local req = {}
+        req.count=50
+        HttpRequest("getFriendsHelpRank", "GetFriendsHelpRankReq", "GetFriendsHelpRankResp", req, function(resp)
+            friendRankData=resp
+            initedFriendRank=true
+            self:SendNotification("InitBossRank",friendRankData)
+        end)
+    else
+        self:SendNotification("InitBossRank",friendRankData)
+    end
+end
+
+function OnCommand_InitFriendReward()
+    if not initedFriendRank then
+        local req = {}
+        req.count=50
+        HttpRequest("getFriendsHelpRank", "GetFriendsHelpRankReq", "GetFriendsHelpRankResp", req, function(resp)
+            friendRankData=resp
+            initedFriendRank=true
+            DoInitFriendReward()
+        end)
+    else
+        DoInitFriendReward()
+    end
+end
+
+function DoInitFriendReward()
+    if not initedFriendReward then
+        friendRewardData={}
+        friendRewardData.seasonEndTime=friendRankData.seasonEndTime
+        friendRewardData.ranks={}
+        local tbl=ResTblContainer:GetTable(FriendRewardTbl.tblName)
+        local rewards=tbl:GetCol(FriendRewardTbl.min)
+	    for i=0,rewards.Length - 1 do
+            local newData={}
+            newData.min=tonumber(rewards[i])
+	        newData.max=tbl:GetInt(rewards[i],FriendRewardTbl.max)
+	        newData.rewards=GetRewardFromTbl(tbl:Get(rewards[i],FriendRewardTbl.reward))
+	        table.insert(friendRewardData.ranks,newData)
+	    end
+	    table.sort(friendRewardData.ranks, function(a,b)
+            return a.max < b.max
+        end)
+        initedFriendReward = true
+        self:SendNotification("InitFriendReward", friendRewardData)
+    else
+        self:SendNotification("InitFriendReward", friendRewardData)
+    end
+end
+
+function OnCommand_ReInitFriendReward()
+    initedMonster = false
+    initedFriendRank = false
+    initedFriendReward = false
+    OnCommand_InitFriendReward()
+end
+
+function OnCommand_ChallengeFriendBoss(objs)
+    local playerInfo=appData:checkData("PlayerInfo")
+    local level=GetConstValue("friendHelpChallengeLevel")
+    if playerInfo.level >= level then
+        if playerInfo.strength <= 0 then
+            CsBridge.hintUILayer:ShowHintBox(Language:getStr("NoPower"),2)
+        else
+            local friend=objs[0]
+            if friend.haveMonster and friend.monsterId > 0 then
+                CsBridge.CacheAssetsByModule(self.Module,function()
+		        local view=CsBridge.OpenView("FormationView","FormationModel",true,true)
+                view:SetParamDataList(1,
+                function (formationPos)
+                    local req={}
+                    req.userId=FormatUserID(friend.friendBasicInfoResp.userId, friend.friendBasicInfoResp.zone)
+                    req.formationPos=formationPos
+                    HttpBattle("challengeFriendBoss", "ChallengeFriendBossReq", req, function(battleInfo)
+                        if battleInfo ~= nil then
+                            initedFriend = false
+                            initedFriendRank = false
+                            self:SendNotification("ChallengeFriendBoss", friend)
+                            EnterBattle(battleInfo)
+                        end
+                    end, true, true)
+                end,nil,0,false)
+	        end, "FormationView","HeroItemSlot")  
+            else
+                CsBridge.hintUILayer:ShowHintBox(Language:getStr("NoBoss"))
+            end
+        end
+    else
+        CsBridge.hintUILayer:ShowHintBox(string.gsub(Language:getStr("Challenge_Need_Level"), "%%s", tostring(level)), 2)
+    end
+end
+
+function OnCommand_ChallengeFriend(objs)
+    if CsBridge.timeManager.ServerTime - lastChallengeFriendTime >= TIME_DELTA then
+        local friend=objs[0]
+        CsBridge.CacheAssetsByModule(self.Module,function()
+		    local view=CsBridge.OpenView("FormationView","FormationModel",true,true)
+            view:SetParamDataList(1,
+            function (formationPos)
+                local req={}
+                req.userId=FormatUserID(friend.friendBasicInfoResp.userId, friend.friendBasicInfoResp.zone)
+                req.formationPos=formationPos
+                HttpBattle("challengeFriend", "ChallengeFriendReq", req, function(battleInfo)
+                    if battleInfo ~= nil then
+                        lastChallengeFriendTime = CsBridge.timeManager.ServerTime
+                        self:SendNotification("ChallengeFriend")
+                        EnterBattle(battleInfo)
+                    end
+                end, true, true)
+            end,nil,0,false)
+	    end, "FormationView","HeroItemSlot")  
+	else
+        --hint:ShowHintBox(string.format(Language:getStr("friendFightingCD"),math.max(lastChallengeFriendTime+TIME_DELTA-timer.ServerTime)))
+        CsBridge.hintUILayer:ShowHintBox(string.format(Language:getStr("friendFightingCD"),CsBridge.timeManager:checkTimeShow(lastChallengeFriendTime+TIME_DELTA-CsBridge.timeManager.ServerTime)))
+    end
+end
+
+function OnCommand_DeleteFriend(objs)
+    local friend=objs[0]
+    CsBridge.messageManager:showAlertView(Language:getStr("hint"), string.gsub(Language:getStr("DeleteFriend"), "%%s", friend.friendBasicInfoResp.nick), Language:getStr("local_cancel"), nil, Language:getStr("local_confirm"), function()
+        local targetUserID = FormatUserID(friend.friendBasicInfoResp.userId, friend.friendBasicInfoResp.zone)
+        utils.RemoveFriend(function(resp)
+            for i=#friendList.friends,1,-1 do
+                local frd=friendList.friends[i]
+                local formatedUserID = FormatUserID(frd.friendBasicInfoResp.userId, frd.friendBasicInfoResp.zone)
+                if formatedUserID == targetUserID then
+                    table.remove(friendList.friends,i)
+                    break
+                end
+            end
+            self:SendNotification("InitFriendList",friendList)        
+        end,targetUserID)
+    end)
+end
+
+function OnCommand_MaskFriend(objs)
+    local friend=objs[0]
+    if not friend.sheild then
+        CsBridge.messageManager:showAlertView(Language:getStr("hint"), string.gsub(Language:getStr("MaskFriendHint"), "%%s", friend.friendBasicInfoResp.nick), Language:getStr("local_cancel"), nil, Language:getStr("local_confirm"), function()
+            DoMaskFriend(friend)
+        end)
+    else
+        DoMaskFriend(friend)
+    end
+end
+
+function OnCommand_ShowPlayerTips(obj)
+	local data = obj[0]
+    CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			local view = CsBridge.OpenView("PlayerInfoView", "PlayerInfoModel",true,true)
+			view.transform.parent:SetAsLastSibling()
+			local isLocal = false
+			local uid = tostring(data.userId)
+			local zone = data.zone
+			view:SetParamDataList(isLocal, uid, zone)
+		end, "PlayerInfoView","AchievementItemSlot")
+end
+
+function DoMaskFriend(friend)
+    local req={}
+    if friend.sheild then
+        req.type=2
+    else
+        req.type=1
+    end
+    req.userId = friend.friendBasicInfoResp.userId
+    HttpRequest("friendSheild", "FriendSheildReq", "FriendSheildResp", req, function(resp)
+         friend.sheild = not friend.sheild
+         self:SendNotification("MaskFriend",friend) 
+    end)
+end
+
+function RefreshFriendAppliedRedFlag()
+    if not UIOpen(UI_OPEN_TYPE_FRIIEND,false) then
+        return
+    end
+    if not initedApplied then
+        local req={}
+        req.useless=0
+        HttpRequest("myApplys", "MyApplysReq", "MyApplysResp", req, function(resp)
+            appliedList={}
+            if resp ~= nil then
+                appliedList.friends=resp.applys
+            else
+                appliedList.friends={}
+            end
+            initedApplied=true
+            friendAppliedRedFlag = appliedList.friends and #appliedList.friends~=0
+            self:SendNotification("RefreshAppliedRefFlag",friendAppliedRedFlag)        
+        end)
+    else
+        friendAppliedRedFlag = #appliedList.friends~=0
+        self:SendNotification("RefreshAppliedRefFlag",friendAppliedRedFlag)        
+    end
+
+end
+
+function RefreshHelpBossRedFlag()
+    if not UIOpen(UI_OPEN_TYPE_LIMIT_FRIENDHELP,false) then
+        return
+    end
+    if not initedMonster then
+        local req = {}
+        req.useless=0
+        HttpRequest("refreshMonsterInfo", "RefreshMonsterInfoReq", "RefreshMonsterInfoResp", req, function(resp)
+            RefreshBoss(resp.playerMonsterSearch, resp.playerMonsterSearchRecord)
+            initedMonster=true
+            helpBossRedFlag = monsterData.canSearch
+            self:SendNotification("RefreshHelpBossRedFlag",monsterData.canSearch)
+        end)
+    else
+        RefreshBossStatus()
+        helpBossRedFlag = monsterData.canSearch
+        self:SendNotification("RefreshHelpBossRedFlag",helpBossRedFlag)
+    end
+end
+
+function OnCommand_ListViewManageBtnClicked(objs)
+    local finishedCbk = function()
+        CsBridge.OpenView("DeleteFriendView", "DeleteFriendModel", true)
+    end
+    CsBridge.CacheAssetsByModule(self.Module, finishedCbk, "DeleteFriendView", "SelectFriendItemSlot")
+end
+
+function DoOnExit()
+    MsgCenter:Broadcast(Notify_FriendRedFlagChanged,friendAppliedRedFlag or helpBossRedFlag)
+    self.Module = nil
+    friendList = nil
+    initedFriend = nil
+    initedFriendApply = nil
+    friendApplyList = nil
+    appliedList = nil
+    initedApplied = nil
+    monsterData = nil
+    initedMonster = nil
+    initedFriendRank = nil
+    friendRankData = nil
+    friendRewardData = nil
+    initedFriendReward = nil
+    lastChallengeFriendTime = nil
+    TIME_DELTA = nil
+    FriendRewardTbl = nil
+    friendAppliedRedFlag = nil
+    helpBossRedFlag = nil
+    utils = nil
+end

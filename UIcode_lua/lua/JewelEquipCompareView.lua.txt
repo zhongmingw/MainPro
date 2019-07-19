@@ -1,0 +1,141 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-02-11 10:00:37
+
+local yield_return = (require 'cs_coroutine').yield_return
+
+local isInit = false
+
+local oldEquipView
+local newEquipView
+
+local function GetEquipView(view, root)
+    view.obj = root.gameObject
+    view.trans = root
+    view.nameTxt = root:GetComponentAtPath("Base/NameTxt",CLS_TEXT)
+    view.tagTxt = root:GetComponentAtPath("Base/Type/TagTxt",CLS_TEXT)
+    view.itemBase = root:GetComponentAtPath("Base/Item",CLS_RECTTRANSFORM)
+    view.propArr = {}
+    for i=1, 6 do
+        local propTxt = root:GetComponentAtPath("DefProp"..i.."Txt",CLS_TEXT)
+        table.insert(view.propArr, propTxt)
+    end
+    view.propSizeDelta = view.propArr[1].transform:CheckSizeDelta()
+end
+
+function DoInit()
+    self.Shadow = 1
+    self.Anim = 8	
+end
+
+function InitUI()
+    oldEquipView = {}
+    newEquipView = {}
+    GetEquipView(oldEquipView, self:GetComponentAtPath("OldEquip",CLS_RECTTRANSFORM))
+    GetEquipView(newEquipView, self:GetComponentAtPath("NewEquip",CLS_RECTTRANSFORM))
+end
+
+function OnOpen()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitJewelEquipCompareData")
+end
+
+function OnClose()
+    for i,v in ipairs(oldEquipView.propArr) do
+        v.gameObject:SetSelfActive(false)
+    end
+    for i,v in ipairs(newEquipView.propArr) do
+        v.gameObject:SetSelfActive(false)
+    end
+    oldEquipView.obj:SetSelfActive(false)
+    newEquipView.obj:SetSelfActive(false)
+end
+
+local function RefreshJewelEquip(view, equip)
+    view.nameTxt.text = equip.name
+    view.tagTxt.text = ResTblContainer:GetPropToStr(equip.type,JewelTypeTbl.desp,JewelTypeTbl.tblName)
+    BindItemBaseValue(view.itemBase, equip)
+    for i,effect in ipairs(equip.effects) do
+        view.propArr[i].gameObject:SetSelfActive(true)
+        local desp = ""
+        if #effect.conds ~= 0 then
+            desp = effect.desp.."("..Language:getStr("CondActive")..JewelUtils.GetJewelCondDesp(effect.conds)..")"
+        else
+            desp = effect.desp
+        end
+		view.propArr[i].text = desp
+		local delta = {
+			x = view.propSizeDelta.x,
+			y = view.propArr[i]:GetPreferredValues().y
+        }
+        view.propArr[i].transform:ResetSizeDelta(delta)
+        local active = effect.active and JewelUtils.CheckJewelEffectCondsActive(heroInfo, effect.conds)
+		local color = active and color41 or color40
+ 		SetFontColor(view.propArr[i], color)
+	end
+end
+
+function OnNotification_RefreshJewelCompareView(objs)
+    local oldEquip, newEquip = objs[0], objs[1]
+    oldEquipView.obj:SetSelfActive(true)
+    newEquipView.obj:SetSelfActive(true)
+    RefreshJewelEquip(oldEquipView, oldEquip)
+    RefreshJewelEquip(newEquipView, newEquip)
+
+    local co = coroutine.create(function()
+        yield_return(1)
+        local ORI_SCALE = 0.8
+        local UP_VAL = 1000
+        local oldOriHeight = oldEquipView.trans.sizeDelta.y
+        local newOriHeight = newEquipView.trans.sizeDelta.y
+        local oldHeight = oldOriHeight * ORI_SCALE
+        local newHeight = newOriHeight * ORI_SCALE
+        local scale = {
+            x = ORI_SCALE,
+            y = ORI_SCALE,
+            z = 1
+        }
+        local allHeight = oldHeight+newHeight
+        if allHeight > UP_VAL then
+            scale.x = scale.x*(UP_VAL/allHeight)
+            scale.y = scale.y*(UP_VAL/allHeight)
+        end
+
+        oldEquipView.trans:ResetLocalScale(scale)
+        newEquipView.trans:ResetLocalScale(scale)
+        oldHeight = oldOriHeight*scale.x
+        newHeight = newOriHeight*scale.x
+        local center = (newHeight-oldHeight)/2
+        local pos = {
+            x = 0,
+            y = oldHeight/2+5+center
+        }
+        oldEquipView.trans:ResetAnchoredPosition(pos)
+        pos.y = -(newHeight/2+5)+center
+        newEquipView.trans:ResetAnchoredPosition(pos)
+    end)
+    assert(coroutine.resume(co))
+end
+
+function OnWearBtnClick(sender)
+    self:SendCommand("WearEquip")
+    self:HideView(self.gameObject.name)
+end
+
+function OnMaskClick(sender)
+    self:SendCommand("ActiveEquipSelect")
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+    yield_return = nil
+
+    isInit = nil
+
+    oldEquipView = nil
+    newEquipView = nil
+end

@@ -1,0 +1,382 @@
+--[[
+	file: UnionSceneModel.lua
+	author: hangang
+	description: Union scene logics
+]]
+
+require "UnionUtils"
+require "UnionBattleUtils"
+
+local UnionFunctions = {
+	Dungeon = 33,
+	Harbor = 34,
+	Laboratory = 37,
+	Battle = 47,
+}
+
+local myUnionData
+local dungeonData
+local applicationData
+local battleData
+
+local unionDonationTried = false
+
+------initialization-------
+function DoInit()
+	MsgCenter:Subscribe(Notify_UnionDonationTried, OnUnionDonationTried)
+end
+
+function DoOnExit()
+	MsgCenter:Unsubscribe(Notify_UnionDonationTried, OnUnionDonationTried)
+	self.Module = nil
+	UnionFunctions = nil
+	myUnionData = nil
+	dungeonData = nil
+	applicationData = nil
+	battleData = nil
+
+	unionDonationTried = nil
+end
+
+function OnUnionDonationTried(args)
+	unionDonationTried = true
+end
+
+------Union scene logics-------
+function TryGetUnionInfo(onFinished)
+	local req = {}
+	req.useless = 0
+	local returnCbk = function(resp)
+		OnGetUnionInfoResp(resp)
+		onFinished()
+	end
+	HttpRequest("myUnion", "MyUnionReq", "MyUnionResp", req, returnCbk)
+end
+
+function OnGetUnionInfoResp(resp)
+	myUnionData = resp
+end
+
+function TryGetDungeonData()
+	local req = {}
+	req.useless = 0
+	HttpRequest("unionDungeon", "UnionDungeonReq", "UnionDungeonResp", req, OnGetDungeonDataResp)
+end
+
+function OnGetDungeonDataResp(resp)
+	dungeonData = resp
+end
+
+function TryGetOrderData()
+	local req = {}
+    req.id=7
+    HttpRequest("initPBItem", "InitPBItemReq", "InitPBItemResp", req, OnGetOrderDataResp)
+end
+
+function OnGetOrderDataResp(resp)
+	orderData = resp
+end
+
+function TryGetBattleData()
+	local showHint = false
+	if UIOpen(UnionFunctions.Battle, showHint) then
+		FetchBattleStatusData(OnGetBattleDataResp)
+	end
+end
+
+function OnGetBattleDataResp(resp)
+	battleData = resp
+end
+
+function TryGetApplications()
+	local req = {}
+	req.useless = 0
+	HttpRequest("applyUnionList", "ApplyUnionListReq", "ApplyUnionListResp", req, OnGetApplicationResp)
+end
+
+function OnGetApplicationResp(resp)
+	applicationData = resp
+	self:SendNotification("RefreshView", GetViewData())
+end
+
+function CheckIn()
+	local req = {}
+	req.useless = 0
+	HttpRequest("unionAttendance", "UnionAttendanceReq", "UnionAttendanceResp", req, OnCheckInResp)
+end
+
+function OnCheckInResp(resp)
+	ShowRewardReceivedTip(self, resp.rewards, TryGetViewData)
+end
+
+------Commands-------
+function OnCommand_GetBaseViewData(objs)
+	TryGetViewData()
+end
+
+function OnCommand_CheckIn(objs)
+	CheckIn()
+end
+
+function OnCommand_EnterHall(objs)
+	local viewName, modelName = "UnionView", "UnionModel"
+	EnterUnion(viewName, modelName)
+end
+
+function OnCommand_EnterHarbor(objs)
+	if not AssertFunction(UnionFunctions.Harbor, true) then
+		return
+	end
+
+	local viewName, modelName = "UnionPortView","UnionPortModel"
+	EnterUnion(viewName, modelName)
+end
+
+function OnCommand_EnterMarket(objs)
+	local IDX_SHOP_UNION = 2
+	self:ShowModule("ShopModule",{IDX_SHOP_UNION},false)
+end
+
+function OnCommand_EnterLaboratory(objs)
+	if not AssertFunction(UnionFunctions.Laboratory, true) then
+		return
+	end
+
+	local viewName, modelName = "UnionTechView", "UnionTechModel"
+	EnterUnion(viewName, modelName)
+end
+
+function OnCommand_EnterDungeon(objs)
+	if not AssertFunction(UnionFunctions.Dungeon, true) then
+		return
+	end
+
+	local viewName, modelName = "UnionDungeonView", "UnionDungeonModel"
+	EnterUnion(viewName, modelName)
+end
+
+function OnCommand_EnterBattle(objs)
+	if not AssertFunction(UnionFunctions.Battle, true) then
+		return
+	end
+
+	if battleData then
+		local seasonLockedFlag = -1
+		if battleData.seasonEndTime == seasonLockedFlag then
+			CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionBattleDelayedTips"))
+			return
+		end
+	end
+
+	local viewName, modelName = "UnionBattleView", "UnionBattleModel"
+	EnterUnion(viewName, modelName)
+end
+
+function AssertFunction(unionFunction, showHint)
+	local enabled = UIOpen(unionFunction, showHint)
+	if enabled then
+		local requiredUnionLvl = ResTblContainer:GetPropToInt(unionFunction, UIOpenBase.guildLevel, UIOpenBase.actorTbl)
+		local currentUnionLvl = myUnionData.union.level
+		enabled = currentUnionLvl >= requiredUnionLvl
+
+		if not enabled and showHint then
+			CsBridge.hintUILayer:ShowHintBox(string.format(Language:getStr("UnionLevelRequired"), tostring(requiredUnionLvl)))
+		end
+	end
+
+	return enabled
+end
+
+function EnterUnion(viewName, modelName)
+	self:ShowModule("UnionModule", {viewName, modelName}, false)
+end
+
+function OnCommand_CheckUnion(obj)
+	CheckUnionData()
+end
+
+function CheckUnionData()
+	local req = {}
+	req.useless = 0
+	HttpRequest("checkMyUnion", "CheckMyUnionReq", "CheckMyUnionResp", req, OnGetUnionInfoFinished)
+end
+
+function OnGetUnionInfoFinished(resp)
+	local joined = false	
+	local authority_member = 2
+	if resp~= nil and resp.unionUserRecord ~= nil then
+		local data = resp.unionUserRecord
+		joined = data.authority >= authority_member
+	end
+
+	if not joined then
+		self:HideView("UnionSceneView")
+		self:OpenView("StageView","StageModel",false)
+	else
+		TryGetViewData()
+	end
+end
+
+------View Controller-------
+function TryGetViewData()
+	TryGetUnionInfo(
+		function()	
+			if AssertFunction(UnionFunctions.Dungeon, false) then
+				TryGetDungeonData()
+			end
+			if AssertFunction(UnionFunctions.Harbor, false) then
+				TryGetOrderData()
+			end	
+			if AssertFunction(UnionFunctions.Battle, false) then
+				TryGetBattleData()
+			end					
+			TryGetApplications()	
+		end)
+end
+
+function GetViewData()
+	local viewData = {}
+
+	viewData.showCheckInPanel = myUnionData.canSignIn	
+	viewData.showHallTips = CheckHallTips()
+	viewData.showHarborTips = CheckHarborTips()
+	viewData.showBattleTips = CheckBattleTips()
+	viewData.bossModelName = GetDungeonBossModel()
+
+	return viewData
+end
+
+function GetDungeonBossModel()
+	local name = ""
+	if dungeonData then
+		local dungeonID = dungeonData.currentId
+		local bossID = GetDungeonBossID(dungeonID)
+		name = GetMonsterModelName(bossID)
+	end
+
+	return name
+end
+
+function CheckHallTips()
+	local showHallTips = false
+	local memberType = myUnionData.myAuthority
+	local authorities = MemberAuthorities[memberType]
+	for k, authority in pairs(authorities) do
+		if authority == UnionAuthorities.GranteApplicaiton then
+			if applicationData and applicationData.applyList then
+				showHallTips = true
+			end
+			break
+		end
+	end
+
+	if not unionDonationTried and
+		not showHallTips
+	then
+		local playerUnionRecord = appData:checkData("PlayerUnionRecord")
+		local cdTime = GetRequestCD(playerUnionRecord.lastRequestReinforcementQuality)
+		showHallTips = CsBridge.timeManager.ServerTime >= (playerUnionRecord.lastRequestReinforcementTime + cdTime)
+	end
+
+	return showHallTips
+end
+
+function GetRequestCD(quality)
+	if DonationCDTbl == nil then
+		DonationCDTbl = {}
+		DonationCDTbl.tblName = "GuildDonation"
+		DonationCDTbl.quality = "quality"
+		DonationCDTbl.coolDown = "coolDown"
+	end
+	return ResTblContainer:GetPropToInt(quality,DonationCDTbl.coolDown,DonationCDTbl.tblName) * 1000
+end
+
+function CheckHarborTips()
+	local showTips = false
+	local playerUnionRecord = appData:checkData("PlayerUnionRecord") 
+    if playerUnionRecord and playerUnionRecord.trades then
+        for index,trade in ipairs(playerUnionRecord.trades) do
+            if trade.status == ServerEnum_OrderStatus.Finished then
+				showTips = true
+				break
+			end
+        end
+    end
+
+	return showTips
+end
+
+function CheckBattleTips()
+	if battleData then
+		local seasonFinished = battleData.seasonEndTime == 0
+		return not seasonFinished
+	else
+		return false
+	end
+end
+
+function GetTechViewData(techID)
+	local viewData = {}
+
+	local techCfg = GetTechCfg(techID)
+	local jobID = techCfg.job
+	local techUnlocked = CheckTechUnlocked(jobID, techID)
+	local techLevel = GetTechLevel(jobID, techID)
+
+	viewData.name = techCfg.name
+	viewData.icon = techCfg.icon
+	viewData.levelText = tostring(techLevel) .. "/" .. tostring(techCfg.levelCount)
+	
+	local bonusDataList = {}
+	local attName, attDesc, levelupDesc = GetAttributeDesc(techCfg)
+	local bonusData = {}
+	bonusData.attributeName = attName
+	bonusData.attributeDesc = attDesc
+	bonusData.levelupDesc = levelupDesc
+	table.insert(bonusDataList, bonusData)
+	viewData.bonusDataList = bonusDataList
+
+	viewData.levelRequired = tostring(techCfg.requiredTechLevel)
+	viewData.levelFontColor = techUnlocked and color2 or color26
+
+	local priceCfg = techCfg.price
+	local priceViewData = {}
+	viewData.priceViewData = priceViewData
+	local allEnough = true
+	for k, priceItem in pairs(priceCfg) do
+		local itemViewData = {}
+		itemViewData.resID = priceItem.id
+		local price = priceItem.count
+		itemViewData.price = tostring(price)
+
+		local balance = GetBalance(priceItem.id)
+		local enoughBalance = balance >= price
+		itemViewData.fontColor = enoughBalance and color2 or color26
+
+		priceViewData[k] = itemViewData
+
+		allEnough = allEnough and enoughBalance
+	end
+
+	local notFinalLevel = techLevel < techCfg.levelCount;
+	viewData.upgradeBtnEnabled = techUnlocked and allEnough and notFinalLevel 
+
+	return viewData
+end
+
+function GetAttributeDesc(techCfg)
+	local attribute = techCfg.attribute
+	local name = ResTblContainer:GetPropToStr(attribute.id, Attribute.name, Attribute.actorTbl)
+
+	local techID = techCfg.id
+	local level = GetTechLevel(techCfg.job, techID)
+	local desc = GetTechBonusDesc(techID, level)
+
+	local levelupDesc = desc
+	if level < techCfg.levelCount then
+		levelupDesc = GetTechBonusDesc(techID, level + 1)
+	end
+
+	return name, desc, levelupDesc
+end
+

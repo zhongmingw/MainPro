@@ -1,0 +1,44 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-02-27 16:36:09
+]]
+
+local IconData = CsBridge.IconData
+local cache = CsBridge.objectCache
+
+function OnActivityIconItemSlotBindValue(slot, data)
+    local iconImg = slot:GetGameObjectAtPath("IconImg")
+    local spineRootObj = slot:GetGameObjectAtPath("SpineRoot")
+    local spineRoot = spineRootObj.transform
+    local nameTxt = slot:GetComponentAtPath("NameTxt",CLS_TEXT)
+    local timeBg = slot:GetGameObjectAtPath("bgImg")
+    local redFlag = slot:GetGameObjectAtPath("RedFlag")
+    local timeTxt = slot:GetComponentAtPath("bgImg/TimeTxt",CLS_TEXT)
+    local despBg = slot:GetGameObjectAtPath("despImg")
+    local despTxt = slot:GetComponentAtPath("despImg/DespTxt",CLS_TEXT)
+
+    iconImg:SetSelfActive(data.icon)
+    if data.icon then
+        IconData.SetIconByName(iconImg, data.icon)
+    end
+    spineRootObj:SetSelfActive(data.spine)
+    if spineRoot.childCount > 0 then
+        for i=0,spineRoot.childCount-1 do
+            local child = spineRoot:GetChild(0).gameObject
+            DestroyModel(child)
+        end
+    end
+    if data.spine then
+        cache:CacheAssets(false,data.groupName,nil,function()
+            cache:CreateObject(data.spine, true, spineRoot)
+        end,data.spine)
+    end
+    nameTxt.text = data.name
+    timeBg:SetSelfActive(data.endTime ~= 0)
+    despBg:SetSelfActive(data.desp)
+    redFlag:SetSelfActive(data.redFlag)
+    timeTxt.text = CheckTimeRemain(data.endTime)
+    despTxt.text = data.desp
+end

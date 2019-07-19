@@ -1,0 +1,37 @@
+
+function OnForgeItemSlotBindValue(slot,data)
+		local icon_Sprite = slot:GetComponentAtPath("IconSprite" ,CLS_IMAGE)
+		local frame_Sprite = slot:GetComponentAtPath("FrameSprite" ,CLS_IMAGE)
+		local chip_Sprite = slot:GetComponentAtPath("ChipSprite" ,CLS_IMAGE)
+		local raceObj=slot.transform:Find("RaceObj")
+		local race_Sprite = slot:GetComponentAtPath("RaceSprite" ,CLS_IMAGE)
+		local starRoot=slot.transform:Find("StarRoot")
+		local orderRoot=slot.transform:Find("OrderRoot")
+		local countTxt = slot:GetComponentAtPath("CountTxt" ,CLS_TEXT)
+		local defaultObj = slot.transform:Find("Default")
+		if data.id < 1 then
+			SetDefaultQuality(frame_Sprite)
+			if defaultObj ~= nil then
+				defaultObj.gameObject:SetSelfActive(true)
+			end
+			return
+		end 
+		if defaultObj ~= nil then
+			defaultObj.gameObject:SetSelfActive(false)
+		end
+		icon_Sprite.gameObject:SetSelfActive(true)
+		if data.typeId==2 then
+			local itemType = ResTblContainer:GetPropToInt(data.id,ItemBase.category,ItemBase.actorTbl)
+			if itemType==1 then
+				SetEquipmentItem(data.id,orderRoot)
+			elseif itemType==3 then
+				chip_Sprite.gameObject:SetSelfActive(true)
+				SetHeroPiecesItem(data.id,race_Sprite,starRoot,raceObj.gameObject)
+		end
+		SetIconByItemId(icon_Sprite.gameObject,data.id)
+		SetQualityByItemId(frame_Sprite.gameObject,data.id)
+    end
+    local item = appData:checkItem("PackItem",tostring(data.id))
+    local ownCount = item~=nil and item.count or 0
+    countTxt.text=ownCount.."/"..data.count    
+end

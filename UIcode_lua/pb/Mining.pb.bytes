@@ -1,0 +1,107 @@
+
+Ô
+Mining.protoMiningstage.protoBattleData.protoplayerData.protoArenaData.proto"Ö
+
+MineDetail
+
+id (	
+state ((
+host (2.playerData.PlayerBaseInfo
+hostStartTime (
+lastTakeMineTime (
+protectionEndTime (
+type (
+protectionType (
+	closeTime	 ("K
+HeroInfo
+uid (
+curHp (
+
+hp (
+lastRecoverTime ("#
+CheckAllMinesReq
+useless ("<
+CheckAllMinesResp'
+mineDetails (2.Mining.MineDetail"H
+TakeMineReq
+mineId (	)
+formationPos (2.stage.FormationPos"r
+TakeMineResp
+result (*
+
+battleInfo (2.BattleData.BattleInfo&
+
+mineDetail (2.Mining.MineDetail"
+QuitMineReq
+mineId (	"
+QuitMineResp
+result ("$
+GetMineResourceReq
+mineId (	":
+GetMineResourceResp#
+resource (2.stage.RewardItem"$
+SearchFreeMineReq
+useless ("=
+SearchFreeMineResp'
+mineDetails (2.Mining.MineDetail"%
+RecoverMineHeroReq
+useless ("%
+RecoverMineHeroResp
+result ("&
+BuyMineProtectionReq
+mineId (	"'
+BuyMineProtectionResp
+result ("ô
+MineInfo
+
+upgradeIds (	
+
+upgradeNum (
+	grabTimes (
+grabWinTimes (
+totalTakenTime (
+	totalGold (
+	totalSoul (
+totalStepCoin (
+recoverTimes	 (
+protectBuyTimes
+ (
+takeMineIds (	"#
+UpgradeMineScienceReq
+
+id ("(
+UpgradeMineScienceResp
+result ("V
+UpdateMineDefFormationReq
+mineId (	)
+formationPos (2.stage.FormationPos",
+UpdateMineDefFormationResp
+result ("'
+CheckMineHeroInfoReq
+useless ("<
+CheckMineHeroInfoResp#
+	heroInfos (2.Mining.HeroInfo""
+checkHostInfoReq
+mineId (	"~
+CheckHostInfoResp0
+formationPos (2.ArenaData.FormationPosAdv#
+	heroInfos (2.Mining.HeroInfo
+
+hostCombat ("'
+CheckExploreEnterReq
+useless ("n
+ExploreEnterItem
+
+id (
+name (	
+tips (	
+
+background (	
+uiOpenId (
+open ("@
+CheckExploreEnterResp'
+items (2.Mining.ExploreEnterItem"/
+RemoveHeroFromMineDefReq
+heroUidList ("+
+RemoveHeroFromMineDefResp
+result (

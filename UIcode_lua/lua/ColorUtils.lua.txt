@@ -1,0 +1,153 @@
+color1 = {255, 241, 235}
+color2 = {255, 255, 255}
+color3 = {119, 236, 100}
+color4 = {135, 217, 255}
+color5 = {255, 138, 112}
+color6 = {209, 192, 180}
+color7 = {70, 185, 80}
+color8 = {98, 86, 80}
+color9 = {206, 206, 129}
+color10 = {181, 158, 0}
+color11 = {34,24,0}
+color12 = {255,210,69}
+color13 = {66,255,0}--green
+color14 = {246,207,72}
+color15 = {246,90,68}
+color16 = {100,180,236}
+color17 = {243,158,82}
+color18 = {212,100,236}
+color19 = {139,139,139}
+color20 = {88,26,0}
+color21 = {255,255,84}
+color22 = {87,49,30}
+color23 = {148,105,78}
+color24 = {255,249,240}
+color25 = {115,82,42}
+color26 = {255,0,42}--red
+color27 = {61,165,59}
+color28 = {152,57,164}
+color29 = {170,119,63}
+color30 = {255,0,0}
+color31 = {255,241,235}
+color32 = {248,15,59}
+color33 = {45,107,18}
+color34 = {54,208,244}	--vip1-5
+color35 = {154,240,255} 	
+color36 = {24,206,0}	--vip6-10
+color37 = {199,255,154}
+color38 = {255,200,0}	--vip11-13
+color39 = {255,243,184}
+color40 = {92,92,92}
+color41 = {71,169,29} --light green
+
+colorTable = {
+	[1] = color1,
+	[2] = color2,
+	[3] = color3,
+	[4] = color4,
+	[5] = color5,
+	[6] = color6,
+	[7] = color7,
+	[8] = color8,
+	[9] = color9,
+	[10] = color10,
+	[11] = color11,
+	[12] = color12,
+	[13] = color13,
+	[14] = color14,
+	[15] = color15,
+	[16] = color16,
+	[17] = color17,
+	[18] = color18,
+	[19] = color19,
+	[20] = color20,
+	[21] = color21,
+	[22] = color22,
+	[23] = color23,
+	[24] = color24,
+	[25] = color25,
+	[26] = color26,
+	[27] = color27,
+	[28] = color28,
+	[29] = color29,
+	[30] = color30,
+	[31] = color31,
+	[32] = color32,
+	[33] = color33,
+	[34] = color34,
+	[35] = color35,
+	[36] = color36,
+	[37] = color37,
+	[38] = color38,
+	[39] = color39,
+}
+
+
+color1_Rich = "fff1eb"    --通用标题字色
+color2_Rich = "ffffff"    --通用物品角标颜色
+color3_Rich = "77ec64"    --(计时一类)商城
+color4_Rich = "97d9ff"    --标题
+color5_Rich = "ff8a70"    --标题
+color6_Rich = "d1c0b4"    --未选中
+color7_Rich = "46b950"    --装备品质 标题
+color8_Rich = "625650"    --
+color9_Rich = "cece81"    --光环
+color10_Rich = "b59e00"   --属性
+color11_Rich = "221800"   --聊天
+color12_Rich = "ffd425"   --
+color13_Rich = "42ff00"   --赠送，倒计时一类的
+color14_Rich = "f6cf48"    --金
+color15_Rich = "f65a44"    --红
+color16_Rich = "64b4ec"    --蓝
+color17_Rich = "f39e52"    --橙
+color18_Rich = "d464ec"    --紫
+color19_Rich = "8B8B8BFF"    --套装未触发
+color20_Rich =  ""  --未满足
+color26_Rich = "FF002A"
+
+---将颜色字符串改为颜色数组
+function ChangeStrToColorArr(colorString)
+	local color = {}
+	local IDX_R, IDX_G, IDX_B, IDX_A = 1, 2, 3, 4
+	local r = string.sub(colorString,1,2)
+	local g = string.sub(colorString,3,4)
+	local b = string.sub(colorString,5,6)
+	local a = string.sub(colorString,7,8)
+	if r ~= nil and r ~= "" then
+		color[IDX_R] = tonumber(r,16)
+	end
+	if g ~= nil and g ~= "" then
+		color[IDX_G] = tonumber(g,16)
+	end
+	if b ~= nil and b ~= "" then
+		color[IDX_B] = tonumber(b,16)
+	end
+	if a ~= nil and a ~= "" then
+		color[IDX_A] = tonumber(a,16)
+	end
+	return color
+end
+
+function SetFontColor(lab,color)
+	CsBridge.UnityHelper.SetFontColor(lab,color[1],color[2],color[3])	
+end
+
+function SetFontColorWithEnough(lab,enoughCallback,enoughColor,notColor)
+	SetFontColor(lab,enoughCallback() and (enoughColor or color31) or (notColor or color30))
+end 
+
+function SetGradientColor(lab,color1,color2)
+	if color1 and color2 then
+        local IDX_R, IDX_G, IDX_B = 1, 2, 3
+        local factor = 1.0 / 255.0
+        local r = color1[IDX_R] * factor
+        local g = color1[IDX_G] * factor
+        local b = color1[IDX_B] * factor
+        local startColor = CsBridge.ColorForLua.CreateColorForLua(r, g, b)
+        r = color2[IDX_R] * factor
+        g = color2[IDX_G] * factor
+        b = color2[IDX_B] * factor
+		local endColor = CsBridge.ColorForLua.CreateColorForLua(r, g, b)
+        lab.gameObject:SetGradientColor(startColor, endColor)
+	end
+end

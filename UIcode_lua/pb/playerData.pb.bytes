@@ -1,0 +1,224 @@
+
+Ð
+playerData.proto
+playerDatastage.proto"‚
+
+PlayerInfo
+userId (	
+zone (	
+nick (	
+level (
+payGem (
+	rewardGem (
+coin (
+vip (
+
+headTexure
+ (	
+	playerExp (
+vipExp (
+soulCoin (
+stepStoneCoin (
+exchangeCoin (
+
+friendCoin (
+icon (
+union (	
+avaliableIcons (
+lotteryDust (
+lastOnlineTime (
+isOnline (
+	unionCoin ("
+banSay (2.playerData.BanSay
+runeDust (
+strength (
+heroSoul (
+feather (
+nickChangedTimes ( 
+box (2.playerData.BoxItem
+activityPoint  (
+FTArenaCoin! (
+FTArenaScore" (
+petSoulEssence# (
+petSoulStone$ (
+	jewelDust% (
+jewelExchangeCoin& (
+zillionaire' (
+timeZone( ("(
+
+PidMapItem
+payId (
+pid (	"@
+BanSay
+beginBanSay (	
+	endBanSay (	
+remark (	"*
+ChangeIconReq
+icon (
+box (" 
+ChangeIconResp
+result ("S
+	StageItem
+
+difficulty (
+chapter (
+stage (
+
+onHookTime ("þ
+OnHookStageItem
+
+difficulty (
+chapter (
+stage (
+goldStartTime (
+resourceStartTime (
+otherStartTime ()
+preGoldRewards (2.stage.RewardItem*
+preOtherRewards (2.stage.RewardItem
+lastSwitchTime	 ("û
+HeroItem
+uid (
+heroId (
+grade (
+level (
+weaponId (
+hatId (
+clothId (
+shoesId (
+duty (
+elementLevel (
+
+elementExp (
+rune (
+relicId (
+distillationStar (
+distillationLevel (
+
+breakLevel (
+jewelIds (
+isEmblem (
+emblemOwnerUid (
+haveEmblemUid ("â
+CallHeroInfo
+lastNormalCallTime (
+lastAdvanceCallTime (
+normalCalledTimes (
+advanceCalledTimes (
+dailySingleCalledChance (
+dailyMultiCalledChance (!
+lastDailyLimitRefreshTime ("H
+PackItem
+itemId (
+count (
+gainTime (
+uid ("ª
+PlayerBaseInfo
+userId (	
+name (	
+icon (
+level (
+zone (	
+union (	
+vip (
+	haveGroup ( 
+box	 (2.playerData.BoxItem"#
+GetCampaignRankReq
+count ("‚
+GetCampaignRankResp3
+	rankInfos (2 .playerData.CampaignRankInfoItem6
+selfRankInfo (2 .playerData.CampaignRankInfoItem"g
+CampaignRankInfoItem2
+playerBaseInfo (2.playerData.PlayerBaseInfo
+score (
+rank ("R
+ZoneInfo
+nameId (	
+registeredCnt (
+status (
+zoneTag (	"p
+ZoneWithPlayerInfo&
+zoneInfo (2.playerData.ZoneInfo2
+playerBaseInfo (2.playerData.PlayerBaseInfo"
+ChangeNickReq
+nick (	" 
+ChangeNickResp
+result ("
+LockHeroReq
+heroUid ("
+LockHeroResp
+status (" 
+UnlockHeroReq
+heroUid (" 
+UnlockHeroResp
+status ("'
+
+BuyItemReq
+
+id (
+count ("
+BuyItemResp
+result (" 
+LastJoinTimeInfo
+time ("
+RecordOnlineReq
+type (""
+RecordOnlineResp
+result ("Q
+ElementCampInfo
+
+id (
+level (
+exp (
+collectedHeros ("=
+HeroCrystalInfo
+heroId (
+level (
+exp ("?
+FriendCampaign-
+infos (2.playerData.FriendCampaignInfo"|
+FriendCampaignInfo2
+playerBaseInfo (2.playerData.PlayerBaseInfo
+
+difficulty (
+chapter (
+stage ("
+CheckNickNameReq
+
+id ("!
+CheckNickNameResp
+nick (	"
+GetBannerReq
+useless ("4
+GetBannerResp#
+records (2.playerData.Record":
+Record
+
+id (
+content (	
+createdTime (",
+RebornHeroReq
+uid (
+reborn ("8
+RebornHeroResp&
+rewardItems (2.stage.RewardItem"6
+BoxItem
+uid (
+
+id (
+
+expireTime ("
+GmGetBoxReq
+
+id ("
+GmGetBoxResp
+result ("&
+ScanOptionalTreasureReq
+uid ("B
+ScanOptionalTreasureResp&
+rewardItems (2.stage.RewardItem"M
+OpenOptionalTreasureReq
+uid (%
+
+rewardItem (2.stage.RewardItem"*
+OpenOptionalTreasureResp
+status (

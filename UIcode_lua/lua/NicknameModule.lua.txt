@@ -1,0 +1,26 @@
+
+function DoInit()
+	
+end
+
+function AssetNames(objs)
+  local arr={"NicknameView"}
+  return arr
+end
+
+
+function OnEnter(objs, onFinished)
+
+	local view=self:OpenView("NicknameView","NicknameModel")
+	
+	-- if(objs[0]) then
+	-- 	view:SetData(objs[0])
+	-- end
+	if(onFinished~=nil)then
+	    onFinished()
+	end
+end
+
+function OnPermanent()
+
+end

@@ -1,0 +1,194 @@
+local actData
+local bgImg
+local titleArtTxt
+local rewardGrid
+local countdownTxt
+local ruleTxt
+local monstersUpData={}
+local enemiesGrid
+local aura
+local auraArr
+local curAura
+local viewData
+
+
+local fightBtn
+
+function DoInit()
+	self.Anim = 0
+	self.Shadow = CS.Client.Library.ShadowType.None
+	InitUI()
+end 
+function InitUI()
+	bgImg = self:GetGameObjectAtPath("BGS/banner/bgImg")
+	titleArtTxt = self:GetComponentAtPath("BGS/banner/TitleArtImg",CLS_LOCALIZE)
+	rewardGrid = self:GetComponentAtPath("other/reward/RewardGrid" ,CLS_UI_ITEM_GRID)
+	countdownTxt = self:GetComponentAtPath("BGS/banner/countdownTxt" ,CLS_TEXT)
+	fightBtn = self:GetComponentAtPath("other/FightingBtn" ,CLS_BUTTON_ARCHLY)
+	enemiesGrid = self:GetComponentAtPath("other/squad/EnemiesGrid" ,"UIItemGrid")
+	aura=self:GetComponentAtPath("other/squad/aureole/icon01Img" ,"UnityEngine.UI.Image")
+	InitAuraArr()
+	
+	ruleTxt = self:GetComponentAtPath("other/rule/name01Txt" ,CLS_TEXT)
+	ruleTxt.text = CsBridge.UnityHelper.SpaceChange(CsBridge.UnityHelper.ReplaceString(ResTblContainer:GetPropToStr(INSTRUCTION_MONOPOLY_FIGHT, Instruction.content, Instruction.tblName)))
+end
+function OnAnimationFinished()
+	CsBridge.IconData.SetRawImageByName(bgImg,"ui_bg_activity_qyzd")
+	SetServerActivityArtFontByImage(titleArtTxt,"ui_bg_activity_qyzd")
+	self:SendCommand("AnimationFinished")
+end
+function SetParamDataList(objs)
+	if objs ~= nil then
+		viewData = objs[0]
+	end
+end
+
+function InitAuraArr()
+	auraArr={}
+	for i, data in pairs(global_auraArr) do  
+		local newData={}
+		newData.id=data.id
+		newData.title=data.title
+		newData.icon=data.icon
+		newData.des=data.desp
+		newData.condition=data.cond
+		newData.isOn=false
+		newData.pos=i
+		newData.condDesp=data.condDesp
+		table.insert(auraArr,newData)
+    end
+end
+
+function OnNotification_LoadEnemy(objs)
+	monstersUpData = objs[0]
+	enemiesGrid:RefreshItemSlots(monstersUpData,self.gameObject,"HeroItemSlot")
+	CalcAura()
+end
+
+function CalcAura()
+    curAura = nil
+    --光环
+	for i,data in pairs(auraArr) do
+		local result=SplitString(data.condition,";")
+		local isAllOK=true
+		for  i = 0,result.Length-1 do
+			local str=SplitString(result[i],",")
+			local raceId=tonumber(str[0])
+			local num=tonumber(str[1])
+			local isEnough=DoCheckAuraNum(raceId,num)
+			if(isEnough==false)then
+				isAllOK=false
+				break
+			end
+		end
+		data.isOn=isAllOK
+		if(isAllOK==true) then
+		    curAura=data
+			break
+		end
+	end
+	if(curAura == nil) then
+        CsBridge.IconData.SetIconByName(aura.gameObject,"new_com_guanghuan11")
+    else
+        CsBridge.IconData.SetIconByName(aura.gameObject,curAura.icon)
+    end
+end
+
+function DoCheckAuraNum(raceId,num)
+	local isEnough=false
+	local col=0
+	local tbl=ResTblContainer:GetTable(HeroBase.actorTbl)
+	for i,data in pairs(monstersUpData) do
+		if(data.heroId~=0) then
+			local race= tbl:GetInt(data.heroId,HeroBase.group)
+			if(raceId==race) then
+				col=col+1
+			end
+		end
+	end
+	if(col>=num)then
+		isEnough=true
+	end
+	return isEnough
+end
+
+function OnNotification_SetActivityData(obj)
+	actData = obj[0]
+	isOver = actData.isOver
+	fightBtn.Gray = isOver
+	rewardGrid:RefreshItemSlots(actData.rewardItems,self.gameObject,"ItemSlot")
+	self:SendCommand("GetBattleInfo",actData.id)
+end
+
+function OnRewardGridItemSlotClick(obj)
+	local item = obj.m_data
+	if item.typeId == 3 then
+		return
+	end
+    CsBridge.CacheAssetsByModule(self.Module,
+	function()
+		local item = obj.m_data
+		local view = CsBridge.OpenView("ItemTipView", "ItemTipModel",false,true)
+		local rewardTmp={}
+		rewardTmp.id=item.id
+		rewardTmp.typeId=item.typeId
+		rewardTmp.count=1
+		if item.typeId == 0 then
+			rewardTmp.attrs = item.attrs
+		end 
+		if item.typeId == 4 then
+			rewardTmp.level = item.level
+		end 
+		view:SetParamDataList(rewardTmp,itemBaseIndex+itemDespIndex+PropsIndex+itemSuitIndex)
+		view:SendCommand("InitItemData")
+	end,"ItemTipView")
+end
+
+function OnNotification_RefreshActCountdown(objs)
+	local existTime = objs[0]
+	if actData then
+		local remainTime = CheckTimeRemain(actData.createdTime + existTime*1000)
+		countdownTxt.text = remainTime
+	end
+end
+
+function OnNotification_SetIsOver(objs)
+	isOver = objs[0]
+	fightBtn.Gray = isOver
+end
+
+function OnaureoleClick(sender)
+	CsBridge.CacheAssetsByModule(self.Module,
+    function()
+		local view = CsBridge.OpenView("aureoleView","FormationModel",true,true)
+		view:SetParamDataList(auraArr, curAura)
+		view.transform.parent:SetAsLastSibling()
+	end, "aureoleView","aureoleItemSlot")
+end
+
+--战斗
+function OnFightingBtnClick(sender)
+	if isOver then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("Monopoly_HasGetFightRewards"))
+	else
+		actData.url = "zillionaireBattle"
+		actData.req = "ZillionaireBattleReq"
+		self:SendCommand("GoToChallenge",actData)
+	end
+end
+
+function OnNotification_CloseActivityView(obj)
+	self:HideView(self.gameObject.name)
+end
+
+function BeoforeReturnBack()
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	actData = nil
+	bgImg = nil
+	titleArtTxt = nil
+	rewardGrid = nil
+	countdownTxt = nil
+end

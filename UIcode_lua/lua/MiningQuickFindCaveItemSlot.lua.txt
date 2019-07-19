@@ -1,0 +1,11 @@
+---绑定数据
+function OnMiningQuickFindCaveItemSlotBindValue(slot, data)
+    local slotTrans = slot.transform
+    ---@type UnityEngine.UI.Image
+    local iconImg = slotTrans:GetComponentAtPath("iconImg", CLS_IMAGE)
+    ---@type UnityEngine.TextMesh
+    local nameTxt = slotTrans:GetComponentAtPath("nameTxt", CLS_TEXT)
+    CsBridge.IconData.SetIconByName(iconImg.gameObject, data.icon)
+    nameTxt.text = data.name
+    SetGradientColor(nameTxt, data.gradientTopColor, data.gradientBottomColor)
+end

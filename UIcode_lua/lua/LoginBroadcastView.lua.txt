@@ -1,0 +1,48 @@
+local startTime_Lab
+local endTime_Lab
+local notice_Lab
+local noticeRT
+
+local broadcastInfo
+
+function DoInit()
+	self.Shadow = 2
+	self.Anim = 8
+	notice_Lab = self:GetComponentAtPath("Center/NoticeSV/ScrollRect/Viewport/ContentTxt" ,CLS_TEXT)
+	noticeRT = notice_Lab:GetComponent("RectTransform")
+end
+
+function OnOpen()
+
+end
+
+function OnNotification_GetLoginBroadcast(objs)
+	broadcastInfo = objs[0]
+	local content = broadcastInfo.content
+	notice_Lab.text = CsBridge.UnityHelper.ReplaceString(content or "......")
+	CsBridge.UnityHelper.SetUISizeDelta(noticeRT, noticeRT:CheckSizeDelta().x, notice_Lab:GetPreferredValues().y)
+	notice_Lab:ForceMeshUpdate()
+    CsBridge.sDKHelper:LogEventBySDK(CsBridge.SDKHelperClass.EVENT_DISPLAY_ANNOUCEMENT)
+end
+
+function OnAnimationFinished()
+	notice_Lab.text = CsBridge.UnityHelper.ReplaceString(broadcastInfo and broadcastInfo.content or "......")
+	CsBridge.UnityHelper.SetUISizeDelta(noticeRT, noticeRT:CheckSizeDelta().x, notice_Lab:GetPreferredValues().y)
+	notice_Lab:ForceMeshUpdate()
+end
+
+function OnMaskClick(sender)
+	if broadcastInfo ~= nil and broadcastInfo.type == 2 then
+		return
+	end
+	self:HideView(self.gameObject.name)
+	CsBridge.sDKHelper:LogEventBySDK(CsBridge.SDKHelperClass.EVENT_HIDE_ANNOUCEMENT)
+end
+
+function DoExit()
+	startTime_Lab = nil
+	endTime_Lab = nil
+	notice_Lab = nil
+	noticeRT = nil
+	broadcastInfo = nil
+end

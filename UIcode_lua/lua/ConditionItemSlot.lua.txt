@@ -1,0 +1,24 @@
+function OnConditionItemSlotBindValue(slot,data)
+	local job_Sprite=slot:GetComponentAtPath("JobSprite",CLS_IMAGE)
+	local group_Sprite=slot:GetComponentAtPath("GroupSprite",CLS_IMAGE)
+	local reach_Sprite=slot:GetComponentAtPath("ReachSprite",CLS_IMAGE)
+
+	local starLevel_Lab=slot:GetComponentAtPath("StarGO/StarLevelTxt",CLS_TEXT)
+
+	local starGO = slot:GetGameObjectAtPath("StarGO")
+
+	reach_Sprite.gameObject:SetSelfActive(data.reached)
+	group_Sprite.gameObject:SetSelfActive(data.type==1)
+	job_Sprite.gameObject:SetSelfActive(data.type==2)
+	starLevel_Lab.gameObject:SetSelfActive(data.type==3)
+	starGO.gameObject:SetSelfActive(data.type==3)
+
+	if data.type==1 then
+		SetIconByRaceId(group_Sprite.gameObject,data.content)
+	elseif data.type==2 then
+		SetIconByJobId(job_Sprite.gameObject,data.content)
+	else
+		starLevel_Lab.text=tostring(data.content)
+	end
+end
+

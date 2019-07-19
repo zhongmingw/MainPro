@@ -1,0 +1,68 @@
+---为dealView初始化需要的数据
+local function InitDealItem(dealInfo, operateType)
+    if operateType == ItemIOperateEnum.Sell then
+        dealInfo.title = Language:getStr("Deal_Sell")
+        dealInfo.btn = Language:getStr("Deal_Sell")
+        dealInfo.type = DealType.Sell
+    elseif operateType == ItemIOperateEnum.Use then
+        dealInfo.title = Language:getStr("Deal_Use")
+        dealInfo.btn = Language:getStr("Deal_Use")
+        dealInfo.type = DealType.Use
+    elseif operateType == ItemIOperateEnum.Compose then
+        dealInfo.title = Language:getStr("Deal_Compose")
+        dealInfo.btn = Language:getStr("Deal_Compose")
+        dealInfo.type = DealType.Compose
+    end
+end
+
+---是否可以使用这个订阅卡
+local function CanUseSubscribeItem(callback)
+    local dailyTaskUtils = require "DailyTaskUtils"
+    dailyTaskUtils.GetCanBuySubscribe(function(stateResult)
+        if ShowUseSubscribeItemTip(stateResult) then
+            if callback then
+                callback()
+            end
+        end
+    end)
+end
+
+---使用订阅卡返回
+local function SpecialUseSubscribeCallBack(resp, dirtyFun)
+    if resp then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("SubscribeItemSuccess"), 2)
+        if dirtyFun then
+            dirtyFun()
+        end
+    end
+end
+
+---使用订阅卡
+local function SpecialUseSubscribe(itemId, dirtyFun)
+    local req = {
+        id = itemId,
+        count = 1
+    }
+    CanUseSubscribeItem(function()
+        HttpRequest("exchangeItem", "ExchangeItemReq", "NormalExchangeItemResp", req, function(resp)
+            SpecialUseSubscribeCallBack(resp, dirtyFun)
+        end)
+    end)
+end
+
+---操作item
+local function OperateItem(module, dealInfo, operateType, dirtyFun)
+    if dealInfo.item.type == ItemType.SubscribeItem then
+        SpecialUseSubscribe(dealInfo.item.id, dirtyFun)
+    else
+        CsBridge.CacheAssetsByModule(module, function()
+            local view = CsBridge.OpenView("DealView", "DealModel", false, true)
+            InitDealItem(dealInfo, operateType)
+            view:SendCommand("InitData", dealInfo, dirtyFun)
+        end, "DealView")
+    end
+end
+
+return {
+    OperateItem = OperateItem,
+}

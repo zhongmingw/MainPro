@@ -1,0 +1,58 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-03-18 10:38:06
+
+local isInit = false
+
+local togGroup
+
+function DoInit()	
+    self.Shadow = 1
+end
+
+function InitUI()
+    togGroup = self:GetComponentAtPath("Top/TogGroup",CLS_TOGGLE_GROUP_ARCHLY)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitWorldBossRankRewardData")
+end
+
+function SetParamDataList(objs)
+    local data = objs[0]
+    self:SendCommand("InitData",data)
+end
+
+function OnClose()
+    togGroup:SetAllTogglesOff()
+end
+
+function OnNotification_RefresWorldBossRankRewardView(objs)
+    local curPageType = objs[0]
+    togGroup:SetToggleOn(curPageType - 1)
+end
+
+function OnTogGroupClick(isOn, index)
+    if not isOn then
+        return
+    end
+    self:SendCommand("OpenWorldBossRankRewardPage", index+1)
+end
+
+function OnCloseBtnClick(sender)
+    self:ReturnBack()
+end
+
+function OnMaskClick(sender)
+    self:ReturnBack()
+end
+
+function DoExit()
+    isInit = nil
+    togGroup = nil
+end

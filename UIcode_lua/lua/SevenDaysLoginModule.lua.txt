@@ -1,0 +1,16 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-05-21 14:04:40
+
+function AssetNames(objs)
+    local arr = {"SevenDaysLoginView","SevenDaysLoginItemSlot","ItemSlot"}
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    self:OpenView("SevenDaysLoginView", "SevenDaysLoginModel")
+    if(onFinished ~= nil) then
+        onFinished()
+    end
+end

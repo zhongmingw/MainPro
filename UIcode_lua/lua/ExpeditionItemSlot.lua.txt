@@ -1,0 +1,25 @@
+
+function OnExpeditionItemSlotBindValue(slot,data)
+    local combat_Lab = slot:GetComponentAtPath("CombatTxt" ,CLS_TEXT)
+    local name_Lab = slot:GetComponentAtPath("NameTxt" ,CLS_TEXT)
+    local level_Lab = slot:GetComponentAtPath("LevelTxt" ,CLS_TEXT)
+    local itemGrid = slot:GetComponentAtPath("ItemGrid" ,CLS_UI_ITEM_GRID)
+    local palyer_TF=slot.transform:Find("PlayerBase")
+    local fightBtn_GO = slot:GetGameObjectAtPath("FightBtn")
+    local fightSprite_GO = fightBtn_GO.transform:GetGameObjectAtPath("FightSprite")
+    local passed_GO = slot:GetGameObjectAtPath("PassedGO")
+
+    combat_Lab.text=tostring(data.combat)
+    name_Lab.text=data.playerBaseInfo.name
+    level_Lab.text=tostring(data.id)
+    fightBtn_GO:SetSelfActive(data.state~=0)
+    passed_GO:SetSelfActive(data.state==0)
+
+    if data.state~=0 then
+        local materialName=data.state==1 and "" or "SpriteGray"
+        CsBridge.IconData.ChangeImageMaterial(fightSprite_GO,materialName)
+    end
+    local rewardItems = GetRewardFromTbl(data.rewardStr)
+    itemGrid:RefreshItemSlots(rewardItems,slot.m_grid.viewBase.gameObject,"ItemSlot")
+    BindPlayerBaseInfoValue(palyer_TF,data.playerBaseInfo)
+end

@@ -1,0 +1,115 @@
+local playerInfo
+local boxItems
+local icon
+local box
+local boxId
+local boxUid
+local boxes
+
+
+local function LoadHeroList()
+	local iconList = {}
+	local data = {}
+	data.icon = 0
+	data.selected = (0 == icon)
+	table.insert(iconList, data)
+
+	local svrList = playerInfo.avaliableIcons
+	if svrList then
+		for k, id in pairs(svrList) do
+			data = {}
+			data.icon = id
+			data.selected = (id == icon);--print(id)
+			table.insert(iconList, data)
+		end
+	end
+	return iconList
+end
+
+local function LoadBoxesData()
+	local boxList = {}
+	if boxItems then	
+		for i=0,boxItems.Length-1 do
+			local value = boxItems[i]
+			if value.expireTime>CsBridge.timeManager.ServerTime or value.expireTime==0 then
+				local data = {}
+				data.uid = value.uid
+				data.id = value.id
+				data.expireTime = value.expireTime 
+				data.selected = (data.uid  == boxUid)
+				table.insert(boxList,data)
+			end
+		end
+	end
+	table.sort(boxList,
+		function(a,b)
+			return a.id<b.id
+		end)
+	return boxList
+end
+
+function OnCommand_InitData(obj)
+	playerInfo = appData:checkData("PlayerInfo")
+	boxItems = appData:checkAllItems("BoxItem")
+	icon = playerInfo.icon
+	box = playerInfo.box
+	if box ~=nil then
+		boxId = box.id
+		boxUid = box.uid
+	end
+	self:SendNotification("SetPlayerBase",icon,boxId)
+end
+
+function OnCommand_RefreshIconData(objs)
+	local iconList = LoadHeroList()
+	self:SendNotification("RefreshIconPanel",iconList)
+end
+
+function OnCommand_RefreshBoxData(objs)
+	local boxList = LoadBoxesData()
+	self:SendNotification("RefreshBoxPanel",boxList)
+end
+
+function OnCommand_RefreshBoxDesp(objs)
+	self:SendNotification("RefreshBoxDesp",boxId)
+end
+
+function OnCommand_SelectIcon(objs)
+	local data = objs[0]
+	icon = data.icon
+	self:SendNotification("SetPlayerBase", icon,boxId)
+end
+
+function OnCommand_SelectBox(objs)
+	local data = objs[0]
+	boxUid = data.uid
+	boxId = data.id
+	self:SendNotification("SetPlayerBase", icon,boxId)
+end
+
+function OnCommand_SetIconAndBox(obj)
+	if icon == playerInfo.icon and box and boxUid == box.uid then
+		return 
+	end
+	local req = {}
+	req.icon = icon
+	req.box = boxUid
+	HttpRequest("changeIcon", "ChangeIconReq", "ChangeIconResp", req, OnChangeIconResp)
+end
+
+function OnChangeIconResp(resp)
+	if(resp.result==0)then
+		MsgCenter:Broadcast(Notify_HeadIconChanged)
+		self:SendNotification("SetIconFinished")
+	end
+end
+
+function DoOnExit()
+	playerInfo = nil
+	boxItems = nil
+	icon = nil
+	box = nil
+	boxId = nil
+	boxUid = nil
+	boxes = nil
+end

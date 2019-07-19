@@ -1,0 +1,17 @@
+
+function OnSummonItemSlotBindValue(slot, data)
+    local bgImgObj = slot:GetGameObjectAtPath("BgImg")
+    local heroImgObj = slot:GetGameObjectAtPath("HeroImg")
+    local raceImgObj = slot:GetGameObjectAtPath("RaceImg")
+    local nameTxt = slot:GetComponentAtPath("NameTxt",CLS_TEXT)
+
+    local suffix = "s"
+    if data.raceId == 7 then
+        nameTxt.text = Language:getStr("DragonSummon_Special")
+    else 
+        nameTxt.text = ResTblContainer:GetPropToStr(data.raceId,Camp.camp,Camp.tblName)
+    end
+    CsBridge.IconData.SetIconByName(bgImgObj,"ui_bg_zy"..data.raceId..suffix)
+    CsBridge.IconData.SetIconByName(heroImgObj,"hero_xianzhi0"..data.raceId)
+    CsBridge.IconData.SetIconByName(raceImgObj,"new_com_zy"..data.raceId)
+end

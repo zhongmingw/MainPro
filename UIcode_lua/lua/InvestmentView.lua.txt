@@ -1,0 +1,254 @@
+--[[
+	file: InvestmentView.lua
+	author: hangang
+	description: Investment activity view(投资基金活动)
+]]
+
+require "ServerActivityItemSlot"
+
+
+local investmentGrid
+local topImage, descTxt, priceTxt, buyBtn, itemGrid
+local cdTxt, cdHeaderObj
+local vipExpTxt, titleArtTxt
+
+local currentInvesetmentSlot
+local currentTaskItemSlot
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 1     --shadow type
+	InitUI()            --cache UI items
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	local path = "ActivitySV/ScrollRect/Viewport/Grid"
+	investmentGrid = selfTrans:GetComponentAtPath(path ,CLS_UI_ITEM_GRID)
+
+	path = "Details/Title/titleImg"
+	topImage = selfTrans:GetGameObjectAtPath(path)
+
+	path = "Details/descTxt"
+	descTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Details/PriceTxt"
+	priceTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Details/vipExpTxt"
+	vipExpTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Details/Title/countdownTxt"
+	cdTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Details/Title/name02Txt"
+	cdHeaderObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "Details/BuyBtn"
+	buyBtn = selfTrans:GetComponentAtPath(path, CLS_BUTTON_ARCHLY)
+
+	path = "Details/ItemSV/ScrollRect/Viewport/ItemGrid"
+	itemGrid = selfTrans:GetComponentAtPath(path, CLS_UI_ITEM_GRID)
+
+	titleArtTxt = self:GetComponentAtPath("Details/Title/TitleArtImg",CLS_LOCALIZE)
+end
+
+--On animation finished event--------------------------------------------------------
+function OnAnimationFinished()
+	self:SendCommand("GetBaseViewData")
+end
+
+--UIController events handlers-------------------------------------------------------
+function OnNotification_RefreshInvestmentList(objs)
+	local viewData = objs[0]
+	RefreshInvestmentList(viewData)
+end
+
+function RefreshInvestmentList(viewData)
+	investmentGrid:RefreshItemSlots(viewData, self.gameObject, "ServerActivityItemSlot")
+
+	local allItems = investmentGrid:GetAllItems()
+	if allItems and allItems.Length > 0 then
+		SwitchInvestment(allItems[0])
+	end
+end
+
+function SwitchInvestment(itemSlot)
+	if currentInvesetmentSlot == itemSlot then
+		return
+	end
+
+	currentInvesetmentSlot = itemSlot
+	currentInvesetmentSlot.IsSelected = false
+	currentInvesetmentSlot.IsSelected = true
+
+	local itemData = itemSlot.m_data
+	self:SendCommand("SelectInvestment", itemData.id)
+end
+
+function OnNotification_UpdateInvestmentList(objs)
+	local viewData = objs[0]
+	local currentItemID = objs[1]
+	currentInvesetmentSlot = nil
+	investmentGrid:RefreshItemSlots(viewData, self.gameObject, "ServerActivityItemSlot")
+
+	local allItems = investmentGrid:GetAllItems()
+	if allItems and allItems.Length > 0 then
+		for i = 0, allItems.Length - 1 do
+			local itemSlot = allItems[i]
+			if itemSlot.m_data.id == currentItemID then
+				SwitchInvestment(itemSlot)
+				break
+			end
+		end		
+	end
+end
+
+function OnNotification_ShowInvestmentDetails(objs)
+	local viewData = objs[0]
+	ShowDetails(viewData)
+end
+
+function ShowDetails(viewData)
+	CsBridge.IconData.SetRawImageByName(topImage, viewData.image)
+	SetServerActivityArtFontByImage(titleArtTxt,viewData.image)
+	descTxt.text = viewData.description
+	buyBtn.interactable = viewData.buyBtnEnabled
+	priceTxt.text = viewData.price
+	vipExpTxt.text = viewData.vipExp
+	itemGrid:RefreshItemSlots(viewData.itemList, self.gameObject, "InvestmentItemSlot")
+end
+
+function OnNotification_RefreshInvestmentTips(objs)
+	local viewData = objs[0]
+	local allItems = investmentGrid:GetAllItems()
+	local tipsPath = "Tips"
+
+	for i = 0, allItems.Length - 1 do
+		local itemSlot = allItems[i]
+		local slotData = itemSlot.m_data
+		local slotID = slotData.id
+		for itemID, showTips in pairs(viewData) do
+			if itemID == slotID then
+				local tipsObj = itemSlot:GetGameObjectAtPath(tipsPath)
+				tipsObj:SetActive(showTips)
+				break
+			end
+		end
+	end
+end
+
+function OnNotification_UpdateCD(objs)
+	local viewData = objs[0]
+	local cdPath = "countdownTxt"
+	if investmentGrid then
+		local allItems = investmentGrid:GetAllItems()
+		for i = 0, allItems.Length - 1 do
+			local itemSlot = allItems[i]
+			local slotData = itemSlot.m_data
+			local slotID = slotData.id
+			for itemID, text in pairs(viewData) do
+				if itemID == slotID then
+					local countdownTxt = itemSlot:GetComponentAtPath(cdPath, CLS_TEXT)
+					countdownTxt.text = text
+					if itemSlot.IsSelected then
+						cdTxt.text = text
+						if IsNilOrEmpty(text) then
+							cdHeaderObj:SetActive(false)
+						else
+							cdHeaderObj:SetActive(true)
+						end
+					end
+					break
+				end
+			end
+		end
+	end
+end
+
+--UI event handlers-------------------------------------------------------------------
+function OnGridServerActivityItemSlotClick(itemSlot)
+	local allItems = investmentGrid:GetAllItems()
+	for i = 0, allItems.Length - 1 do
+		local item = allItems[i]
+		item.IsSelected = (item == itemSlot)
+	end
+	SwitchInvestment(itemSlot)
+end
+
+function OnrewardGridItemSlotClick(obj)
+	if obj.gameObject.name == "ItemSlot" then
+		local item = obj.m_data
+    	self:SendCommand("OpenTipView", item)
+	end
+end
+
+function OnItemGridClaimBtnClick(obj)
+	currentTaskItemSlot = obj
+	local itemData = obj.m_data
+	self:SendCommand("ClaimReward", itemData.id)
+end
+
+function OnBuyBtnClick(sender)
+	self:SendCommand("BuyBtnClicked")
+end
+
+--Bind item slots--------------------------------------------------------------------
+function OnInvestmentItemSlotBindValue(slot, data)
+	local slotTrans = slot.transform
+
+	path = "nameTxt"
+	local titleTxt = slotTrans:GetComponentAtPath(path, CLS_TEXT)
+	titleTxt.text = data.title
+
+	path = "slider/progressTxt"
+	local progressTxt = slotTrans:GetComponentAtPath(path, CLS_TEXT)
+	progressTxt.text = data.progressText
+
+	path = "slider"
+	local slider = slotTrans:GetComponentAtPath(path, CLS_SLIDER)
+	slider.value = data.progress
+
+	path = "ClaimBtn"
+	local claimBtn = slotTrans:GetComponentAtPath(path, CLS_BUTTON_ARCHLY)
+	claimBtn.interactable = data.claimBtnEnabled
+	path = "ClaimBtn/Tips"
+	local claimTipsObj = slotTrans:GetGameObjectAtPath(path)
+	claimTipsObj:SetActive(data.claimBtnEnabled)
+
+	path = "rewardGrid"
+	local rewardGrid = slotTrans:GetComponentAtPath(path,CLS_UI_ITEM_GRID)
+	rewardGrid:RefreshItemSlots(data.rewards, self.gameObject, "ItemSlot")
+end
+
+--On closing--------------------------------------------------------------------------
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close()
+	currentInvesetmentSlot = nil
+	self:SendCommand("ViewClosing")
+	self:ReturnBack()
+end
+
+function DoExit()
+	self.Module=nil
+	investmentGrid = nil
+	topImage = nil 
+	descTxt = nil 
+	priceTxt = nil 
+	buyBtn = nil 
+	itemGrid = nil
+	cdTxt = nil 
+	cdHeaderObj = nil
+	vipExpTxt = nil 
+	titleArtTxt = nil
+
+	currentInvesetmentSlot = nil
+	currentTaskItemSlot = nil
+end

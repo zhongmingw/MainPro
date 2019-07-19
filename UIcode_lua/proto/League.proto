@@ -1,0 +1,201 @@
+import "stage.proto";
+import "playerData.proto";
+import "BattleData.proto";
+import "ArenaData.proto";
+import "SkyscraperData.proto";
+package League;
+
+message GetBraveArenaInfoReq 
+{
+	required int32 id = 1; //useless
+}
+
+message GetBraveArenaInfoResp 
+{
+    repeated BraveArenaMatchInfo matches = 1;
+    required int32 currentRound = 2;
+    required bool gameOver = 3;
+    required string group = 4;
+    required int32 totalRoundNum = 5;
+    required int64 seasonEndTime = 6;
+    required int64 signUpEndTime = 7;
+    required bool signed = 8;
+    required int32 rankingOfAuditions = 9;
+}
+
+message BraveArenaMatchInfo 
+{
+    required string group = 1;
+    required int32 round = 2;
+    required int32 id = 3;
+    required playerData.PlayerBaseInfo redPlayer = 4;
+    required playerData.PlayerBaseInfo blackPlayer = 5;
+    required int64 redCombat = 6;
+    required int64 blackCombat = 7;
+    required int32 redRank = 8;
+    required int32 blackRank = 9;
+    required int32 redOdds = 10;
+    required int32 blackOdds = 11;
+    required bool done = 12;
+    required bool redWin = 13;
+    required int64 time = 14;
+    repeated stage.RewardItem winRewards = 15;
+    repeated stage.RewardItem lostRewards = 16;
+    required string remark = 17;
+    required int64 redTotalStake = 18;
+    required int64 blackTotalStake = 19;
+    required int64 oddsLastUpdateNum = 20;
+    required int64 redTotalCompensate = 21;
+    required int64 blackTotalCompensate = 22;
+    required StakeRecord selfStakeRecord = 23;
+    required int32 redWinTimes = 24;
+    required int32 blackWinTimes = 25;
+    repeated string redWinMatchIds = 26;
+    required bool redStakeLocked = 27;
+    required bool blackStakeLocked = 28;
+    repeated ArenaData.FormationPosAdv redFormation1 = 29;
+    repeated ArenaData.FormationPosAdv redFormation2 = 30;
+    repeated ArenaData.FormationPosAdv redFormation3 = 31;
+    repeated ArenaData.FormationPosAdv blackFormation1 = 32;
+    repeated ArenaData.FormationPosAdv blackFormation2 = 33;
+    repeated ArenaData.FormationPosAdv blackFormation3 = 34;
+    required int32 winnerHeroId = 35;
+}
+
+message StakeRecord
+{
+    required string zone = 1;
+    required string userId = 2;
+    required int64 count = 3;
+    required int32 odds = 4;
+    required bool redWin = 5;
+}
+
+message StakeBraveArenaReq
+{
+    required int32 round = 1;
+    required int32 id = 2;
+    required bool redWin = 3;
+    required int32 count = 4;
+}
+
+message StakeBraveArenaResp
+{
+    required int32 result = 1;
+}
+
+message GetBraveArenaVedioReq
+{
+    required int32 round = 1;
+    required int32 id = 2;
+}
+
+message GetBraveArenaVedioResp
+{
+    repeated BraveArenaBattleResult battleInfos1 = 1;
+    repeated BraveArenaBattleResult battleInfos2 = 2;
+    repeated BraveArenaBattleResult battleInfos3 = 3;
+}
+
+message BraveArenaBattleResult
+{
+    required bool redWin = 1;
+    required BattleData.BattleInfo battleInfo = 2;
+    required playerData.PlayerBaseInfo redPlayer = 3;
+    required playerData.PlayerBaseInfo blackPlayer = 4;
+}
+
+message GetBraveArenaMatchReq
+{
+    required int32 round = 1;
+    required int32 id = 2;
+}
+
+message GetBraveArenaMatchResp
+{
+    required BraveArenaMatchInfo matchInfo = 1;
+}
+
+message CheckBraveArenaOpenReq
+{
+    required int32 id = 1; //useless
+}
+
+message CheckBraveArenaOpenResp
+{
+    required bool open = 1;
+    required bool newSeason = 2;
+}
+
+message UpdateFTArenaSingleFormationReq
+{
+    required int32 type = 1;
+    repeated stage.FormationPos formationPos = 2;
+}
+
+message UpdateFTArenaSingleFormationResp
+{
+    required int32 result = 1;
+}
+
+message UpdateFTArenaFormationReq
+{
+    required stage.Formation formation_1 = 1;
+    required stage.Formation formation_2 = 2;
+    required stage.Formation formation_3 = 3;
+}
+
+message UpdateFTArenaFormationResp
+{
+    required int32 result = 1;
+}
+
+message CheckBraveArenaCombatReq
+{
+    required int32 matchId = 1;
+}
+
+message CheckBraveArenaCombatResp
+{
+    required int64 redCombat = 1;
+    required int64 blackCombat = 2;
+}
+
+message SignUpBraveArenaReq
+{
+    required stage.Formation formation_1 = 1;
+    required stage.Formation formation_2 = 2;
+    required stage.Formation formation_3 = 3;
+}
+
+message SignUpBraveArenaResp
+{
+    required int32 result = 1;
+}
+
+message GetSignersReq
+{
+    required int32 count = 1;
+}
+
+message GetSignersResp
+{
+    repeated SkyscraperData.CombatRankInfoItem seededPlayers = 1;
+	repeated SkyscraperData.CombatRankInfoItem otherPlayers = 2;
+}
+
+message CheckBraveArenaRewardReq
+{
+    required int32 userless = 1;
+}
+
+message CheckBraveArenaRewardResp
+{
+    repeated RoundRewardDef rewards = 1;
+}
+
+message RoundRewardDef
+{
+    required string rankText = 1;
+    repeated stage.RewardItem rewards = 2;
+}

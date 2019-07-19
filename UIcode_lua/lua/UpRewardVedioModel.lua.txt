@@ -1,0 +1,70 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-11-27 11:47:57
+
+local UpRewardVedioUtils = require "UpRewardVedioUtils"
+
+local curUpRewardVedio
+
+local AdReward
+
+local function ShowUpRewardVedioReward()
+    self:SendNotification("CloseUpRewardVedioView")    
+    PopRewardView(self,curUpRewardVedio.rewards,function()
+        MsgCenter:Broadcast(Notify_MainCityUpRewardVedioGetReward)
+    end)
+end
+
+function DoInit()
+    CsBridge.MsgCenter.Subscribe(Notify_UpRewardVedioGetReward, OnUpRewardVedioGetReward)
+    CsBridge.MsgCenter.Subscribe(Notify_UpRewardVedioDontReady, OnUpRewardVedioDontReady)
+    AdReward = {
+        typeId = ItemTypeEnum.Resource,
+        id = ResourceEnum.Gem,
+        count = GetConstValue("AdReward")
+    }
+end
+
+function InitProperties()
+end
+
+function OnCommand_InitData(objs)
+    UpdateCurUpRewardVedio(objs[0])
+end
+
+function OnCommand_InitUpRewardVedioData(objs)
+    self:SendNotification("RefreshUpRewardVedioView",curUpRewardVedio)
+end
+
+function OnCommand_ShowUpRewardVedio(objs)
+    UpRewardVedioUtils.OpenUpRewardVedio(curUpRewardVedio.name,nil,function(resp)
+        ShowUpRewardVedioReward()
+    end)
+end
+
+function UpdateCurUpRewardVedio(name)
+    curUpRewardVedio = {
+        name = name,
+        rewards = {AdReward}
+    }
+end
+
+function OnUpRewardVedioGetReward(obj)
+    UpRewardVedioUtils.GetUpRewardVedioReward(curUpRewardVedio.name,nil,function(resp)
+        ShowUpRewardVedioReward()
+    end)
+end
+
+function OnUpRewardVedioDontReady()
+    CsBridge.hintUILayer:ShowHintBox(Language:getStr("UpRewardVedioDontReady"),2)
+end
+
+function DoOnExit()
+    CsBridge.MsgCenter.Unsubscribe(Notify_UpRewardVedioGetReward, OnUpRewardVedioGetReward)
+    CsBridge.MsgCenter.Unsubscribe(Notify_UpRewardVedioDontReady, OnUpRewardVedioDontReady)
+	self.Module = nil
+    curUpRewardVedio = nil
+    AdReward = nil
+    UpRewardVedioUtils = nil
+end 

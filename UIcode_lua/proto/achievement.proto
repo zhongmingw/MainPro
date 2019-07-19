@@ -1,0 +1,109 @@
+import "stage.proto";
+import "ArenaData.proto";
+import "playerData.proto";
+import "RelicData.proto";
+import "JewelData.proto";
+import "Union.proto";
+
+package achievement;
+
+message AchievementRewardReq
+{
+	required int32 type = 1;//�ɾ�����
+	required int32 id = 2;//�ɾ�id
+}
+
+message AchievementRewardResp
+{
+	repeated stage.RewardItem rewardItems = 1;
+}
+
+message GmAchievementAccomplishedReq
+{
+	required int32 type = 1;//�ɾ�����
+	required int32 id = 2;//�ɾ�id
+}
+
+message GmAchievementAccomplishedResp
+{
+	required int32 status = 1;
+}
+
+message GmAchievementResetReq
+{
+	required int32 type = 1;//�ɾ�����
+}
+
+message GmAchievementResetResp
+{
+	required int32 status = 1;
+}
+
+message GmAchievementAccomplishAllReq
+{
+	required int32 useless = 1;
+}
+
+message GmAchievementAccomplishAllResp
+{
+	required int32 status = 1;
+}
+
+message GmAchievementResetAllReq
+{
+	required int32 useless = 1;
+}
+
+message GmAchievementResetAllResp
+{
+	required int32 status = 1;
+}
+
+message PlayerAchievement
+{
+	required int32 type = 1;//成就类型
+	required int32 count = 2;//达成数
+	required int32 id = 3;//当前成就id
+	required int32 status = 4;//成就状态：0-未完成；1-可领取；2-该类型全部成就完成
+}
+
+message GetPlayerCardRequest
+{
+	required string userId = 1;
+	required string zone = 2;
+	required int32 formationType = 3; //��������
+}
+
+message GetPlayerCardResp
+{
+	required playerData.PlayerInfo playerInfo = 1;
+	required string union = 2; //����
+	required int32 formationType = 3; //��������
+	required int32 combat = 4; //����ս��
+	repeated ArenaData.FormationPosAdv formation = 5; //����
+	required int32 auraId = 6; //��Ӫ�⻷
+	required bool sameZone = 7; //�Ƿ���ͬһ����
+	required bool isFriend = 8; //�Ƿ��Ѿ��Ǻ���
+	repeated PlayerAchievement achievements = 9; //�ɾ�
+	required int32 unionIcon = 10; //�����־
+	required int32 unionId = 11;
+	required bool sameGroup = 12;
+}
+
+message GetHeroDetailReq
+{
+    required string userId = 1;
+    required string zone = 2;
+    required int32 heroUid = 3;
+}
+
+message GetHeroDetailResp
+{
+    required playerData.HeroItem heroItem = 1;//英雄信息
+    required RelicData.RelicItem relicItem = 2;//神器信息
+    required playerData.HeroCrystalInfo heroCrystalInfo = 3;//英雄元素融合
+    required playerData.ElementCampInfo campInfo = 4;//阵营元素融合
+    required GetHeroDetailResp emblem = 5;//纹章英雄信息
+    repeated JewelData.JewelItem jewelItems = 6;//晶石
+    repeated Union.JobTech unionTechs = 7;//公会科技
+}

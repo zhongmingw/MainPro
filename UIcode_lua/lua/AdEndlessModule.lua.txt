@@ -1,0 +1,20 @@
+function DoInit()
+
+end
+
+function AssetNames(objs)
+    local arr = {
+        "AdEndlessView",
+        "AdItem",
+    }
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    local data, exit = objs[0], objs[1]
+    local view = self:OpenView("AdEndlessView", "AdEndlessModel")
+    view:SetParamDataList(data,exit)
+    if (onFinished ~= nil) then
+        onFinished()
+    end
+end

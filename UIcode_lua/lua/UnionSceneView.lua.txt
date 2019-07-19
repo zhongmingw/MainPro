@@ -1,0 +1,158 @@
+--[[
+	file: UnionSceneView.lua
+	author: hangang
+	description: Union scene container, union modules entrainces
+]]
+
+local bossRoot, bossModel
+local checkinPanelObj
+local hallTipsObj, harborTipsObj
+
+function DoInit()
+	InitUI()
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	local path = "BG/UnionBg1/Castle/BossBtn/BossRoot"
+	bossRoot = selfTrans:Find(path)
+
+	path = "BG/Text/HallName/NewFlag"
+	hallTipsObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "BG/Text/HarborName/NewFlag"
+	harborTipsObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "BG/UnionBg1/Castle/CheckinBtn"
+	checkinPanelObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "BG/UnionBg1/Castle/BattleTips"
+	battleTipsObj = selfTrans:GetGameObjectAtPath(path)	
+end
+
+function OnAnimationFinished()
+	self:SendCommand("GetBaseViewData")
+end 
+
+function OnOpen()
+	self:PlayBg("music_mailTown")
+end
+
+function OnDoUnhide()
+	self:PlayBg("music_mailTown")
+	self:SendCommand("CheckUnion")
+end
+
+function OnNotification_RefreshView(objs)
+	local viewData = objs[0]
+	RefreshView(viewData)
+end
+
+function RefreshView(viewData)
+	SetCheckinPanelVisible(viewData.showCheckInPanel)
+	SetHallTipsVisible(viewData.showHallTips)
+	SetHarborTipsVisible(viewData.showHarborTips)
+	SetBattleTipsVisible(viewData.showBattleTips)
+
+	local bossModelName = viewData.bossModelName
+	if bossModelName ~= "" then
+		ShowBoss(bossModelName)
+	end
+
+end
+
+function ShowBoss(name)
+	if bossModel then
+		if bossModel.name == name then
+			return
+		else
+			HideBoss()
+		end
+	end
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			local model = CsBridge.objectCache:CreateObject(name, true)
+			model.transform:SetParent(bossRoot, false)
+			CsBridge.UnityHelper.SetAnchoredPosition(model.gameObject, 0, 0)
+			CsBridge.UnityHelper.SetlocalScale(model.gameObject, -1, 1, 1)
+			local skeleton = model.transform:GetChild(0):GetComponent("Spine.Unity.SkeletonGraphic")
+			skeleton:PlayAnimation("stand", true)
+			bossModel = model
+		end, 
+		name)
+end
+
+function GetBossModelGroupName()
+	return self.gameObject.name
+end
+
+function HideBoss()
+	if bossModel then
+		DestroyModel(bossModel, GetBossModelGroupName())
+		bossModel = nil
+	end
+end
+
+function SetCheckinPanelVisible(visible)
+	checkinPanelObj:SetActive(visible)
+end
+
+function SetHallTipsVisible(visible)
+	hallTipsObj.gameObject:SetActive(visible)
+end
+
+function SetHarborTipsVisible(visible)
+	harborTipsObj:SetActive(visible)
+end
+
+function SetBattleTipsVisible(visible)
+	battleTipsObj:SetActive(visible)
+end
+
+function OnHarborBtnClick(sender)
+	self:SendCommand("EnterHarbor")
+end
+
+function OnMarketBtnClick(sender)
+	self:SendCommand("EnterMarket")
+end
+
+function OnUnionHallBtnClick(sender)
+	self:SendCommand("EnterHall")
+end
+
+function OnUnionTechBtnClick(sender)
+	self:SendCommand("EnterLaboratory")
+end
+
+function OnBossBtnClick(sender)
+	self:SendCommand("EnterDungeon")
+end
+
+function OnCheckinBtnClick(sender)
+	self:SendCommand("CheckIn")
+end
+
+function OnBattleBtnClick(sender)
+	self:SendCommand("EnterBattle")
+end
+
+function OnBattleTipsClick(sender)
+	SetBattleTipsVisible(false)
+	self:SendCommand("EnterBattle")
+end
+
+function Close()
+	SetBattleTipsVisible(false)
+	SetCheckinPanelVisible(false)
+	self:ReturnBack()
+end
+
+function DoExit()
+	bossRoot = nil
+	bossModel = nil
+	checkinPanelObj = nil
+	hallTipsObj = nil
+	harborTipsObj = nil
+end

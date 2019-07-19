@@ -1,0 +1,707 @@
+--[[
+	file: UnionDungeonView.lua
+	author: hangang
+	description: View for union dungeon
+]]
+
+local challengePanel = {}
+local leaderboardPanel = {}
+local dailyPanel = {}
+
+local ToggleIndics = 
+{
+	challenge = 0,
+	leaderboard = 1,
+	daily = 2,
+}
+local ScrollDirection = {
+	backward = 1,
+	forward = 2,
+}
+local switchDuration = 0.3
+
+local viewData
+local selectedItem
+local switching = false
+
+local finishSpineObj
+
+function DoInit()
+	self.Shadow = 1
+	InitUI()
+end 
+
+function IsSetAnchor()
+	return true
+end
+
+function InitUI()
+	----challenge panel----
+	local selfTrans = self.transform
+	local path = "BossPanel"
+	challengePanel.rootObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "BossPanel/HelpBtn"
+	challengePanel.helpBtn = selfTrans:GetGameObjectAtPath(path)
+
+	path = "BossPanel/Rewards"
+	challengePanel.rewardsObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "BossPanel/Rewards/FightRewardsGrid"
+	challengePanel.fightRewardsGrid = selfTrans:GetComponentAtPath(path ,CLS_UI_ITEM_GRID)
+
+	path = "BossPanel/Rewards/KillRewardsGrid"
+	challengePanel.killRewardsGrid = selfTrans:GetComponentAtPath(path ,CLS_UI_ITEM_GRID)
+
+	path = "BossPanel/BossInfo/"
+	challengePanel.bossInfoObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "BossPanel/BossInfo/groupImg"
+	challengePanel.bossGroupObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "BossPanel/BossInfo/hpSlider/progressTxt"
+	challengePanel.hpTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "BossPanel/BossInfo/hpSlider"
+	challengePanel.hpSlider = selfTrans:GetComponentAtPath(path ,CLS_SLIDER)
+
+	path = "BossPanel/BossInfo/ModelRoot"
+	challengePanel.bossRoot = selfTrans:Find(path)
+
+	path = "BossPanel/BossInfo/FloorSpine"
+	challengePanel.platformSpine = selfTrans:GetComponentAtPath(path ,CLS_SKELETONGRAPHIC)
+
+	path = "BossPanel/BossInfo/powerTxt"
+	challengePanel.powerTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "BossPanel/EmptyTips"
+	challengePanel.emptyTipsObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "BossPanel/memberSV/ScrollRect/Viewport/Grid"
+	challengePanel.damageGrid = selfTrans:GetComponentAtPath(path ,CLS_UI_ITEM_GRID)	
+
+	path = "BossPanel/FightBtn"
+	challengePanel.fightBtn = selfTrans:GetComponentAtPath(path ,CLS_BUTTON_ARCHLY)
+	
+	path = "BossPanel/FightBtn/priceTxt"
+	challengePanel.priceTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "BossPanel/Countdown/timeTxt"
+	challengePanel.timeTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "BossPanel/FinishSpine"
+	challengePanel.finishSpineRoot = selfTrans:GetGameObjectAtPath(path)
+
+	----leaderboard panel----
+	path = "LeaderboardPanel"
+	leaderboardPanel.rootObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "LeaderboardPanel/BossInfo/groupImg"
+	leaderboardPanel.bossGroupObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "LeaderboardPanel/PreviousBtn"
+	local btnTrans = selfTrans:Find(path)
+	leaderboardPanel.previousBtnTrans= btnTrans
+	leaderboardPanel.previousBtnObj = btnTrans.gameObject
+	leaderboardPanel.previousBtnPos = btnTrans.localPosition.x
+
+	path = "LeaderboardPanel/NextBtn"
+	local btnTrans = selfTrans:Find(path)
+	leaderboardPanel.nextBtnTrans= btnTrans
+	leaderboardPanel.nextBtnObj = btnTrans.gameObject
+	leaderboardPanel.nextBtnPos = btnTrans.localPosition.x
+
+	path = "LeaderboardPanel/BossInfo/Mask/HeroModel"
+	leaderboardPanel.modelRoot = selfTrans:Find(path)
+
+	path = "LeaderboardPanel/BossInfo/Mask/HeroModel/DragSlot"
+	leaderboardPanel.dragSlotObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "LeaderboardPanel/BossInfo/Mask/HeroModel/Model/ModelRoot"
+	leaderboardPanel.bossRoot = selfTrans:Find(path)
+	leaderboardPanel.centerPosX = leaderboardPanel.bossRoot.position.x
+
+	path = "LeaderboardPanel/BossInfo/Mask/HeroModel/Model/FloorSpine"
+	leaderboardPanel.platformSpine = selfTrans:GetComponentAtPath(path ,CLS_SKELETONGRAPHIC)
+
+	path = "LeaderboardPanel/BossInfo/Mask/HeroModel/LeftModel/ModelRoot"
+	leaderboardPanel.prevBossRoot = selfTrans:Find(path)
+	leaderboardPanel.leftPosX = leaderboardPanel.prevBossRoot.position.x
+
+	path = "LeaderboardPanel/BossInfo/Mask/HeroModel/LeftModel/FloorSpine"
+	leaderboardPanel.prevPlatformSpine = selfTrans:GetComponentAtPath(path ,CLS_SKELETONGRAPHIC)
+
+	path = "LeaderboardPanel/BossInfo/Mask/HeroModel/RightModel/ModelRoot"
+	leaderboardPanel.nextBossRoot = selfTrans:Find(path)
+	leaderboardPanel.rightPosX = leaderboardPanel.nextBossRoot.position.x
+
+	path = "LeaderboardPanel/BossInfo/Mask/HeroModel/RightModel/FloorSpine"
+	leaderboardPanel.nextPlatformSpine = selfTrans:GetComponentAtPath(path ,CLS_SKELETONGRAPHIC)
+
+	path = "LeaderboardPanel/BossInfo/powerTxt"
+	leaderboardPanel.powerTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "LeaderboardPanel/EmptyTips"
+	leaderboardPanel.emptyTipsObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "LeaderboardPanel/memberSV/ScrollRect/Viewport/Grid"
+	leaderboardPanel.damageGrid = selfTrans:GetComponentAtPath(path ,CLS_UI_ITEM_GRID)
+
+	path = "LeaderboardPanel/BossInfo/groupBg"
+	leaderboardPanel.groupBgObj = selfTrans:GetGameObjectAtPath(path)	
+
+	path = "LeaderboardPanel/BossInfo/nameTxt/levelTxt"
+	leaderboardPanel.levelTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)	
+
+	path = "LeaderboardPanel/BossInfo/nameTxt"
+	leaderboardPanel.nameTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+
+	----daily panel----
+	path = "DailyPanel"
+	dailyPanel.rootObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "DailyPanel/EmptyTips"
+	dailyPanel.emptyTipsObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "DailyPanel/memberSV/ScrollRect/Viewport/DailyGrid"
+	dailyPanel.damageGrid = selfTrans:GetComponentAtPath(path ,CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+	local togglesRoot = self.transform:Find("General/TogGroup")
+	local toggle = togglesRoot:GetChild(ToggleIndics.challenge):GetComponent(CLS_TOGGLE_ARCHLY)
+	toggle.isOn = true
+
+	self:SendCommand("StartCountdown")
+end 
+
+function OnTogGroupClick(isOn, index)
+	if isOn then
+		challengePanel.rootObj:SetActive(false)
+		leaderboardPanel.rootObj:SetActive(false)
+		dailyPanel.rootObj:SetActive(false)
+
+		if index == ToggleIndics.challenge then
+			challengePanel.rootObj:SetActive(true)
+			self:SendCommand("GetChallengeViewData")
+		elseif index == ToggleIndics.leaderboard then
+			leaderboardPanel.rootObj:SetActive(true)
+			self:SendCommand("GetLeaderboardViewData", 0)
+		else
+			dailyPanel.rootObj:SetActive(true)
+			self:SendCommand("GetDailyViewData")
+		end
+	end
+end
+
+function PlaySwitchBtnsAnim()
+	local offset = 10
+	local duration = 0.5
+	leaderboardPanel.previousBtnTweener = CsBridge.TweenUtils.MoveLeftRight(
+		leaderboardPanel.previousBtnTrans, 
+		leaderboardPanel.previousBtnPos - offset, duration)
+	leaderboardPanel.previousBtnTweener:DoPlay()
+
+	leaderboardPanel.nextBtnTweener = CsBridge.TweenUtils.MoveLeftRight(
+		leaderboardPanel.nextBtnTrans, 
+		leaderboardPanel.nextBtnPos + offset, duration)
+	leaderboardPanel.nextBtnTweener:DoPlay()
+end
+
+function OnNotification_RefreshChallengeView(objs)
+	viewData = objs[0]
+	if self.gameObject.activeInHierarchy then
+		RefreshChallengeView(viewData)
+	end
+end
+
+function RefreshChallengeView(viewData)
+	if viewData.isPassAll == 1 then
+		challengePanel.rewardsObj:SetActive(false)
+		challengePanel.bossInfoObj:SetActive(false)
+		challengePanel.helpBtn:SetActive(false)
+		challengePanel.finishSpineRoot:SetActive(true)
+		if not finishSpineObj then
+			local finishSpine = challengePanel.finishSpineRoot.transform
+			CsBridge.CacheAssetsByModule(
+				self.Module,
+				function()
+					finishSpineObj = CsBridge.objectCache:CreateObject("DungeonFinishSpine", true)
+					finishSpineObj.transform:SetParent(finishSpine, false)
+					CsBridge.UnityHelper.SetAnchoredPosition(finishSpineObj.gameObject, 0, 0)
+					local skeleton = finishSpineObj:GetComponent("SkeletonGraphic")
+					skeleton:PlayAnimation("loop", true)
+				end, 
+				"DungeonFinishSpine")
+		end
+		challengePanel.fightBtn.Gray = true
+		challengePanel.fightBtn.interactable = false
+		challengePanel.priceTxt.text = "-"
+	else
+		challengePanel.rewardsObj:SetActive(true)
+		challengePanel.bossInfoObj:SetActive(true)
+		challengePanel.helpBtn:SetActive(true)
+		challengePanel.finishSpineRoot:SetActive(false)
+		challengePanel.fightBtn.Gray = false
+		challengePanel.fightBtn.interactable = true
+
+		challengePanel.priceTxt.text = viewData.priceText
+		SetFontColor(challengePanel.priceTxt, viewData.priceColor)
+		challengePanel.fightRewardsGrid:RefreshItemSlots(viewData.fightRewards, self.gameObject, "ItemSlot")
+		challengePanel.killRewardsGrid:RefreshItemSlots(viewData.killRewards, self.gameObject, "ItemSlot")
+		SetIconByRaceId(challengePanel.bossGroupObj, viewData.bossGroupID)
+		challengePanel.hpTxt.text = viewData.bossHp
+		challengePanel.powerTxt.text = viewData.bossPower
+		challengePanel.hpSlider.value = viewData.bossHpPercent
+		local bossModelName = viewData.bossModelName
+		if bossModelName ~= "" then
+			ShowBoss(bossModelName, challengePanel.bossRoot, viewData.platformAnim, challengePanel.platformSpine, GetChallengePanelBossGrpName())
+		end
+	end
+
+	local haveRecords = #viewData.damageData > 0
+	challengePanel.emptyTipsObj:SetActive(not haveRecords)
+	challengePanel.damageGrid.gameObject:SetActive(haveRecords)
+	if haveRecords then
+		challengePanel.damageGrid:RefreshItemSlots(viewData.damageData, self.gameObject, "UnionBossRankItemSlot")
+	end
+end
+
+function OnNotification_RefreshCountdown(objs)
+	challengePanel.timeTxt.text = objs[0]
+end
+
+function OnNotification_RefreshDailyView(objs)
+	viewData = objs[0]
+	if self.gameObject.activeInHierarchy then
+		RefreshDailyView(viewData)
+	end
+end
+
+function RefreshDailyView(viewData)
+	local haveRecords = #viewData.damageData > 0
+	dailyPanel.emptyTipsObj:SetActive(not haveRecords)
+	dailyPanel.damageGrid.gameObject:SetActive(haveRecords)
+	if haveRecords then
+		dailyPanel.damageGrid:RefreshItemSlots(viewData.damageData, self.gameObject, "UnionBossDailyItemSlot")
+	end
+end
+
+function OnUnionBossDailyItemSlotBindValue(slot, data)
+	OnUnionBossRankItemSlotBindValue(slot, data)
+	local path = "Other/countTxt"
+	local countTxt = slot:GetComponentAtPath(path ,CLS_TEXT)
+	countTxt.text = data.countText
+end
+
+function OnNotification_RefreshLeaderboardView(objs)
+	viewData = objs[0]
+	if self.gameObject.activeInHierarchy then
+		RefreshLeaderboardView(viewData)
+	end
+end
+
+function RefreshLeaderboardView(viewData)
+	SetIconByRaceId(leaderboardPanel.bossGroupObj, viewData.bossGroupID)
+	leaderboardPanel.powerTxt.text = viewData.bossPower
+	leaderboardPanel.nameTxt:SetTextWithSizeChange(viewData.bossName)
+	leaderboardPanel.levelTxt.text = viewData.bossLevel
+	leaderboardPanel.previousBtnObj:SetActive(viewData.showPreviousBtn)
+	leaderboardPanel.nextBtnObj:SetActive(viewData.showNextBtn)
+	CsBridge.IconData.SetRawImageByName(leaderboardPanel.groupBgObj, viewData.groupBgName)
+	
+	ShowAllBosses(viewData)
+
+	local haveRecords = #viewData.damageData > 0
+	leaderboardPanel.emptyTipsObj:SetActive(not haveRecords)
+	leaderboardPanel.damageGrid.gameObject:SetActive(haveRecords)
+	if haveRecords then
+		leaderboardPanel.damageGrid:RefreshItemSlots(viewData.damageData, self.gameObject, "UnionBossRankItemSlot")
+	end
+	
+	PlaySwitchBtnsAnim()
+end
+
+function OnHeroModelEndDrag(obj)
+	local modelRoot = leaderboardPanel.bossRoot
+	local changePosX = CsBridge.UnityHelper.GetMainCameraSize() / 8
+	local itemPosX = modelRoot.position.x
+	if itemPosX > changePosX then --backward
+		if viewData.showPreviousBtn then
+			TurnPage(ScrollDirection.backward)
+		else
+			ScrollToCenter(modelRoot)
+		end
+	elseif itemPosX < -changePosX then --forward
+		if viewData.showNextBtn then
+			TurnPage(ScrollDirection.forward)
+		else
+			ScrollToCenter(modelRoot)
+		end
+	else
+		ScrollToCenter(modelRoot)
+	end
+end
+
+function SwitchGroupBg(imageObj, textureName)
+	--local rawImg = imageObj:GetComponent(CLS_RAWIMAGE)
+	local endValue = 0
+	local duration = 0.1
+	CsBridge.TweenUtils.DoRawImageAlphaValue(imageObj, endValue, duration, 
+		function()
+			CsBridge.IconData.SetRawImageByName(imageObj, textureName)
+			endValue = 1
+			CsBridge.TweenUtils.DoRawImageAlphaValue(imageObj, endValue, duration)
+		end)
+end
+
+function ShowAllBosses(viewData)
+	ResetBossRootPos()
+	local cachedModels = CacheModels({leaderboardPanel.prevBossRoot, leaderboardPanel.bossRoot, leaderboardPanel.nextBossRoot})
+
+	local bossModelName = viewData.bossModelName
+	local cachedModel
+	if bossModelName ~= "" then
+		for k, model in pairs(cachedModels) do
+			if model.name == bossModelName then
+				cachedModel = model
+				cachedModels[k] = nil
+				break
+			end
+		end
+		if cachedModel then
+			ShowBossWithModel(cachedModel, leaderboardPanel.bossRoot, viewData.platformAnim, leaderboardPanel.platformSpine)
+		else
+			ShowBoss(bossModelName, leaderboardPanel.bossRoot, viewData.platformAnim, leaderboardPanel.platformSpine)
+		end
+	end
+
+	cachedModel = nil
+	bossModelName = viewData.prevBossModelName
+	if bossModelName ~= "" then
+		for k, model in pairs(cachedModels) do
+			if model.name == bossModelName then
+				cachedModel = model
+				cachedModels[k] = nil
+				break
+			end
+		end
+		if cachedModel then
+			ShowBossWithModel(cachedModel, leaderboardPanel.prevBossRoot, viewData.prevPlatformAnim, leaderboardPanel.prevPlatformSpine)
+		else
+			ShowBoss(bossModelName, leaderboardPanel.prevBossRoot, viewData.prevPlatformAnim, leaderboardPanel.prevPlatformSpine)
+		end
+	end
+
+	cachedModel = nil
+	bossModelName = viewData.nextBossModelName
+	if bossModelName ~= "" then
+		for k, model in pairs(cachedModels) do
+			if model.name == bossModelName then
+				cachedModel = model
+				cachedModels[k] = nil
+				break
+			end
+		end
+		if cachedModel then
+			ShowBossWithModel(cachedModel, leaderboardPanel.nextBossRoot, viewData.nextPlatformAnim, leaderboardPanel.nextPlatformSpine)
+		else
+			ShowBoss(bossModelName, leaderboardPanel.nextBossRoot, viewData.nextPlatformAnim, leaderboardPanel.nextPlatformSpine)
+		end
+	end
+
+	if #cachedModels > 0 then
+		for k, model in pairs(cachedModels) do
+			DestroyModel(model)
+		end
+	end
+end
+
+function CacheModels(rootTbl)
+	local models = {}
+	for k, root in pairs(rootTbl) do
+		if root.childCount > 0 then
+			local oldModelTrans = root:GetChild(0)
+			local model = oldModelTrans.gameObject
+			table.insert(models, model)
+			root:DetachChildren()
+		end
+	end
+
+	return models
+end
+
+function ResetBossRootPos()
+	local leftModelObj, centerModelObj, rightModelObj =
+		leaderboardPanel.prevBossRoot.gameObject, 
+		leaderboardPanel.bossRoot.gameObject, 
+		leaderboardPanel.nextBossRoot.gameObject
+
+	local y = centerModelObj.transform.position.y
+	leftModelObj:SetGlobalPosition(leaderboardPanel.leftPosX, y)
+	centerModelObj:SetGlobalPosition(leaderboardPanel.centerPosX, y)
+	rightModelObj:SetGlobalPosition(leaderboardPanel.rightPosX, y)
+
+	leftModelObj, centerModelObj, rightModelObj =
+		leaderboardPanel.prevPlatformSpine.gameObject, 
+		leaderboardPanel.platformSpine.gameObject, 
+		leaderboardPanel.nextPlatformSpine.gameObject
+
+	y = centerModelObj.transform.position.y
+	leftModelObj:SetGlobalPosition(leaderboardPanel.leftPosX, y)
+	centerModelObj:SetGlobalPosition(leaderboardPanel.centerPosX, y)
+	rightModelObj:SetGlobalPosition(leaderboardPanel.rightPosX, y)
+
+	y = leaderboardPanel.dragSlotObj.transform.position.y
+	leaderboardPanel.dragSlotObj:SetGlobalPosition(leaderboardPanel.centerPosX, y)
+end
+
+function TurnPage(direction)
+	local modelRoot = direction == ScrollDirection.forward
+		and leaderboardPanel.nextBossRoot
+		or leaderboardPanel.prevBossRoot
+	local newLevelID = direction == ScrollDirection.forward
+		and viewData.levelID + 1
+		or viewData.levelID - 1
+
+	ScrollToCenter(modelRoot, 
+		function()
+			RepositionBossModels(direction)
+			self:SendCommand("GetLeaderboardViewData", newLevelID)
+		end)
+end
+
+function ScrollToCenter(target, onFinished)
+	local distance = leaderboardPanel.centerPosX - target.position.x
+	local tweenTarget = leaderboardPanel.modelRoot
+	local currentPos = tweenTarget.position
+	local endX, endY = currentPos.x + distance, currentPos.y
+
+	local tweener = CsBridge.TweenUtils.MoveToByWorld(
+		tweenTarget, 
+		endX, 
+		endY, 
+		switchDuration,
+		function()
+			switching = false
+			if onFinished then
+				onFinished()
+			end
+		end)
+	tweener:DoPlay()
+	switching = true
+end
+
+function ShowBoss(name, bossRoot, platformAnim, platformSpine, groupName)
+	if bossRoot.childCount > 0 then
+		local oldModelTrans = bossRoot:GetChild(0)
+		if oldModelTrans.name == name then
+			return
+		else
+			ClearModel(bossRoot)		
+		end
+	end
+
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			local model = CsBridge.objectCache:CreateObject(name, true)
+			model.transform:SetParent(bossRoot, false)
+			CsBridge.UnityHelper.SetAnchoredPosition(model.gameObject, 0, 0)
+			CsBridge.UnityHelper.SetlocalScale(model.gameObject, -1, 1, 1)
+			local skeleton = model.transform:GetChild(0):GetComponent("Spine.Unity.SkeletonGraphic")
+			skeleton:PlayAnimation("stand", true)
+			platformSpine:PlayAnimation(platformAnim, true)
+		end, 
+		name)
+end
+
+function ShowBossWithModel(model, bossRoot, platformAnim, platformSpine)
+	ClearModel(bossRoot)
+
+	model.transform:SetParent(bossRoot, false)
+	CsBridge.UnityHelper.SetAnchoredPosition(model, 0, 0)
+	CsBridge.UnityHelper.SetlocalScale(model, -1, 1, 1)
+	local skeleton = model.transform:GetChild(0):GetComponent("Spine.Unity.SkeletonGraphic")
+	platformSpine:PlayAnimation(platformAnim, true)
+end
+
+function ClearModel(root, groupName)
+	local modelIdx = 0
+	if root.childCount > modelIdx then	
+		local model = root:GetChild(modelIdx).gameObject
+		root:DetachChildren()
+		DestroyModel(model, groupName)
+	end
+end
+
+function GetChallengePanelBossGrpName()
+	return self.gameObject.name
+end
+
+function ClearView()
+	local roots = {
+		leaderboardPanel.prevBossRoot, 
+		leaderboardPanel.bossRoot, 
+		leaderboardPanel.nextBossRoot,
+	}
+	for k, root in pairs(roots) do
+		ClearModel(root)
+	end
+
+	ClearModel(challengePanel.bossRoot, GetChallengePanelBossGrpName())
+
+	if leaderboardPanel.previousBtnTweener then
+		leaderboardPanel.previousBtnTweener:Kill()
+		leaderboardPanel.previousBtnTweener = nil
+
+		local pos = leaderboardPanel.previousBtnTrans.localPosition
+		pos.x = leaderboardPanel.previousBtnPos
+		leaderboardPanel.previousBtnTrans.localPosition = pos
+	end
+
+	if leaderboardPanel.nextBtnTweener then
+		leaderboardPanel.nextBtnTweener:Kill()
+		leaderboardPanel.nextBtnTweener = nil
+
+		local pos = leaderboardPanel.nextBtnTrans.localPosition
+		pos.x = leaderboardPanel.nextBtnPos
+		leaderboardPanel.nextBtnTrans.localPosition = pos
+	end
+end
+
+function OnUnionBossRankItemSlotBindValue(slot, data)
+	local path = "PlayerBase"
+	local playerRoot = slot.transform:Find(path)
+	BindPlayerBaseInfoValue(playerRoot,data.playerInfo)
+
+	local path = "Other"
+	local otherRoot = slot.transform:Find(path)
+
+	path = "powerTxt"
+	local powerTxt = otherRoot:GetComponentAtPath(path ,CLS_TEXT)
+	powerTxt.text = data.power
+
+	path = "nameTxt"
+	local nameTxt = otherRoot:GetComponentAtPath(path ,CLS_TEXT)
+	nameTxt.text = data.name
+
+	path = "titleTxt"
+	local titleTxt = otherRoot:GetComponentAtPath(path ,CLS_TEXT)
+	titleTxt.text = data.title
+
+	path = "Ribbon/rankTxt"
+	local rankTxt = otherRoot:GetComponentAtPath(path ,CLS_TEXT)
+	rankTxt.text = data.rankText
+
+	path = "Ribbon/ribbonImg"
+	local ribbonImageObj = otherRoot:GetGameObjectAtPath(path)
+	ribbonImageObj:SetActive(data.showRibbon)
+	if data.showRibbon then
+		CsBridge.IconData.SetIconByName(ribbonImageObj, data.ribbonIcon)
+	end
+
+	path = "damageSlider"
+	local damageSlider = otherRoot:GetComponentAtPath(path ,CLS_SLIDER)
+	damageSlider.value = data.damagePercent
+
+	path = "damageSlider/damageTxt"
+	local damageTxt = otherRoot:GetComponentAtPath(path ,CLS_TEXT)
+	damageTxt.text = data.damageText
+end
+
+function OnFightRewardsGridItemSlotClick(obj)
+	local itemData = obj.m_data
+    self:SendCommand("OpenTipView", itemData)
+end
+
+function OnKillRewardsGridItemSlotClick(obj)
+	local itemData = obj.m_data
+    self:SendCommand("OpenTipView", itemData)
+end
+
+function OnFightBtnClick(sender)
+	self:SendCommand("Challenge", viewData.levelID)
+end
+
+function OnPreviousBtnClick(sender)
+	if not switching then
+		TurnPage(ScrollDirection.backward)
+	end
+end
+
+function OnNextBtnClick(sender)
+	if not switching then
+		TurnPage(ScrollDirection.forward)
+	end
+end
+
+function RepositionBossModels(direction)
+	local left, center, right = leaderboardPanel.prevBossRoot, leaderboardPanel.bossRoot, leaderboardPanel.nextBossRoot
+	local leftPlatform, centerPlatform, rightPlatform = leaderboardPanel.prevPlatformSpine, leaderboardPanel.platformSpine, leaderboardPanel.nextPlatformSpine
+	if direction == ScrollDirection.backward then		
+		leaderboardPanel.prevBossRoot = center	
+		leaderboardPanel.bossRoot = right		
+		leaderboardPanel.nextBossRoot = left
+		leaderboardPanel.prevPlatformSpine = centerPlatform
+		leaderboardPanel.platformSpine = rightPlatform
+		leaderboardPanel.nextPlatformSpine = leftPlatform
+	else
+		leaderboardPanel.prevBossRoot = right		
+		leaderboardPanel.bossRoot = left		
+		leaderboardPanel.nextBossRoot = center
+		leaderboardPanel.prevPlatformSpine = rightPlatform
+		leaderboardPanel.platformSpine = leftPlatform
+		leaderboardPanel.nextPlatformSpine = centerPlatform
+	end
+end
+
+function OnGridPlayerBaseClick(obj, itemIndex)
+	local slotData = obj.m_data
+	local memberID = slotData.userId
+	local zone = slotData.zone
+	self:SendCommand("OpenMemberDetailView", memberID, zone, self.gameObject.name)
+end
+
+function OnDailyGridPlayerBaseClick(obj, itemIndex)
+	local slotData = obj.m_data
+	local memberID = slotData.userId
+	local zone = slotData.zone
+	self:SendCommand("OpenMemberDetailView", memberID, zone, self.gameObject.name)
+end
+
+function OnHelpBtnClick(sender)
+	self:SendCommand("OpenHelpView", self.gameObject.name)
+end
+
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close() 
+	self:SendCommand("StopCountdown")
+	ClearView()
+	self:ReturnBack()
+end
+
+function DoExit()
+	challengePanel = nil
+	leaderboardPanel = nil
+	dailyPanel = nil
+
+	ToggleIndics = nil
+	ScrollDirection = nil
+	switchDuration = nil
+	viewData = nil
+	selectedItem = nil
+	switching = nil
+	finishSpineObj = nil
+end

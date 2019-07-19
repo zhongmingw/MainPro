@@ -1,0 +1,1841 @@
+--[[
+	file: BattleView.lua
+	author: hangang
+	description: Battle view
+]]
+
+local utils = require "BattleUtils"
+local Camp = utils.Camp
+local SpineEvents = utils.SpineEvents
+local SpineBone = utils.SpineBone
+local ViewEvents = utils.ViewEvents
+local HeroStateEffectType = utils.HeroStateEffectType
+local AttackEffectType = utils.AttackEffectType
+local TweenUtils = CsBridge.TweenUtils
+local Ease = CsBridge.Ease
+local UnityHelper = CsBridge.UnityHelper
+local BattleUtils = CsBridge.BattleUtils
+local TWEEN_POINT_COUNT = 10
+
+--fields
+local cachedViewData
+local cachedHeroList = {}
+local cachedLeftHeroList = {}
+local cachedRightHeroList = {}
+local cachedLeftPosList = {}
+local cachedRightPosList = {}
+
+local curRoundId
+
+local cachedCallbacks = {}
+local cachedCallbackIdx = 0
+
+--cached UI ctrls
+local battleRoot
+local battleModelRoot
+local battleBGRoot
+local battleEffectRoot
+local battlePopNumRoot
+local maskObj
+local battleProgressBar
+local timeScaleTxt
+local curRoundTxt
+local roundCountTxt
+local leftAuraImg
+local rightAuraImg
+local skipBtnObject
+local cachedBloodTexts = {}
+
+--local functions
+local DelayTimer = utils.DelayTimer
+local CreatSpineModel = CsBridge.SpineHelper.CreatSpineModel
+local PlayStateEndAinm = BattleUtils.PlayStateEndAinm
+local PlayStateStartAinm = BattleUtils.PlayStateStartAinm
+local UpdateBloodbar, UpdateAngerBar
+local PlayHeroEnterAnimation
+local UpdateHeroBaseData, UpdateHeroDefHpBar
+local DoPopHurt, PopTip, PopNum
+local UpdateHeroStates
+local GetPositionById
+local AddCbk, CreateEffect
+local RefreshHeroStates
+local InitMove, DoCharge, PlayAttackAnimation, ResetMove
+local ShowAttackEffects, PlayHitAnimation, ShowHitEffect
+local ShowKilledEffect, SetHeroVisibleById, ShowRevivedEffect
+local RepositionHero, ShowSpeed, ResetFight, ResetHeroAnimation
+local SortModels, SetHeroVisible, UpdateUniqueStates
+local OnActionStarted, ShowHurtCopyEffect, ShowParabolaAttackFx
+local InitView, CreateBone, CreateHeadStateView
+local CreateBones, CreateHero, CreateHeros
+local GetBloodTextObj, UpdateBuffIcons
+
+local PlaySound = function(soundCamp, soundName)
+	CsBridge.audioManager:PlaySound(soundCamp, soundName)
+end
+
+local RecycleSkeleton = function(skeleton)
+	if skeleton then
+		skeleton:RecyclSpineModel()
+	end
+end
+
+local CreateObjectFromBundle = function(assetName, parentTrans)
+	local activeOnFinished = true
+	return CsBridge.objectCache:CreateObject(assetName, activeOnFinished, parentTrans)
+end
+
+local CreateSkeletonFromBundle = function(assetName, parentTrans, shouldReverse)
+	local gameObject = CreateObjectFromBundle(assetName, parentTrans)
+	local skeleton = gameObject:GetComponent(CLS_SKELETONGRAPHIC)
+	skeleton:SetSpineDefaultRectTransform()
+	if shouldReverse then
+		skeleton:SetSpineReverse()
+	end
+	return skeleton
+end
+
+local CreateHeroFx = function(actorId, assetName, parentTrans, onFinished)
+	local finishedCbk = function(skeleton)
+		if skeleton then
+			local hero = cachedHeroList[actorId]
+			local data = {
+				name = assetName,
+				skeleton = skeleton,
+			}
+			table.insert(hero.effects, data)
+		end
+		if onFinished then
+			onFinished(skeleton)
+		end
+	end
+	CreatSpineModel(assetName, parentTrans, AddCbk(finishedCbk))
+end
+
+local RemoveCachedHeroFx = function(actorId, assetName)
+	local hero = cachedHeroList[actorId]
+	local effects = hero.effects
+	for k, item in pairs(effects) do
+		if item.name == assetName then
+			effects[k] = nil
+			return item
+		end
+	end
+end
+
+local SetHeroAsLastSibling = function(actorId)
+	local hero = cachedHeroList[actorId]
+	local modelTrans = hero.modelTrans
+	modelTrans:SetAsLastSibling()
+end
+
+local OnViewEvents = function(cmdName, data)
+	if data then
+		self:SendCommand("ViewEvents", cmdName, data)
+	else
+		self:SendCommand("ViewEvents", cmdName)
+	end
+end
+
+------------------------Managed callbacks------------------------------------------------------
+AddCbk = function(cbk,...)
+	if not cachedCallbacks then
+		local empty = function() end
+		return empty
+	end
+
+	local idx = cachedCallbackIdx + 1
+	cachedCallbacks[idx] = cbk
+	local managedCbk = function(...)
+		if cachedCallbacks then
+			local workCbk = cachedCallbacks[idx]
+			if workCbk then
+				return workCbk(...)
+			end
+		end
+	end
+
+	cachedCallbackIdx = idx
+	return managedCbk
+end
+
+local function ClearCachedCbks()
+	cachedCallbackIdx = 0
+	cachedCallbacks = {}
+end
+------------------------Managed callbacks end---------------------------------------------------
+
+function DoInit()
+	self.Anim = 0
+	battleRoot=self:GetComponentAtPath("BattleRoot",CLS_RECTTRANSFORM)
+	battleBGRoot=self:GetComponentAtPath("BattleBGRoot",CLS_RECTTRANSFORM)
+	battleModelRoot=battleRoot:Find("BattleModelRoot")
+	battleEffectRoot=battleRoot:Find("BattleEffectRoot")
+	battlePopNumRoot=battleRoot:Find("BattlePopNumRoot")
+
+	timeScaleTxt = self:GetComponentAtPath("BottomRight/Btns/SpeedBtn/SpeedTxt",CLS_TEXT)
+	battleProgressBar = self:GetComponentAtPath("Top/RoundGO/RoundSlider",CLS_SLIDER)
+	curRoundTxt = self:GetComponentAtPath("Top/RoundGO/CurRoundTxt",CLS_TEXT)
+	roundCountTxt = self:GetComponentAtPath("Top/RoundGO/MaxRoundTxt",CLS_TEXT)
+	leftAuraImg = self:GetComponentAtPath("TopLeft/SelfAuraBtn/SelfAuraSprite",CLS_IMAGE)
+	rightAuraImg = self:GetComponentAtPath("TopRight/EnemyAuraBtn/EnemyAuraSprite",CLS_IMAGE)
+	skipBtnObject = self:GetGameObjectAtPath("BottomRight/Btns/SkipBtn")
+
+end
+
+function SetData(data)
+	self:SendCommand("InitBattle",data)
+end
+
+function OnNotification_InitScene(objs)
+	cachedViewData = objs[0]
+	InitView(cachedViewData)
+end
+
+function OnNotification_SortModels(objs)
+	SortModels()
+end
+
+function OnNotification_RoundChanged(objs)
+	local viewData = objs[0]
+	curRoundId = viewData.roundIdx
+	curRoundTxt.text = viewData.roundText
+	battleProgressBar.value = viewData.progress
+end
+
+function OnNotification_ShakeBattleRoot(objs)
+	BattleUtils.AttackShake(BattleRoot)
+end
+
+function OnNotification_ClearView(objs)
+	ClearCachedCbks()
+	OnViewEvents(ViewEvents.ViewCleared)
+end
+
+function OnNotification_UpdateHeroBaseData(objs)
+	local viewData = objs[0]
+	UpdateHeroBaseData(viewData)	
+end
+
+function OnNotification_PlayHeroEnterAnimation(objs)
+	local viewData = objs[0]
+	PlayHeroEnterAnimation(viewData.soundCamp, viewData.heroCamp)
+end
+
+function OnNotification_UpdateAllHeroHeadView(objs)
+	local viewData = objs[0]
+	local itemCount = #viewData
+	local isTheLastOne = false
+	for idx = 1, itemCount do
+		isTheLastOne = idx == itemCount
+		local itemViewData = viewData[idx]
+		UpdateAngerBar(itemViewData)
+
+		local onFinished = function()
+			if isTheLastOne then
+				OnViewEvents(ViewEvents.ActorBaseDataUpdated, viewData)
+			end
+		end
+		UpdateBloodbar(itemViewData, AddCbk(onFinished))
+	end
+end
+
+function OnNotification_UpdateHeroStates(objs)
+	local viewData = objs[0]
+	RefreshHeroStates(viewData)
+end
+
+function OnNotification_InitMove(objs)
+	local viewData = objs[0]
+	InitMove(viewData)
+end
+
+function OnNotification_Charge(objs)
+	local viewData = objs[0]
+	DoCharge(viewData)
+end
+
+function OnNotification_PlayAttackAnimation(objs)
+	local viewData = objs[0]
+	PlayAttackAnimation(viewData)
+end
+
+function OnNotification_ShowAttackEffect(objs)
+	local viewData = objs[0]
+	ShowAttackEffects(viewData)
+end
+
+function OnNotification_PlayHitAnimation(objs)
+	local viewData = objs[0]
+	PlayHitAnimation(viewData)
+end
+
+function OnNotification_ShowHitEffect(objs)
+	local viewData = objs[0]
+	ShowHitEffect(viewData)
+end
+
+function OnNotification_ShowKilledEffect(objs)
+	local viewData = objs[0]
+	ShowKilledEffect(viewData)
+end
+
+function OnNotification_ShowRevivedEffect(objs)
+	local viewData = objs[0]
+	ShowRevivedEffect(viewData)
+end
+
+function OnNotification_RepositionHero(objs)
+	local viewData = objs[0]
+	RepositionHero(viewData)
+end
+
+function OnNotification_ResetFight(objs)
+	ResetFight()
+end
+
+function OnNotification_ResetHeroAnimation(objs)
+	local viewData = objs[0]
+	ResetHeroAnimation(viewData)
+end
+
+function OnNotification_ResetMove(objs)
+	ResetMove()
+end
+
+function OnNotification_ActionStarted(objs)
+	local viewData = objs[0]
+	OnActionStarted(viewData)
+end
+
+function OnNotification_ShowHurtCopyEffect(objs)
+	local viewData = objs[0]
+	ShowHurtCopyEffect(viewData)
+end
+
+function OnNotification_OnBloodChanged(objs)
+	local viewData = objs[0]
+	UpdateBloodbar(viewData)
+end
+
+function OnNotification_OnAngerChanged(objs)
+	local viewData = objs[0]
+	UpdateAngerBar(viewData)
+end
+
+function OnNotification_TimeScaleChanged(objs)
+	local timeScale = objs[0]
+	ShowSpeed(timeScale)
+end
+
+function ResumeGame()
+	OnViewEvents(ViewEvents.RoundWaitingFinished)
+end
+
+function RoundOne()
+	local roundId = 1
+	OnViewEvents(ViewEvents.PauseOnRound, roundId)
+    return curRoundId == roundId
+end
+
+function RoundTwo()
+	local roundId = 2
+	OnViewEvents(ViewEvents.PauseOnRound, roundId)
+    return curRoundId == roundId
+end
+
+function OnTipBtnClick(sender)
+	OnViewEvents(ViewEvents.ShowTip)
+end
+
+function OnSpeedBtnClick(sender)
+	OnViewEvents(ViewEvents.Fastforward)
+end
+
+function OnSkipBtnClick(sender)
+	OnViewEvents(ViewEvents.Skip)
+end
+
+function OnSelfAuraBtnClick(sender)
+	OnViewEvents(ViewEvents.ShowLeftAura)
+end
+
+function OnEnemyAuraBtnClick(sender)
+	OnViewEvents(ViewEvents.ShowRightAura)
+end
+
+function OnBuffBtnClick(sender)
+	OnViewEvents(ViewEvents.ShowBuffTip)
+end
+
+ShowHurtCopyEffect = function(viewData)
+	SetHeroAsLastSibling(viewData.defenderId)
+
+	local onSpineEvents = function(name) end
+	local onEffectFinished = function()
+		OnViewEvents(ViewEvents.HurtCopyFxFinished, viewData)
+	end
+	ShowParabolaAttackFx(viewData, onSpineEvents, onEffectFinished)
+end
+
+OnActionStarted = function(viewData)
+	local finishedCbk = function()
+		OnViewEvents(viewData.eventName)
+	end
+	DelayTimer(viewData.delay, AddCbk(finishedCbk))
+end
+
+ResetMove = function()
+	maskObj:SetActive(false)
+end
+
+ResetHeroAnimation = function(viewData)
+	local Animations = utils.CtrlAnimationType
+	local actorId = viewData.actorId
+	local skeleton = cachedHeroList[actorId].skeleton
+	local playType = viewData.playType
+
+	if playType == Animations.Static then
+		skeleton.AnimationState:ClearTracks()
+	elseif playType == Animations.Stun 
+		or playType == Animations.None
+	then
+		local animationName, loop = viewData.animationName, viewData.animationLoop
+		local eventCbk, finishedCbk = nil, nil
+		skeleton:PlayAnimation(animationName, loop, eventCbk, finishedCbk)
+	end
+end
+
+ResetFight = function()
+	maskObj:SetActive(false)
+	SortModels()
+end
+
+RepositionHero = function(viewData)
+	local hero = cachedHeroList[viewData.actorId]
+	local modelTrans = hero.modelTrans
+
+	local x, y = GetPositionById(viewData.posId, viewData.camp)
+	local onTweenFinished = function()
+		OnViewEvents(ViewEvents.HeroRepositioned, viewData)
+	end
+
+	local tweener = TweenUtils.MoveTo(
+		modelTrans, x, y, viewData.duration, AddCbk(onTweenFinished))
+    tweener:DoPlay()
+end
+
+ShowRevivedEffect = function(viewData)
+	local actorId = viewData.actorId
+	local hero = cachedHeroList[viewData.actorId]
+	local bone = hero.bones[viewData.boneName]
+	local skeleton = CreateSkeletonFromBundle(
+		viewData.effectName, bone, viewData.shouldReverse)
+
+	local spineEventCbk = function(eventName)
+		if eventName == SpineEvents.Sound then
+			OnViewEvents(viewData.soundEventName, viewData)
+		end
+	end
+	local spineFinishedCbk = function()
+		SetHeroVisibleById(actorId, true)
+		local heroStatus = viewData.heroStatus
+		local heroSkeleton = cachedHeroList[actorId].skeleton
+		UpdateUniqueStates(heroSkeleton, heroStatus)
+
+		OnViewEvents(viewData.finishedEventName, viewData)
+		RecycleSkeleton(skeleton)
+	end
+	local loop = false
+	skeleton:PlayFirstAnim(loop, AddCbk(spineEventCbk, e), AddCbk(spineFinishedCbk))
+end
+
+local function ClearHeroFxSpines(actorId)
+	local hero = cachedHeroList[actorId]
+	local effects = hero.effects
+	for i, effect in pairs(effects) do
+		local skeleton = effect.skeleton
+		RecycleSkeleton(skeleton)
+		effect.skeleton = nil		
+	end
+	hero.effects = {}
+end
+
+ShowKilledEffect = function(viewData)
+	local actorId = viewData.actorId
+	local hero = cachedHeroList[actorId]
+	local bone = hero.bones[viewData.boneName]
+	local skeleton = CreateSkeletonFromBundle(
+		viewData.effectName, bone, viewData.shouldReverse)
+
+	viewData.finishedEventTriggered = false
+	local spineEventCbk = function(eventName)
+		if eventName == SpineEvents.Sound then
+			OnViewEvents(viewData.soundEventName, viewData)
+		elseif eventName == SpineEvents.FxReady then
+			SetHeroVisible(hero, false)
+			if viewData.shouldClearEffect then
+				ClearHeroFxSpines(actorId)
+			end
+			OnViewEvents(viewData.finishedEventName, viewData)
+		end
+	end
+	local spineFinishedCbk = function()
+		RecycleSkeleton(skeleton)
+	end
+	local loop = false
+	skeleton:PlayFirstAnim(loop, AddCbk(spineEventCbk, e), AddCbk(spineFinishedCbk))
+end
+
+SetHeroVisibleById = function(actorId, visible)
+	local hero = cachedHeroList[actorId]
+	SetHeroVisible(hero, visible)
+end
+
+SetHeroVisible = function(hero, visible)
+	hero.gameObject:SetActive(visible)
+	hero.headView.gameObject:SetActive(visible)
+end
+
+ShowHitEffect = function(viewData)
+	local hero = cachedHeroList[viewData.actorId]
+	local bone = hero.bones[viewData.boneName]
+	local skeleton = CreateSkeletonFromBundle(
+		viewData.effectName, bone, viewData.shouldReverse)
+
+	viewData.finishedEventTriggered = false
+	local spineEventCbk = function(eventName)
+		if eventName == SpineEvents.Sound then
+			OnViewEvents(viewData.soundEventName, viewData)
+		elseif eventName == SpineEvents.FxReady then
+			viewData.finishedEventTriggered = true
+			OnViewEvents(viewData.finishedEventName, viewData)
+		end
+	end
+	local spineFinishedCbk = function()
+		--兼容有些特效没有SpineEvents.FxReady的情况
+		if not viewData.finishedEventTriggered then
+			viewData.finishedEventTriggered = true
+			OnViewEvents(viewData.finishedEventName, viewData)
+		end
+		RecycleSkeleton(skeleton)
+	end
+	local loop = false
+	skeleton:PlayFirstAnim(loop, AddCbk(spineEventCbk, e), AddCbk(spineFinishedCbk))
+end
+
+PlayHitAnimation = function(viewData)
+	local hero = cachedHeroList[viewData.actorId]
+	local skeleton = hero.skeleton
+	local finishedCbk = function()
+		local loop = true
+		local idleEventCbk, idleFinishedCbk = nil, nil
+		skeleton:PlayAnimation(
+			viewData.nextAnimName, loop, idleEventCbk, idleFinishedCbk)
+		OnViewEvents(ViewEvents.HitAnimationFinished, viewData)
+	end
+	local loop = false
+	local spineEventCbk = nil
+	skeleton:PlayAnimation(
+		viewData.animName, loop, spineEventCbk, AddCbk(finishedCbk))
+end
+
+----------Show attack effects---------------------------------------------------------------
+
+local function ShowDirectAttackFx(viewData, onSpineEvents, onEffectFinished)
+	local defender = cachedHeroList[viewData.defenderId]
+	local bone = defender.bones[viewData.boneName]
+	local skeleton = CreateSkeletonFromBundle(viewData.effectName, bone, true)
+	onSpineEvents(SpineEvents.Sound)
+	onSpineEvents(SpineEvents.FxReady)
+	local spineFinishedCbk = function ()
+		RecycleSkeleton(skeleton)
+		onEffectFinished()
+	end
+	local loop = false
+	local spineEventCbk = nil
+	skeleton:PlayFirstAnim(loop, spineEventCbk, AddCbk(spineFinishedCbk))
+end
+
+local function ShowMissileAttackFx(viewData, onSpineEvents, onEffectFinished)
+	local attacker = cachedHeroList[viewData.attackerId]
+	local bone = attacker.bones[viewData.boneName]
+	local skeleton = CreateSkeletonFromBundle(viewData.effectName, bone)
+	local loop = true
+	local spineEventCbk, spineFinishedCbk = nil, nil
+	skeleton:PlayFirstAnim(loop, spineEventCbk, spineFinishedCbk)
+	onSpineEvents(SpineEvents.Sound)
+	
+	local finishedCbk = function()
+		RecycleSkeleton(skeleton)
+		onSpineEvents(SpineEvents.FxReady)
+		onEffectFinished()
+	end
+	local defender = cachedHeroList[viewData.defenderId]
+	local missileDestTrans = defender.bones[viewData.hurtBoneName]
+	BattleUtils.SetSpineMissile(
+		skeleton.transform, missileDestTrans, AddCbk(finishedCbk))
+end
+
+local function ShowRayAttackFx(viewData, onSpineEvents, onEffectFinished)
+	local attacker = cachedHeroList[viewData.attackerId]
+	local attackerBone = attacker.bones[viewData.boneName]
+	local defender = cachedHeroList[viewData.defenderId]
+	local defenderBone = defender.bones[viewData.hurtBoneName]
+	BattleUtils.SetSpineRay(viewData.effectName, attackerBone, defenderBone)
+
+	onSpineEvents(SpineEvents.Sound)
+	onSpineEvents(SpineEvents.FxReady)
+	onEffectFinished()
+end
+
+local function ShowIndirectAttackFx(viewData, onSpineEvents, onEffectFinished)
+	local defender = cachedHeroList[viewData.defenderId]
+	local bone = defender.bones[viewData.boneName]
+	local skeleton = CreateSkeletonFromBundle(viewData.effectName, bone, true)
+	local spineFinishedCbk = function()
+		RecycleSkeleton(skeleton)
+		onEffectFinished()
+	end
+	local loop = false
+	local spineEventCbk, spineFinishedCbk = onSpineEvents, AddCbk(spineFinishedCbk)
+	skeleton:PlayFirstAnim(loop, spineEventCbk, spineFinishedCbk)
+end
+
+local function ShowUniqueAttackFx(viewData, onSpineEvents, onEffectFinished)
+	local skeleton = CreateSkeletonFromBundle(
+		viewData.effectName, battleEffectRoot, viewData.shouldReverse)
+	local sceneData = cachedViewData.sceneData
+	local pos = sceneData.uniquePos
+	local x = viewData.shouldReverse and pos.x or -pos.x
+	skeleton:SetSpineLoaclPosition(x, pos.y)
+	local spineFinishedCbk = function ()
+		RecycleSkeleton(skeleton)
+		onEffectFinished()
+	end
+	local loop = false
+	local spineEventCbk, spineFinishedCbk = onSpineEvents, AddCbk(spineFinishedCbk)
+	skeleton:PlayFirstAnim(loop, spineEventCbk, spineFinishedCbk)
+end
+
+ShowParabolaAttackFx = function(viewData, onSpineEvents, onEffectFinished)
+	local attacker = cachedHeroList[viewData.attackerId]
+	local attackerBone = attacker.bones[viewData.boneName]
+	local skeleton = CreateSkeletonFromBundle(viewData.effectName, attackerBone)
+	local loop = true
+	local spineEventCbk, spineFinishedCbk = nil, nil
+	skeleton:PlayFirstAnim(loop, spineEventCbk, spineFinishedCbk)
+	onSpineEvents(SpineEvents.Sound)
+
+	local finishedCbk = function()
+		RecycleSkeleton(skeleton)
+		onSpineEvents(SpineEvents.FxReady)
+		onEffectFinished()
+	end
+	local defender = cachedHeroList[viewData.defenderId]
+	local defenderBone = defender.bones[viewData.hurtBoneName]
+	BattleUtils.SetSpineParabola(
+		skeleton.transform, defenderBone, AddCbk(finishedCbk))
+end
+
+local ShowAttackFxActions =
+{
+	[AttackEffectType.Direct] = ShowDirectAttackFx,
+	[AttackEffectType.Missile] = ShowMissileAttackFx,
+	[AttackEffectType.Ray] = ShowRayAttackFx,
+	[AttackEffectType.Indirect] = ShowIndirectAttackFx,
+	[AttackEffectType.Unique] = ShowUniqueAttackFx,
+	[AttackEffectType.Parabola] = ShowParabolaAttackFx,
+}
+
+local function ShowAttackEffect(viewData)
+	local effectType = viewData.effectType
+	local onEffectFinished = function()
+		if viewData.shouldSendSignal then
+			OnViewEvents(ViewEvents.AttackFxFinished, viewData)
+		end
+	end
+	local onSpineEvents = function(eventName)
+		if eventName == SpineEvents.Sound then
+			OnViewEvents(ViewEvents.AttackFxSoundEvent, viewData)
+		elseif viewData.shouldSendSignal and eventName == SpineEvents.FxReady then
+			OnViewEvents(ViewEvents.AttackFxHitEvent, viewData)
+		end
+	end
+	local action = ShowAttackFxActions[effectType]
+	if action then
+		action(viewData, AddCbk(onSpineEvents, e), AddCbk(onEffectFinished))
+	end
+end
+
+ShowAttackEffects = function(viewData)
+	for i, itemViewData in ipairs(viewData) do
+		ShowAttackEffect(itemViewData)
+	end
+end
+
+----------Show attack effects end------------------------------------------------------------
+
+PlayAttackAnimation = function(viewData)
+	local spineEventCbk = function(eventName)
+		if eventName == SpineEvents.Attack then
+			OnViewEvents(ViewEvents.AttackHitEvent)
+		end
+	end
+	local spineFinishedCbk = function()
+		OnViewEvents(ViewEvents.AttackFinished)
+	end
+	local actorId = viewData.uid
+	local hero = cachedHeroList[actorId]
+	local skeleton = hero.skeleton
+	local animName, loop = viewData.animName, viewData.loop
+	skeleton:PlayAnimation(
+		animName, loop, AddCbk(spineEventCbk, e), AddCbk(spineFinishedCbk))
+end
+
+DoCharge = function(viewData)
+	local actorId = viewData.actorId
+	local hero = cachedHeroList[actorId]
+	local modelTrans = hero.modelTrans
+
+	local targetId = viewData.targetHeroId
+	local target = cachedHeroList[targetId]
+	local pos = target.modelTrans.localPosition
+	local x = pos.x + viewData.offsetX
+	local y = pos.y
+
+	local onTweenFinished = function()
+		OnViewEvents(ViewEvents.ChargeFinished)
+	end
+
+	local tweener = TweenUtils.MoveTo(
+		modelTrans, x, y, viewData.duration, AddCbk(onTweenFinished))
+    tweener:DoPlay()
+end
+
+InitMove = function(viewData)
+	if viewData.showMask then
+		maskObj.transform:SetAsLastSibling()
+		maskObj:SetActive(true)
+	else
+		maskObj:SetActive(false)
+	end
+	local siblingList = viewData.siblingList
+	for k, actorId in ipairs(siblingList) do
+		SetHeroAsLastSibling(actorId)
+	end
+	SetHeroAsLastSibling(viewData.attackerUid)
+
+	OnViewEvents(ViewEvents.MoveInited)
+end
+
+local function AddDefHPEffect(hero, stateEffect, onFinished)
+	if stateEffect.shouldCreateFx then
+		local sfxName = stateEffect.sfxName
+		local finishedCbk = function (skeleton)
+			if skeleton then
+				PlayStateStartAinm(skeleton)
+				UpdateHeroDefHpBar(stateEffect)
+			end
+			onFinished()
+		end
+		local bone = hero.bones[stateEffect.boneName]
+		CreateHeroFx(hero.uid, sfxName, bone, AddCbk(finishedCbk, skeleton))
+	else
+		UpdateHeroDefHpBar(stateEffect)
+		onFinished()
+	end
+end
+
+CreateEffect = function(hero, data, onFinished)
+	local sfxName = data.sfxName
+	if IsNilOrEmpty(sfxName) then
+		if onFinished then onFinished() end
+		return
+	end
+
+	local finishedCbk = function(skeleton)
+		if data.recycleOnFinished then
+			local spineFinishedCbk = function()
+				RecycleSkeleton(skeleton)
+				RemoveCachedHeroFx(hero.uid, sfxName)
+			end
+			skeleton:PlayFirstAnim(false, nil, AddCbk(spineFinishedCbk))
+		else
+			PlayStateStartAinm(skeleton)
+		end
+		if onFinished then
+			onFinished()
+		end
+	end
+	local bone = hero.bones[data.boneName]
+	CreateHeroFx(hero.uid, sfxName, bone, AddCbk(finishedCbk, skeleton))
+end
+
+local function AddDotEffect(hero, stateEffect, onFinished)
+	local dotList = stateEffect.dotList
+	local itemCount = #dotList
+	if itemCount == 0 then
+		onFinished()
+		return
+	end
+	for i = 1, itemCount do
+		local isTheLastOne = i == itemCount
+		local itemViewData = dotList[i]
+		itemViewData.recycleOnFinished = stateEffect.recycleOnFinished	
+		CreateEffect(hero, itemViewData, isTheLastOne and onFinished or nil)
+	end
+end
+
+UpdateBuffIcons = function(hero, viewData)
+	if not viewData then 
+		return 
+	end
+	local headView = hero.headView
+	local dataIdx = #viewData
+	for i = headView.buffIconCount, 1, -1 do
+		local buffItemObj = headView.buffItems[i]
+		local iconName = viewData[dataIdx]
+		buffItemObj:SetActive(not IsNilOrEmpty(iconName))
+		if not IsNilOrEmpty(iconName) then
+			CsBridge.IconData.SetIconByName(buffItemObj, iconName)
+		end
+
+		dataIdx = dataIdx - 1
+	end
+end
+
+local function AddStateEffect(hero, stateEffect, onFinished)
+	local effectData = stateEffect.effectData
+	local actorId, stateId = stateEffect.actorId, stateEffect.uid
+	local itemCount = #effectData
+	if itemCount == 0 then
+		onFinished()
+		return
+	end
+	for i = 1, itemCount do
+		local isTheLastOne = i == itemCount
+		local itemViewData = effectData[i]
+		itemViewData.recycleOnFinished = stateEffect.recycleOnFinished
+		itemViewData.uid = stateEffect.uid
+		CreateEffect(hero, itemViewData, isTheLastOne and onFinished or nil)
+	end
+end
+
+GetPositionById = function(posId, camp)
+	local data = camp == Camp.Right 
+		and cachedRightPosList or cachedLeftPosList
+	local pos = data[posId]
+	return pos.x, pos.y
+end
+
+local function SwapPos(modelTrans, newPos, camp)
+	local x, y = GetPositionById(newPos, camp)
+	UnityHelper.SetUILocalPosition(modelTrans, x, y)
+end
+
+local function SetInvisible(modelTrans, destination, onFinished)
+	local x, y = destination.x, destination.y
+	local duration = 0.5
+	TweenUtils.MoveTo(modelTrans, x, y, duration, onFinished)
+end
+
+local function AddTirggerSpecialEffect(hero, effectData, onEvents, onFinished)
+	onEvents = onEvents and AddCbk(onEvents, e) or onEvents
+	onFinished = onFinished and AddCbk(onFinished) or onFinished
+	local onAllEvents = function()
+		if onEvents then
+			onEvents()
+		end
+		if onFinished then
+			onFinished()
+		end
+	end
+	local sfxName, boneName = effectData.sfxName, effectData.boneName
+	if IsNilOrEmpty(sfxName) then
+		onAllEvents()
+	else
+		local finishedCbk = function(skeleton)
+			if skeleton then
+				local spineFinishedCbk = function ()
+					if onFinished then
+						onFinished()
+					end
+					effectData.skeleton = nil
+					RecycleSkeleton(skeleton)
+				end
+				skeleton:PlayFirstAnim(false, onEvents, AddCbk(spineFinishedCbk))
+			else
+				onAllEvents()
+			end
+		end
+		local bone = hero.bones[boneName]
+		CreateHeroFx(hero.uid, sfxName, bone, AddCbk(finishedCbk, skeleton))
+	end
+end
+
+local function DoAddSpecialEffect(hero, effectData, onFinished)
+	local effectType = effectData.specialEffectType
+	local Effects = utils.StateSpecialEffectType
+	local modelTrans = hero.modelTrans
+	if effectType == Effects.Transform then
+		UnityHelper.SetUILocalScale(modelTrans, effectData.scale)
+		onFinished()
+	elseif effectType == Effects.ChangeCamp then
+		UnityHelper.SetUIReverse(modelTrans)
+		onFinished()
+	elseif effectType == Effects.SwapPos
+		or effectType == Effects.Invisible
+	then
+		local onSpineEvents, onSpineFinished
+		if effectType == Effects.SwapPos then
+			onSpineEvents = function(e)
+				SwapPos(modelTrans, effectData.newPos, hero.camp)
+				onFinished()
+			end
+		else
+			onSpineFinished = function()
+				SetInvisible(modelTrans, effectData.destination, onFinished)
+			end
+		end
+		AddTirggerSpecialEffect(hero, effectData, onSpineEvents, onSpineFinished)
+	end
+end
+
+local function AddLoopSpecialEffect(hero, baseEffectData, onFinished)
+	local sfxName, boneName = baseEffectData.sfxName, baseEffectData.boneName
+	if not IsNilOrEmpty(sfxName) then
+		local finishedCbk = function(skeleton)
+			if skeleton then
+				PlayStateStartAinm(skeleton)
+			end
+			onFinished()
+		end
+		local bone = hero.bones[boneName]
+		CreateHeroFx(hero.uid, sfxName, bone, AddCbk(finishedCbk, skeleton))
+	else
+		onFinished()
+	end
+end
+
+local function AddSpecialEffect(hero, stateEffect, onFinished)
+	local onLoopEffectAdded = function()
+		if stateEffect.effectData then
+			DoAddSpecialEffect(hero, stateEffect.effectData, onFinished)
+		else
+			onFinished()
+		end
+	end
+	if stateEffect.baseEffectData then
+		AddLoopSpecialEffect(hero, stateEffect.baseEffectData, onLoopEffectAdded)
+	elseif stateEffect.effectData then
+		DoAddSpecialEffect(hero, stateEffect.effectData, onFinished)
+	else
+		onFinished()
+	end
+end
+
+local AddHeroStateCbks = 
+{
+	[HeroStateEffectType.DefHP] = AddDefHPEffect,
+	[HeroStateEffectType.Dot] = AddDotEffect,
+	[HeroStateEffectType.Effect] = AddStateEffect,
+	[HeroStateEffectType.Ctrl] = CreateEffect,
+	[HeroStateEffectType.Special] = AddSpecialEffect,
+}
+
+local function AddHeroState(hero, stateViewData, onFinished)
+	local effectData = stateViewData.stateEffects
+	local sfxCount = #effectData
+	if sfxCount == 0 then
+		onFinished()
+		return
+	end
+	local onAddFinished = function()
+		sfxCount = sfxCount - 1
+		if sfxCount == 0 then
+			onFinished()
+		end
+	end
+	for i, stateEffect in pairs(effectData) do
+		local effectType = stateEffect.effectType
+		local action = AddHeroStateCbks[effectType]
+		if action then
+			action(hero, stateEffect, onAddFinished)
+		else
+			onAddFinished()
+		end
+	end
+end
+
+local function AddHeroStates(hero, newStates, onFinished)
+	if not newStates
+		or #newStates == 0
+	then
+		onFinished()
+		return
+	end
+
+	local stateCount = #newStates
+	local onAddFinished = function()
+		stateCount = stateCount - 1
+		if stateCount == 0 then
+			onFinished()
+		end
+	end
+	for k, newState in pairs(newStates) do
+		AddHeroState(hero, newState, onAddFinished)
+	end
+end
+
+local function UpdateHeroStates(hero, stateEffect, onFinished)
+	if not stateEffect
+		or not next(stateEffect)
+	then
+		onFinished()
+		return
+	end
+
+	UpdateHeroDefHpBar(stateEffect)
+	if stateEffect.shouldClearEffect then
+		local cachedData = RemoveCachedHeroFx(hero.uid, stateEffect.sfxName)
+		if cachedData then
+			local skeleton = cachedData.skeleton
+			local finishedCbk = function(skeleton)
+				RecycleSkeleton(skeleton)
+				onFinished()
+			end
+			PlayStateEndAinm(skeleton, AddCbk(finishedCbk, skeleton))
+		else
+			onFinished()
+		end
+	else
+		onFinished()
+	end
+end
+
+local function RecycleHeroEffects(actorId, sfxNameList, onFinished)
+	local sfxCount = #sfxNameList
+	local onRecycleFinished = function(skeleton)
+		RecycleSkeleton(skeleton)
+		sfxCount = sfxCount - 1
+		if sfxCount == 0 then
+			onFinished()
+		end
+	end
+	for i, sfxName in ipairs(sfxNameList) do
+		local cachedData = RemoveCachedHeroFx(actorId, sfxName)
+		if cachedData then
+			local skeleton = cachedData.skeleton
+			PlayStateEndAinm(skeleton, AddCbk(onRecycleFinished, skeleton))
+		end
+	end
+end
+
+local function RemoveStateEffect(actorId, stateEffect, onFinished)
+	local effectData = stateEffect.effectData
+	local sfxCount = #effectData
+	local onRecycleFinished = function(skeleton)
+		if skeleton then
+			RecycleSkeleton(skeleton)
+		end
+		sfxCount = sfxCount - 1
+		if sfxCount == 0 then
+			onFinished()
+		end
+	end
+	for i, effect in ipairs(effectData) do
+		local sfxName = effect.sfxName
+		local cachedData = RemoveCachedHeroFx(actorId, sfxName)
+		if cachedData then
+			local skeleton = cachedData.skeleton
+			local finishedCbk = function(skeleton)
+				onRecycleFinished(skeleton)
+			end
+			PlayStateEndAinm(skeleton, AddCbk(finishedCbk, skeleton))
+		else
+			onRecycleFinished(nil)
+		end
+	end
+end
+
+local function RemoveStateEffects(actorId, stateEffectList, onFinished)
+	local sfxCount = #stateEffectList
+	local onRecycleFinished = function()
+		sfxCount = sfxCount - 1
+		if sfxCount == 0 then
+			onFinished()
+		end
+	end
+	for i, stateEffect in pairs(stateEffectList) do
+		RemoveStateEffect(actorId, stateEffect, onRecycleFinished)
+	end
+end
+
+local function DoRemoveSpecialEffect(actorId, specialData, onFinished)
+	local effectData = specialData.effectData
+	if effectData then
+		local hero = cachedHeroList[actorId]
+		local modelTrans = hero.modelTrans
+		local effectType = effectData.specialEffectType
+		local Effects = utils.StateSpecialEffectType
+		if effectType == Effects.Transform then
+			UnityHelper.SetUILocalScale(modelTrans, effectData.scale)
+			onFinished()
+		elseif effectType == Effects.ChangeCamp then
+			UnityHelper.SetUIReverse(modelTrans)
+			onFinished()
+		elseif effectType == Effects.Invisible then
+			local newPos = effectData.newPos
+			local x, y = newPos.x, newPos.y
+			local duration = 0.5
+			TweenUtils.MoveTo(modelTrans, x, y, duration, onFinished)
+		else
+			onFinished()
+		end
+	else
+		onFinished()
+	end
+end
+
+local function RemoveSpecialEffect(actorId, specialData, onFinished)
+	local baseEffectData = specialData.baseEffectData
+	local nextAction = function()
+		DoRemoveSpecialEffect(actorId, specialData, onFinished)
+	end
+	if baseEffectData then
+		local sfxName = baseEffectData.sfxName
+		local cachedData = RemoveCachedHeroFx(actorId, sfxName)
+		if cachedData then
+			local finishedCbk = function(skeleton)
+				RecycleSkeleton(skeleton)
+				nextAction()
+			end
+			PlayStateEndAinm(cachedData.skeleton, AddCbk(finishedCbk, skeleton))
+		else
+			nextAction()
+		end
+	else
+		nextAction()
+	end
+end
+
+local function RemoveSpecialEffects(actorId, specialDataList, onFinished)
+	local sfxCount = #specialDataList
+	local onRecycleFinished = function()
+		sfxCount = sfxCount - 1
+		if sfxCount == 0 then
+			onFinished()
+		end
+	end
+	for i, specialData in pairs(specialDataList) do
+		RemoveSpecialEffect(actorId, specialData, onRecycleFinished)
+	end
+end
+
+local function RemoveHeroStates(viewData, onFinished)
+	if not viewData 
+		or not next(viewData)
+	then
+		onFinished()
+		return
+	end
+
+	local CheckAllFinished = function()
+		local allFinished = viewData.allSfxRemoved
+			and viewData.stateEffectRemoved
+			and viewData.specialEffectRemoved		
+		if allFinished and onFinished then
+			onFinished()
+		end
+	end
+	local actorId = viewData.actorId
+
+	viewData.allSfxRemoved = true
+	local sfxNameList = viewData.sfxNameList
+	if sfxNameList and #sfxNameList > 0 then
+		viewData.allSfxRemoved = false
+		local onRemoveFinished = function()
+			viewData.allSfxRemoved = true
+			CheckAllFinished()
+		end
+		RecycleHeroEffects(actorId, sfxNameList, AddCbk(onRemoveFinished))
+	end
+
+	viewData.stateEffectRemoved = true
+	local stateEffectList = viewData.stateEffectList
+	if stateEffectList and #stateEffectList > 0 then
+		viewData.stateEffectRemoved = false
+		local onRemoveFinished = function()
+			viewData.stateEffectRemoved = true
+			CheckAllFinished()
+		end
+		RemoveStateEffects(actorId, stateEffectList, AddCbk(onRemoveFinished))
+	end
+
+	viewData.specialEffectRemoved = true
+	local specialDataList = viewData.specialDataList
+	if specialDataList and #specialDataList > 0 then
+		viewData.specialEffectRemoved = false
+		local onRemoveFinished = function()
+			viewData.specialEffectRemoved = true
+			CheckAllFinished()
+		end
+		RemoveSpecialEffects(actorId, specialDataList, AddCbk(onRemoveFinished))
+	end
+
+	CheckAllFinished()
+end
+
+UpdateUniqueStates = function(skeleton, viewData, onFinished)
+	if viewData then
+		local newMatName = viewData.materialName
+		if newMatName then
+			skeleton:ChangeMaterial(newMatName)
+		end		
+		if viewData.playType then
+			ResetHeroAnimation(viewData)
+		end
+	end
+
+	if onFinished then 
+		onFinished()
+	end
+end
+
+RefreshHeroStates = function(viewData)
+	local actorId = viewData.actorId
+	local hero = cachedHeroList[actorId]
+	viewData.CheckAllFinished = function()
+		if viewData.addingFinished 
+			and viewData.updatingFinished
+			and viewData.removingFinished
+			and viewData.uniqueStatesUpdated
+		then
+			OnViewEvents(ViewEvents.ActorStateUpdated, viewData)
+		end
+	end
+
+	UpdateBuffIcons(hero, viewData.buffData)
+
+	local onFinished = function()
+		viewData.addingFinished = true
+		viewData.CheckAllFinished()
+	end
+	AddHeroStates(hero, viewData.newStates, onFinished)
+
+	onFinished = function()
+		viewData.updatingFinished = true
+		viewData.CheckAllFinished()
+	end
+	UpdateHeroStates(hero, viewData.updatingData, onFinished)
+
+	onFinished = function()
+		viewData.removingFinished = true
+		viewData.CheckAllFinished()
+	end
+	RemoveHeroStates(viewData.removingData, onFinished)
+
+	onFinished = function()
+		viewData.uniqueStatesUpdated = true
+		viewData.CheckAllFinished()
+	end
+	UpdateUniqueStates(hero.skeleton, viewData.uniqueData, onFinished)
+	
+end
+
+UpdateHeroDefHpBar = function(viewData)
+	local actorId = viewData.actorId
+	local bloodSliderValue, defSliderValue = 
+		viewData.bloodSliderValue, viewData.defSliderValue
+
+	local hero = cachedHeroList[actorId]
+	local headViewData = hero.headView
+	headViewData.blood_Slider.value = bloodSliderValue
+	headViewData.defHp_Slider.value = defSliderValue
+	if defSliderValue ~= 0 then
+		headViewData.bloodBack_Slider.value = bloodSliderValue
+	end
+end
+
+local function PopHurt(viewData, onFinished)
+	local cbk = function(itemViewData, isTheLastOne)
+		DoPopHurt(itemViewData, isTheLastOne and onFinished or nil)
+	end
+	local dataCount = #viewData
+	local interval = 0.1
+	local delay
+	for dataIdx = 1, dataCount do
+		local isTheLastOne = dataIdx == dataCount
+		local itemViewData = viewData[dataIdx]
+		if dataIdx == 1 then
+			cbk(itemViewData, isTheLastOne)
+		else			
+			delay = (dataIdx - 1) * interval
+			local onLooping = function()
+				cbk(itemViewData, isTheLastOne)
+			end
+			DelayTimer(delay, AddCbk(onLooping))
+		end
+	end
+end
+
+UpdateHeroBaseData = function(viewData)
+	viewData.CheckAllFinished = function()
+		local allFinished = viewData.hurtFinished and viewData.hpUpdated
+		if allFinished then
+			OnViewEvents(ViewEvents.ActorBaseDataUpdated, viewData)
+		end
+	end
+
+	if viewData.angerChanged then
+		UpdateAngerBar(viewData)
+	end
+
+	viewData.hurtFinished = true
+	if viewData.beHurted then
+		viewData.hurtFinished = false
+		local onPopFinished = function()
+			viewData.hurtFinished = true
+			viewData.CheckAllFinished()
+		end
+		PopHurt(viewData.hurtViewData, AddCbk(onPopFinished))
+	end
+
+	if viewData.defHpChanged then
+		UpdateHeroDefHpBar(viewData)
+	end
+
+	viewData.hpUpdated = true
+	if viewData.hpChanged then
+		viewData.hpUpdated = false
+		local onUpdateFinished = function()
+			viewData.hpUpdated = true
+			viewData.CheckAllFinished()
+		end
+		UpdateBloodbar(viewData, AddCbk(onUpdateFinished))
+	end
+
+	viewData.CheckAllFinished()
+end
+
+UpdateBloodbar = function(viewData, onFinished)
+	local heroIdx = viewData.uid
+	local headView = cachedHeroList[heroIdx].headView
+	local value = viewData.hpRatio
+
+	headView.blood_Slider.value = value
+
+	local alpha = 1
+	local duration = 0
+	local ignorTimeScale = true
+	headView.hpBackSprite:CrossFadeAlpha(alpha,duration,ignorTimeScale)
+	if headView.defHp_Slider.value ~= 0 then
+		headView.defHp_Slider.value = 0
+	end
+
+	local backSlider = headView.bloodBack_Slider
+	if value < backSlider.value then
+		local timerCbk = function()
+			alpha = 0.3
+			duration = 0.3
+			headView.hpBackSprite:CrossFadeAlpha(alpha, duration, ignorTimeScale)
+			duration = duration + 0.02
+			TweenUtils.DOSliderValue(backSlider, value, duration, onFinished)
+		end
+		local delay = 0.1
+		DelayTimer(delay, AddCbk(timerCbk))
+	else
+		backSlider.value = value
+		if onFinished then
+			onFinished()
+		end
+	end
+end
+
+UpdateAngerBar = function(viewData)
+	local heroIdx = viewData.uid
+	local headView = cachedHeroList[heroIdx].headView
+	headView.anger_Slider.value = viewData.angerRatio
+	headView.angerMaxSfxObj:SetActive(viewData.angerFullfilled)
+	if viewData.angerFullfilled then
+		headView.angerMaxSfx:PlayFirstAnim(true,nil,nil)
+	end
+end
+
+ShowSpeed = function(speed)
+	timeScaleTxt.text=tostring(speed)
+end
+
+CreateBone = function(boneName, boneScale, parent, skeleton)
+	local boneObject = UnityHelper.CreateNewUIGameObject(boneName,parent)
+	local boneTrans=boneObject.transform
+	if boneScale > 0 then
+		UnityHelper.SetUILocalScale(boneTrans, boneScale)
+	end
+
+	local boneFollower = UnityHelper.GetOrAddComponent(boneObject,"Spine.Unity.BoneFollowerGraphic")
+	boneFollower.SkeletonGraphic = skeleton
+	boneFollower.followBoneRotation = false
+	boneFollower:SetBone(boneName)
+	
+	return boneTrans
+end
+
+CreateHeadStateView = function(parent, viewData)
+    local headStateView = CsBridge.objectCache:CreateObject("HeadStateView", true, parent)
+    local headViewData = {}
+    headViewData.entity = headStateView
+	local viewTrans = headStateView.transform
+    headViewData.raceSpriteObj = viewTrans:GetGameObjectAtPath("RaceSprite")
+    headViewData.defHp_Slider = viewTrans:GetComponentAtPath("defHpSlider", CLS_SLIDER)
+    headViewData.bloodBack_Slider = viewTrans:GetComponentAtPath("bloodBackSlider", CLS_SLIDER)
+    headViewData.hpBackSprite = headViewData.bloodBack_Slider.fillRect:GetComponent(CLS_IMAGE)
+    headViewData.blood_Slider = viewTrans:GetComponentAtPath("bloodSlider", CLS_SLIDER)
+    headViewData.anger_Slider = viewTrans:GetComponentAtPath("angerSlider", CLS_SLIDER)
+    headViewData.hpSpriteObj = headViewData.blood_Slider.fillRect.gameObject
+	headViewData.angerMaxSfx = viewTrans:GetComponentAtPath("energybar_p", CLS_SKELETONGRAPHIC)
+	headViewData.angerMaxSfxObj = headViewData.angerMaxSfx.gameObject
+    SetRaceIconByHeroId(headViewData.raceSpriteObj,viewData.actorId)
+    CsBridge.IconData.SetIconByName(headViewData.hpSpriteObj, viewData.hpSpriteName)
+    if viewData.shouldReverseModel then
+		UnityHelper.SetUIReverse(viewTrans)
+    end
+	local buffRoot = viewTrans:Find("BuffSc/BuffGrid")
+	headViewData.buffIconCount = buffRoot.childCount
+	headViewData.buffItems = {}
+    for i = 0, headViewData.buffIconCount - 1 do
+		local buffItem = buffRoot:GetChild(i).gameObject
+		buffItem:SetActive(false)
+		table.insert(headViewData.buffItems, buffItem)
+    end
+	headViewData.gameObject = viewTrans.gameObject
+	return headViewData
+end
+
+CreateBones = function(viewData, modelRect, skeleton)
+	local bones = {}
+	local boneScale = viewData.boneScale
+	local headView
+	for k, boneName in pairs(SpineBone) do
+		local boneTrans = CreateBone(boneName, boneScale, modelRect, skeleton)
+		bones[boneName] = boneTrans
+
+		if boneName == SpineBone.bloodPos then
+			headView = CreateHeadStateView(boneTrans, viewData)
+		end
+	end
+
+	return bones, headView
+end
+
+CreateHero = function(viewData)
+	local hero = {}
+	local skeleton = CsBridge.SpineHelper.CreatSpineModelWithoutCache(
+		viewData.modelName,
+		viewData.defaultAnim,
+		battleModelRoot,
+		true)
+	local modelRect = skeleton.transform.parent
+	modelRect.name = modelRect.name .."_uid_" .. viewData.uid
+	UnityHelper.SetAnchoredPosition(
+			modelRect.gameObject, 
+			viewData.anchoredX, 
+			viewData.anchoredY)
+	if viewData.shouldReverseModel then
+    	UnityHelper.SetUIReverse(modelRect)
+	end
+	UnityHelper.SetUILocalScale(modelRect,viewData.scale)
+
+	hero.skeleton = skeleton
+	hero.gameObject = skeleton.gameObject
+	hero.modelTrans = modelRect
+	hero.posId = viewData.posId
+	hero.camp = viewData.camp
+	hero.uid = viewData.uid	
+	local pos = modelRect.localPosition
+	hero.modelPos = {
+		x = pos.x,
+		y = pos.y,
+	}
+
+	hero.bones, hero.headView = CreateBones(viewData, modelRect, skeleton)
+	hero.effects = {}
+
+	if viewData.hideOnCreate then
+		SetHeroVisible(hero, false)
+	end
+
+	return hero
+end
+
+CreateHeros = function(data)
+	for i,heroData in ipairs(data) do
+		local uid = heroData.uid
+		local hero = CreateHero(heroData)
+		cachedHeroList[uid] = hero
+
+		local camp = heroData.camp
+		local posId = heroData.posId
+		local modelPos = hero.modelPos
+		if camp == Camp.Left then
+			cachedLeftPosList[posId] = modelPos
+			cachedLeftHeroList[uid] = hero
+		else
+			cachedRightPosList[posId] = modelPos
+			cachedRightHeroList[uid] = hero
+		end
+	end
+end
+
+InitView = function(viewData)
+	ShowSpeed(viewData.timeScale)
+	battleProgressBar.value=viewData.progress
+	curRoundTxt.text=viewData.roundId
+	roundCountTxt.text=viewData.roundCount	
+	skipBtnObject:SetActive(viewData.skipBtnEnabled)
+
+	local auraData = viewData.auraData
+	SetIconByAuraId(leftAuraImg.gameObject, auraData.leftAuraId)
+	SetIconByAuraId(rightAuraImg.gameObject,auraData.rightAuraId)
+	if auraData.shouldReplaceAuraName then
+		local leftAuraTxt = self:GetComponentAtPath("TopLeft/SelfAuraBtn/name02Txt",CLS_TEXT)
+		local rightAuraTxt = self:GetComponentAtPath("TopRight/EnemyAuraBtn/name01Txt",CLS_TEXT)
+		leftAuraTxt.text = auraData.leftAuraName
+		rightAuraTxt.text = auraData.rightAuraName
+	end
+
+	local battleBGName = viewData.sceneData.battleBGName
+	local bgImage = battleBGRoot:GetComponentAtPath("BattleBG", CLS_RAWIMAGE)
+	bgImage.texture = CsBridge.objectCache:SharedTexture2D(battleBGName)
+
+	CreateHeros(viewData.heroList)
+	maskObj = CsBridge.objectCache:CreateObject("Mask", true, battleModelRoot)
+	maskObj:SetActive(false)
+
+	OnViewEvents(ViewEvents.SceneInited)
+end
+
+SortModels = function()
+	local uidList = {}
+	for k, hero in pairs(cachedHeroList) do
+		table.insert(uidList, hero.uid)
+	end
+
+	table.sort(uidList, function(a, b)
+		local heroA, heroB = cachedHeroList[a], cachedHeroList[b]
+		local posA, posB = heroA.modelTrans.localPosition.y, heroB.modelTrans.localPosition.y
+		if posA == posB then
+			local posIdA, posIdB = heroA.posId, heroB.posId
+			if posIdA == posIdB then
+				return heroA.camp < heroB.camp
+			else
+				return posIdA < posIdB
+			end
+		else
+			return posA < posB
+		end
+	end)
+
+	for k, uid in pairs(uidList) do
+		local hero = cachedHeroList[uid]
+		hero.modelTrans:SetAsFirstSibling()
+	end
+end
+
+GetBloodTextObj = function()
+	local cachedObj
+	for k, item in pairs(cachedBloodTexts) do
+		if not item.activeInHierarchy then
+			cachedObj = item
+			table.remove(cachedBloodTexts, k)
+			break
+		end
+	end
+
+	if not cachedObj then
+		local prefab = CsBridge.objectCache:CreateObject("PopNum")
+		cachedObj = CsBridge.GameObject.Instantiate(prefab)
+		CsBridge.objectCache:Recycle(prefab)
+		table.insert(cachedBloodTexts, cachedObj)
+	end
+
+	cachedObj:SetActive(true)
+	return cachedObj
+end
+
+local function PopNum_BeHit(popNumObject, scaleX)
+	local pointCount = 10
+	local duration = 0.81
+	local reversed = true
+	local onFinished = function()
+		popNumObject:SetActive(false)
+	end
+	local scaleX = 100 * scaleX
+	local scaleY = 100
+	popNumObject:DoEasePath(
+		Ease.InBounce,
+		pointCount,
+		duration,
+		AddCbk(onFinished),
+		reversed,
+		scaleX,
+		scaleY)
+
+	local endScaleValue = 1
+	duration = 0.8
+	popNumObject:DoEaseScale(
+		Ease.OutElastic, TWEEN_POINT_COUNT, duration, endScaleValue)
+end
+
+local function PopNum_BeCured(popNumObject, textTrans, x, y)
+	local pointCount = 10
+	local duration = 0.8
+	local scale = 1.2
+	popNumObject:DoEaseScale(
+		Ease.OutElastic, TWEEN_POINT_COUNT, duration, scale)
+
+	local delay = 0.4
+	duration = 0.4
+	local delayAction = function()
+		TweenUtils.MoveTo(textTrans, x, y, duration, nil)
+	end
+	DelayTimer(delay, AddCbk(delayAction))
+end
+
+local function PopNum_ByCamp(popNumObject, scaleX)
+	local onFinished = function()
+		popNumObject:SetActive(false)
+	end
+	local duration = 0.8
+	local reversed = true
+	local scaleX = 100 * scaleX
+	local scaleY = 100
+	popNumObject:DoEasePath(
+		Ease.InBounce, 
+		TWEEN_POINT_COUNT, 
+		duration, 
+		AddCbk(onFinished),
+		reversed,
+		scaleX,
+		scaleY)
+	local endScaleValue = 1.2
+	popNumObject:DoEaseScale(
+		Ease.OutElastic,
+		TWEEN_POINT_COUNT,
+		duration,
+		endScaleValue)
+end
+
+PopNum = function(viewData, modelTrans, finishedCbk)
+	local popNumObject = GetBloodTextObj()
+	local cg = popNumObject:GetComponent("CanvasGroup");
+	cg.alpha=1
+	local textTrans = popNumObject.transform
+	textTrans:SetParent(battlePopNumRoot)
+	UnityHelper.SetUIDefaultRectTransform(textTrans)
+
+	local popTxt = popNumObject:GetComponent(CLS_TEXT)
+	popTxt.text = viewData.text
+	SetGradientColor(popTxt,viewData.gradientStart, viewData.gradientEnd)
+	local outlineColor = viewData.outlineColor
+	local r, g, b = outlineColor[1], outlineColor[2], outlineColor[3]
+	UnityHelper.SetOutlineColor(popTxt, r, g, b)
+	local modelPos = modelTrans.localPosition
+	UnityHelper.SetUILocalPosition(
+		textTrans, modelPos.x, modelPos.y + viewData.popVerticalOffset)
+
+	local scale = 0.8
+	local hurtType = viewData.hurtType
+	local HurtType = utils.HurtType
+	if hurtType ~= HurtType.Critical then
+		UnityHelper.SetUILocalScale(textTrans, scale)
+	end
+
+	local duration = 0.8
+	if hurtType == HurtType.BeHit then		
+		local scaleX = modelTrans.localScale.x
+		PopNum_BeHit(popNumObject, scaleX)
+	elseif hurtType == HurtType.BeCured
+		or hurtType == HurtType.BeCriticalCured
+	then
+		local x, y = modelPos.x, modelPos.y + 250
+		PopNum_BeCured(popNumObject, textTrans, x, y)
+	elseif hurtType == HurtType.Critical then
+		scale = scale * 2
+		popNumObject:DoEaseScale(Ease.OutElastic, TWEEN_POINT_COUNT, duration, scale)		
+	elseif hurtType == HurtType.ByCamp then
+		local scaleX = modelTrans.localScale.x
+		PopNum_ByCamp(popNumObject, scaleX)
+	end
+
+	local fadeAction = function()
+		local onFadeFinished = function()
+			if finishedCbk then
+				finishedCbk()
+			end
+			popNumObject:SetActive(false)
+			table.insert(cachedBloodTexts, popNumObject)
+		end
+		local alpha = 1
+		local duration = 0.25
+		TweenUtils.FadeTo(textTrans, alpha, duration, AddCbk(onFadeFinished))
+	end
+	local fadingDelay = 0.6
+	DelayTimer(fadingDelay, AddCbk(fadeAction))
+end
+
+PopTip = function(viewData, modelTrans, finishedCbk)
+	local tipObject = CreateObjectFromBundle("PopTip", battlePopNumRoot)
+	local cg = tipObject:GetComponent("CanvasGroup")
+	cg.alpha = 1
+	local tipTrans = tipObject.transform
+	UnityHelper.SetUIDefaultRectTransform(tipTrans)
+	local tipTxt = tipObject:GetComponent(CLS_TEXT)
+	tipTxt.text = viewData.text
+	SetGradientColor(tipTxt, viewData.gradientStart, viewData.gradientEnd)
+
+	local modelPos = modelTrans.localPosition
+	local scale = 0.8
+	local x, y = modelPos.x, modelPos.y + viewData.popVerticalOffset
+	UnityHelper.SetUILocalPosition(tipTrans, x, y)
+	UnityHelper.SetUILocalScale(tipTrans, scale)	
+	UnityHelper.SetOutlineColor(tipTxt, viewData.outlineColor)
+
+	local duration = 0.8
+	scale = 1.2
+	tipObject:DoEaseScale(Ease.OutElastic, TWEEN_POINT_COUNT, duration, scale)
+	local moveAction = function()
+		local duration = 0.4
+		TweenUtils.MoveTo(
+			tipTxt.transform, modelPos.x, modelPos.y + 250, duration, nil)
+	end
+	local moveDelay = 0.4
+	DelayTimer(moveDelay, AddCbk(moveAction))
+
+	local fadeAction = function ()
+		local onFinished = function()
+			CsBridge.objectCache:Recycle(tipObject)
+			if finishedCbk then
+				finishedCbk()
+			end
+		end
+		local alpha = 0
+		local duration = 0.22
+		TweenUtils.FadeTo(tipTrans, alpha, duration, AddCbk(onFinished))
+	end
+	local fadingDelay = 0.6
+	DelayTimer(fadingDelay, AddCbk(fadeAction))
+end
+
+DoPopHurt = function(viewData, onFinished)
+	local actorId = viewData.actorId
+	local modelTrans = cachedHeroList[actorId].modelTrans
+	local hurtType = viewData.hurtType
+	local HurtTypes = utils.HurtType
+	local action
+	if hurtType > HurtTypes.ByCamp 
+		and hurtType < HurtTypes.BeCriticalCured
+	then
+		action = PopTip
+	else
+		action = PopNum
+	end
+	action(viewData, modelTrans)
+
+	if onFinished then
+		onFinished()
+	end
+end
+
+PlayHeroEnterAnimation = function(soundCamp, heroCamp)
+	local sceneData = cachedViewData.sceneData
+	local soundName = sceneData.startSfxSoundName
+	local sfxName = sceneData.startSfxName
+	local boneName = SpineBone.shadowPos
+	local cbk = function(hero, isTheLastOne)
+		local skeleton = CreateSkeletonFromBundle(sfxName, hero.bones[boneName])
+		local spineEventCbk = function(eventName)
+			if eventName == SpineEvents.Sound then
+				PlaySound(soundCamp, soundName)
+			elseif eventName == SpineEvents.FxReady then
+				SetHeroVisible(hero, true)
+			end
+		end
+		local finishedCbk = function()
+			if isTheLastOne then
+				OnViewEvents(ViewEvents.EnterAnimationFinished)
+			end
+			RecycleSkeleton(skeleton)
+		end
+		skeleton:PlayFirstAnim(false,
+			AddCbk(spineEventCbk, eventName),
+			AddCbk(finishedCbk))
+	end
+
+	local heroList = heroCamp == Camp.Left 
+		and cachedLeftHeroList or cachedRightHeroList
+	for k, hero in pairs(heroList) do
+		hero.gameObject:SetActive(false)
+		hero.headView.gameObject:SetActive(false)
+	end
+
+	local dataCount = #heroList
+	if dataCount > 0 then
+		local dataIdx = 1
+		local isTheLastOne = dataIdx == dataCount
+		cbk(heroList[dataIdx], isTheLastOne)
+	end
+	if dataCount > 1 then
+		local interval = 0.1
+		local delay
+		for dataIdx = 2, dataCount do
+			delay = (dataIdx - 1) * interval
+			local isTheLastOne = dataIdx == dataCount
+			local onLooping = function()
+				cbk(heroList[dataIdx], isTheLastOne)
+			end
+			DelayTimer(delay, AddCbk(onLooping))
+		end
+	end
+end
+
+function DoExit()
+	ClearCachedCbks()
+	utils = nil
+	Camp = nil
+	SpineEvents = nil
+	SpineBone = nil
+	ViewEvents = nil
+	HeroStateEffectType = nil
+	AttackEffectType = nil
+	TweenUtils = nil
+	Ease = nil
+	UnityHelper = nil
+	BattleUtils = nil
+	TWEEN_POINT_COUNT = nil
+	cachedViewData = nil
+	cachedHeroList = nil
+	cachedLeftHeroList = nil
+	cachedRightHeroList = nil
+	cachedLeftPosList = nil
+	cachedRightPosList = nil
+	curRoundId = nil
+	cachedCallbacks  = nil
+	cachedCallbackIdx  = nil
+	battleRoot = nil
+	battleModelRoot = nil
+	battleBGRoot = nil
+	battleEffectRoot = nil
+	battlePopNumRoot = nil
+	maskObj = nil
+	battleProgressBar = nil
+	timeScaleTxt = nil
+	curRoundTxt = nil
+	roundCountTxt = nil
+	leftAuraImg = nil
+	rightAuraImg = nil
+	skipBtnObject = nil
+	cachedBloodTexts  = nil
+end
+
+

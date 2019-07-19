@@ -1,0 +1,63 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-07-10 15:12:06
+
+require "BagPiecesItemSlot"
+
+local isInit = false
+
+local matGrid
+local nothingObj
+
+function DoInit()
+    self.Shadow = 1
+end
+
+function InitUI()
+    matGrid = self:GetComponentAtPath("OTHER/suipianSV/ScrollRect/Viewport/MatGrid" ,CLS_UI_ITEM_GRID)
+    nothingObj = self:GetGameObjectAtPath("OTHER/Nothing")
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitReinforcementMatData")
+end
+
+function OnClose() 
+    matGrid:ClearItems()
+end
+
+function OnNotification_RefreshReinforcementMatView(objs)
+    local matArr = objs[0]
+    if #matArr == 0 then
+        nothingObj:SetSelfActive(true)
+        matGrid:ClearItems()
+    else
+        nothingObj:SetSelfActive(false)
+        matGrid:RefreshItemSlots(matArr, self.gameObject, "BagPiecesItemSlot")
+    end
+end
+
+function OnNotification_RefreshSingleDonationMat(objs)
+    local mat = objs[0]
+    matGrid:SingleRefreshSlot(mat)
+end
+
+function OnMatGridItemSlotClick(obj)
+    self:SendCommand("SelectDonationMat",obj.m_index)
+end
+
+function OnConfirmBtnClick(sender)
+    self:SendCommand("ConfirmRequestPieces")
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+    isInit = nil
+    matGrid = nil
+    nothingObj = nil
+end

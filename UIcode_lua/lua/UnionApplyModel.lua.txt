@@ -1,0 +1,284 @@
+--[[guild
+	file: UnionApplyModel.lua
+	author: hangang
+	description: Union apply logics
+]]
+
+require "UnionUtils"
+
+local unionNameCharCount = 0
+local unionNoticeCharCount = 0
+local unionSetupPrice = 400
+local applyCDTime = 0
+local guildVip = 0
+
+local unionBannerCfg
+
+------initialization-------
+function DoInit()
+	unionNameCharCount = tonumber(GetConstValue("unionNameCharCount"))
+	unionNoticeCharCount = tonumber(GetConstValue("unionNoticeCharCount"))
+	unionSetupPrice = tonumber(GetConstValue("guildSetupCost"))
+	applyCDTime = tonumber(GetConstValue("guildExitTime")) * 1000
+	guildVip = tonumber(GetConstValue("GuildVip"))
+
+	LoadUnionBannerCfg()
+end
+
+function LoadUnionBannerCfg()
+	unionBannerCfg = {}
+	local tblName = GuildBanner.tblName
+	local itemIds = GetIds(tblName)
+	local rowData
+	local tbl=ResTblContainer:GetTable(tblName)
+    for  i = 0, itemIds.Length - 1 do
+        local id = tonumber(itemIds[i])
+		rowData = {}
+		rowData.id = id
+		rowData.icon = tbl:Get(id, GuildBanner.banner)
+		unionBannerCfg[id] = rowData
+    end
+end
+
+------Get recommended union list-------
+function OnCommand_GetUnionList(objs)	
+	TryGetUnionList()
+end
+
+function TryGetUnionList()
+	local req = {}
+	req.useless = 0
+	HttpRequest("recommendUnions", "RecommendUnionsReq", "RecommendUnionsResp", req, OnGetUnionListResp)
+end
+
+function OnGetUnionListResp(resp)
+	if not resp then
+		self:SendNotification("RefreshRecommendUnions", {})
+		return
+	end
+
+	local unions = resp.unions or {}
+	local showRank = false
+	local viewData = GetUnionListViewData(unions, showRank)
+	self:SendNotification("RefreshRecommendUnions", viewData)
+end
+
+function GetUnionListViewData(unions, showRank)
+	local viewData = {}
+	local tbl=ResTblContainer:GetTable(GuildBanner.tblName)
+	for k, union in pairs(unions) do
+		local itemData = {}
+		itemData.id = union.id
+		itemData.name = union.name
+		itemData.icon = tbl:Get(union.icon, GuildBanner.banner)
+		itemData.name = union.name
+		itemData.levelText = tostring(union.level)
+		itemData.showRank = showRank
+		itemData.memeberText = tostring(union.memberCount) .. "/" .. tostring(union.memberMax)
+		itemData.btnEnabled = true
+
+		table.insert(viewData, itemData)
+	end
+
+	return viewData
+end
+
+------Found new union-------
+function InitUnionFoundationView()
+	local viewData = {}
+	viewData.nameCharCount = unionNameCharCount
+	viewData.noticeCharCount = unionNoticeCharCount
+	viewData.defaultNotice = Language:getStr("DefaultUnionNotice")
+
+	viewData.price = tostring(unionSetupPrice)
+	local playerInfo = appData:checkData("PlayerInfo")
+	viewData.priceColor = color2
+	local balance = playerInfo.payGem + playerInfo.rewardGem
+	if balance < unionSetupPrice then
+		viewData.priceColor = color26
+	end
+
+	local defaultBannerIdx = 1
+	viewData.bannerData = unionBannerCfg
+	viewData.bannerData[defaultBannerIdx].selected = true
+	viewData.icon = unionBannerCfg[defaultBannerIdx].icon
+	viewData.iconID = unionBannerCfg[defaultBannerIdx].id
+	self:SendNotification("RefreshUnionFoundationView", viewData)
+end
+
+function OnCommand_FoundUnion(objs)	
+	local playerInfo = appData:checkData("PlayerInfo")
+	local gemTotal = playerInfo.payGem + playerInfo.rewardGem
+	local vip = playerInfo.vip
+
+	local name, notice, icon = objs[0], objs[1], objs[2]
+	if CsBridge.UnityHelper.GetStringLen(name) > unionNameCharCount then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionNameTooLong"))
+		return
+	elseif CsBridge.UnityHelper.GetStringLen(notice) > unionNoticeCharCount then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionNotificationTooLong"))
+		return
+	elseif gemTotal < unionSetupPrice then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("1001"), 2)
+		return
+	elseif vip < guildVip then 
+		CsBridge.hintUILayer:ShowHintBox(string.format(Language:getStr("Not_TurnTable_Tenth"), guildVip), 2)
+		return
+	end
+
+	FoundUnion(name, notice, icon)
+end
+
+function FoundUnion(name, notice, icon)
+	local title = Language:getStr("hint")
+	local text = Language:getStr("FoundUnionHint")
+	text = string.gsub(text, "%%s", tostring(unionSetupPrice))
+	local cancelText = Language:getStr("local_cancel")
+	local confirmText = Language:getStr("local_confirm")
+	local cancelCbk = nil
+	local confirmCbk = function()
+		DoFoundUnion(name, notice, icon)
+	end
+	CsBridge.messageManager:showAlertView(title, text, cancelText, cancelCbk, confirmText, confirmCbk)
+end
+
+function DoFoundUnion(name, notice, icon)
+	local req = {}
+	req.name = name
+	req.notice = notice
+	req.icon = icon
+	HttpRequest("addUnion", "AddUnionReq", "AddUnionResp", req, OnFoundUnionResp)
+end
+
+function OnFoundUnionResp(resp)
+	if resp.status == 0 then
+		CloseUnionApplyView()
+		EnterUnion()
+		MsgCenter:Broadcast(Notify_JoinUnion, unionID)
+	end
+end
+
+------Search union-------
+function OnCommand_SearchUnion(objs)	
+	local req = {}
+	req.name = objs[0]
+	HttpRequest("searchUnion", "SearchUnionReq", "SearchUnionResp", req, OnSearchUnionResp)
+end
+
+function OnSearchUnionResp(resp)
+	if not resp then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("searchUnionReturnEmpty"))
+		return
+	end
+	local union = resp.union
+	if union then
+		local unions = {union}
+		local showRank = false
+		local viewData = GetUnionListViewData(unions, showRank)
+		self:SendNotification("RefreshSearchResult", viewData)
+	end
+end
+
+------Apply union-------
+function OnCommand_ApplyUnion(objs)	
+	if not AssertApplyEnabled() then
+		return
+	end
+
+	local req = {}
+	local unionID = objs[0]
+	req.id = unionID
+	local returnCbk = function(resp)
+		if resp.status == ServerEnum_ApplyResponse.ApplicationReceived then
+			CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionApplicationRecieved"))
+			TryGetUnionList()
+		elseif resp.status == ServerEnum_ApplyResponse.Granted then
+			CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionSucceededJoined"))
+			EnterUnion()
+			MsgCenter:Broadcast(Notify_JoinUnion, unionID)
+		end
+	end
+	HttpRequest("applyUnion", "ApplyUnionReq", "ApplyUnionResp", req, returnCbk)
+end
+
+function EnterUnion()
+	CloseUnionApplyView()
+	self:HideView("UnionApplyView")
+end
+
+function AssertApplyEnabled()
+	local enabled = true
+
+	local unionPB = appData:checkData("PlayerUnionRecord")
+	local kickedoutTime = unionPB.lastKickoutTime or 0
+	local withdrawTime = unionPB.lastQuitUnionTime or 0
+	local lastOperationTime = withdrawTime > kickedoutTime and withdrawTime or kickedoutTime
+	if lastOperationTime > 0 then
+		local endTime = lastOperationTime + applyCDTime
+		enabled = CsBridge.timeManager.ServerTime > endTime
+
+		if not enabled then 
+			local text = CsBridge.localizationHelper:getStr("UnionApplyCDTips")
+			text = string.format(text, CheckTimeRemain(endTime))
+			CsBridge.hintUILayer:ShowHintBox(text)
+		end
+	end
+
+	return enabled
+end
+
+------Open child view-------
+local ChildViewIdx =
+{
+	RecommendListView = 1,
+	FoundationView = 2,
+	SearchView = 3,
+}
+
+function OnCommand_OpenChildView(obj)
+	CloseUnionApplyView()
+
+	local viewIdx = obj[0] + 1
+	local modelName, parentViewName = "UnionApplyModel", "UnionApplyView"
+	if viewIdx == ChildViewIdx.RecommendListView then
+		CsBridge.CacheAssetsByModule( self.Module,
+			function()
+				CsBridge.OpenView("UnionListView",modelName, false, false)
+				TryGetUnionList()
+			end,
+			"UnionListView", "UnionItemSlot")
+	elseif viewIdx == ChildViewIdx.FoundationView then
+		CsBridge.CacheAssetsByModule( self.Module,
+			function()
+				CsBridge.OpenView("UnionFoundationView",modelName, false, false)
+				InitUnionFoundationView()
+			end,
+			"UnionFoundationView", "UnionBannerItemSlot")
+	elseif viewIdx == ChildViewIdx.SearchView then
+		CsBridge.CacheAssetsByModule( self.Module,
+			function()
+				CsBridge.OpenView("UnionSearchView",modelName, false, false)
+			end,
+			"UnionSearchView", "UnionItemSlot")
+	end
+end
+
+------Hide all views-------
+function OnCommand_CloseUnionApplyView(obj)
+	CloseUnionApplyView()
+end
+
+function CloseUnionApplyView()
+	self:SendNotification("CloseUnionApplyView")
+end
+
+function DoOnExit()
+	self.Module = nil
+	unionNameCharCount = nil
+	unionNoticeCharCount = nil
+	unionSetupPrice = nil
+	applyCDTime = nil
+	guildVip = nil
+
+	unionBannerCfg = nil
+end

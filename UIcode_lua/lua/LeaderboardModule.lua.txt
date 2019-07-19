@@ -1,0 +1,24 @@
+--[[
+	file: LeaderboardModule.lua
+	author: hangang
+	description:Leaderboard context
+]]
+
+function AssetNames(objs)
+	local arr={
+		"LeadersView",
+	}
+	return arr
+end
+
+function OnEnter(objs,onFinished)
+	if objs and objs.Length >= 1 then
+		local leaderboardType = objs[0]
+        local view = self:OpenView("LeadersView","LeaderboardModel",true,true)
+        view:SetParamDataList(leaderboardType)
+	end
+
+	if onFinished then
+		onFinished()
+	end
+end

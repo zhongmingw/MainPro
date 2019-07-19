@@ -1,0 +1,176 @@
+local tickerName_MonopolyActivityView = "tickerName_MonopolyActivityView"
+local itemsGrid
+local leftImgObj
+local bg
+local emptyTipsObj
+local titleTxt
+local downBgImg
+local currentItemSlot
+local ActData
+local refreshCallback
+local isOver
+local activeIndex
+
+function DoInit()
+	self.Shadow = 1
+	InitUI()
+end 
+function InitUI()
+	local path = "ActivitySV/ScrollRect/Viewport/Grid"
+	itemsGrid = self:GetComponentAtPath(path ,CLS_UI_ITEM_GRID)
+	path = "BGS/leftImg"
+	leftImgObj = self:GetGameObjectAtPath(path)
+	path = "BGS/bgRawImg"
+	bg = self:GetGameObjectAtPath(path)
+	path = "Nothing"
+	emptyTipsObj = self:GetGameObjectAtPath(path)
+	titleTxt = self:GetComponentAtPath("other/TitleTxt",CLS_TEXT)
+	downBgImg = self:GetGameObjectAtPath("BGS/downbgImg")
+end
+function OnAnimationFinished()
+	refreshCallback = ActData.refreshCallback
+	local qyId = ActData.id
+	self:SendCommand("OpenActivityView", qyId,ActData.actData)
+end
+function SetParamDataList(objs)
+	if objs ~= nil then
+		ActData = objs[0]
+	end
+end
+
+function OnNotification_RefreshBaseView(objs)
+	local viewData = objs[0]
+	local activeIndex = objs[1]
+	local itemCount = #viewData
+	if itemCount > 0 then
+		SetEmpty(false)
+		itemsGrid:RefreshItemSlots(viewData, self.gameObject, "MonopolyActivityItemSlot")
+		local allItems = itemsGrid:GetAllItems()
+		if allItems and allItems.Length > 0 then
+			for i=0,allItems.Length-1 do
+				local itemSlot = allItems[i]
+				if itemSlot.m_index == activeIndex-1 then
+					itemSlot.IsSelected = true
+				else
+					itemSlot.IsSelected = false
+				end
+			end
+			local endTime = CsBridge.timeManager.ServerTime * 2
+			local interval = 1.0
+			Timer:AddTicker(tickerName_MonopolyActivityView,endTime,RefreshCountdown,nil,interval)
+		end
+	else
+		SetEmpty(true)
+		itemsGrid:ClearItems()
+		Timer:StopTicker(tickerName_MonopolyActivityView)
+	end
+end
+
+function OnMonopolyActivityItemSlotBindValue(slot,data)
+	-- body
+	local iconObj = slot:GetGameObjectAtPath("iconImg")
+	local nameText = slot:GetComponentAtPath("nameTxt" ,CLS_TEXT)
+
+	local tbl = ResTblContainer:GetTable("ZillionaireFortuitous")
+	local icon = tbl:Get(ActData.id,"iconImg2")
+	local name = tbl:Get(ActData.id,"name")
+	CsBridge.IconData.SetIconByName(iconObj, icon)
+	nameText.text = CsBridge.UnityHelper.ReplaceString(name)
+end
+
+function SetEmpty(isEmpty)
+	leftImgObj:SetActive(not isEmpty)
+	emptyTipsObj:SetActive(isEmpty)
+end
+
+function OnNotification_SetIsOver(objs)
+	isOver = objs[0]
+	local createdTime = objs[1]
+	for k,v in pairs(ActData.actData) do
+		if createdTime == v.createdTime then
+			if type(isOver) == "number" then
+				ActData.actData[k].isOver = isOver
+			else
+				ActData.actData[k].isOver = true
+			end
+			break
+		end
+	end
+	self:SendCommand("ChangeViewData",ActData.actData)
+end
+
+function OnNotification_SetDownImgVisible(objs)
+	local flag = objs[0]
+	downBgImg.gameObject:SetActive(flag)
+end
+
+function RefreshCountdown()
+	local allItems = itemsGrid:GetAllItems()
+	local tbl = ResTblContainer:GetTable("ZillionaireFortuitous")
+	local existTime = tbl:Get(ActData.id,"time")
+	local createTab = {}
+	for i = 0, allItems.Length - 1 do
+		local itemSlot = allItems[i]
+		local countdownTxt = itemSlot.transform:Find("countdownTxt"):GetComponent(CLS_TEXT)
+		local itemData = itemSlot.m_data
+		local createdTime = itemData.createdTime
+		local remainTime = CheckTimeRemain(createdTime + existTime*1000)
+		countdownTxt.text = remainTime
+		if remainTime == "" then--倒计时结束 活动结束
+			createTab[tostring(createdTime)] = 1
+		end
+	end
+
+	--刷新当前活动数量
+	local newActData = {}
+	for k,v in pairs(ActData.actData) do
+		if createTab[tostring(v.createdTime)] ~= 1 then
+			table.insert(newActData,v)
+		end
+	end
+	if #newActData ~= ActData.count then
+		currentItemSlot = nil
+		ActData.actData = newActData
+		ActData.count = #newActData
+		self:SendCommand("ChangeViewData",ActData.actData)
+	elseif #newActData == 0 then
+		Close()
+	end
+	self:SendCommand("RefreshActCountdown")
+end
+
+function OnGridMonopolyActivityItemSlotClick(itemSlot)
+	local allItems = itemsGrid:GetAllItems()
+	for i = 0, allItems.Length - 1 do
+		local item = allItems[i]
+		item.IsSelected = (item == itemSlot)
+	end
+	self:SendCommand("SetActivityData",itemSlot.m_index+1)
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close() 
+	Timer:StopTicker(tickerName_MonopolyActivityView)
+	self:SendCommand("CloseActivityView")
+	self:ReturnBack()
+end
+function OnClose()
+	Timer:StopTicker(tickerName_MonopolyActivityView)
+end
+
+function DoExit()
+	self.Module=nil
+	refreshCallback()
+	Timer:StopTicker(tickerName_MonopolyActivityView)
+	tickerName_MonopolyActivityView = nil
+	itemsGrid = nil
+	leftImgObj = nil
+	bg = nil
+	emptyTipsObj = nil
+	titleTxt = nil
+	currentItemSlot = nil
+	ActData = nil
+end

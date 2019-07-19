@@ -1,0 +1,90 @@
+---@type Client.Library.ToggleArchly
+local dailyTaskTog
+---@type Client.Library.ToggleArchly
+local rewardTog
+---@type UnityEngine.GameObject
+local rewardRedObj
+
+---@type Client.Library.ViewBase
+local selfViewBase
+---@type table
+local togArr = {}
+
+---@type number 目标tog
+local targetTogIndex = 1
+
+function DoInit()
+    selfViewBase = self
+    selfViewBase.Shadow = 1
+    dailyTaskTog = selfViewBase:GetComponentAtPath("Button/DailyTaskTog", CLS_TOGGLE_ARCHLY)
+    rewardTog = selfViewBase:GetComponentAtPath("Button/RewardTog", CLS_TOGGLE_ARCHLY)
+    rewardRedObj = selfViewBase:GetGameObjectAtPath("Button/RewardTog/NewFlag")
+    table.insert(togArr, dailyTaskTog)
+    table.insert(togArr, rewardTog)
+end
+
+local function InitTogState()
+    for i = 1, #togArr do
+        togArr[i].isOn = false
+        if i == targetTogIndex then
+            togArr[targetTogIndex].isOn = true
+        end
+    end
+end
+
+function SetParamDataList(objs)
+    if objs and objs.Length > 0 then
+        targetTogIndex = objs[0]
+    end
+    InitTogState()
+end
+
+function OnAnimationFinished()
+    selfViewBase:SendCommand("OpenDefaultTargetView", targetTogIndex)
+end
+
+function Active()
+    selfViewBase:SendCommand("RefreshSubscribeRed")
+end
+
+function OnNotification_OpenTargetView(objs)
+    targetTogIndex = objs[0]
+    InitTogState()
+end
+
+function OnNotification_RefreshSubscribeRed(objs)
+    rewardRedObj:SetActive(objs[0])
+end
+
+function OnDailyTaskTogClick()
+    if togArr[DailyTaskTogType.DailyTaskDetails].isOn then
+        return
+    end
+    selfViewBase:SendCommand("OpenTargetView", DailyTaskTogType.DailyTaskDetails)
+end
+
+function OnRewardTogClick()
+    if togArr[DailyTaskTogType.SubscribeReward].isOn then
+        return
+    end
+    selfViewBase:SendCommand("OpenTargetView", DailyTaskTogType.SubscribeReward)
+end
+
+function OnMaskClick()
+    self:ReturnBack()
+end
+
+function OnCloseBtnClick()
+    self:ReturnBack()
+end
+
+function OnClose()
+
+end
+
+function DoExit()
+    dailyTaskTog = nil
+    rewardTog = nil
+    selfViewBase = nil
+    togArr = nil
+end

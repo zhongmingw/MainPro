@@ -1,0 +1,185 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-09-12 11:24:12
+
+require "GloryRoadUtils"
+
+local isInit = false
+
+local lightFight
+local darkFight
+local resetArtTxt
+local fightGrid
+
+function DoInit()	
+    self.Shadow = 1
+    MsgCenter:Subscribe(Notify_OnBattleEnd,OnBattleEnd)
+end
+
+function InitUI()
+    resetArtTxt = self:GetComponentAtPath("Bottom/ResetBtn/ArtTxt",CLS_TEXT)
+    fightGrid = self:GetComponentAtPath("Center/GloryRoadFightGrid",CLS_UI_ITEM_GRID)
+end
+
+function InitFightUI(trans,isLight)
+    local fight = {
+        noFightObj = trans:GetGameObjectAtPath("NoFight"),
+        hasFightObj = trans:GetGameObjectAtPath("HasFight"),
+        fMonsterGrid = trans:GetComponentAtPath("HasFight/MonsterGrid/FMonsterGrid",CLS_UI_ITEM_GRID),
+        bMonsterGrid = trans:GetComponentAtPath("HasFight/MonsterGrid/BMonsterGrid",CLS_UI_ITEM_GRID),
+        passedFlag = trans:GetGameObjectAtPath("HasFight/PassedFlag"),
+    }
+    local ligthBufTxt = trans:GetGameObjectAtPath("HasFight/LightBufTxt")
+    local lightRecordBtn = trans:GetGameObjectAtPath("HasFight/LightRecordBtn")
+    local lightStartBtn = trans:GetGameObjectAtPath("HasFight/LightStartBtn")
+
+    local darkBufTxt = trans:GetGameObjectAtPath("HasFight/DarkBufTxt")
+    local darkRecordBtn = trans:GetGameObjectAtPath("HasFight/DarkRecordBtn")
+    local darkStartBtn = trans:GetGameObjectAtPath("HasFight/DarkStartBtn")
+
+    if isLight then
+        darkBufTxt:SetSelfActive(false)
+        darkRecordBtn:SetSelfActive(false)
+        darkStartBtn:SetSelfActive(false)
+        fight.bufTxt = ligthBufTxt:GetComponent(CLS_TEXT)
+        fight.startBtnObj = lightStartBtn
+    else
+        ligthBufTxt:SetSelfActive(false)
+        lightRecordBtn:SetSelfActive(false)
+        lightStartBtn:SetSelfActive(false)
+        fight.bufTxt = darkBufTxt:GetComponent(CLS_TEXT)
+        fight.startBtnObj = darkStartBtn
+    end
+    return fight
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitGloryRoadFightData")
+end
+
+function OnClose()
+    fightGrid:ClearItems()
+end
+
+function DoExit()
+    MsgCenter:Unsubscribe(Notify_OnBattleEnd,OnBattleEnd)
+    self.Module=nil
+     isInit = false
+
+    lightFight = nil
+    darkFight= nil
+    resetArtTxt= nil
+    fightGrid= nil
+end
+
+function OnGloryRoadFightItemSlotBindValue(slot, data)
+
+    local noFightObj = slot:GetGameObjectAtPath("NoFight")
+    local hasFightObj = slot:GetGameObjectAtPath("HasFight")
+    local fMonsterGrid = slot:GetComponentAtPath("HasFight/MonsterGrid/FMonsterGrid",CLS_UI_ITEM_GRID)
+    local bMonsterGrid = slot:GetComponentAtPath("HasFight/MonsterGrid/BMonsterGrid",CLS_UI_ITEM_GRID)
+    local passedFlag = slot:GetGameObjectAtPath("HasFight/PassedFlag")
+    local startBtn = slot:GetGameObjectAtPath("HasFight/StartBtn")
+
+    local ligthBufTxt = slot:GetGameObjectAtPath("HasFight/LightBufTxt")
+    local lightRecordBtn = slot:GetGameObjectAtPath("HasFight/LightRecordBtn")
+
+    local darkBufTxt = slot:GetGameObjectAtPath("HasFight/DarkBufTxt")
+    local darkRecordBtn = slot:GetGameObjectAtPath("HasFight/DarkRecordBtn")
+
+
+    ligthBufTxt:SetSelfActive(data.type == FightType.Light)
+    lightRecordBtn:SetSelfActive(data.type == FightType.Light)
+
+    darkBufTxt:SetSelfActive(data.type == FightType.Dark)
+    darkRecordBtn:SetSelfActive(data.type == FightType.Dark)
+
+    local bufTxt = data.type == FightType.Light and ligthBufTxt:GetComponent(CLS_TEXT) or darkBufTxt:GetComponent(CLS_TEXT)
+
+    noFightObj:SetSelfActive(data.monsterArr == nil)
+    hasFightObj:SetSelfActive(data.monsterArr ~= nil)
+    if data.monsterArr ~= nil then
+        bufTxt.text = data.passive
+        fMonsterGrid:RefreshItemSlots(data.fMonsterArr,self.gameObject,"HeroItemSlot")
+        bMonsterGrid:RefreshItemSlots(data.bMonsterArr,self.gameObject,"HeroItemSlot")
+        passedFlag:SetSelfActive(data.state == FightState.Passed)
+        startBtn:SetSelfActive(data.state == FightState.UnPass)
+    end
+end
+
+function OnNotification_RefreshGloryRoadFightView(objs)
+    local stage = objs[0]
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        fightGrid:RefreshItemSlots(stage.fightArr,self.gameObject,"GloryRoadFightItemSlot")
+    end,"GloryRoadFightItemSlot","HeroItemSlot")
+    local gray = (stage.fight1.state == FightState.UnPass) and (stage.fight2.state == FightState.UnPass)
+    RefreshResetBtnState(gray)
+end
+
+function OnNotification_UpdateGloryRoadFightState(objs)
+    local fight = objs[0]
+    fightGrid:SingleRefreshSlot(fight)
+    RefreshResetBtnState(fight.state == FightState.UnPass)
+end
+
+function OnNotification_ResetGloryRoad(objs)
+    local f1,f2 = objs[0],objs[1]
+    fightGrid:SingleRefreshSlot(f1)
+    fightGrid:SingleRefreshSlot(f2)
+    RefreshResetBtnState(true)
+end
+
+function RefreshGloryRoadFight(fight,data)
+    fight.noFightObj:SetSelfActive(data.monsterArr == nil)
+    fight.hasFightObj:SetSelfActive(data.monsterArr ~= nil)
+    if data.monsterArr ~= nil then
+        fight.bufTxt.text = data.passive
+        fight.fMonsterGrid:RefreshItemSlots(data.fMonsterArr,self.gameObject,"HeroItemSlot")
+        fight.bMonsterGrid:RefreshItemSlots(data.bMonsterArr,self.gameObject,"HeroItemSlot")
+        RefreshGloryRoadFightState(fight,data.state)
+    end
+end
+
+function RefreshGloryRoadFightState(fight,state)
+    fight.passedFlag:SetSelfActive(state == FightState.Passed)
+    fight.startBtnObj:SetSelfActive(state == FightState.UnPass)
+end
+
+function RefreshResetBtnState(gray)
+    local key = gray and "FontKey_gloryroad_reset_off" or "FontKey_gloryroad_reset_on"
+    resetArtTxt.text = FormatTmpSpriteTagByFontKey(key)
+end
+
+function OnBattleEnd()
+    self:SendCommand("UpdateGloryRoadFightData")
+end
+
+function OnGloryRoadFightGridLightRecordBtnClick(sender)
+    self:SendCommand("OpenGloryRoadFightRecord",FightType.Light)
+end
+
+function OnGloryRoadFightGridStartBtnClick(obj)
+    local data = obj.m_data
+    self:SendCommand("TryBattle",data.type)
+end
+
+function OnGloryRoadFightGridDarkRecordBtnClick(sender)
+    self:SendCommand("OpenGloryRoadFightRecord",FightType.Dark)
+end
+
+function OnResetBtnClick(sender)
+    self:SendCommand("ResetGloryRoad")
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function OnMaskClick(sender)
+    self:HideView(self.gameObject.name)
+end

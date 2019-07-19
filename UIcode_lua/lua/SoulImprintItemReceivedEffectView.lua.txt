@@ -1,0 +1,95 @@
+require('SoulImprintItemSlot')
+require('SoulImprintItemMaskSlot')
+
+---@type Client.Library.UnityHelper
+local UnityHelper = CS.Client.Library.UnityHelper
+---@type Client.Library.TimeManager
+local timeManager = CS.Client.Library.TimeManager.instance
+
+---@type UnityEngine.GameObject
+local imprintBagBtnObj
+---@type Client.Library.UIItemGrid
+local itemGrid
+
+---@type table
+local viewData
+
+local DURATION_EFFECT_FLY = 0.5
+local DURATION_EFFECT_POP = 0.1
+
+local TICKER_NAME = "ticker_SoulImprintItemReceivedEffectView"
+
+function DoInit()
+    self.Anim = 0
+    self.Shadow = 1
+    imprintBagBtnObj = self:GetGameObjectAtPath("ImprintBagBtn")
+    itemGrid = self:GetComponentAtPath("RewardSV/ScrollRect/Viewport/RewardGrid", CLS_UI_ITEM_GRID)
+end
+
+local function OnAllItemFlyFinish()
+    Timer:AddTicker(TICKER_NAME, DURATION_EFFECT_POP * 2 * 1000 + timeManager.ServerTime, nil, function()
+        self:HideView(self.gameObject.name, false)
+    end, nil)
+end
+
+local function PlayGeneralFlyEffect(finishedCbk)
+    local oneFinishedCbk = function()
+        imprintBagBtnObj:PlayPopAnimation(DURATION_EFFECT_POP)
+    end
+    local itemSlots = itemGrid:GetAllItems()
+    local targets = {}
+    for i = 0, itemSlots.Length - 1 do
+        table.insert(targets, itemSlots[i].transform)
+    end
+    local startPos
+    local endPos = imprintBagBtnObj.transform:CheckPosition()
+    local callback
+    local targetCount = #targets
+    local delay = 0.04
+    for i = 1, targetCount do
+        local target = targets[i]
+        startPos = target:CheckPosition()
+        callback = i < targetCount and oneFinishedCbk or function()
+            oneFinishedCbk()
+            finishedCbk()
+        end
+        UnityHelper.MoveItemTo(
+                target,
+                startPos,
+                endPos,
+                DURATION_EFFECT_FLY + i * delay,
+                callback)
+    end
+end
+
+function OnAnimationFinished()
+    if viewData == nil then
+        self:SendCommand("GetReceiveEffectViewData")
+    else
+        PlayGeneralFlyEffect(OnAllItemFlyFinish)
+    end
+end
+
+function OnNotification_GetReceiveEffectViewData(objs)
+    viewData = objs[0]
+    if viewData then
+        itemGrid:RefreshItemSlots(viewData, self.gameObject, "SoulImprintItemMaskSlot")
+    end
+    PlayGeneralFlyEffect(OnAllItemFlyFinish)
+end
+
+function OnClose()
+    viewData = nil
+    itemGrid:RefreshItemSlots({}, self.gameObject, "SoulImprintItemMaskSlot")
+    Timer:StopTicker(TICKER_NAME)
+end
+
+function DoExit()
+    Timer:StopTicker(TICKER_NAME)
+    imprintBagBtnObj = nil
+    itemGrid = nil
+    viewData = nil
+    DURATION_EFFECT_FLY = nil
+    DURATION_EFFECT_POP = nil
+    TICKER_NAME = nil
+end

@@ -1,0 +1,35 @@
+---向服务器获取界面需要的数据-
+local GetViewData = function(targetData, callback)
+    local req = {}
+    req.uid = targetData.uid
+    HttpRequest("scanOptionalTreasure", "ScanOptionalTreasureReq", "ScanOptionalTreasureResp", req, function(resp)
+        if callback then
+            callback(resp)
+        end
+    end)
+end
+
+---向服务器选择一个物品
+local ChoiceOneReward = function(boxItemData, targetData, callback, model)
+    local req = {}
+    req.uid = boxItemData.uid
+    req.rewardItem = {}
+    req.rewardItem.typeId = targetData.typeId
+    req.rewardItem.id = targetData.id
+    req.rewardItem.count = targetData.count
+    HttpRequest("openOptionalTreasure", "OpenOptionalTreasureReq", "OpenOptionalTreasureResp", req, function(resp)
+        local result = {}
+        table.insert(result, req.rewardItem)
+        local confirmCbk = function()
+            if callback then
+                callback(resp)
+            end
+        end
+        ShowRewardReceivedTip(model, result, confirmCbk)
+    end)
+end
+
+return {
+    GetViewData = GetViewData,
+    ChoiceOneReward = ChoiceOneReward,
+}

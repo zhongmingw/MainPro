@@ -1,0 +1,24 @@
+
+---绑定数据
+function OnMiningMyCaveItemSlotBindValue(slot, data)
+    local slotTrans = slot.transform
+    ---@type UnityEngine.GameObject
+    local iconImgObj = slotTrans:GetGameObjectAtPath("ItemBtn/iconImg")
+    ---@type UnityEngine.TextMesh
+    local nameTxt = slotTrans:GetComponentAtPath("ItemBtn/nameTxt", CLS_TEXT)
+    ---@type UnityEngine.TextMesh
+    local timeTxt = slotTrans:GetComponentAtPath("ItemBtn/timeTxt", CLS_TEXT)
+    ---@type UnityEngine.GameObject
+    local tipObj = slotTrans:GetGameObjectAtPath("ItemBtn/Tip")
+    ---@type Client.Library.ButtonArchly
+    local receiveBtn = slotTrans:GetComponentAtPath("ReceiveBtn", CLS_BUTTON_ARCHLY)
+
+    CsBridge.IconData.SetIconByName(iconImgObj, data.icon)
+    nameTxt.text = data.name
+    SetGradientColor(nameTxt, data.gradientTopColor, data.gradientBottomColor)
+
+    timeTxt.text = data.protectionEndTimeStr
+    tipObj:SetActive(data.showTakeTip)
+    receiveBtn.Gray = not data.showTakeTip
+
+end

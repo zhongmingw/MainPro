@@ -1,0 +1,171 @@
+require "SoulPalaceItemSlot"
+local TXT_LEFT_POSX = -207
+local TXT_RIGHT_POSX = 207
+local TICKER_SOULPALACE = "Ticker_SoulPalace"
+local isInit = false
+local scroll
+local viewport
+local content
+local targetsGrid
+local timeTxt
+local remainsTxt
+local lastRenewTime
+local refreshFlagCallback
+
+function DoInit()
+	self.Anim = 0
+end 
+
+function InitUI()
+	RENEW_INTERVAL_CONST=GetConstValue("TempleRenewCD")*1000
+	scroll = self:GetComponentAtPath("ScrollRect" ,"UnityEngine.UI.ScrollRect")
+	viewport = scroll.viewport
+	content = scroll.content
+	targetsGrid = self:GetComponentAtPath("ScrollRect/Viewport/Grid",CLS_UI_ITEM_GRID)
+	timeTxt = self:GetComponentAtPath("Top/timeTxt",CLS_TEXT)
+	remainsTxt = self:GetComponentAtPath("Top/numberTxt",CLS_TEXT)
+end
+
+function SetData(callback)
+	refreshFlagCallback = callback
+end
+
+function OnNotification_RefreshFlag()
+	if refreshFlagCallback then
+		refreshFlagCallback()
+	end
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+	end
+	self:SendCommand("SoulPalaceViewReady")
+end
+
+local function RefreshCountdown()
+	timeTxt.text = CheckTimeRemain(lastRenewTime+RENEW_INTERVAL_CONST)
+end
+
+local function ScrollToCenter(ItemSlot)
+	local slot_y = content.anchoredPosition.x
+	CsBridge.TweenUtils.MoveToByAnchored(content,content.anchoredPosition.x,slot_y,0.3,function()end)
+end
+
+function OnNotification_RefreshTopView(objs)
+	local templeInfo = objs[0]
+	remainsTxt.text = templeInfo.remains + templeInfo.extraRemains
+	lastRenewTime = templeInfo.lastRenewTime
+	timeTxt.text = CheckTimeRemain(lastRenewTime+RENEW_INTERVAL_CONST)
+	local endTime = CsBridge.timeManager.ServerTime * 2
+	local interval = 1.0
+	Timer:AddTicker(TICKER_SOULPALACE,endTime,RefreshCountdown,nil,interval)
+end
+
+function OnNotification_RefreshTargets(objs)
+	-- body
+	local targetsData = objs[0]
+	targetsGrid:RefreshItemSlots(targetsData,self.gameObject,"SoulPalaceItemSlot")
+	local itemSlot = targetsGrid.transform:GetChild(0)
+	if itemSlot then
+		ScrollToCenter(itemSlot)
+	end
+end
+
+function OnSoulPalaceItemSlotBindValue(slot, data)
+    local turnObject = slot:GetGameObjectAtPath("TurnObject")
+    local txtPanel = slot.transform:Find("TxtPanel")
+    local txtPanelObj = txtPanel.gameObject
+    local contourImg = slot:GetComponentAtPath("TurnObject/FloorImg/contourImg", CLS_IMAGE)
+    local heroRoot = slot.transform:Find("TurnObject/HeroRoot")
+    local nameTxt = slot:GetComponentAtPath("TxtPanel/nameTxt", CLS_TEXT)
+    local rankTxt = slot:GetComponentAtPath("TxtPanel/rankTxt", CLS_TEXT)
+    local powerTxt = slot:GetComponentAtPath("TxtPanel/powerTxt", CLS_TEXT)
+    local index = slot.m_index
+    local scaleX = (index%2 == 0) and 1 or -1
+    CsBridge.UnityHelper.SetlocalScale(turnObject,scaleX,1,1)
+    local posY = txtPanel.transform.localPosition.y
+    if scaleX == 1 then
+    	CsBridge.UnityHelper.SetAnchoredPosition(txtPanelObj,TXT_LEFT_POSX,posY)
+    else
+    	CsBridge.UnityHelper.SetAnchoredPosition(txtPanelObj,TXT_RIGHT_POSX,posY)
+    end
+    if heroRoot.childCount > 0 then
+        for i=0,heroRoot.childCount-1 do
+            local child = heroRoot:GetChild(0).gameObject
+            DestroyModel(child)
+        end
+    end
+    
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local model = CsBridge.objectCache:CreateObject(data.heroModel, true)
+        model.transform:SetParent(heroRoot, false)
+        CsBridge.UnityHelper.SetAnchoredPosition(model.gameObject,0,0)
+		CsBridge.UnityHelper.SetlocalScale(model.gameObject,-0.7,0.7,0.7)
+        heroModelSkeleton = model.transform:GetChild(0):GetComponent("Spine.Unity.SkeletonGraphic")
+        heroModelSkeleton:PlayAnimation("stand", true)
+	end, data.heroModel)
+    nameTxt.text = data.name
+    rankTxt.text = data.rankStr
+    powerTxt.text = data.power
+    contourImg.gameObject:SetActive(data.contourImgVisible)
+    CsBridge.IconData.SetIconByName(contourImg.gameObject,data.contourImg)
+end
+
+function OnGridChallengeBtnClick(obj)
+    local data = obj.m_data
+    self:SendCommand("GoToChallenge",data)
+end
+
+function OnRuleBtnClick(sender)
+	ShowHelpTip(self,INSTRUCTION_SOULPALACE)
+end
+
+function OnRecordBtnClick(sender)
+	CsBridge.CacheAssetsByModule(self.Module,
+    function()
+        CsBridge.OpenView("SoulRecordsView","SoulPalaceModel",true,true)
+    end, "SoulRecordsView","SoulRecordItemSlot")
+end
+
+function OnAwardsBtnClick(sender)
+	CsBridge.CacheAssetsByModule(self.Module,
+    function()
+        CsBridge.OpenView("SoulRewardView","SoulPalaceModel",true,true)
+    end, "SoulRewardView","APArenaRewardItemSlot","SoulReachRewardItemSlot")
+end
+
+function OnRankBtnClick(sender)
+	CsBridge.CacheAssetsByModule(self.Module,
+    function()
+        CsBridge.OpenView("SoulPalaceRankView","SoulPalaceModel",true,true)
+    end, "SoulPalaceRankView","SoulRankItemSlot")
+end
+
+function OnAddBtnClick(sender)
+	self:SendCommand("BuyCount")
+end
+
+function BeoforeReturnBack()
+    self:HideView(self.gameObject.name)
+end
+
+function OnClose()
+	self:SendCommand("ViewClosed")
+	Timer:StopTicker(TICKER_SOULPALACE)
+end
+
+function DoExit()
+	Timer:StopTicker(TICKER_SOULPALACE)
+	TICKER_SOULPALACE = nil
+	isInit = nil
+	scroll = nil
+	viewport = nil
+	content = nil
+	targetsGrid = nil
+	timeTxt = nil
+	remainsTxt = nil
+	lastRenewTime = nil
+	refreshFlagCallback = nil
+end

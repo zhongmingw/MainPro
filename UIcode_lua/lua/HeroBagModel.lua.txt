@@ -1,0 +1,195 @@
+local utils = require "HeroBagUtils"
+local ScreenUtils = require "ScreenUtils"
+local soulImprintItemBagUtils = require "SoulImprintItemBagUtils"
+
+local HeroBagPageType = utils.HeroBagPageType
+local HeroBagSortType = utils.HeroBagSortType
+
+--bag
+local curHeroBagPageType = HeroBagPageType.Hero
+local curHeroBagSortType = HeroBagSortType.Level
+local curHeroArr
+local allHeroArr 
+local maxHeroBagTimes
+local initHeroBagNum
+local extendHeroBagAddNum
+
+local function RefreshHeroBagRedTip()
+    if curHeroBagPageType == HeroBagPageType.Book then
+        return
+    end
+    local levelResult = CheckHeroUpLevelOrUpGradeRedFlag()
+    local equipResult = CheckHeroEquipRedFlag()
+    local distillResult = CheckHeroCanDistillationRedFlag()
+    local jewelEquipResult = CheckHeroesJewelEquipRedFlag()
+    if curHeroArr == nil then
+        return
+    end
+    for i,hero in ipairs(curHeroArr) do
+        if hero.flag ~= (levelResult[hero.uid]~= nil) then
+            hero.flag = levelResult[hero.uid]
+        end
+        if not hero.flag and hero.flag ~= (equipResult[hero.uid] ~= nil) then
+            hero.flag = equipResult[hero.uid]
+        end
+        if not hero.flag and hero.flag ~= (distillResult[hero.uid]~=nil) then
+            hero.flag = distillResult[hero.uid]
+        end
+        if not hero.flag and hero.flag ~= (jewelEquipResult[hero.uid]~=nil) then
+            hero.flag = jewelEquipResult[hero.uid]
+        end
+    end
+end
+
+local function UpdateHeroArrDataBySortType(heroArr, sortType)
+    if sortType == HeroBagSortType.Level then
+        table.sort(heroArr, SortHeroByLevel)
+    elseif sortType == HeroBagSortType.Quality then
+        table.sort(heroArr, SortHeroByQuality)
+    end
+end
+
+local function UpdateHeroArrData(type, sort)
+    if type == HeroBagPageType.Hero then
+        allHeroArr = utils.FormatAllOwnedHeroData()
+        curHeroArr = allHeroArr 
+        UpdateHeroArrDataBySortType(curHeroArr, sort)
+    elseif curHeroBagPageType == HeroBagPageType.Book then
+        allHeroArr = utils.InitBookHeroData()
+        curHeroArr = allHeroArr
+    end
+end
+
+local function ScreenHero(race)
+    curHeroArr = {}
+    race = race - 1
+    for i,v in ipairs(allHeroArr) do
+        if race == 0 or race == v.race then
+            table.insert(curHeroArr, v)
+        end 
+    end
+    self:SendNotification("RefreshHeroBagScreenViewByRaceType",curHeroArr)
+end
+
+local function OpenPageByType(type, sort)
+    UpdateHeroArrData(type, sort)
+    RefreshHeroBagRedTip()
+    ScreenUtils.InitScreen(ScreenHero)
+    self:SendNotification("RefreshHeroBagView",curHeroArr,type == HeroBagPageType.Hero)
+    if type == HeroBagPageType.Hero then
+        local heroNum,bagNum = utils.GetHeroNumAndBagNum()
+        self:SendNotification("RefreshHeroBagCount",heroNum,bagNum,false)
+    end
+end
+
+function DoInit()
+    local tbl=ResTblContainer:GetTable(HeroBag.tblName)
+    maxHeroBagTimes = tbl:GetCol(HeroBag.count).Length
+    initHeroBagNum = GetConstValue("maxHeroCount") or 0
+    extendHeroBagAddNum = GetConstValue("heroBagExtendNum") or 0
+    MsgCenter:Subscribe(Notify_UpdateCurHeroJewelEquipRedTip, OnUpdateCurHeroJewelEquipRedTip)
+end
+
+function DoOnExit()
+    MsgCenter:Unsubscribe(Notify_UpdateCurHeroJewelEquipRedTip, OnUpdateCurHeroJewelEquipRedTip)
+
+    utils = nil
+    ScreenUtils = nil
+    HeroBagPageType = nil
+    HeroBagSortType = nil
+    curHeroBagPageType = nil
+    curHeroBagSortType = nil
+    curHeroArr = nil
+    allHeroArr  = nil
+    maxHeroBagTimes = nil
+    initHeroBagNum = nil
+    extendHeroBagAddNum = nil
+end 
+
+function OnCommand_InitHeroBagData(objs)
+    local name = curHeroBagSortType == HeroBagSortType.Level and Language:getStr("SortByQuality") or Language:getStr("SortByLevel")
+    self:SendNotification("RefreshHeroBagPageTypeView",curHeroBagPageType,name)
+    OpenPageByType(curHeroBagPageType,curHeroBagSortType)
+    ScreenUtils.InitScreen(ScreenHero)
+end
+
+function OnCommand_OpenHeroBagPage(objs)
+    local type = objs[0]
+    if type == curHeroBagPageType then
+        return
+    end
+    curHeroBagPageType = type
+    OpenPageByType(curHeroBagPageType,curHeroBagSortType)
+end
+
+function OnCommand_ChangeHeroBagBySortType(objs)
+    curHeroBagSortType = curHeroBagSortType == HeroBagSortType.Level and HeroBagSortType.Quality or HeroBagSortType.Level
+    UpdateHeroArrDataBySortType(curHeroArr, curHeroBagSortType)
+    local name = curHeroBagSortType == HeroBagSortType.Level and Language:getStr("SortByQuality") or Language:getStr("SortByLevel")
+    self:SendNotification("RefreshHeroBagScreenViewBySortType", curHeroArr, name)
+end
+
+local function GetExtendTimes()
+    return appData:checkData("HeroBagInfo").extendTimes
+end 
+
+local function GetExtendPrice(times)
+    local tbl = ResTblContainer:GetTable(HeroBag.tblName)
+    if tbl:HasKey(times) then
+        return tonumber(tbl:Get(times, HeroBag.price))
+    end 
+    return nil
+end 
+
+local function OnExtendHeroBag(resp)
+    if resp.result ~= nil then
+        local heroNum,bagNum = utils.GetHeroNumAndBagNum()
+        self:SendNotification("RefreshHeroBagCount",heroNum,bagNum,true)
+    end
+end
+
+local function OnConfirmCallBack()
+    local playerInfo = appData:checkData("PlayerInfo")
+    local times = GetExtendTimes()    
+    if not CheckResEnough(ResourceEnum.Gem,GetExtendPrice(times+1),true) then
+        return
+    end
+    utils.RequestExtendHeroBag(OnExtendHeroBag)
+end 
+
+function OnCommand_ExtendHeroBag(objs)
+    local times = GetExtendTimes()
+    if times>=maxHeroBagTimes then
+        utils.ShowHintBox(Language:getStr("ExtendHeroBag_Max"))
+        return 
+    end
+    local desp = string.format(Language:getStr("ExtendHeroBag_Check"),GetExtendPrice(times+1))
+    utils.ShowFirstMsgBox("ExtendHeroBag",desp,OnConfirmCallBack)
+end
+
+function OnCommand_HeroShow(objs)
+    local index = objs[0]+1
+    local heroArr = table.copy(curHeroArr)
+    local centerHero = heroArr[index]
+    if centerHero.haveEmblemUid and centerHero.haveEmblemUid > 0 then
+        if centerHero.soulImprintItem and centerHero.haveEmblemUid == centerHero.soulImprintItem.uid then
+            return
+        else
+            local items = {}
+            soulImprintItemBagUtils.InitAllSoulImprintItem(items, function(star, heroPb)
+                return heroPb.uid == centerHero.haveEmblemUid
+            end)
+            centerHero.soulImprintItem = items[1]
+        end
+    else
+        centerHero.soulImprintItem = nil
+    end
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = self:OpenView("HeroShowView","HeroShowModel",true,true)
+        view:SetParamDataList(curHeroBagPageType,heroArr,index)
+    end, "HeroShowView","SkillItemSlot")
+end
+
+function OnCommand_UpdateHeroBagView(objs)
+    OpenPageByType(curHeroBagPageType,curHeroBagSortType)
+end

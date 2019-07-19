@@ -1,0 +1,102 @@
+local countTxt
+local deleteBtn
+local appliedGrid
+local nothing
+
+function DoInit()
+    self.Anim = 0
+    self.Shadow=0
+    countTxt = self:GetComponentAtPath("other/number01Txt" ,CLS_TEXT)
+    deleteBtn = self:GetComponentAtPath("button/deleteBtn" ,CLS_BUTTON_ARCHLY)
+    appliedGrid = self:GetComponentAtPath("other/kuangSV/ScrollRect/Viewport/Grid" ,CLS_UI_ITEM_GRID)
+    nothing = self:GetGameObjectAtPath("other/Nothing")
+end
+
+function IsSetAnchor()
+    return true
+end
+
+function BeoforeReturnBack()
+    self.gameObject:SetSelfActive(false)
+end
+
+function OnAnimationFinished()
+     self:SendCommand("InitApplied")
+end
+
+function OnNotification_InitApplied(objs)
+    local friends = objs[0].friends
+    if friends and #friends > 0 then
+        nothing:SetSelfActive(false)
+        appliedGrid.gameObject:SetSelfActive(true)
+        appliedGrid:RefreshItemSlots(objs[0].friends, self.gameObject, "FriendAppliedItemSlot")
+        Refresh(#objs[0].friends)
+    else
+        nothing:SetSelfActive(true)
+        appliedGrid.gameObject:SetSelfActive(false)
+        Refresh(0)
+    end
+end
+
+function Refresh(count)
+    countTxt.text=tostring(count)
+    if (count > 0) then
+        deleteBtn.Gray=false
+    else
+        deleteBtn.Gray=true
+    end
+end
+
+function OnFriendAppliedItemSlotBindValue(slot,data)
+    local nickTxt = slot:GetComponentAtPath("nameTxt" ,CLS_TEXT)
+    local timeTxt = slot:GetComponentAtPath("numberTxt" ,CLS_TEXT)
+    local player=slot.transform:Find("Player")
+    BindPlayerBaseInfoValue(player,data)
+    nickTxt.text= FormatWorldPlayerName(data.nick, data.zone)
+    timeTxt.text=CsBridge.timeManager:checkTimePass(data.lastOnlineTime)
+end
+
+function OnGridacceptClick(obj)
+    self:SendCommand("AcceptFriend", obj.m_data) 
+end
+
+function OnNotification_AcceptFriend(objs)
+    local applied=objs[0]
+    local removed=objs[1]
+    Refresh(#applied.friends)
+    appliedGrid:ScreenItemSlots(applied.friends, self.gameObject, "FriendAppliedItemSlot")
+end
+
+function OnGridrefuseClick(obj)
+    self:SendCommand("RefuseFriend", obj.m_data)
+end
+
+function OnNotification_RefuseFriend(objs)
+    local applied=objs[0]
+    local removed=objs[1]
+    Refresh(#applied.friends)
+    appliedGrid:ScreenItemSlots(applied.friends, self.gameObject, "FriendAppliedItemSlot")
+end
+
+function OndeleteBtnClick(sender)
+    self:SendCommand("DeleteApplied")
+end
+
+function OnGridPlayerClick(sender)
+	local data = sender.m_data
+	self:SendCommand("ShowPlayerTips", data)
+end
+
+function OnNotification_DeleteApplied(objs)
+    local applied=objs[0]
+    Refresh(#applied.friends)
+    appliedGrid:RefreshItemSlots(applied.friends, self.gameObject, "FriendAppliedItemSlot")
+end
+
+function DoExit()
+	self.Module=nil
+    countTxt = nil
+    deleteBtn = nil
+    appliedGrid = nil
+    nothing = nil
+end

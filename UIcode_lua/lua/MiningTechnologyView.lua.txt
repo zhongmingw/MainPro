@@ -1,0 +1,92 @@
+require "MiningTechnologyItemSlot"
+
+---@type UnityEngine.TextMesh 产量提升
+local productUpTxt
+---@type Client.Library.UIItemGrid
+local technologyItemGrid
+
+---@type Client.Library.ViewBase
+local selfViewBase
+
+---@type table 界面数据
+local viewData
+
+---初始化
+function DoInit()
+    selfViewBase = self
+    selfViewBase.Shadow = 1
+    productUpTxt = selfViewBase:GetComponentAtPath("BGS/productUp/productUpTxt", CLS_TEXT)
+    technologyItemGrid = selfViewBase:GetComponentAtPath("ScrollRect/Viewport/TechnologyItemGrid", CLS_UI_ITEM_GRID)
+end
+
+---刷新界面
+local function RefreshView()
+    technologyItemGrid:RefreshItemSlots(viewData.technologyItemArr, selfViewBase.gameObject, "MiningTechnologyItemSlot")
+    productUpTxt.text = string.format(Language:getStr("ProductOutputUpPerStr"), viewData.totalUpValueStr)
+end
+
+---设置界面数据
+function SetParamDataList(objs)
+    viewData = objs[0]
+    if viewData then
+        RefreshView()
+    else
+        technologyItemGrid:ClearItems()
+    end
+end
+
+---动画结束回调
+function OnAnimationFinished()
+    self:SendCommand("InitTechnologyView")
+end
+
+---隐藏之后打开回调
+function Active()
+
+end
+
+---初始化
+function OnNotification_InitTechnologyView(objs)
+    viewData = objs[0]
+    if viewData then
+        RefreshView()
+    else
+        technologyItemGrid:ClearItems()
+    end
+end
+
+---开启按钮点击
+function OnTechnologyItemGridOpenBtnClick(obj)
+    local data = obj.m_data
+    selfViewBase:SendCommand("OpenOneTechnologyItem", data)
+end
+
+---帮助按钮点击
+function OnHelpBtnClick()
+    self:SendCommand("ShowHelpView")
+end
+
+---遮罩点击
+function OnMaskClick()
+    technologyItemGrid:ClearItems()
+    selfViewBase:HideView(selfViewBase.gameObject.name)
+end
+
+---关闭按钮点击
+function OnCloseBtnClick()
+    technologyItemGrid:ClearItems()
+    selfViewBase:HideView(selfViewBase.gameObject.name)
+end
+
+---关闭界面回调
+function OnClose()
+    technologyItemGrid:ClearItems()
+end
+
+---退出module回调
+function DoExit()
+    productUpTxt = nil
+    technologyItemGrid = nil
+    selfViewBase = nil
+    viewData = nil
+end

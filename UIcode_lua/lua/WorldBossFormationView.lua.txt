@@ -1,0 +1,249 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-06-14 16:37:28
+local ScreenUtils = require "ScreenUtils"
+local FormationUtils = require "FormationUtils"
+
+local isInit = false
+
+local fightTxt
+local togGroup
+local togs
+local raceFlag
+local auraImgObj
+local nothingObj
+local heroEffect
+local inviteBtn
+local enable = true
+
+local upHeroGrid
+local donwHeroGrid
+local dragItemObj
+
+function DoInit()	
+    self.Shadow = 1
+end
+
+local function InitUI()
+    fightTxt = self:GetComponentAtPath("UP/numberTxt",CLS_TEXT)
+    upHeroGrid = self:GetComponentAtPath("UP/UpHeroGrid",CLS_UI_ITEM_GRID)
+    donwHeroGrid = self:GetComponentAtPath("heroSV/ScrollRect/Viewport/Grid",CLS_UI_ITEM_GRID)
+    togGroup = self:GetComponentAtPath("TOG",CLS_TOGGLE_GROUP_ARCHLY)
+    togs={}
+    local togGroupTrans = togGroup.transform
+	for i=1, togGroupTrans.childCount-1 do
+        local tog = togGroupTrans:GetChild(i):GetComponent(CLS_TOGGLE_ARCHLY)
+        tog.ClickAnim = true
+		table.insert(togs, tog)
+	end
+	raceFlag=self:GetComponentAtPath("TOG/raceTog",CLS_RECTTRANSFORM)
+	auraImgObj=self:GetGameObjectAtPath("UP/aureole/icon01Img")
+    heroEffect = {}
+    heroEffect.trans = self:GetComponentAtPath("HeroBase",CLS_RECTTRANSFORM)
+    heroEffect.obj = heroEffect.trans.gameObject
+    nothingObj = self:GetGameObjectAtPath("None")
+    dragItemObj = self:GetGameObjectAtPath("UP/UpHeroGrid/DragItem")
+    inviteBtn = self:GetComponentAtPath("BUTTON/InviteBtn",CLS_BUTTON_ARCHLY)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    ScreenUtils.InitScreenUI(togGroup,togs,raceFlag)
+    self:SendCommand("InitWorldBossFormationData",formationType,raceId)
+end
+
+function SetParamDataList(objs)
+    local data = objs[0]
+    self:SendCommand("InitData",data)
+end
+
+function OnClose()
+    ScreenUtils.Clear()
+    donwHeroGrid:ClearItems()
+    dragItemObj:SetSelfActive(false)
+end
+
+function DoExit()
+    isInit = nil
+    ScreenUtils = nil
+    FormationUtils = nil
+
+    fightTxt = nil
+    togGroup = nil
+    togs = nil
+    raceFlag = nil
+    auraImgObj = nil
+    nothingObj = nil
+    heroEffect = nil
+    enable = nil
+
+    upHeroGrid = nil
+    donwHeroGrid = nil
+    dragItemObj = nil
+    inviteBtn = nil
+end
+
+local function HideView()
+    self:HideView(self.gameObject.name)
+end
+
+function OnNotification_RefreshWorldBossFormationView(objs)
+    local viewData = objs[0]
+    local upHeroArr = viewData.upHeroArr
+    local downHeroArr = viewData.downHeroArr
+    upHeroGrid:RefreshItemSlots(upHeroArr,self.gameObject,"HeroItemSlot")    
+    donwHeroGrid:RefreshItemSlots(downHeroArr,self.gameObject,"HeroItemSlot")
+    nothingObj:SetSelfActive(#downHeroArr == 0)
+    FormationUtils.SetAuraIcon(auraImgObj,viewData.curAura)
+    fightTxt.text = viewData.fight
+    inviteBtn.Gray = not viewData.inviteEnable
+end
+
+function OnNotification_RefreshInviteOtherView(objs)
+    local viewData = objs[0]
+    upHeroGrid:RefreshSlot(viewData.upHero,viewData.index)
+    FormationUtils.SetAuraIcon(auraImgObj,viewData.curAura)
+    fightTxt.text = viewData.fight
+    inviteBtn.Gray = not viewData.inviteEnable
+end
+
+function OnNotification_ScreenWorldBossFormationView(objs)
+    local downHeroArr = objs[0]
+    donwHeroGrid:RefreshItemSlots(downHeroArr,self.gameObject,"HeroItemSlot")
+end
+
+function OnNotification_RefreshUpHeroView(objs)
+    local viewData = objs[0]
+    local changeUp = viewData.changeUp
+    local changeArr = viewData.changeDownHeroArr
+    upHeroGrid:RefreshSlot(changeUp.hero,changeUp.index)
+    for _, downHero in ipairs(changeArr) do
+        donwHeroGrid:SingleRefreshSlot(downHero)
+    end
+    FormationUtils.SetAuraIcon(auraImgObj,viewData.curAura)
+    fightTxt.text = viewData.fight
+end
+
+function OnNotification_ShowUpHeroEffect(objs)
+    local viewData = objs[0]
+    local hero = viewData.hero
+    local index = viewData.index
+    local slot = viewData.slot
+    local startPos = slot.transform:CheckPosition()
+    local endPos = upHeroGrid.transform:GetChild(index):CheckPosition()
+    local duration = 0.2
+    local function onFinished()
+        enable = true
+        heroEffect.obj:SetSelfActive(false)
+        local index = slot.m_index
+        local data = {
+            hero = hero,
+            pos = viewData.pos,
+            isBack = viewData.isBack,
+            index = index,
+        }
+        self:SendCommand("UpHero",data)
+    end
+    enable = false
+    heroEffect.obj:SetSelfActive(true)
+    heroEffect.trans:ResetPosition(startPos)
+    BindHeroBaseValue(heroEffect.trans,hero)
+    CsBridge.TweenUtils.MoveToByWorld(
+        heroEffect.trans,
+        endPos.x,
+        endPos.y,duration,
+        onFinished)
+end
+
+local function SetDragItem(obj, data)
+    local heroBaseTF = obj.transform:GetComponentAtPath("HeroBase",CLS_RECTTRANSFORM)
+	BindHeroBaseValue(heroBaseTF,data)
+end 
+
+function OnHeroItemSlotBeginDrag(obj)
+	local btn = obj:GetComponent(CLS_BUTTON_ARCHLY)
+	btn:StopRunningClickAnim()
+	btn.ClickAnim = false
+    local slot = obj:GetComponent(CLS_ITEM_SLOT)
+    self:SendCommand("HeroBeginDrag",slot)
+end 
+
+function OnNotification_RefreshHeroBeginDrag(objs)
+    local viewData = objs[0]
+    local slot = viewData.slot
+    local hero = viewData.hero
+    SetDragItem(dragItemObj, hero)
+    dragItemObj:SetSelfActive(true)
+    local pos = slot.transform:CheckPosition()
+    dragItemObj.transform:ResetPosition(pos)
+    upHeroGrid:RefreshSlot(viewData.newHero,viewData.index)
+end
+
+function OnHeroItemSlotEndDrag(obj)
+	local btn = obj:GetComponent(CLS_BUTTON_ARCHLY)
+	btn.ClickAnim = true
+    local slot = obj:GetComponent(CLS_ITEM_SLOT)
+    self:SendCommand("HeroEndDrag",slot)
+end 
+
+function OnNotification_RefreshHeroEndDrag(objs)
+    local viewData = objs[0]
+    local hero = viewData.hero
+    local slot = viewData.slot
+    if viewData.dragHero then
+        upHeroGrid:RefreshSlot(viewData.dragHero, viewData.dragIndex)
+    end
+    if viewData.dropHero then
+        upHeroGrid:RefreshSlot(viewData.dropHero, viewData.dropIndex)
+    end
+    dragItemObj:SetSelfActive(false)
+end
+
+function OnNotification_HideView(objs)
+    HideView()
+end
+
+function OnHeroItemSlotDrop(obj)
+    local slot = obj:GetComponent(CLS_ITEM_SLOT)
+    self:SendCommand("HeroDrop",slot)
+end
+
+--点击上面格子
+function OnUpHeroGridHeroItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("SelectUpHero",data)
+end
+
+--点击下面格子
+function OnGridHeroItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("SelectDownHero",data,obj)
+end
+
+function OnaureoleClick(sender)
+    self:SendCommand("OpenAuraView")
+end
+
+function OnStartBtnClick(sender)
+    self:SendCommand("GoToBattle")
+end
+
+function OnInviteBtnClick(sender)
+    self:SendCommand("InviteOther")
+end
+
+function OnTOGClick(isOn, index)
+    ScreenUtils.TogGroupClick(isOn,index)
+end
+
+function OnCloseBtnClick(sender)
+    HideView()
+end
+
+function OnMaskClick(sender)
+    HideView()
+end

@@ -1,0 +1,7 @@
+
+function OnElementCrystalItemSlotBindValue(slot,data)
+    local itemBaseTF = slot.transform:Find("ItemBase")
+    local selectedObj = slot.transform:Find("SelectImg").gameObject
+    BindItemBaseValue(itemBaseTF, data)
+    selectedObj:SetSelfActive(data.IsSelected)
+end

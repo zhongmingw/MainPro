@@ -1,0 +1,57 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-05-05 10:30:53
+
+local monsters
+local formationCallback
+
+local function GetMonsterPreData(monsterData)
+    local fdata = {}
+    local bdata = {}
+    for i,v in ipairs(monsterData) do
+        if i <=2 then
+            table.insert(fdata, v)
+        else
+            table.insert(bdata, v)
+        end
+    end
+    return fdata,bdata
+end
+
+local function GetFormationPos(formationPos)
+    local data = {}
+    for i,v in ipairs(formationPos) do
+        local pos = {
+            pos = v.pos,
+            heroUid = v.uid,
+            heroId = v.heroId
+        }
+        table.insert(data, pos)
+    end
+    return data
+end
+
+function DoOnExit()
+    monsters = nil
+end
+
+function OnCommand_InitData(objs)
+    monsters,formationCallback = objs[0],objs[1]
+end
+
+function OnCommand_InitMazeMonsterPreData(objs)
+    local fMonsters, bMonsters = GetMonsterPreData(monsters)
+    self:SendNotification("RefreshMazeMonsterPreView",fMonsters,bMonsters)
+end
+
+function OnCommand_BattleMonster(objs)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("FormationView","FormationModel")
+        view:SetParamDataList(FormationTypeEnum.FormationType_PVE,function(formationPos)
+            self:SendNotification("CloseView",false)
+            local data = GetFormationPos(formationPos)
+            formationCallback(data)
+        end,nil)
+    end,"FormationView","HeroItemSlot")
+end

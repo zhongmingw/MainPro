@@ -1,0 +1,152 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-11-06 11:31:47
+
+require "DSGoodsItemSlot"
+local yield_return = (require 'cs_coroutine').yield_return
+local isInit = false
+
+local titleImgObj, countdownTxt, titleArtImg, descTxt
+local freeTimeTxt
+local viewData
+local dsGrid
+local refreshBtnItemObj
+local refreshBtnItemIconImg
+local refreshBtnItemNumTxt
+local refreshBtnFreeObj
+
+local isFreeRefrsh = false
+
+local TICKER_NAME = "ticker_DiscountShopActivityView"
+
+function DoInit()	
+    self.Shadow = 0
+    self.Anim = 0
+end
+
+function InitUI()
+    titleImgObj = self:GetGameObjectAtPath("BGS/bgImg")
+    countdownTxt = self:GetComponentAtPath("BGS/TimeTxt",CLS_TEXT)
+    titleArtImg = self:GetComponentAtPath("BGS/TitleArtImg",CLS_LOCALIZE)
+    descTxt = self:GetComponentAtPath("BGS/DespTxt",CLS_TEXT)
+    freeTimeTxt = self:GetComponentAtPath("BGS/FreeTimeTxt",CLS_TEXT)
+    refreshBtnItemObj = self:GetGameObjectAtPath("button/RefreshBtn/Item")
+    refreshBtnItemIconImg = self:GetGameObjectAtPath("button/RefreshBtn/Item/IconImg")
+    refreshBtnItemNumTxt = self:GetComponentAtPath("button/RefreshBtn/Item/NumTxt",CLS_TEXT)
+    refreshBtnFreeObj = self:GetGameObjectAtPath("button/RefreshBtn/FreeRefresh")
+    dsGrid = self:GetComponentAtPath("Center/itemSV/ScrollRect/Viewport/DSGrid",CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+end
+
+function OnNotification_RefreshActivityView(objs)
+    if self.gameObject.activeInHierarchy then
+        viewData = objs[0]
+        RefreshView(viewData)
+        self:SendCommand("InitDiscountShopActivityData")
+	end
+end
+
+function RefreshView(data)
+    descTxt.text = data.desc
+    SetServerActivityArtFontByImage(titleArtImg,data.image)
+    countdownTxt.text = data.restTime
+	CsBridge.IconData.SetRawImageByName(titleImgObj, data.image)
+end
+
+function OnNotification_RefreshCountdown(objs)
+	local data = objs[0]
+	RefreshCountdown(data)
+end
+
+function RefreshCountdown(countdownData)
+	if not viewData then--not ready
+		return
+	end
+
+	local currentActivityID = viewData.id
+	for activityID, restTime in pairs(countdownData) do
+		if activityID == currentActivityID then
+			countdownTxt.text = restTime
+			return
+		end
+	end
+end
+
+function OnNotification_RefreshDiscountShopActivityView(objs)
+    local curDSGoods = objs[0]
+    dsGrid:RefreshItemSlots(curDSGoods.goodsArr,self.gameObject,"DSGoodsItemSlot")
+    UpdateRefreshBtnState(curDSGoods)
+end
+
+function UpdateRefreshBtnState(curDSGoods)
+    Timer:StopTicker(TICKER_NAME)
+    isFreeRefrsh = false
+    refreshBtnFreeObj:SetSelfActive(isFreeRefrsh)
+    refreshBtnItemObj:SetSelfActive(not isFreeRefrsh)
+    Timer:AddTicker(TICKER_NAME,curDSGoods.lastFreeRefreshTime+curDSGoods.refreshInterval, function(targetTime)
+        if self == nil or self.Module == nil then
+            return
+        end
+        if freeTimeTxt ~= nil then
+            freeTimeTxt.text = CheckTimeRemain(targetTime)
+        end
+    end, function()
+        isFreeRefrsh = true
+        freeTimeTxt.text = DEFAULT_TIME
+        refreshBtnFreeObj:SetSelfActive(isFreeRefrsh)
+        refreshBtnItemObj:SetSelfActive(not isFreeRefrsh)
+    end)
+    if not isFreeRefrsh then
+        ShowOneConsume(refreshBtnItemIconImg,refreshBtnItemNumTxt,curDSGoods.refreshItem)
+        SetFontColorWithEnough(refreshBtnItemNumTxt,function()
+            return CheckItemEnough(curDSGoods.refreshItem.id,curDSGoods.refreshItem.typeId,curDSGoods.refreshItem.count,false)
+        end,color2)
+    end
+end
+
+function OnDSGridBuyBtnClick(obj)
+    local data = obj.m_data
+    self:SendCommand("BuyDiscountShopGoods",data)
+end
+
+function OnDSGridItemSlotClick(obj)
+    local data = obj.m_data.goods
+    self:SendCommand("OpenTipView",data)
+end
+
+function OnRefreshBtnClick(sender)
+    self:SendCommand("RefreshDiscountShop",isFreeRefrsh)
+end
+
+function OnHelpBtnClick(sender)
+    ShowHelpTip(self,INSTRUCTION_DISCOUNT_SHOP)
+end
+
+function OnNotification_CloseActivityView(obj)
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+    Timer:StopTicker(TICKER_NAME)
+    isInit = nil
+    titleImgObj = nil
+    countdownTxt = nil
+    titleArtImg = nil
+    descTxt = nil
+    freeTimeTxt = nil
+    viewData = nil
+    dsGrid = nil
+    refreshBtnItemObj = nil
+    refreshBtnItemIconImg = nil
+    refreshBtnItemNumTxt = nil
+    refreshBtnFreeObj = nil
+    isFreeRefrsh = nil
+    TICKER_NAME = nil
+end

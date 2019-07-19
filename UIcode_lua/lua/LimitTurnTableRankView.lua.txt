@@ -1,0 +1,91 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-10-23 17:04:24
+
+require "LimitTurnTableRankItemSlot"
+
+local isInit = false
+
+local playerBase
+local rankTxt
+local scoreTxt
+local rankGrid
+local nothingObj
+
+function DoInit()	
+    self.Shadow = 1
+end
+
+function InitUI()
+    playerBase = self:GetComponentAtPath("Center/Player",CLS_RECTTRANSFORM)
+    rankTxt = self:GetComponentAtPath("Center/RankTxt",CLS_TEXT)
+    scoreTxt = self:GetComponentAtPath("Center/ScoreTxt",CLS_TEXT)
+    rankGrid = self:GetComponentAtPath("Center/playerSV/ScrollRect/Viewport/RankGrid",CLS_UI_ITEM_GRID)
+    nothingObj = self:GetGameObjectAtPath("Center/None")
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitLimitTurnTableRankData")
+end
+
+function OnClose()
+    rankGrid:ClearItems()
+    nothingObj:SetSelfActive(false)
+end
+
+function OnNotification_RefreshLimitTurnTableRankView(objs)
+    local rankData = objs[0]
+    BindPlayerBaseInfoValue(playerBase, rankData.selfRankData.playerBaseInfo)
+    scoreTxt.text = Language:getStr("Global_13")..rankData.selfRankData.score
+    rankTxt.text = Language:getStr("Global_14")..(rankData.selfRankData.rank == -1 and "-" or  rankData.selfRankData.rank)
+    if rankData.rankItems and #rankData.rankItems~=0 then
+        nothingObj:SetSelfActive(false)
+        rankGrid:RefreshItemSlots(rankData.rankItems,self.gameObject,"LimitTurnTableRankItemSlot")
+    else
+        nothingObj:SetSelfActive(true)
+    end
+end
+
+function OnRankGridPlayerBaseClick(obj)
+	local data = obj.m_data
+    CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			local view = CsBridge.OpenView("PlayerInfoView", "PlayerInfoModel",true,true)
+			view.transform.parent:SetAsLastSibling()
+			local isLocal = false
+			local uid = data.playerBaseInfo.userId
+			local zone = data.playerBaseInfo.zone
+			view:SetParamDataList(isLocal, uid, zone)
+		end, "PlayerInfoView","AchievementItemSlot")
+end
+
+function OnCloseBtnClick(sender)
+	self:HideView(self.gameObject.name)
+end
+
+function OnMaskClick(sender)
+	self:HideView(self.gameObject.name)
+end
+
+function OnRewardBtnClick(objs)
+    CsBridge.CacheAssetsByModule(self.Module,
+    function()
+        CsBridge.OpenView("LimitTurnTableRankRewardView","LimitTurnTableModel",true,true)
+    end,"LimitTurnTableRankRewardView","LimitTurnTableRankRewardItemSlot")
+end
+
+function DoExit()
+
+    isInit = nil
+
+    playerBase = nil
+    rankTxt = nil
+    scoreTxt = nil
+    rankGrid = nil
+    nothingObj = nil
+end

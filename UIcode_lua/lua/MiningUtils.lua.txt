@@ -1,0 +1,321 @@
+---获取资源
+local function GetItemByString(valueStr)
+    local costConsume = {}
+    local resourceSplit = string.split(tostring(valueStr), ",")
+    costConsume.typeId = tonumber(resourceSplit[0])
+    costConsume.id = tonumber(resourceSplit[1])
+    costConsume.count = tonumber(resourceSplit[2])
+    return costConsume
+end
+
+--- 获取矿产的产出
+local function GetMiningCaveOuPutArr(valueStr)
+    local result = {}
+    if valueStr then
+        local splitArr = string.split(valueStr, ";")
+        if splitArr.Length > 0 then
+            for i = 0, splitArr.Length - 1 do
+                local item = GetItemByString(splitArr[i])
+                table.insert(result, item)
+            end
+        end
+    end
+    return result
+end
+
+---把服务器的数据附加上去
+local function AddMiningMapItemServerData(mapItemInfo, serverData)
+    if serverData then
+        mapItemInfo.state = serverData.state --0->free, 1->占领
+        mapItemInfo.host = serverData.host
+        mapItemInfo.hostStartTime = serverData.hostStartTime
+        mapItemInfo.lastTakeMineTime = serverData.lastTakeMineTime
+        mapItemInfo.protectionEndTime = serverData.protectionEndTime or 0
+        mapItemInfo.hostCombat = serverData.hostCombat
+        mapItemInfo.protectionType = serverData.protectionType
+        mapItemInfo.closeTime = serverData.closeTime
+        if mapItemInfo.protectionEndTime ~= nil and mapItemInfo.protectionEndTime > CsBridge.timeManager.ServerTime then
+            mapItemInfo.protectionEndTimeStr = CheckTimeRemain(serverData.protectionEndTime)
+            mapItemInfo.showProtect = true
+        else
+            mapItemInfo.protectionEndTime = 0
+            mapItemInfo.protectionEndTimeStr = ""
+            mapItemInfo.showProtect = false
+        end
+        if mapItemInfo.lastTakeMineTime == 0 or mapItemInfo.lastTakeMineTime == nil then
+            mapItemInfo.lastTakeMineTime = mapItemInfo.hostStartTime
+        end
+        local playerInfo = appData:checkData("PlayerInfo")
+        if mapItemInfo.host then
+            if mapItemInfo.host.userId == playerInfo.userId and
+                    mapItemInfo.host.zone == playerInfo.zone then
+                mapItemInfo.host.isSelf = true
+                local MineInfo = appData:checkData("MineInfo")
+                mapItemInfo.host.nextBuyProtectId = MineInfo.protectBuyTimes + 1
+                mapItemInfo.host.nextRecoverId = MineInfo.recoverTimes + 1
+            else
+                mapItemInfo.host.isSelf = false
+            end
+        end
+    end
+end
+
+---通过id获取到矿点类型
+local function GetMiningTypeById(mapItemInfo, id, mineralTypeTbl, serverData)
+    mapItemInfo.typeId = tonumber(mineralTypeTbl:Get(id, MineralType.id))
+    mapItemInfo.name = tostring(mineralTypeTbl:Get(id, MineralType.name))
+    mapItemInfo.icon = tostring(mineralTypeTbl:Get(id, MineralType.icon))
+    mapItemInfo.mapIcon = tostring(mineralTypeTbl:Get(id, MineralType.mapIcon))
+    mapItemInfo.outPut = tostring(mineralTypeTbl:Get(id, MineralType.outPut))
+    mapItemInfo.time = tonumber(mineralTypeTbl:Get(id, MineralType.time))
+    mapItemInfo.outputDescribe = tostring(mineralTypeTbl:Get(id, MineralType.outputDescribe))
+    mapItemInfo.timeMax = tonumber(mineralTypeTbl:Get(id, MineralType.timeMax))
+    mapItemInfo.heroQuality = tonumber(mineralTypeTbl:Get(id, MineralType.heroQuality))
+    mapItemInfo.heroLevel = tonumber(mineralTypeTbl:Get(id, MineralType.heroLevel))
+    mapItemInfo.mostNum = tonumber(mineralTypeTbl:Get(id, MineralType.mostNum))
+    mapItemInfo.gradientTopColor = ChangeStrToColorArr(tostring(mineralTypeTbl:Get(id, MineralType.gradientTopColor)))
+    mapItemInfo.gradientBottomColor = ChangeStrToColorArr(tostring(mineralTypeTbl:Get(id, MineralType.gradientBottomColor)))
+    mapItemInfo.outPutItemArr = GetMiningCaveOuPutArr(mapItemInfo.outPut)
+    mapItemInfo.showProtect = false
+    if mapItemInfo.mostNum == nil or mapItemInfo.mostNum == 0 then
+        mapItemInfo.mostNum = -1
+    end
+    AddMiningMapItemServerData(mapItemInfo, serverData)
+end
+
+---获取矿点类型列表
+local function GetMiningCaveTypeList()
+    local MineralTypeTbl = ResTblContainer:GetTable(MineralType.actorTbl)
+    local MineralTypeIds = ResTblContainer:GetIds(MineralType.actorTbl)
+    local result = {}
+    for i = 0, MineralTypeIds.Length - 1 do
+        local mapItemInfo = {}
+        GetMiningTypeById(mapItemInfo, tonumber(MineralTypeIds[i]), MineralTypeTbl)
+        table.insert(result, mapItemInfo)
+    end
+    return result
+end
+
+---获取我的矿产数量
+local function GetMyCaveCount()
+    local count = 0
+    local mineInfo = appData:checkData("MineInfo")
+    if mineInfo and mineInfo.takeMineIds then
+        count = #mineInfo.takeMineIds
+    end
+    return count
+end
+
+---从本地表中读取出地图信息
+local function LoadMiningMapInfoFromTbl(mineDetails)
+    local myHoldCaveArr = {}
+    local mineralTypeTbl = ResTblContainer:GetTable(MineralType.actorTbl)
+    local mineralTypeIds = ResTblContainer:GetIds(MineralType.actorTbl)
+    for i = 0, mineralTypeIds.Length - 1 do
+        local index = tonumber(mineralTypeIds[i])
+        myHoldCaveArr[index] = 0
+    end
+    local myCaveItemCount = {}
+    myCaveItemCount.count = GetMyCaveCount()
+    local mapArr = {}
+    if mineDetails == nil then
+        return mapArr
+    end
+    for i = 1, #mineDetails do
+        local mineDetailsItem = mineDetails[i]
+        local mapData = {}
+        local id = tonumber(mineDetailsItem.id)
+        local idStr = mineDetailsItem.id
+        local mapPageIndex = tonumber(string.sub(idStr, 1, string.len(idStr) - 2))
+        local mapPosIndex = tonumber(string.sub(idStr, string.len(mapPageIndex) + 1, string.len(idStr)))
+        mapData.id = id
+        mapData.idStr = idStr
+        mapData.type = tonumber(mineDetailsItem.type)
+        mapData.mapPageIndex = mapPageIndex
+        mapData.mapPosIndex = mapPosIndex
+        GetMiningTypeById(mapData, mapData.type, mineralTypeTbl, mineDetailsItem)
+        mapData.myHoldCaveArr = myHoldCaveArr
+        mapData.myCaveItemCount = myCaveItemCount
+        if mapData.host and mapData.host.isSelf then
+            myHoldCaveArr[mapData.type] = myHoldCaveArr[mapData.type] + 1
+        end
+        if mapArr[mapPageIndex] == nil then
+            mapArr[mapPageIndex] = {}
+        end
+        mapArr[mapPageIndex][mapPosIndex] = mapData
+    end
+    return mapArr
+end
+
+---找到最小的那一夜
+local function FindMinPageIndex(pageIndexArr)
+    local min = -1
+    if #pageIndexArr <= 0 then
+        return min
+    else
+        min = pageIndexArr[1]
+    end
+    for i = 1, #pageIndexArr do
+        local pageIndexItem = pageIndexArr[i]
+        if min > pageIndexItem then
+            min = pageIndexItem
+        end
+    end
+    return min
+end
+
+---查找没有人占领的矿产页数
+local function FindFreeCaveMapPageIndex(caveTypeItem, mapArr)
+    if mapArr == nil then
+        return
+    end
+    local pageIndexArr = {}
+    for i = 1, #mapArr do
+        local mapPage = mapArr[i]
+        for k = 1, #mapPage do
+            local mapPageItem = mapPage[k]
+            if mapPageItem.host == nil and caveTypeItem.typeId == mapPageItem.type then
+                table.insert(pageIndexArr, mapPageItem.mapPageIndex)
+            end
+        end
+    end
+    return FindMinPageIndex(pageIndexArr)
+end
+
+---我自己的矿产的item数据
+local function MyselfCaveItemDataForItemSlot(mapData)
+    if mapData.lastTakeMineTime > 0 and mapData.time * 1000 < CsBridge.timeManager.ServerTime - mapData.lastTakeMineTime then
+        mapData.showTakeTip = true
+    else
+        mapData.showTakeTip = false
+    end
+    if mapData.protectionEndTime > CsBridge.timeManager.ServerTime then
+        mapData.protectionEndTimeStr = CheckTimeRemain(mapData.protectionEndTime, false)
+    else
+        mapData.protectionEndTimeStr = ""
+    end
+end
+
+---稍稍改变一下数据
+local function ChangeMyselfCaveItemDataForItemSlot(mapTypeArr, subMapArr)
+    if mapTypeArr == nil or subMapArr == nil then
+        return
+    end
+    for i = 1, #mapTypeArr do
+        for k = 1, #subMapArr do
+            if tonumber(mapTypeArr[i].typeId) == tonumber(subMapArr[k].type) then
+                MyselfCaveItemDataForItemSlot(subMapArr[k])
+            end
+        end
+    end
+end
+
+---通过服务器数据获取到自己的矿点信息
+local function GetMyCaveItemByMapArr(mapArr)
+    local result = {}
+    if mapArr == nil or #mapArr <= 0 then
+        return result
+    end
+    local playerInfo = appData:checkData("PlayerInfo")
+    for i = 1, #mapArr do
+        local mapPage = mapArr[i]
+        for k = 1, #mapPage do
+            local mapPageItem = mapPage[k]
+            if mapPageItem.host ~= nil and mapPageItem.host.userId == playerInfo.userId
+                    and mapPageItem.host.zone == playerInfo.zone then
+                table.insert(result, mapPageItem)
+            end
+        end
+
+    end
+    return result
+end
+
+---收取资源之后更新我的矿产
+local function UpdateMyCaveItemFofGetOutPut(subMapArr)
+    for i = 1, #subMapArr do
+        subMapArr[i].lastTakeMineTime = CsBridge.timeManager.ServerTime
+        MyselfCaveItemDataForItemSlot(subMapArr[i])
+    end
+end
+
+---获取地图信息
+local function GetMapInfo(callback, self)
+    local req = {}
+    req.useless = 1
+    HttpRequest("checkAllMines", "CheckAllMinesReq", "CheckAllMinesResp", req, function(resp)
+        if resp and callback then
+            callback(resp)
+        else
+            CsBridge.ShowHintBoxTwo(Language:getStr("SystemIsClosed"))
+            self:ReturnBack()
+        end
+    end)
+end
+
+---获取地图信息
+local function GetMingMapInfo(callback, self)
+    local function GetMapInfoCallBack(resp)
+        if resp and resp.mineDetails then
+            local mapArr = LoadMiningMapInfoFromTbl(resp.mineDetails)
+            if callback then
+                callback(mapArr)
+            end
+        end
+    end
+    GetMapInfo(GetMapInfoCallBack, self)
+end
+
+---查找无人占领的矿
+local function FindFreeCaveItem(caveTypeItem, callback, refreshMapCallBack, self)
+    local function GetMapInfoCallBack(resp)
+        local mapArr = LoadMiningMapInfoFromTbl(resp.mineDetails)
+        local targetPageIndex = FindFreeCaveMapPageIndex(caveTypeItem, mapArr)
+        if callback then
+            callback(targetPageIndex)
+        end
+        if refreshMapCallBack then
+            refreshMapCallBack(mapArr)
+        end
+    end
+    GetMapInfo(GetMapInfoCallBack, self)
+end
+
+---获取自己的所有矿产
+local function GetMyselfCaveItem(mapTypeArr, callback, refreshMapCallBack, self)
+    local function GetMapInfoCallBack(resp)
+        local mapArr = LoadMiningMapInfoFromTbl(resp.mineDetails)
+        local myCaveArr = GetMyCaveItemByMapArr(mapArr)
+        ChangeMyselfCaveItemDataForItemSlot(mapTypeArr, myCaveArr)
+        if callback then
+            callback(myCaveArr)
+        end
+        if refreshMapCallBack then
+            refreshMapCallBack(mapArr)
+        end
+    end
+    GetMapInfo(GetMapInfoCallBack, self)
+end
+
+---获取产出
+local function GetMyCaveOutPut(mineId, callback)
+    local req = {}
+    req.mineId = mineId
+    HttpRequest("getMineResource", "GetMineResourceReq", "GetMineResourceResp", req, function(resp)
+        if resp and callback then
+            callback(resp)
+        end
+    end)
+end
+
+return {
+    GetItemByString = GetItemByString,
+    GetMingMapInfo = GetMingMapInfo,
+    GetMiningCaveTypeList = GetMiningCaveTypeList,
+    FindFreeCaveItem = FindFreeCaveItem,
+    GetMyselfCaveItem = GetMyselfCaveItem,
+    GetMyCaveOutPut = GetMyCaveOutPut,
+    UpdateMyCaveItemFofGetOutPut = UpdateMyCaveItemFofGetOutPut,
+    AddMiningMapItemServerData = AddMiningMapItemServerData,
+    GetMyCaveCount = GetMyCaveCount,
+}

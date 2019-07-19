@@ -1,0 +1,66 @@
+require "ConstantTbl"
+require "ItemSlot"
+require "HeroItemSlot"
+
+local rewardGrid
+local bgImg
+local titleArtTxt
+local desTxt
+
+function DoInit()
+    self.Anim = 0
+end
+
+
+local titleImgObj
+local itemsGrid
+
+local viewData
+
+function DoInit()
+	self.Shadow = CS.Client.Library.ShadowType.None
+	self.Anim = 0
+	InitUI()
+end 
+
+function InitUI()
+    
+    titleImgObj = self:GetGameObjectAtPath("Title/bgImg")
+	bgImg = self:GetGameObjectAtPath("Title/BgImg")
+	titleArtTxt = self:GetComponentAtPath("Title/TitleArtImg",CLS_LOCALIZE)
+	itemsGrid = self:GetComponentAtPath("Center/RewardGrid" ,CLS_UI_ITEM_GRID)
+	desTxt = self:GetComponentAtPath("Center/TipsTxt",CLS_TEXT)
+end
+
+function OnNotification_RefreshActivityView(objs)
+	if self.gameObject.activeInHierarchy then
+		viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function RefreshView(data)
+	bgImg:SetSelfActive(data.bg~=nil)
+	if data.bg ~= nil then
+		CsBridge.IconData.SetRawImageByName(bgImg,data.bg)
+        SetServerActivityArtFontByImage(titleArtTxt,data.bg)
+	end
+	desTxt.text = data.desc
+	itemsGrid:RefreshItemSlots(data.rewards, self.gameObject, "ItemSlot")
+end
+
+function OnRewardGridItemSlotClick(obj)
+	local reward = obj.m_data
+    self:SendCommand("OpenTipView", reward)
+end
+
+function OnNotification_CloseActivityView(obj)
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	rewardGrid = nil
+	bgImg = nil
+	titleArtTxt = nil
+	desTxt = nil
+end

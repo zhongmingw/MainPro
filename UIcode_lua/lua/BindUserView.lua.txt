@@ -1,0 +1,46 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-05-30 21:10:29
+
+local userNameInput
+local passwordInput
+local confirmPasswordInput
+
+local isInit = false
+
+function DoInit()
+    self.Shadow = 1
+end
+
+function InitUI()
+    userNameInput = CsBridge.GetInputFromView(self, "Center/AccountInput")
+	passwordInput = CsBridge.GetInputFromView(self, "Center/PasswordInput")
+    confirmPasswordInput = CsBridge.GetInputFromView(self, "Center/ConfirmPasswordInput")
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+end
+
+function OnConfirmBtnClick(sender)
+    self:SendCommand("BindUser",userNameInput.text,passwordInput.text,confirmPasswordInput.text)
+end
+
+function OnNotification_CloseBindUserView(objs)
+    self:HideView(self.gameObject.name)
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+    userNameInput = nil
+    passwordInput = nil
+    confirmPasswordInput = nil
+    isInit = nil
+end

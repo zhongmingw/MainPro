@@ -1,0 +1,148 @@
+--[[
+	file: DiscountShopActivityUtils.lua
+	author: zhangyue
+	description: DiscountShopActivity utilities
+]]
+
+local DoRefreshDiscountShop
+local CheckCurDSGoodsHasSpecial
+local InitDiscountShopData
+local UpdateCurDSGoods
+
+local function InitDiscountShopActivityData(discountData, model)
+	InitDiscountShopData(discountData)
+	UpdateCurDSGoods(discountData)
+	model:SendNotification("RefreshDiscountShopActivityView",discountData.curDSGoods)
+end
+
+local function RefreshDiscountShop(isFree, discountData, model)
+	if CheckCurDSGoodsHasSpecial(discountData) then
+		CsBridge.messageManager:PopMsgBox(Language:getStr("local_confirm"),
+		Language:getStr("GPRefreshSpecialConfirm"),
+		Language:getStr("local_cancel"),nil,
+		Language:getStr("local_confirm"),function()
+			DoRefreshDiscountShop(isFree, discountData, model)
+		end)
+	else
+		DoRefreshDiscountShop(isFree, discountData, model)
+	end
+end
+
+DoRefreshDiscountShop = function(isFree, discountData, model)
+	local currentActivityID = discountData.id
+	local useGem = (not isFree) and (discountData.curDSGoods.refreshItem.typeId == ItemTypeEnum.Resource and discountData.curDSGoods.refreshItem.id == ResourceEnum.Gem)
+	if not isFree then
+		if not CheckItemEnough(discountData.curDSGoods.refreshItem.id,discountData.curDSGoods.refreshItem.typeId,discountData.curDSGoods.refreshItem.count,true) then
+			return
+		end
+	end
+	if isFree then
+		local req = {
+			acId = currentActivityID,
+			free = isFree,
+			useGem = useGem
+		}
+		HttpRequest("refreshDiscountBuy","RefreshDiscountBuyReq","RefreshDiscountBuyResp",req,function(resp)
+			UpdateCurDSGoods(discountData)
+			model:SendNotification("RefreshDiscountShopActivityView",discountData.curDSGoods)
+		end)
+	else
+		local staticName = useGem and "DSGemRefreshConfirmTitle" or "DSItemRefreshConfirmTitle"
+		CsBridge.messageManager:FristConfirmBox(staticName,Language:getStr("local_confirm"),
+		string.format(Language:getStr("RefreshConfirmDesp"),discountData.curDSGoods.refreshItem.count..(discountData.curDSGoods.refreshItem.typeId == ItemTypeEnum.Resource and GetNameByResId(discountData.curDSGoods.refreshItem.id) or GetItemNameByItemId(discountData.curDSGoods.refreshItem.id))),
+		Language:getStr("local_cancel"),nil,
+		Language:getStr("local_confirm"),function()
+			local req = {
+				acId = currentActivityID,
+				free = isFree,
+				useGem = useGem
+			}
+			HttpRequest("refreshDiscountBuy","RefreshDiscountBuyReq","RefreshDiscountBuyResp",req,function(resp)
+				UpdateCurDSGoods(discountData)
+				model:SendNotification("RefreshDiscountShopActivityView",discountData.curDSGoods)
+			end)
+		end)
+	end
+end
+
+local function BuyDiscountShopGoods(data, discountData, model)
+	local refrshItemId, dsRefreshPrice = discountData.refrshItemId, discountData.dsRefreshPrice
+	local currentActivityID = discountData.id
+	if data.allRemain == 0 or data.remain == 0 then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("HasMaxCount"),2)
+		return
+	end
+	if not CheckItemEnough(data.price.id,data.price.typeId,data.discountPrice,true) then
+		return
+	end
+	local remain = data.allRemain < 0 and data.remain or math.min(data.remain, data.allRemain)
+	local utils = require "GroupPurchaseActivityUtils"
+	utils.PopBuyConfirmMsg(remain,function()
+		local req = {
+			acId = currentActivityID,
+			goodId = data.goodId
+		}
+		HttpRequest("discountBuy","DiscountBuyReq","DiscountBuyResp",req,function(resp)
+			local confirmCbk = function()
+				UpdateCurDSGoods(discountData)
+				model:SendNotification("RefreshDiscountShopActivityView",discountData.curDSGoods)
+			end
+			ShowRewardReceivedTip(model,{data.goods}, confirmCbk)
+		end)
+	end)
+end
+
+CheckCurDSGoodsHasSpecial = function(discountData)
+	for i,goods in ipairs(discountData.curDSGoods.goodsArr) do
+		if goods.isSpecial and goods.remain ~= 0 then
+			return true
+		end
+	end
+	return false
+end
+
+InitDiscountShopData = function(discountData)
+	if discountData.dsFreeRefreshInterval == nil then
+		discountData.dsFreeRefreshInterval = GetConstValue("DoubleElevenDiscountFree")*1000
+	end
+end
+
+UpdateCurDSGoods = function(discountData)
+	local refrshItemId, dsRefreshPrice = discountData.refrshItemId, discountData.dsRefreshPrice
+	local pb = appData:checkData("PlayerDiscountActivity")
+	discountData.curDSGoods = {
+		lastFreeRefreshTime = pb.lastFreeRefreshTime,
+		refreshInterval = discountData.dsFreeRefreshInterval,
+		goodsArr = {}
+	}
+	local isItem = CheckPackItemEnough(refrshItemId,1,false)
+	discountData.curDSGoods.refreshItem = {
+		typeId = isItem and ItemTypeEnum.Item or ItemTypeEnum.Resource,
+		id = isItem and refrshItemId or ResourceEnum.Gem,
+		count = isItem and 1 or dsRefreshPrice
+	}
+	for i,pbGoods in ipairs(pb.goods) do
+		local goods = {
+			goodId = pbGoods.goodConfig.id,
+			count = pbGoods.count,
+			totalCount = pbGoods.totalCount,
+			isSpecial = pbGoods.goodConfig.special == 1,
+			goods = pbGoods.goodConfig.goodItem[1],
+			price = pbGoods.goodConfig.priceItem[1],
+			discount = pbGoods.goodConfig.Discount,
+			islowestDiscount = pbGoods.goodConfig.lowestDiscount == 1
+		}
+		goods.discountPrice = math.floor(goods.price.count*goods.discount/100)
+		local c = pbGoods.goodConfig.Count == 0 and -1 or pbGoods.goodConfig.Count
+		local t = pbGoods.goodConfig.purchase == 0 and - 1 or pbGoods.goodConfig.purchase
+		goods.remain = c - goods.count
+		goods.allRemain = t - goods.totalCount
+		table.insert(discountData.curDSGoods.goodsArr, goods)
+	end
+end
+
+return{
+	InitDiscountShopActivityData = InitDiscountShopActivityData,
+	RefreshDiscountShop = RefreshDiscountShop,
+	BuyDiscountShopGoods = BuyDiscountShopGoods,
+}

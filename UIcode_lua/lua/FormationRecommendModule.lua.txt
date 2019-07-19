@@ -1,0 +1,19 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-02-18 15:31:28
+
+function DoInit()
+end
+
+function AssetNames(objs)
+    local arr = {"FormationRecommendView","FormationRecommendItemSlot","HeroItemSlot"}
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    self:OpenView("FormationRecommendView", "FormationRecommendModel")
+    if(onFinished ~= nil) then
+        onFinished()
+    end
+end

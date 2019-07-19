@@ -1,0 +1,85 @@
+--[[
+	file: GoodsMonthlyCardView.lua
+	author: hangang
+	description: UI for Weekly card of goods
+]]
+
+local isInit = false
+
+local bgImg
+local titleArtTxt
+local vipExpTxt
+local despTxt
+local priceTxt
+local buyBtn
+local rewardGrid
+
+local viewData
+
+function DoInit()	
+    self.Anim = 0
+end
+
+function InitUI()
+    bgImg = self:GetGameObjectAtPath("BGS/BgImg")
+    titleArtTxt = self:GetComponentAtPath("BGS/TitleArtImg",CLS_LOCALIZE)
+    vipExpTxt = self:GetComponentAtPath("Center/VipExpTxt",CLS_TEXT)
+    despTxt = self:GetComponentAtPath("Center/DespTxt",CLS_TEXT)
+    priceTxt = self:GetComponentAtPath("Center/PriceTxt",CLS_TEXT)
+    buyBtn = self:GetComponentAtPath("Center/BuyBtn",CLS_BUTTON_ARCHLY)
+    rewardGrid = self:GetComponentAtPath("Center/RewardGrid",CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+end
+
+function OnNotification_RefreshActivityView(objs)
+	if self.gameObject.activeInHierarchy then
+        viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function RefreshView(data)
+    if data.bg ~= nil then
+        CsBridge.IconData.SetRawImageByName(bgImg,data.bg)
+        SetServerActivityArtFontByImage(titleArtTxt,data.bg)
+    end
+    buyBtn.Gray = not data.canBuy
+    vipExpTxt.text = data.activity.expText
+    despTxt.text = data.desc
+    priceTxt.text = data.activity.priceText
+    rewardGrid:RefreshItemSlots(data.activity.rewards,self.gameObject,"ItemSlot")
+end
+
+function OnBuyBtnClick(sender)
+    if viewData.canBuy then
+        self:SendCommand("BuyGiftBox",viewData.activity,false)
+    else
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("CycleChargeHasBuy"))
+    end
+end
+
+function OnRewardGridItemSlotClick(obj)
+	self:SendCommand("OpenTipView",obj.m_data)
+end 
+
+function OnNotification_CloseActivityView(obj)
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+     isInit = false
+     bgImg = nil
+     titleArtTxt = nil
+     vipExpTxt = nil
+     despTxt = nil
+     priceTxt = nil
+     buyBtn = nil
+     rewardGrid = nil
+     viewData = nil
+end

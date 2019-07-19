@@ -1,0 +1,21 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-01-29 16:52:42
+]]
+
+function OnDecomposeJewelItemSlotBindValue(slot,data)
+    local itemBase = slot:GetComponentAtPath("ItemSlot",CLS_RECTTRANSFORM)
+    local equipFlag = slot:GetGameObjectAtPath("EquipFlag")
+    local selectImg = slot:GetGameObjectAtPath("ItemSlot/CheckSprite")
+
+    BindItemBaseValue(itemBase,data)
+    equipFlag:SetSelfActive(data.isEquip)
+    selectImg:SetSelfActive(data.selected)
+
+    if data.anim then
+        CsBridge.UnityHelper.SetlocalScale(slot.gameObject,1,1,1)
+		SetUpdateEffect(slot.transform,0.7,nil,true,true)
+    end
+end

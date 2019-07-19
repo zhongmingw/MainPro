@@ -1,0 +1,410 @@
+local templeInfo = {}
+local challengeRank
+local isSkip = false
+local battleInfos = {}
+local battleIndex = 1
+local isRecord = false
+local MAX_RANK = 9999999
+local RANK_COUNT = 50
+local seasonEndTime
+local SoulRewardDataArr = {}
+local INITIAL_RANK = 10000
+local DEFAULT_MODEL = "hero_011_p"
+local battleUtils = require "BattleUtils"
+
+local ShowBattleEndView, ReloadFormBattle, ContinuePlay
+
+local function ShowMsgBox(desp, confirmCallback)
+    CsBridge.messageManager:PopMsgBox(Language:getStr("local_confirm"),
+    desp,
+    Language:getStr("local_cancel"),nil,
+    Language:getStr("local_confirm"),confirmCallback)
+end
+
+local function RefreshSoulView()
+    local req = {}
+    req.useless = 0
+    HttpRequest("matchTarget","MatchTargetReq","MatchTargetResp", req, function (resp)
+        if resp.status then
+            seasonEndTime = resp.seasonEndTime
+            templeInfo = appData:checkData("PlayerTempleInfo")
+            self:SendNotification("RefreshTopView",templeInfo)
+            InitRankData()
+        end
+    end)
+end
+
+function OnCommand_SoulPalaceViewReady(objs)
+    RefreshSoulView()
+    MsgCenter:Subscribe(Notify_OnBattleEnd,ReloadFormBattle)
+end
+
+function InitRankData()
+    local req = {}
+    req.count = 5
+    local infos = {}
+    HttpRequest("templeRank","TempleRankReq","TempleRankResp", req, function (resp)
+        if resp then
+            local myRankItem = resp.myRankItem
+            myRankItem.rank = myRankItem.rank == 0 and MAX_RANK or myRankItem.rank
+            myRankItem.mine = true--自己的标记
+            table.insert(infos,myRankItem)
+
+            for _,v in pairs(resp.rankItems) do
+                if v.rank ~= myRankItem.rank then
+                    v.target = true
+                    table.insert(infos,v)
+                end
+            end
+
+            local targets = templeInfo.targets
+            for _,v in pairs(targets) do
+                local isContained = false
+                local index = 1
+                for k,tar in pairs(infos) do
+                    if tar.rank == v.rank then
+                        index = k
+                        isContained = true
+                        break
+                    end
+                end
+                if not isContained then
+                    v.target = false
+                    table.insert(infos,v)
+                else
+                    infos[index].target = false
+                end
+            end
+            table.sort(infos,function(a,b)
+                return a.rank < b.rank
+            end)
+            local targetInfos = GetTargetInfos(infos)
+            self:SendNotification("RefreshTargets",targetInfos)
+        end
+    end)
+end
+
+function GetTargetInfos(infos)
+    local targetInfos = {}
+    for k,v in pairs(infos) do
+        local data = {}
+        local iconId = v.playerBaseInfo.icon
+        local heroModel = ResTblContainer:GetPropToStr(iconId, HeroBase.model, HeroBase.actorTbl)
+        if iconId == 0 then
+            heroModel = DEFAULT_MODEL
+        end
+        data.heroModel = heroModel
+        data.name = v.playerBaseInfo.name
+        data.rankStr = Language:getStr("Global_14") .. (v.rank > 999999 and INITIAL_RANK or v.rank)
+        data.rank = v.rank
+        data.power = Language:getStr("SoulPalace_Power") .. GetValueAbbreviation(v.combat)
+        if v.mine then
+            data.contourImg = "new_com_yldzfg"
+        else
+            data.contourImg = "new_com_yldzfg2"
+        end
+        data.contourImgVisible = v.mine or v.target
+        data.mine = v.mine
+        data.target = v.target
+        table.insert(targetInfos,data)
+    end
+    return targetInfos
+end
+
+function OnCommand_GoToChallenge(objs)
+    local data = objs[0]
+    challengeRank = data.rank
+    if data.mine or data.target then
+        if data.mine then
+            CsBridge.hintUILayer:ShowHintBox(Language:getStr("SoulPalace_Dec1"))
+        else
+            CsBridge.hintUILayer:ShowHintBox(Language:getStr("SoulPalace_Dec2"))
+        end
+        return
+    end
+    if templeInfo.remains + templeInfo.extraRemains > 0 then
+        isSkip = false
+        battleIndex = 1
+        local _type = FormationTypeEnum.FormationType_Temple
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            local view=CsBridge.OpenView("SoulFormationView","SoulFormationModel",true,true)
+            view:SetParamDataList(_type,function(formationPos,skip)
+                OnFormationReady(formationPos,skip)
+            end,nil) 
+        end,"SoulFormationView","HeroItemSlot")
+    else
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("SoulPalace_Dec3"))
+    end
+end
+
+local function LoadBattleInfos()
+    if isSkip then
+        battleIndex = #battleInfos
+        local battleInfo = battleInfos[battleIndex]
+        ShowBattleEndView(battleInfo, ContinuePlay)
+    else
+        local cbk = function()
+            local battleInfo = battleInfos[battleIndex]
+            ShowBattleModule(battleInfo, self, true)
+        end
+        CsBridge.timeManager:WaitForNextFrame(cbk)
+    end
+end
+
+local function CacheBattleData(resp, isRecord)
+    if resp and resp.battleInfos then
+        battleInfos = resp.battleInfos
+    else
+        battleInfos = {}
+    end
+    local lastData
+    for i, battleInfo in ipairs(battleInfos) do
+        battleInfo.isRecord = isRecord
+        lastData = battleInfo
+    end
+    if lastData then
+        lastData.isTheLast = true
+    end
+end
+
+local function SendRequest(url, reqCls, respCls, data, onFinished)
+    HttpRequest(url,reqCls,respCls, data,onFinished)
+end
+
+function OnFormationReady(formationPos,skip)
+    local myRank = templeInfo.myRankInfo.rank
+    local req = {
+        formationPos = formationPos,
+        targetRank = challengeRank,
+        rank = myRank,
+    }
+    isSkip = skip
+    local onFinished = function(resp)
+        CacheBattleData(resp, false)
+        battleIndex = 1
+        LoadBattleInfos()
+    end
+    SendRequest("templeChallenge","TempleChallengeReq","BattleInfosResp", req,onFinished)
+end
+
+local function PlayVideo(id,isQuikly)
+    local req = {}
+    req.id = id
+    isSkip = isQuikly
+    local onFinished = function(resp)
+        CacheBattleData(resp, true)
+        battleIndex = 1
+        LoadBattleInfos()
+    end
+    SendRequest("templeDefRecordPlay","TempleDefRecordPlayReq","BattleInfosResp",req,onFinished)
+end
+
+ContinuePlay = function()
+    battleIndex = battleIndex +1
+    if battleIndex>#battleInfos then
+        RefreshSoulView()
+        self:SendNotification("RefreshFlag")
+    else
+        LoadBattleInfos()
+    end
+end
+
+ShowBattleEndView = function(battleInfo, onClosed)
+    battleUtils.OpenBattleEndView(battleInfo, self, onClosed)
+end
+
+ReloadFormBattle = function(objs)
+    local currentBattleData = battleInfos[battleIndex]
+    ShowBattleEndView(currentBattleData, ContinuePlay) 
+end
+
+function OnCommand_SkipBtnClicked(objs)
+    battleIndex = #battleInfos
+    local lastBattleData = battleInfos[battleIndex]
+    lastBattleData.onClose = ContinuePlay
+    self:SendNotification("RefreshWinViewOnSkiped", lastBattleData)
+    local rewards = lastBattleData.battleEndInfo.randomReward
+    if rewards and not lastBattleData.isRecord 
+    then
+		CsBridge.CacheAssetsByModule(self.Module,
+            function()
+                local view = CsBridge.OpenView("RandomRewardView", "SoulPalaceModel")
+                view:SetData(rewards)
+            end,
+            "RandomRewardView")
+	end 
+end
+
+function OnCommand_DetailBtnClicked(objs)
+    local data = battleIndex == #battleInfos 
+        and battleInfos or {battleInfos[battleIndex]}
+    ShowBattleRecordView(data, self)
+end
+
+function OnCommand_PlayVideoNormal(objs)
+    local id = objs[0]
+    isRecord = true
+    PlayVideo(id)
+end
+
+function OnCommand_PlayVideoQuikly(objs)
+    local id = objs[0]
+    PlayVideo(id,true)
+end
+
+function OnCommand_BuyCount(objs)
+    local hasBuyCount = templeInfo.dailyBuyExtraRemainsCount
+    local tbl = ResTblContainer:GetTable("TemplePurchase")
+    local costNum = tbl:GetInt(hasBuyCount+1,"cost")
+    if costNum > 0 then
+        local str = string.format(Language:getStr("SoulPalace_BuyCount"),costNum)
+        ShowMsgBox(str, function()
+            local req = {
+                type = UI_OPEN_TYPE_SOULTASK,
+                count = 1
+            }
+            SendRequest("buyExtraChance", "BuyExtraChanceReq", "BuyExtraChanceResp", req,
+            function (resp)
+                if resp then
+                    templeInfo.extraRemains = templeInfo.extraRemains + 1
+                    templeInfo.dailyBuyExtraRemainsCount = templeInfo.dailyBuyExtraRemainsCount + 1
+                    self:SendNotification("RefreshTopView",templeInfo)
+                    self:SendNotification("RefreshFlag")
+                end
+            end)
+        end)
+    else
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("1145"))
+    end
+end
+
+function OnCommand_InitRecordsData(objs)
+    local req = {}
+    req.useless = 0
+    SendRequest("templeDefRecord","TempleDefRecordReq","TempleDefRecordResp", req, function (resp)
+        if resp then
+            self:SendNotification("RefreshRecords",resp.defRecords)
+        end
+    end)
+    MsgCenter:Subscribe(Notify_OnBattleEnd,ReloadFormBattle)
+end
+
+function OnCommand_InitRankViewData(objs)
+    -- body
+    local req = {}
+    req.count = RANK_COUNT
+    SendRequest("templeRank","TempleRankReq","TempleRankResp", req, function (resp)
+            if resp then
+
+                self:SendNotification("RefreshRankView",resp.rankItems,resp.myRankItem)
+            end
+        end)
+end
+
+function OnCommand_InitSoulRewardData(objs)
+    if next(SoulRewardDataArr)==nil then
+        local ids = ResTblContainer:GetIds(TempleRankReward.tblName)
+        local tbl = ResTblContainer:GetTable(TempleRankReward.tblName)
+        for i=0,ids.Length-1 do
+            local data = {}
+            local id = tonumber(ids[i])
+            data.id = id
+            data.min = tbl:GetInt(id,TempleRankReward.min)
+            data.max = tbl:GetInt(id,TempleRankReward.max)
+            data.dailyRewardStr = tbl:Get(id,TempleRankReward.dailyRewardStr)
+            data.seasonRewardStr = tbl:Get(id,TempleRankReward.seasonRewardStr)
+            table.insert(SoulRewardDataArr,data)
+        end
+    end
+    self:SendNotification("InitSoulRewardData")
+end
+
+function OnCommand_InitSoulDailyRewardData(objs)
+    local maxRank = templeInfo.hisHighestRank
+    local curRank = templeInfo.myRankInfo.rank
+    curRank = curRank == 0 and INITIAL_RANK or curRank
+    local dailyRewardDataArr = {}
+    for i,rewardData in ipairs(SoulRewardDataArr) do
+        local data = {}
+        data.min=rewardData.min
+        data.max=rewardData.max
+        data.rewardStr=rewardData.dailyRewardStr
+        table.insert(dailyRewardDataArr,data)
+    end
+    self:SendNotification("InitSoulDailyRewardData",maxRank,curRank,dailyRewardDataArr)
+end
+
+function OnCommand_InitSoulSeasonRewardData(objs)
+    local curRank = templeInfo.myRankInfo.rank
+    curRank = curRank == 0 and INITIAL_RANK or curRank
+    local seasonRewardDataArr = {}
+    for i,rewardData in ipairs(SoulRewardDataArr) do
+        local data = {}
+        data.min=rewardData.min
+        data.max=rewardData.max
+        data.rewardStr=rewardData.seasonRewardStr
+        table.insert(seasonRewardDataArr,data)
+    end
+    if seasonEndTime then
+        self:SendNotification("InitSoulSeasonRewardData",curRank,seasonRewardDataArr,seasonEndTime)
+    end
+end
+
+function OnCommand_InitSoulReachRewardData(objs)
+    local curRank = templeInfo.myRankInfo.rank
+    curRank = curRank == 0 and INITIAL_RANK or curRank
+    local seasonRewardDataArr = {}
+    local ids = ResTblContainer:GetIds(TempleReward.tblName)
+    local tbl = ResTblContainer:GetTable(TempleReward.tblName)
+    local reachIds = templeInfo.rankReward or {}
+    local index = 0
+    local isAllGet = true
+    for i=0,ids.Length-1 do
+        local id = tonumber(ids[i])
+        local rankNum = tbl:GetInt(id,TempleReward.rank)
+        local isGet = false
+        for k,v in pairs(reachIds) do
+            if rankNum == v then
+                isGet = true
+                break
+            end
+        end
+
+        if not isGet then
+            isAllGet = false
+        end
+
+        if curRank > rankNum then
+            index = i
+        end
+        local data = {}
+        data.id = id
+        data.isGet = isGet
+        data.rank = rankNum
+        data.rewardStr = tbl:Get(id,TempleReward.rewardStr)
+        table.insert(seasonRewardDataArr,data)
+    end
+    if isAllGet then
+        index = 0
+    end
+    self:SendNotification("InitSoulReachRewardData",curRank,seasonRewardDataArr,index)
+end
+
+function OnCommand_ViewClosed(objs)
+    MsgCenter:Unsubscribe(Notify_OnBattleEnd,ReloadFormBattle)
+end
+
+function DoOnExit()
+    MsgCenter:Unsubscribe(Notify_OnBattleEnd,ReloadFormBattle)
+    templeInfo = nil
+    challengeRank = nil
+    isSkip = nil
+    battleInfos = nil
+    battleIndex =nil
+    isRecord = nil
+    MAX_RANK = nil
+    RANK_COUNT = nil
+    seasonEndTime = nil
+    SoulRewardDataArr = nil
+    INITIAL_RANK = nil
+end

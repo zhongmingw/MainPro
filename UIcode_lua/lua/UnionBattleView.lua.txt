@@ -1,0 +1,175 @@
+--[[
+	file: UnionBattleView.lua
+	author: hangang
+	description: union battle main view
+]]
+
+local battleCDTxt, ticketCountTxt, challengeCDTxt, battleCDHeaderTxt
+local opponentPanelObj, tipsObj, opponentDetailItems, tipsTxt
+local centerSpine, centerSpineObj
+
+local entryAnimationPlayed = false
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 1     --shadow type
+	InitUI()            --cache UI items
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	local path = "Top/seasonCountdownTxt"
+	battleCDTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Top/seasonCdHeaderTxt"
+	battleCDHeaderTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Top/Tickets/ticketCountTxt"
+	ticketCountTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Center/battleCountdownTxt"
+	challengeCDTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Center/Opponent"
+	local opponentRoot = selfTrans:Find(path)
+	opponentPanelObj = opponentRoot.gameObject
+
+	opponentDetailItems = {}
+	path = "Labels/memberCountTxt"
+	opponentDetailItems.memberCountTxt = opponentRoot:GetComponentAtPath(path, CLS_TEXT)
+	path = "Labels/scoreTxt"
+	opponentDetailItems.scoreTxt = opponentRoot:GetComponentAtPath(path, CLS_TEXT)
+	path = "Labels/unionNameTxt"
+	opponentDetailItems.unionNameTxt = opponentRoot:GetComponentAtPath(path, CLS_TEXT)
+	path = "Labels/PowerTxt"
+	opponentDetailItems.powerTxt = opponentRoot:GetComponentAtPath(path, CLS_TEXT)
+	path = "Labels/unionLevelTxt"
+	opponentDetailItems.unionLevelTxt = opponentRoot:GetComponentAtPath(path, CLS_TEXT)
+	path = "Banner/bannerImg"
+	opponentDetailItems.bannerImgObj = opponentRoot:GetGameObjectAtPath(path)
+
+	path = "Center/Tips"
+	tipsObj = selfTrans:GetGameObjectAtPath(path)
+	tipsTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Center/MatchFx/MatchSpine"
+	centerSpine = selfTrans:GetComponentAtPath(path, CLS_SKELETONGRAPHIC)
+	centerSpineObj = centerSpine.gameObject
+end
+
+--On animation finished event--------------------------------------------------------
+function OnAnimationFinished()
+	self:SendCommand("GetBattleViewData")	
+end
+
+--UIController events handlers-------------------------------------------------------
+function OnNotification_RefreshBattleView(objs)
+	local viewData = objs[0]
+	RefreshView(viewData)
+end
+
+function RefreshView(viewData)
+	battleCDTxt.text = viewData.seasonCD
+	SetFontColor(battleCDTxt, viewData.seasonCDColor)
+	ticketCountTxt.text = viewData.ticketCount
+	challengeCDTxt.text = viewData.buffCD
+	battleCDHeaderTxt.text = viewData.seasonCDHeader
+	opponentPanelObj:SetActive(not IsNilOrEmpty(viewData.buffCD))
+	tipsTxt.text = viewData.tipsText
+
+	tipsObj:SetActive(not viewData.showOpponentPanel)	
+	centerSpineObj:SetActive(viewData.showOpponentPanel)
+	if viewData.showOpponentPanel then
+		if not entryAnimationPlayed then
+			PlayEntryAnimation(viewData)
+			entryAnimationPlayed = true
+		else
+			ShowOpponent(viewData)
+		end
+	end
+end
+
+function PlayEntryAnimation(viewData)
+	local loop = false
+	local onMsgReceivedAction = nil
+	local finisehdCbk = function()
+		loop = true
+		centerSpine:PlayAnimation("loop", loop, onMsgReceivedAction, nil)
+		ShowOpponent(viewData)
+	end
+
+	loop = false
+	centerSpine:PlayAnimation("start", loop, onMsgReceivedAction, finisehdCbk)
+end
+
+function ShowOpponent(viewData)
+	opponentPanelObj:SetActive(true)
+	opponentDetailItems.memberCountTxt.text = viewData.memberCountText
+	opponentDetailItems.scoreTxt.text = viewData.score
+	opponentDetailItems.unionNameTxt.text = viewData.opponentName
+	opponentDetailItems.powerTxt.text = viewData.power
+	opponentDetailItems.unionLevelTxt.text = viewData.opponentLevel
+	CsBridge.IconData.SetIconByName(opponentDetailItems.bannerImgObj, viewData.opponentBanner)
+end
+
+function OnNotification_RefreshBattleViewCD(objs)
+	if self.gameObject.activeInHierarchy then
+		local battleCD, challengeCD = objs[0], objs[1]
+		battleCDTxt.text = battleCD
+		challengeCDTxt.text = challengeCD
+	end
+end
+
+--UI event handlers-------------------------------------------------------------------
+function OnHelpBtnClick(sender)
+	self:SendCommand("OnHelpBtnClick", self.gameObject.name)
+end
+
+function OnBuyBtnClick(sender)
+	self:SendCommand("OnBuyBtnClick")
+end
+
+function OnChallengeBtnClick(sender)
+	self:SendCommand("ShowOpponentDetails")
+end
+
+function OnRankBtnClick(sender)
+	self:SendCommand("OnRankBtnClick")
+end
+
+function OnDetailsBtnClick(sender)
+	self:SendCommand("OnDetailsBtnClick")
+end
+
+function OnFormationBtnClick(sender)
+	self:SendCommand("UpdateFormation")
+end
+
+--On closing--------------------------------------------------------------------------
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close() 
+	self:SendCommand("BattleViewClosed")
+	self:ReturnBack()
+end
+
+function DoExit()
+	battleCDTxt = nil
+	ticketCountTxt = nil
+	challengeCDTxt = nil
+	battleCDHeaderTxt = nil
+	opponentPanelObj = nil
+	tipsObj = nil
+	opponentDetailItems = nil
+	tipsTxt = nil
+	centerSpine = nil
+	centerSpineObj = nil
+
+	entryAnimationPlayed = nil
+end

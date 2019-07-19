@@ -1,0 +1,89 @@
+---@type Client.Library.HintUILayer
+local hint = CS.Client.Library.HintUILayer.instance
+---@type Client.Library.MessageManager
+local message = CS.Client.Library.MessageManager.instance
+
+---@type Client.Library.UIItemGrid
+local rewardItemsGrid
+---@type UnityEngine.Transform 上一次选中的物体-
+local lastChoiceTrans
+
+function DoInit()
+    self.Anim = 1
+    self.Shadow = 1
+    rewardItemsGrid = self:GetComponentAtPath("Center/ScrollRect/Viewport/RewardItemsGrid", CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+    lastChoiceTrans = nil
+    self:SendCommand("InitBoxItemSelectViewData")
+end
+
+---获取到界面需要的数据
+function OnNotification_InitBoxItemSelectViewData(objs)
+    local viewData = objs[0]
+    rewardItemsGrid:RefreshItemSlots(viewData, self.gameObject, "ItemSlot")
+end
+
+---清空数据
+function OnNotification_ClearBoxItemSelectView(objs)
+    ClearView()
+end
+
+---确定按钮点击事件
+function OnSureBtnClick()
+    if lastChoiceTrans == nil then
+        hint:ShowHintBox(Language:getStr("PleaseChoiceOneReward", 2))
+        return
+    end
+    if lastChoiceTrans ~= nil then
+        local data = lastChoiceTrans:GetComponent(CLS_ITEM_SLOT).m_data
+        message:PopMsgBox(Language:getStr("hint"), Language:getStr("IsSureChoiceThisReward"), Language:getStr("Global_76"),
+                function()
+                end, Language:getStr("Global_8"), function()
+                    self:SendCommand("ChoiceOneReward", data)
+                end)
+    end
+end
+
+---物品点击事件
+function OnRewardItemsGridItemSlotClick(obj)
+    local nowObjTrans = obj.gameObject.transform
+    if nowObjTrans == lastChoiceTrans then
+        SetItemState(nowObjTrans, false)
+        lastChoiceTrans = nil
+        return
+    else
+        SetItemState(nowObjTrans, true)
+        SetItemState(lastChoiceTrans, false)
+        lastChoiceTrans = nowObjTrans
+    end
+end
+
+---设置item的选中状态
+function SetItemState(objTsf, show)
+    if objTsf then
+        local selectedObj = objTsf:GetGameObjectAtPath("selected")
+        selectedObj:SetActive(show)
+    end
+end
+
+---遮罩点击事件
+function OnMaskClick(sender)
+    ClearView()
+end
+
+---关闭按钮点击
+function OnCloseBtnClick()
+    ClearView()
+end
+
+---清理界面
+function ClearView()
+    if lastChoiceTrans then
+        SetItemState(lastChoiceTrans, false)
+    end
+    lastChoiceTrans = nil
+    rewardItemsGrid = nil
+    self:HideView(self.gameObject.name)
+end

@@ -1,0 +1,657 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-03-13 20:14:17
+
+require "SkillItemSlot"
+
+local WorldBossUtils = require "WorldBossUtils"
+
+local isInit = false
+
+local bgSpineRoot = {}
+local floorSpineRoot = {}
+local bossSpineRoot = {}
+local fgSpineRoot = {}
+local bossObj
+local bossSpine
+
+local bossNameTxt
+local bossHpSlider
+local bossHpTxt
+local bossRaceImg
+local bossSkillGrid
+
+local fightBtn
+local fightCountDownTxt
+local bg
+local bgInitWidth
+local BgMinHeight = 170
+local BgMaxHeight = 520
+local allRankObj
+local selfHurtRankItemSlot
+local selfHurtRankItemSlotObj
+local expandNameTxt
+local rankNameTxt
+local countDownTxt
+local challengeCountTxt
+
+local cellSizeY
+local spacingY
+local paddingTop
+local scrollRect
+local hurtRankGridParent
+local hurtRankGrid
+local hurtRankGridTrans
+local dataProvider
+
+local expandTweener
+
+local effect
+
+local stopIntValueChangedTimer = false
+local MILL_NUM = 1000000
+
+local function InitSpineRoot(root, path)
+    root.trans = self:GetComponentAtPath(path,CLS_RECTTRANSFORM)
+    root.obj = root.trans.gameObject
+end
+
+local function OpenHurtRank(open,rankName,expandName)
+    if open then
+        bg.obj:SetSelfActive(true)
+        rankNameTxt.text = rankName
+        expandNameTxt.text = expandName
+    else
+        bg.obj:SetSelfActive(false)
+        hurtRankGrid:ClearItems()
+        allRankObj:SetSelfActive(false)
+        bg.trans:ResetSizeDelta(
+            {
+                x = bgInitWidth,
+                y = BgMinHeight
+            }
+        )
+    end
+end
+
+function DoInit()
+    self.Anim = 0	
+end
+
+function InitUI()
+    countDownTxt = self:GetComponentAtPath("Center/CountDownTxt",CLS_TEXT)
+    challengeCountTxt = self:GetComponentAtPath("Center/AddItem/NumTxt",CLS_TEXT)
+    InitSpineRoot(bgSpineRoot, "Center/BgSpine")
+    InitSpineRoot(floorSpineRoot, "Center/FloorSpine")
+    InitSpineRoot(bossSpineRoot, "Center/BossSpine")
+    InitSpineRoot(fgSpineRoot, "Center/FgSpine")
+    bossObj = self:GetGameObjectAtPath("Center/Boss")
+    fightBtn = self:GetComponentAtPath("BUTTON/FightBtn",CLS_BUTTON_ARCHLY)
+    fightCountDownTxt = self:GetComponentAtPath("BUTTON/CountDownTxt",CLS_TEXT)
+    bg = {
+        trans = self:GetComponentAtPath("Center/Bg",CLS_RECTTRANSFORM),
+        obj = nil
+    }
+    bg.obj = bg.trans.gameObject
+    bgInitWidth = bg.trans:CheckSizeDelta().x
+    allRankObj = self:GetGameObjectAtPath("Center/Bg/AllRank")
+    selfHurtRankItemSlot = self:GetComponentAtPath("Center/Bg/SelfRank/HurtRankItemSlot",CLS_RECTTRANSFORM)
+    selfHurtRankItemSlotObj = selfHurtRankItemSlot.gameObject
+
+    bossNameTxt = self:GetComponentAtPath("Center/Boss/NameTxt",CLS_TEXT)
+    bossHpSlider = self:GetComponentAtPath("Center/Boss/HpSlider",CLS_SLIDER)
+    bossHpTxt = self:GetComponentAtPath("Center/Boss/HpSlider/NumTxt",CLS_TEXT)
+    bossRaceImg = self:GetGameObjectAtPath("Center/Boss/RaceImg")
+    bossSkillGrid = self:GetComponentAtPath("Center/Boss/SkillGrid",CLS_UI_ITEM_GRID)
+
+    scrollRect = self:GetComponentAtPath("Center/Bg/AllRank/RankSV/ScrollRect","ScrollRectArchly")
+    hurtRankGrid = self:GetComponentAtPath("Center/Bg/AllRank/RankSV/ScrollRect/Viewport/HurtRankGrid",CLS_UI_ITEM_GRID)
+    hurtRankGridParent = self:GetComponentAtPath("Center/Bg/AllRank/RankSV/ScrollRect/Viewport/parent",CLS_RECTTRANSFORM)
+    hurtRankGridTrans = hurtRankGrid.transform
+    local layoutGrid = hurtRankGrid:GetComponent("GridLayoutGroup")
+    cellSizeY = layoutGrid.cellSize.y
+    spacingY = layoutGrid.spacing.y
+    paddingTop = layoutGrid.padding.top
+    dataProvider = hurtRankGrid.DataProvider
+
+    expandNameTxt = self:GetComponentAtPath("Center/Bg/ExpandBtn/NameTxt",CLS_TEXT)
+    rankNameTxt = self:GetComponentAtPath("Center/Bg/RankBtn/NameTxt",CLS_TEXT)
+
+    effect = {
+        obj = self:GetGameObjectAtPath("Effect"),
+        trans = self:GetComponentAtPath("Effect",CLS_RECTTRANSFORM)
+    }
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitWorldBossDetailData")
+end
+
+function OnClose()
+    OpenHurtRank(false)
+    effect.obj:SetSelfActive(false)
+end
+
+function BeoforeReturnBack()
+    stopIntValueChangedTimer = true
+    self:HideView(self.gameObject.name)
+end
+
+local function GetShowMillNum(num)
+    return num > MILL_NUM and math.modf(num/MILL_NUM).."M" or num
+end
+
+local function SetSliderWithMill(txt,slider,curNum,maxNum)
+    local progress = math.min(curNum/maxNum,1)
+    slider.value = progress
+    local pre = GetShowMillNum(curNum)
+    local bac = GetShowMillNum(maxNum)
+    txt.text = pre.."/"..bac
+end
+
+local function ExpandHurtRank(expand, name, onFinished)
+    if expandTweener then
+        expandTweener:DoKill()
+    end
+    expandNameTxt.text = name
+    if expand then
+        expandTweener = CsBridge.TweenUtils.SizeDeltaTo(bg.trans,bgInitWidth,BgMaxHeight,0.3,function()
+            allRankObj:SetSelfActive(true)
+            if onFinished then
+                onFinished()
+            end
+        end)
+    else
+        allRankObj:SetSelfActive(false)
+        hurtRankGrid:ClearItems()
+        expandTweener = CsBridge.TweenUtils.SizeDeltaTo(bg.trans,bgInitWidth,BgMinHeight,0.3,function()
+            if onFinished then
+                onFinished()
+            end
+        end)
+    end
+end
+
+local function CheckLocalPosYByIndex(index)
+    return -(cellSizeY/2+index*(cellSizeY+spacingY)+paddingTop)
+end
+
+local function UpdateDataProvider(datas)
+    dataProvider:Clear()
+    for i,v in ipairs(datas) do
+        dataProvider:Add(v)
+    end
+end
+
+local function RecycleItemSlot(itemSlot)
+    CsBridge.objectCache:Recycle(itemSlot.gameObject)
+end
+
+local function IntValueChanged(old, new, onLoop, onFinished, duration)
+    local allCount = 10
+    local endTime = CsBridge.timeManager.ServerTime+duration*1000
+    local delta = math.floor((new - old)/allCount)
+    local cur = old
+	local d = duration/allCount
+	local oldT = 0
+	CsBridge.timeManager:UpdateFrame(duration, function(t)
+		if t - oldT >= d then
+			oldT = t
+			cur = cur + delta
+			if onLoop then
+				onLoop(cur)
+			end
+		end
+	end,function()
+		if onFinished then
+            onFinished()
+        end
+	end,function()
+        return stopIntValueChangedTimer
+	end)
+end
+
+local function BindHurtRankItemSlot(slot, data)
+    local rankImg = slot:GetGameObjectAtPath("Rank/RankImg")
+    local rankTxt = slot:GetComponentAtPath("Rank/RankTxt",CLS_TEXT)
+    local nameTxt = slot:GetComponentAtPath("UnionName",CLS_TEXT)
+    local unionIcon = slot:GetGameObjectAtPath("UnionIcon")
+    local hurtTxt = slot:GetComponentAtPath("HurtNum",CLS_TEXT)
+    local hurtSlider = slot:GetComponentAtPath("HurtSlider",CLS_SLIDER)
+
+    if data.rank > 0 and data.rank<=3 then
+        rankImg:SetSelfActive(true)
+		CsBridge.IconData.SetIconByName(rankImg,"new_com_paiming"..data.rank)
+	else
+		rankImg:SetSelfActive(false)
+    end
+    rankTxt.text = data.rank == -1 and "-" or data.rank
+    nameTxt.text = data.name
+    if data.isPlayer or data.id == 0 then
+        unionIcon:SetSelfActive(false)
+    else
+        unionIcon:SetSelfActive(true)
+        CsBridge.IconData.SetIconByName(unionIcon, data.icon)
+    end
+
+    if data.hurtUpdate then
+        local allHurt = GetShowMillNum(data.hurt)
+        IntValueChanged(data.oldHurt,data.hurt,function(x)
+            local curHurt = GetShowMillNum(x)
+            hurtTxt.text = curHurt
+        end, function()
+            hurtTxt.text = allHurt
+        end, 0.3)
+    else
+        hurtTxt.text = GetShowMillNum(data.hurt)
+    end
+
+    if data.hurtPercentUpdate then
+        CsBridge.TweenUtils.TweenSliderTo(hurtSlider, data.hurtPercent, 0.3)
+    else
+        hurtSlider.value = data.hurtPercent
+    end
+end
+
+local function RefreshBoss(boss, anim)
+    local spine = CsBridge.objectCache:CreateObject(boss.model,true,bossSpineRoot.trans)
+    bossSpine = spine.transform:GetChild(0).gameObject
+    local ske = bossSpine:GetComponent(CLS_SKELETONGRAPHIC)
+    if anim then
+        ske:PlayAnimation("stand",true)
+    end
+    bossNameTxt.text = boss.name
+    local SizeDelta = bossNameTxt.transform:CheckSizeDelta()
+    SizeDelta.x = bossNameTxt.preferredWidth
+    bossNameTxt.transform:ResetSizeDelta(SizeDelta)
+    SetIconByRaceId(bossRaceImg, boss.raceId)
+    SetSliderWithMill(bossHpTxt,bossHpSlider,boss.curHp,boss.hp)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        bossSkillGrid:RefreshItemSlots(boss.buffArr,self.gameObject,"SkillItemSlot")
+    end,"SkillItemSlot")
+end
+
+local function DestroySpine(spineRoot)
+    if spineRoot.childCount >= 1 then
+        DestroyModel(spineRoot:GetChild(0).gameObject)
+    end
+end
+
+local function ClearSpine(clearAll, ... )
+    if clearAll then
+        DestroySpine(bgSpineRoot.trans)
+        DestroySpine(floorSpineRoot.trans)
+        DestroySpine(fgSpineRoot.trans)
+        DestroySpine(bossSpineRoot.trans)
+    else
+        local roots = { ... }
+        for i,root in ipairs(roots) do
+            DestroySpine(root)
+        end
+    end
+end
+
+local function RefreshCountdownDesp(countDown)
+    countDownTxt.text = countDown
+end
+
+local function RefreshFightBtnState(enabled, price, countDown)
+    fightBtn.Gray = not enabled
+    fightCountDownTxt.gameObject:SetSelfActive(not enabled)
+    fightCountDownTxt.text = countDown or ""
+end
+
+function OnNotification_RefreshDontAppearState(objs)
+    local endTime = objs[0]
+    ClearSpine(true)
+    bossObj:SetSelfActive(false)
+    RefreshFightBtnState(true)
+    fightBtn.Gray = true
+    RefreshCountdownDesp(endTime)
+end
+
+function OnNotification_RefreshAppearState(objs)
+    local viewData = objs[0]
+    local boss = viewData.boss
+    local countDownDesp = viewData.countDownDesp
+    local hasTransAnim = viewData.hasTransAnim
+    local appearSpineName = "WorldBossAppearSpine"
+    local appearAnimName = "chuchang"
+    local bgSpine = "WorldBossBgSpine"
+    local bgAnimName = "loop_hou"
+    local floorSpine = "WorldBossFloorSpine"
+    local floorAnimName = "loop_zhong"
+    local fgSpine = "WorldBossFgSpine"
+    local fgAnimName = "loop_qian"
+    effect.obj:SetSelfActive(true)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local doRefreshAppearState = function()
+            local spine = CsBridge.objectCache:CreateObject(bgSpine,true,bgSpineRoot.trans)
+            spine:GetComponent(CLS_SKELETONGRAPHIC):PlayAnimation(bgAnimName,true)
+            spine = CsBridge.objectCache:CreateObject(floorSpine,true,floorSpineRoot.trans)
+            spine:GetComponent(CLS_SKELETONGRAPHIC):PlayAnimation(floorAnimName,true)
+            spine = CsBridge.objectCache:CreateObject(fgSpine,true,fgSpineRoot.trans)
+            spine:GetComponent(CLS_SKELETONGRAPHIC):PlayAnimation(fgAnimName,true)
+            RefreshBoss(boss,true)
+            bossObj:SetSelfActive(true)
+            RefreshFightBtnState(true)
+            fightBtn.Gray = false
+            effect.obj:SetSelfActive(false)
+        end
+        if hasTransAnim then
+            local spine = CsBridge.objectCache:CreateObject(appearSpineName,true,effect.trans)
+            spine:GetComponent(CLS_SKELETONGRAPHIC):PlayAnimation(appearAnimName,false,function()
+                ClearSpine(false, effect.trans)
+                doRefreshAppearState()
+            end)
+        else
+            doRefreshAppearState()
+        end
+        RefreshCountdownDesp(countDownDesp)
+    end,appearSpineName,bgSpine,floorSpine,fgSpine,boss.model)
+end
+
+function OnNotification_RefreshDisappearState(objs)
+    local endTime,hasTransAnim = objs[0],objs[1]
+    local appearSpineName = "WorldBossAppearSpine"
+    local appearAnimName = "chuchang"
+    effect.obj:SetSelfActive(true)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local doRefreshDisappearState = function()
+            ClearSpine(true)
+            bossObj:SetSelfActive(false)
+            RefreshFightBtnState(true)
+            fightBtn.Gray = true
+            RefreshCountdownDesp(endTime)
+            effect.obj:SetSelfActive(false)
+        end
+        if hasTransAnim then
+            local spine = CsBridge.objectCache:CreateObject(appearSpineName,true,effect.trans)
+            spine:GetComponent(CLS_SKELETONGRAPHIC):PlayAnimation(appearAnimName,false,function()
+                ClearSpine(false, effect.trans)
+                doRefreshDisappearState()
+            end)
+        else
+            doRefreshDisappearState()
+        end
+    end,appearSpineName)
+end
+
+function OnNotification_RefreshRecoverState(objs)
+    local viewData = objs[0]
+    local countDownDesp = viewData.countDownDesp
+    local hasTransAnim = viewData.hasTransAnim
+    ClearSpine(true)
+    bossObj:SetSelfActive(false)
+    RefreshFightBtnState(true)
+    fightBtn.Gray = true
+    RefreshCountdownDesp(countDownDesp)
+end
+
+local function RefreshBossDead(endTime)
+    ClearSpine(false,bgSpineRoot.trans,floorSpineRoot.trans,fgSpineRoot.trans)
+    bossObj:SetSelfActive(false)
+    CsBridge.IconData.ChangeSpineMaterial(bossSpine,"SpriteGray")
+    RefreshFightBtnState(true)
+    fightBtn.Gray = true
+    RefreshCountdownDesp(endTime)
+end
+
+function OnNotification_RefreshDeadState(objs)
+    local viewData = objs[0]
+    local boss = viewData.boss
+    local countDownDesp = viewData.countDownDesp
+    local hasTransAnim = viewData.hasTransAnim
+    local oldHp = viewData.oldHp
+    local function doRefreshDeadState()
+        ClearSpine(true)
+        bossObj:SetSelfActive(false)
+        RefreshFightBtnState(true)
+        fightBtn.Gray = true
+        RefreshCountdownDesp(countDownDesp)
+        effect.obj:SetSelfActive(false)
+    end
+    if hasTransAnim then
+        local newHp = boss.curHp
+        local hp = boss.hp
+        CsBridge.TweenUtils.TweenSliderTo(bossHpSlider,0,0.3,function()
+            doRefreshDeadState()
+        end)
+        local allHp = GetShowMillNum(hp)
+        IntValueChanged(oldHp,newHp,function(x)
+            local curHp = GetShowMillNum(x)
+            bossHpTxt.text =  curHp.."/"..allHp
+        end,function()
+            SetSliderWithMill(bossHpTxt,bossHpSlider,newHp,hp)
+        end,0.3)
+    else
+        doRefreshDeadState()
+    end
+end
+
+function OnNotification_RefreshSettleState(objs)
+    local viewData = objs[0]
+    local countDownDesp = viewData.countDownDesp
+    local hasTransAnim = viewData.hasTransAnim
+    local appearSpineName = "WorldBossAppearSpine"
+    local appearAnimName = "chuchang"
+    effect.obj:SetSelfActive(true)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local doRefreshDisappearState = function()
+            ClearSpine(true)
+            bossObj:SetSelfActive(false)
+            RefreshFightBtnState(true)
+            fightBtn.Gray = true
+            RefreshCountdownDesp(countDownDesp)
+            effect.obj:SetSelfActive(false)
+        end
+        if hasTransAnim then
+            local spine = CsBridge.objectCache:CreateObject(appearSpineName,true,effect.trans)
+            spine:GetComponent(CLS_SKELETONGRAPHIC):PlayAnimation(appearAnimName,false,function()
+                ClearSpine(false, effect.trans)
+                doRefreshDisappearState()
+            end)
+        else
+            doRefreshDisappearState()
+        end
+    end,appearSpineName)
+end
+
+function OnNotification_RefreshChallengeCountView(objs)
+    local count = objs[0]
+    challengeCountTxt.text = count
+end
+
+function OnNotification_RefreshCountDownDesp(objs)
+    local countDown = objs[0]
+    RefreshCountdownDesp(countDown)
+end
+
+function OnNotification_RefreshCurWorldBossHp(objs)
+    local viewData = objs[0]
+    local oldHp = viewData.oldHp
+    local newHp = viewData.newHp
+    local hp = viewData.hp
+    CsBridge.TweenUtils.TweenSliderTo(bossHpSlider,newHp/hp,0.3)
+    local allHp = GetShowMillNum(hp)
+    IntValueChanged(oldHp,newHp,function(x)
+        local curHp = GetShowMillNum(x)
+        bossHpTxt.text = curHp .. "/" .. allHp
+    end,function()
+        SetSliderWithMill(bossHpTxt,bossHpSlider,newHp,hp)
+    end,0.3)
+end
+
+function OnNotification_RefreshSelfHurtRankView(objs)
+    local selfData = objs[0]
+    BindHurtRankItemSlot(selfHurtRankItemSlot, selfData)
+    selfHurtRankItemSlotObj:SetSelfActive(true)
+end
+
+function OnNotification_RefreshAllHurtRankView(objs)
+    local allHurtRankData = objs[0]
+    hurtRankGrid:RefreshItemSlots(allHurtRankData, self.gameObject, "HurtRankItemSlot")
+end
+
+function OnNotification_UpdateAllHurtRank(objs)
+    local newDatas, updateDatas = objs[0], objs[1]
+    UpdateDataProvider(newDatas)
+    for i,updateData in ipairs(updateDatas) do
+        if updateData.type == WorldBossUtils.HurtRankUpdateType.Update then
+            local oldIndex = updateData.oldRank - 1
+            local newIndex = updateData.data.rank - 1
+            local itemSlot = hurtRankGridTrans:GetChild(oldIndex):GetComponent("ItemSlot")
+            hurtRankGrid:BindValue(itemSlot, updateData.data)
+            if newIndex ~= oldIndex then
+                local itemSlotTrans = itemSlot.transform
+                local newPosY = CheckLocalPosYByIndex(newIndex)
+                CsBridge.TweenUtils.MoveTo(itemSlotTrans,-2,newPosY,0.3,function()
+                    itemSlotTrans:SetSiblingIndex(newIndex)
+                end)
+            end
+        elseif updateData.type == WorldBossUtils.HurtRankUpdateType.Add then
+            local index = updateData.newRank - 1
+            local itemSlot = hurtRankGrid:CreateItemSlot("HurtRankItemSlot",hurtRankGrid.transform)
+            hurtRankGrid:BindValue(itemSlot, updateData.data)
+            local newPosY = CheckLocalPosYByIndex(index)
+            local itemSlotTrans = itemSlot.transform
+            CsBridge.TweenUtils.MoveTo(itemSlotTrans,-2,newPosY,0.3,function()
+                itemSlotTrans:SetSiblingIndex(index)
+            end)
+        elseif updateData.type == WorldBossUtils.HurtRankUpdateType.Remove then
+            local index = updateData.oldRank - 1
+            local itemSlot = hurtRankGridTrans:GetChild(index):GetComponent("ItemSlot")
+            local itemSlotTrans = itemSlot.transform
+            local t = CsBridge.TweenUtils.ScaleTo(itemSlotTrans,0,0,0.3)
+            t:OnCompleteAction(function()
+                RecycleItemSlot(itemSlot)
+            end)
+            t:DoPlay()
+        end
+    end
+end
+
+function OnNotification_OpenHurtRank(objs)
+    local open,rankNameTxt,expandName = objs[0],objs[1],objs[2]
+    OpenHurtRank(open,rankNameTxt,expandName)
+end
+
+function OnNotification_RefreshRankBtnName(objs)
+    local name = objs[0]
+    rankNameTxt.text = name
+end
+
+function OnNotification_ExpandHurtRank(objs)
+    local expand = objs[0]
+    local name = objs[1]
+    local onFinished = objs.Length == 3 and objs[2] or nil
+    ExpandHurtRank(expand, name, onFinished)
+end
+
+function OnNotification_RefreshFightBtnState(objs)
+    local viewData = objs[0]
+    local enabled = viewData.enabled
+    local price = viewData.price
+    local countDown = viewData.countDown
+    RefreshFightBtnState(enabled,price,countDown)
+end
+
+function OnHurtRankItemSlotBindValue(slot, data)
+    BindHurtRankItemSlot(slot, data)
+end
+
+function OnSkillGridItemClick(obj)
+    local data = obj.m_data
+    self:SendCommand("OpenSkillTip",data)
+end
+
+function OnHurtRankBtnClick(sender)
+    self:SendCommand("OpenHurtRank")
+end
+
+function OnRankBtnClick(sender)
+    self:SendCommand("UpdateHurtRankType")
+end
+
+function OnExpandBtnClick(sender)
+    self:SendCommand("ExpandHurtRank")
+end
+
+function OnBossBtnClick(sender)
+    self:SendCommand("FightWorldBoss")
+end
+
+function OnRankRewardBtnClick(sender)
+    self:SendCommand("OpenRankRewardView")
+end
+
+function OnBossSpineClick(sender)
+    self:SendCommand("FightWorldBoss")
+end
+
+function OnFightBtnClick(sender)
+    self:SendCommand("FightWorldBoss")
+end
+
+function OnFightCountDownBtnClick(sender)
+    self:SendCommand("FightWorldBoss")
+end
+
+function OnHelpBtnClick(sender)
+    self:SendCommand("OpenHelpTip")
+end
+
+function OnAddBtnClick(sender)
+    self:SendCommand("AddChallengeCount")
+end
+
+function DoExit()
+    isInit = nil
+
+    bgSpineRoot = nil
+    floorSpineRoot = nil
+    bossSpineRoot = nil
+    fgSpineRoot = nil
+    bossObj = nil
+    bossSpine = nil
+
+    countDownTxt = nil
+
+    bossNameTxt = nil
+    bossHpSlider = nil
+    bossHpTxt = nil
+    bossRaceImg = nil
+    bossSkillGrid = nil
+
+    fightBtn = nil
+    fightCountDownTxt = nil
+    bg = nil
+    bgInitWidth = nil
+    BgMinHeight = nil
+    BgMaxHeight = nil
+    allRankObj = nil
+    selfHurtRankItemSlot = nil
+    selfHurtRankItemSlotObj = nil
+    expandNameTxt = nil
+    rankNameTxt = nil
+
+    cellSizeY = nil
+    spacingY = nil
+    paddingTop = nil
+    scrollRect = nil
+    hurtRankGridParent = nil
+    hurtRankGrid = nil
+    hurtRankGridTrans = nil
+    dataProvider = nil
+
+    expandTweener = nil
+
+    effect = nil
+
+    stopIntValueChangedTimer = nil
+end

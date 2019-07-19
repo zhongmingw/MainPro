@@ -1,0 +1,24 @@
+
+function OnUnionReinforcementItemSlotBindValue(slot, data)
+    local playerBaseTF = slot.transform:Find("Player")
+    local NameTxt = slot:GetComponentAtPath("NameTxt" ,CLS_TEXT)
+    local PieceItem = slot.transform:Find("PieceItem")
+    local slider = slot:GetComponentAtPath("Slider" ,CLS_SLIDER)
+    local progressTxt = slot:GetComponentAtPath("Slider/NumTxt" ,CLS_TEXT)
+    local ownObj = slot:GetGameObjectAtPath("Own")
+    local otherObj = slot:GetGameObjectAtPath("Other")
+    local maskObj = slot:GetGameObjectAtPath("Mask")
+    local donationBtn = slot:GetComponentAtPath("According/DonationBtn" ,CLS_BUTTON_ARCHLY)
+    local ownCountTxt = slot:GetComponentAtPath("According/Own/NumTxt" ,CLS_TEXT)
+
+    BindPlayerBaseInfoValue(playerBaseTF,data.member)
+    BindItemBaseValue(PieceItem,{typeId = data.requestItem.typeId, id = data.requestItem.id, count = 1})
+    SetSliderProgress(progressTxt,slider,data.requestItem.receivedCount,data.requestItem.count)
+    NameTxt.text = data.member.name
+    ownCountTxt.text = data.requestItem.ownCount
+    maskObj:SetSelfActive(data.hasDonation)
+    ownObj:SetSelfActive(data.isOwn)
+    otherObj:SetSelfActive(not data.isOwn)
+    donationBtn.gameObject:SetSelfActive(not data.isOwn and data.requestItem.ownCount ~= 0)
+    donationBtn.Gray = data.hasMaxDonation
+end

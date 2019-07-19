@@ -1,0 +1,52 @@
+
+function OnPayItemSlotBindValue(slot,data)
+    local slotTrans = slot.transform
+    local first = slotTrans:Find("first").gameObject
+    local rewardTxt = slotTrans:GetComponentAtPath("number01Txt", CLS_TEXT)
+    local priceTxt = slotTrans:GetComponentAtPath("number03Txt", CLS_TEXT)
+    local iconImg = slotTrans:GetComponentAtPath("iconImg", CLS_IMAGE)
+    local buyTxt = slotTrans:GetComponentAtPath("name03Txt",CLS_TEXT)
+
+    first:SetSelfActive(data.isFirst)
+    priceTxt.text=data.showPrice
+    CsBridge.IconData.SetIconByName(iconImg.gameObject,data.icon)
+
+    local isCard = data.isCard
+    local topGemIconObj = slot.transform:Find("gemImg").gameObject
+    topGemIconObj:SetSelfActive(not isCard)
+
+    local cardInfoRoot = slot.transform:Find("card")
+    cardInfoRoot.gameObject:SetSelfActive(isCard)
+    local cardInfoObj = cardInfoRoot:Find("CardInfoBtn").gameObject
+    cardInfoObj:SetSelfActive(isCard)
+    buyTxt.text = data.buyBtnTxt
+    if isCard then
+        rewardTxt.text = ""
+        local cardNameTxt = cardInfoRoot:GetComponentAtPath("cardNameTxt", CLS_TEXT)
+        local cardRewardTxt = cardInfoRoot:GetComponentAtPath("gemCountTxt", CLS_TEXT)
+        local cardExpTxt = cardInfoRoot:GetComponentAtPath("expTxt", CLS_TEXT)
+        local cdImgObj = cardInfoRoot:GetGameObjectAtPath("cdBgImg")
+        local cdTxt = cardInfoRoot:GetComponentAtPath("cdTxt", CLS_TEXT)
+        local iconImgObj = cardInfoRoot:GetGameObjectAtPath("iconImg")
+        local expHeadTxtObj = cardInfoRoot:GetGameObjectAtPath("expHeadTxt")
+        local gemImgObj = cardInfoRoot:GetGameObjectAtPath("gemImg")
+
+        cardNameTxt.text = data.title
+        cardRewardTxt.text = tostring(data.reward)
+        cardExpTxt.text = "+" .. tostring(data.vip)
+        cdTxt.text = data.daysLeft
+        cdTxt.gameObject:SetActive(data.showCD)
+        cdImgObj:SetActive(data.showCD)
+        iconImgObj:SetActive(data.showReward)
+        gemImgObj:SetActive(data.showReward)
+        cardRewardTxt.gameObject:SetActive(data.showReward)
+        expHeadTxtObj:SetActive(data.showReward)
+        cardExpTxt.gameObject:SetActive(data.showReward)
+    else
+        if data.addreward > 0 then
+            rewardTxt.text=tostring(data.reward).."+"..tostring(data.addreward)
+        else
+            rewardTxt.text=tostring(data.reward)
+        end
+    end
+end

@@ -1,0 +1,406 @@
+---获取纹章的某个属性
+local GetSoulImprintItemAttrValueById = function(attrId, itemInfo)
+    local result = 0
+    if itemInfo then
+        for i = 1, #itemInfo.soulImprintValue do
+            if itemInfo.soulImprintValue[i].id == attrId then
+                result = itemInfo.soulImprintValue[i].attrNumberValue
+            end
+        end
+    end
+    return math.floor(result)
+end
+
+---获取需要比较的属性
+local GetHeroAttrValue = function(targetId, a, b)
+    local aValue = GetSoulImprintItemAttrValueById(targetId, a)
+    local bValue = GetSoulImprintItemAttrValueById(targetId, b)
+    return aValue, bValue
+end
+
+---全部灵魂纹章排序
+local SortSoulImprintItemByAll = function(a, b)
+    if a.uid ~= b.uid then
+        return a.uid > b.uid
+    end
+    return a.heroId < b.heroId
+end
+
+---根据属性排序
+local SortSoulImprintItemByIds = function(firsetId, nextId, a, b)
+    local aValue, bValue = GetHeroAttrValue(firsetId, a, b)
+    if aValue ~= bValue then
+        return aValue > bValue
+    end
+    if nextId then
+        aValue, bValue = GetHeroAttrValue(nextId, a, b)
+        if aValue ~= bValue then
+            return aValue > bValue
+        end
+    end
+    return a.uid > b.uid
+end
+
+---按照攻击排序
+local SortSoulImprintItemByAttack = function(a, b)
+    local attackId = 4
+    local violentAttackId = 8
+    return SortSoulImprintItemByIds(attackId, violentAttackId, a, b)
+end
+
+---按照防御排序
+local SortSoulImprintItemByDefend = function(a, b)
+    local healthId = 1
+    local defendID = 5
+    return SortSoulImprintItemByIds(healthId, defendID, a, b)
+end
+
+---按照速度排序
+local SortSoulImprintItemBySpeed = function(a, b)
+    local speedId = 3
+    return SortSoulImprintItemByIds(speedId, nil, a, b)
+end
+
+---计算表中的实际比例
+local GetSoulorbRateTblRateValue = function(value)
+    if value then
+        return (tonumber(value) / 10000.0) * 100
+    else
+        return 0
+    end
+end
+
+---把属性转换成数字表示，如果是比例，则转换成千分制的分子部分
+local GetAttrToNumber = function(type, value, rate)
+    if (type == 2) then
+        local temp = GetPropTrueVal(type, value)---百分制的分子
+        local rateTemp = GetSoulorbRateTblRateValue(rate) ---比例的百分制的分子
+        return math.floor(tonumber(((rateTemp * temp) / 10000) * 1000))
+    else
+        return math.floor(tonumber(value * rate / 10000))
+    end
+    return math.floor(tonumber(value * rate / 10000))
+end
+
+---计算纹章的属性
+local CalculateSoulImprintItemAttr = function(conditon, hero, soulorbRateValueArr)
+    hero.soulImprintValue = {}
+    for i = 1, #soulorbRateValueArr[conditon] do
+        local temp = {}
+        local tempAttrValue = GetHeroAttr(hero, soulorbRateValueArr[conditon][i].id, false, false, false)
+        temp.id = soulorbRateValueArr[conditon][i].id
+        temp.attrNumberValue = GetAttrToNumber(soulorbRateValueArr[conditon][i].type, tempAttrValue, soulorbRateValueArr[conditon][i].rate)
+        temp.attrName = GetPropName(soulorbRateValueArr[conditon][i].id)
+        temp.attrValue = GetPropValue(soulorbRateValueArr[conditon][i].type, temp.attrNumberValue)
+        temp.type = soulorbRateValueArr[conditon][i].type
+        temp.nameAndValueStr = temp.attrName .. "：" .. temp.attrValue
+        table.insert(hero.soulImprintValue, temp)
+    end
+end
+
+---缓存一下表的数据
+local MemorySoulorbRateTableValue = function(soulorbRateValueArr, conditon, soulorbRateTbl)
+    if soulorbRateValueArr[conditon] == nil then
+        local strValue = soulorbRateTbl:Get(tostring(conditon), SoulorbRate.rate1)
+        local strSplit = string.split(strValue, ";")
+        if strSplit then
+            soulorbRateValueArr[conditon] = {}
+            for i = 0, strSplit.Length - 1 do
+                local temp = string.split(strSplit[i], ",")
+                local idAndRate = {}
+                idAndRate.id = tonumber(temp[0])
+                idAndRate.rate = tonumber(temp[1])
+                for j, data in pairs(global_attributeArr) do
+                    if data.id == idAndRate.id then
+                        idAndRate.type = tonumber(data.type)
+                    end
+                end
+                table.insert(soulorbRateValueArr[conditon], idAndRate)
+            end
+        end
+    end
+end
+
+---获取英雄信息
+local function GetHeroData(heroBaseTbl, oldHero)
+    local curGroup = heroBaseTbl:GetInt(oldHero.heroId, HeroBase.group)
+    local curStar = oldHero.distillationStar
+    local curQuality = heroBaseTbl:GetInt(oldHero.heroId, HeroBase.quality)
+    local hero = {
+        uid = oldHero.uid,
+        heroId = oldHero.heroId,
+        grade = oldHero.grade,
+        level = oldHero.level,
+        weaponId = oldHero.weaponId or 0,
+        hatId = oldHero.hatId or 0,
+        clothId = oldHero.clothId or 0,
+        shoesId = oldHero.shoesId or 0,
+        distillationStar = curStar,
+        distillationLevel = oldHero.distillationLevel,
+        breakLevel = oldHero.breakLevel,
+        relicId = oldHero.relicId,
+        race = curGroup,
+        quality = curQuality,
+        model = heroBaseTbl:Get(oldHero.heroId, HeroBase.model),
+        name = heroBaseTbl:Get(oldHero.heroId, HeroBase.title),
+        jewelIds = oldHero.jewelIds,
+        runeData = oldHero.rune,
+        isEmblem = oldHero.isEmblem,
+        emblemOwnerUid = oldHero.emblemOwnerUid,
+        haveEmblemUid = oldHero.haveEmblemUid,
+        job = heroBaseTbl:GetInt(oldHero.heroId, HeroBase.job),
+        skill = GetHeroSkillArr(oldHero),
+        distillation = GetHeroDistillation(oldHero),
+        elementCampInfo = oldHero.elementCampInfo,
+        heroCrystalInfo = oldHero.heroCrystalInfo,
+        other = oldHero.other,
+        relicItem = oldHero.relicItem,
+        jewelItems = oldHero.jewelItems,
+        unionTechs = oldHero.unionTechs,
+        rune = oldHero.rune,
+    }
+    return hero
+end
+
+---初始化所有的灵魂纹章
+local InitAllSoulImprintItem = function(allItemArr, conditionFunc)
+    local soulorbRateTbl = ResTblContainer:GetTable(SoulorbRate.actorTbl)
+    local heroBaseTbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    local soulorbRateValueArr = {}
+    local pbs = appData:checkAllItems("HeroItem")
+    if pbs ~= nil then
+        for i = 0, pbs.Length - 1 do
+            local pbHero = pbs[i]
+            local isSoulImprinted = pbHero.isEmblem
+            if isSoulImprinted then
+                local curStar = pbHero.distillationStar
+                local curQuality = heroBaseTbl:GetInt(pbHero.heroId, HeroBase.quality)
+                local conditon = curStar + curQuality
+                local pass = true
+                if conditionFunc then
+                    pass = conditionFunc(conditon, pbHero)
+                end
+                if pass then
+                    local hero = GetHeroData(heroBaseTbl, pbHero)
+                    hero.showDuty = CheckHeroInDuty(pbHero, GetHeroAllDuty())
+                    hero.dutyInPve = CheckHeroDutyInPve(pbHero.duty)
+                    hero.lock = CheckHeroInDuty(pbHero, HeroDuty.LOCK)
+                    MemorySoulorbRateTableValue(soulorbRateValueArr, conditon, soulorbRateTbl)
+                    CalculateSoulImprintItemAttr(conditon, hero, soulorbRateValueArr)
+                    table.insert(allItemArr, hero)
+                end
+            end
+        end
+    end
+    table.sort(allItemArr, SortSoulImprintItemByAll)
+end
+
+---获取预览版的纹章
+local function GetPreviewSoulImprintItem(heroInfo)
+    local result = {}
+    local soulorbRateTbl = ResTblContainer:GetTable(SoulorbRate.actorTbl)
+    local heroBaseTbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    local soulorbRateValueArr = {}
+    if heroInfo then
+        local curStar = heroInfo.distillationStar
+        local curQuality = heroBaseTbl:GetInt(heroInfo.heroId, HeroBase.quality)
+        local conditon = curStar + curQuality
+        result = GetHeroData(heroBaseTbl, heroInfo)
+        result.isEmblem = true
+        result.runeData = heroInfo.runeData
+        result.haveEmblemUid = 0
+        MemorySoulorbRateTableValue(soulorbRateValueArr, conditon, soulorbRateTbl)
+        CalculateSoulImprintItemAttr(conditon, result, soulorbRateValueArr)
+    end
+    return result
+end
+
+---切换灵魂纹章的标签页
+local ScreenSoulImprintItem = function(curRace, allItemArr)
+    ---@type table 分页类型
+    local SoulImprintItemType = {
+        All = 0, ---所有
+        Attack = 1, ---攻击
+        Defend = 2, ---防御
+        Speed = 3, ---速度
+    }
+    if allItemArr then
+        if curRace == SoulImprintItemType.All then
+            table.sort(allItemArr, SortSoulImprintItemByAll)
+        elseif curRace == SoulImprintItemType.Attack then
+            table.sort(allItemArr, SortSoulImprintItemByAttack)
+        elseif curRace == SoulImprintItemType.Defend then
+            table.sort(allItemArr, SortSoulImprintItemByDefend)
+        elseif curRace == SoulImprintItemType.Speed then
+            table.sort(allItemArr, SortSoulImprintItemBySpeed)
+        else
+            table.sort(allItemArr, SortSoulImprintItemByAll)
+        end
+    end
+end
+
+---初始化解封，自己的资源
+local InitDesSoulImprintCost = function(soulorbResetTbl)
+    local selfConsume = {}
+    local resource = soulorbResetTbl:Get(tostring(1), SoulorbReset.resource)
+    local resourceSplit = string.split(resource, ",")
+    selfConsume.typeId = tonumber(resourceSplit[0])
+    selfConsume.id = tonumber(resourceSplit[1])
+    selfConsume.count = GetCountByItemType(selfConsume.id, selfConsume.typeId) or 0
+    return selfConsume
+end
+
+---计算解封需要消耗的资源
+local CalculateDesSoulImprintCost = function(selfConsume, selectedArr, soulorbResetTbl)
+    local costConsume = {}
+    costConsume.typeId = selfConsume.typeId
+    costConsume.id = selfConsume.id
+    costConsume.count = 0
+    if selectedArr then
+        for i = 1, #selectedArr do
+            local resource = soulorbResetTbl:Get(tostring(selectedArr[i].grade), SoulorbReset.resource)
+            local resourceSplit = string.split(resource, ",")
+            costConsume.typeId = tonumber(resourceSplit[0])
+            costConsume.id = tonumber(resourceSplit[1])
+            costConsume.count = costConsume.count + tonumber(resourceSplit[2])
+        end
+    end
+    return costConsume
+end
+
+---初始化灵魂纹章提示界面的数据
+local InitSoulItemTipsViewData = function(heroInfo)
+    if heroInfo then
+        local viewData = {}
+        viewData.itemInfo = heroInfo
+        viewData.base = {}
+        viewData.base.nameTxt = heroInfo.name
+        viewData.base.typeTxt = Language:getStr("SoulImprint")
+        viewData.base.despTxt = ""
+        viewData.showBtn = {}
+        viewData.showBtn.btnParentState = false
+        viewData.showBtn.unWearBtnState = false
+        viewData.showBtn.exchangeBtnState = false
+        viewData.showBtn.wearBtnState = false
+        viewData.showBtn.useBtnState = false
+        viewData.props = {}
+        for i = 1, #heroInfo.soulImprintValue do
+            local valueItem = heroInfo.soulImprintValue[i]
+            local temp = {}
+            temp.propTxt = valueItem.attrValue
+            temp.propNameTxt = valueItem.attrName
+            temp.propNumber = valueItem.attrNumberValue
+            temp.type = valueItem.type
+            temp.id = valueItem.id
+            table.insert(viewData.props, temp)
+        end
+        return viewData
+    else
+        return nil
+    end
+end
+
+---获取纹章的属性条数
+local function GetItemProCount(itemData)
+    local count = 0
+    if itemData then
+        count = #itemData.props
+    end
+    return count
+end
+
+---获取纹章的一条属性
+local function GetItemPro(itemData, index)
+    if itemData then
+        return itemData.props[index]
+    end
+    return nil
+end
+
+---加入一个增加或者减少的属性
+local ChangeSoulImprintAddOrSubAttr = function(newViewData, oldViewData, isAdd)
+    local tempProps = {}
+    local newProCount = GetItemProCount(newViewData)
+    local oldProCount = GetItemProCount(oldViewData)
+    local maxProCount = newProCount
+    local minProCount = oldProCount
+    local maxProItem = newViewData
+    local minProItem = oldViewData
+    local maxIsNew = true
+    if newProCount < oldProCount then
+        maxProCount = oldProCount
+        maxProItem = oldViewData
+        minProItem = newViewData
+        minProCount = newProCount
+        maxIsNew = false
+    end
+
+    for i = 1, maxProCount do
+        local maxPropItem = GetItemPro(maxProItem, i)
+        local temp = {}
+        temp.isUp = maxIsNew and isAdd
+        temp.name = maxPropItem.propNameTxt
+        temp.id = maxPropItem.id
+        temp.propNumber = maxPropItem.propNumber
+        temp.changeValStr = string.gsub(maxPropItem.propTxt, '+', "", 10)
+        for k = 1, minProCount do
+            local minPropItem = GetItemPro(minProItem, k)
+            if minPropItem and minPropItem.id == temp.id then
+                local attrNumber = temp.propNumber - minPropItem.propNumber
+                if attrNumber ~= 0 then
+                    if maxIsNew then
+                        temp.isUp = attrNumber >= 0
+                    else
+                        temp.isUp = attrNumber < 0
+                    end
+                    local attrNumberValue = attrNumber >= 0 and attrNumber or -attrNumber
+                    temp.propNumber = attrNumberValue
+                    temp.changeValStr = string.gsub(GetPropValue(temp.type, attrNumberValue), "+", "", 10)
+                end
+            end
+        end
+        table.insert(tempProps, temp)
+    end
+    newViewData.changedProps = tempProps
+end
+
+---通过uid获取灵魂纹章
+local function GetSoulImprintItemByEmblemUid(emblemUid)
+    if emblemUid and emblemUid > 0 then
+        local items = {}
+        InitAllSoulImprintItem(items, function(star, heroPb)
+            return heroPb.uid == emblemUid
+        end)
+        return items[1]
+    else
+        return nil
+    end
+end
+
+---获取英雄的灵魂纹章
+local function GetSoulImprintItemByHero(heroInfo)
+    local newCurHeroData = heroInfo.isEmblem and heroInfo or appData:checkItem("HeroItem", heroInfo.uid)
+    if heroInfo.emblemHero then
+        local attr = GetPreviewSoulImprintItem(heroInfo.emblemHero)
+        return attr
+    end
+    if newCurHeroData then
+        local attr = GetSoulImprintItemByEmblemUid(newCurHeroData.haveEmblemUid)
+        return attr
+    else
+        return nil
+    end
+end
+
+return {
+    GetSoulImprintItemAttrValueById = GetSoulImprintItemAttrValueById,
+    InitAllSoulImprintItem = InitAllSoulImprintItem,
+    ScreenSoulImprintItem = ScreenSoulImprintItem,
+    InitDesSoulImprintCost = InitDesSoulImprintCost,
+    CalculateDesSoulImprintCost = CalculateDesSoulImprintCost,
+    InitSoulItemTipsViewData = InitSoulItemTipsViewData,
+    ChangeSoulImprintAddOrSubAttr = ChangeSoulImprintAddOrSubAttr,
+    GetPreviewSoulImprintItem = GetPreviewSoulImprintItem,
+    GetSoulImprintItemByHero = GetSoulImprintItemByHero,
+    GetSoulImprintItemByEmblemUid = GetSoulImprintItemByEmblemUid,
+}

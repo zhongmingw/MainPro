@@ -1,0 +1,107 @@
+---@type UnityEngine.TextMesh
+local dayFreeTxt
+---@type UnityEngine.TextMesh
+local priceTxt
+---@type Client.Library.ButtonArchly
+local buyBtn
+---@type UnityEngine.GameObject
+local remainTimeObj
+---@type UnityEngine.TextMesh
+local remainTimeGreenTxt
+---@type UnityEngine.GameObject
+local remainTimeGreenTxtObj
+---@type UnityEngine.TextMesh
+local remainTimeNormalTxt
+---@type UnityEngine.GameObject
+local remainTimeNormalTxtObj
+---@type UnityEngine.TextMesh
+local remainDayTxt
+---@type Client.Library.UIItemGrid
+local itemGrid
+---@type Client.Library.ButtonArchly
+local getRewardBtn
+
+---@type table fixactivitytbl表的数据
+local curData
+
+---@type Client.Library.ViewBase
+local selfViewBase
+
+function DoInit()
+    selfViewBase = self
+    selfViewBase.Anim = 0
+    dayFreeTxt = selfViewBase:GetComponentAtPath("kuangImg/DayRestTxt", CLS_TEXT)
+    priceTxt = selfViewBase:GetComponentAtPath("PriceNumberTxt", CLS_TEXT)
+    buyBtn = selfViewBase:GetComponentAtPath("BuyBtn", CLS_BUTTON_ARCHLY)
+    remainTimeObj = selfViewBase:GetGameObjectAtPath("RemainTime")
+    remainTimeGreenTxt = selfViewBase:GetComponentAtPath("RemainTime/RemainTimeGreenTxt", CLS_TEXT)
+    remainTimeGreenTxtObj = remainTimeGreenTxt.gameObject
+    remainTimeNormalTxt = selfViewBase:GetComponentAtPath("RemainTime/RemainTimeNormalTxt", CLS_TEXT)
+    remainTimeNormalTxtObj = remainTimeNormalTxt.gameObject
+    remainDayTxt = selfViewBase:GetComponentAtPath("RemainTime/RemainTimeDayTxt", CLS_TEXT)
+    itemGrid = selfViewBase:GetComponentAtPath("ItemGrid", CLS_UI_ITEM_GRID)
+    getRewardBtn = selfViewBase:GetComponentAtPath("GetRewardBtn", CLS_BUTTON_ARCHLY)
+end
+
+function OnAnimationFinished()
+    selfViewBase:SendCommand("GetSubscribeViewState")
+end
+
+function OnNotification_GetSubscribeViewState(objs)
+    if selfViewBase.gameObject.activeInHierarchy then
+        local viewData = objs[0]
+        buyBtn.Gray = viewData.buyBtnGray
+        getRewardBtn.Gray = viewData.rewardBtnGray
+        dayFreeTxt.text = viewData.adStr
+        remainTimeObj:SetActive(viewData.showRemainTime)
+        priceTxt.text = viewData.price
+        itemGrid:RefreshItemSlots(viewData.itemArr, selfViewBase.gameObject, "ItemSlot")
+        getRewardBtn.gameObject:SetActive(viewData.showGetBtn)
+        if viewData.showRemainTime == true then
+            remainTimeGreenTxtObj:SetActive(viewData.showGreenTxt)
+            remainTimeNormalTxtObj:SetActive(not viewData.showGreenTxt)
+            remainTimeNormalTxt.text = viewData.endDayStr
+            remainTimeGreenTxt.text = viewData.endDayStr
+            remainDayTxt.text = viewData.dayStr
+        end
+    end
+end
+
+function BeoforeReturnBack()
+    self.gameObject:SetSelfActive(false)
+end
+
+---购买按钮点击
+function OnBuyBtnClick()
+    selfViewBase:SendCommand("OpenPayModule")
+end
+
+---item点击
+function OnItemGridItemSlotClick(obj)
+    selfViewBase:SendCommand("ShowItemTip", obj.m_data)
+end
+
+---收取资源按钮点击
+function OnGetRewardBtnClick()
+    selfViewBase:SendCommand("GetAutoSub")
+end
+
+function OnClose()
+
+end
+
+function DoExit()
+    dayFreeTxt = nil
+    priceTxt = nil
+    buyBtn = nil
+    remainTimeObj = nil
+    remainTimeGreenTxt = nil
+    remainTimeGreenTxtObj = nil
+    remainTimeNormalTxt = nil
+    remainTimeNormalTxtObj = nil
+    remainDayTxt = nil
+    curData = nil
+    selfViewBase = nil
+    itemGrid = nil
+    getRewardBtn = nil
+end

@@ -1,0 +1,21 @@
+function OnSoulRankItemSlotBindValue(slot, data)
+    local name_Lab = slot:GetComponentAtPath("NameTxt",CLS_TEXT)
+    local rank_Lab = slot:GetComponentAtPath("RankNumTxt",CLS_TEXT)
+    local power_Lab = slot:GetComponentAtPath("PowerTxt",CLS_TEXT)
+    local rank_Sprite = slot:GetComponentAtPath("RankSprite",CLS_IMAGE)
+
+    local palyer_TF = slot:GetComponentAtPath("PlayerBase",CLS_RECTTRANSFORM)
+    BindPlayerBaseInfoValue(palyer_TF,data.playerBaseInfo)
+
+    local nick, zone = data.playerBaseInfo.name, data.playerBaseInfo.zone
+    name_Lab.text = FormatWorldPlayerName(nick, zone)
+    power_Lab.text = data.combat
+    rank_Lab.text = data.rank
+
+    rank_Sprite.gameObject:SetActive(true)
+    if data.rank<=3 and data.rank>0 then
+        CsBridge.IconData.SetIconByName(rank_Sprite.gameObject,"new_com_paiming"..data.rank)
+    else
+        rank_Sprite.gameObject:SetActive(false)
+    end
+end

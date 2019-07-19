@@ -1,0 +1,205 @@
+import "stage.proto";
+import "playerData.proto";
+package BattleData;
+
+message BattleInfo
+{
+    repeated Hero redHeroList=1;              //我方阵营
+    repeated Hero blackHeroList=2;            //敌方阵营                         
+    required int32 maxRound=3;                      //最大回合数
+    repeated SoldierStatus startBattleEffected=4;   //出场时受影响英雄状态
+    repeated RoundInfo rounds=5;                //各回合战斗信息
+    required int32 redAuraId=6;
+    required int32 blackAuraId=7;
+    required int32 result=8;                                   //0 - 失败，1 - 胜利，2 - 超时
+    required BattleEndInfo battleEndInfo=9;
+    required int32 sceneId=10;
+}
+
+message Hero
+{
+    required int32 camp=1;                        //阵营 0 - 我方， 1 - 敌方
+    required int32 pos=2;                         //位置 1,2,3,4,5,6
+    required int32 uid=3;                         //角色唯一编号，不发生变化
+    required int32 templateid=4;                  //模板ID
+    required string name=5;                     
+    required int64 maxHp=6;
+    required int32 maxAnger=7;
+    required int32 startAnger=8;
+    required int32 grade=9;
+    required int32 level=10;
+    required int32 heroUID=11;
+    required int32 isMonster=12;
+    required int64 startHp=13;
+    required int32 distillationStar=14;
+    required int32 distillationLevel=15;
+    required int32 skillStar=16;
+    required int32 skillLevel=17;
+    required int32 gloryRoadPassiveSkill=18;
+    required int32 breakLevel=19;
+}
+
+    /*
+    * 一个回合战斗信息
+    * */
+message RoundInfo
+{
+    required int32 roundid=1;                     //第几回合
+    repeated ActionInfo actionInfos=2;    //行动列表
+    repeated SoldierStatus startRoundEffected=3;      //回合开始受影响角色
+    repeated SoldierStatus endRoundEffected=4;      //回合结束受影响角色
+}
+
+/*
+* 一次行动信息
+* */
+message ActionInfo
+{
+    repeated SoldierStatus startActionEffects=1;         //行动开始受影响角色
+    repeated SoldierStatus endActionEffects=2;           //行动结束受影响角色
+    repeated SoldierStatus attackActionEffects=3;         //行动攻击对角色的影响
+}
+
+/*
+* 某个角色某时间的状态
+* */
+/**
+* 参数变化控制参数，位控制
+* 1-状态变化
+* 2-怒气变化
+* 4-生命，伤害变化
+* 8-动作变化
+* 16-交换位置
+* 32-最大生命变化
+*/
+message SoldierStatus
+{
+    required int32 uid=1;                         //角色唯一编号，不发生变化
+    repeated int32 targetPos=2;             //位置变化
+    required int64 dataChange=3;      //参数变化
+    required int64 curHp=4;       //当前生命
+    required int64 curAnger=5;    //当前怒气
+    required int32 attackType=6;           //攻击类型 0 - idle,1 - normal attack,  3 - skill
+    required int32 attackSkillId=7;                       //攻击技能id
+    required int32 defendType=8;           //受击类型 0 - idle,2 - hurt, 5 - die, 6-cured, 7-addState
+    required int32 defendSkillId=9;                       //受击技能id
+    repeated Hurt hurtInfoList=10;            //伤害列表
+    repeated StateStatus stateInfoList=11;    //状态列表
+    required bool isRevive=12;        //死亡后是否复活
+    required int64 maxHp=13;              //最大生命
+    required bool beKilled = 14;    //是否被杀死
+}
+
+message Hurt
+{
+    required int32 hurtType=1;                    //0 - 无攻击，1 - 被击减血，2 - 治疗加血, 3 - 暴击减血
+    required int64 hurtNum=2;                          //伤害值
+    required int32 uid=3;                          //伤害释放者
+}
+
+message StateStatus
+{
+    required int32 templateid=1;
+    required int32 uid=2;           //唯一编号id，用于状态删除
+    required int32 statusType=3;    //状态变化类型,1-增加，2-删除，3-更新
+    required StatusValue statusValue=4;
+}
+
+message StatusValue
+{
+    required int32 type=1;           //1-护盾
+    required int64 value=2;           
+}
+
+message BattleEndInfo 
+{	
+	required int32 result = 1;
+	repeated stage.RewardItem dropItems = 2;
+	required int32 type = 3;
+	required APArenaResult apArenaResult = 4;
+	required playerData.PlayerBaseInfo  targetPlayerBaseInfo = 5;
+	repeated stage.RewardItem upLevelRewards = 6;
+    required int64 hurt = 7;
+    repeated stage.RewardItem randomReward = 8;
+	required playerData.PlayerBaseInfo  selfPlayerBaseInfo = 9;
+	required int64 score=10;
+    required MultipleTeamArenaResult multipleTeamArenaResult=11;
+    required int32 pass = 12;
+    required string uuid = 13;
+}
+
+message APArenaResult
+{
+    required int32 redScore=1;
+    required int32 blackScore=2;
+    required int32 deltaScore=3;
+}
+
+message TestBattleReq
+{
+    repeated stage.FormationPos heroIds =1;
+    required int32 diff=2;
+    required int32 chapter=3;
+    required int32 id=4;
+}
+
+message BattleInfosResp
+{
+    required int32 type=1;
+    repeated BattleInfo battleInfos=2;
+}
+
+message MultipleTeamArenaResult
+{
+    required int32 redScore=1;
+    required int32 blackScore=2;
+    required int32 deltaScore=3;
+    required int32 redWin=4;
+    required int32 blackWin=5;
+}
+
+message LikeCommentReq
+{
+    required string uuid = 1;
+    required int64 time = 2;
+    required bool like = 3;
+}
+
+message LikeCommentResp
+{
+    required int32 result = 1;
+}
+
+message CommentReq
+{
+    required string uuid = 1;
+    required string comments = 2;
+}
+
+message CommentResp
+{
+    required int32 result = 1;
+}
+
+message CheckCommentsReq
+{
+    required string uuid = 1;
+    required int32 beginIndex = 2;
+    required int32 endIndex = 3;
+}
+
+message CheckCommentsResp
+{
+    repeated NormalComment comments = 1;
+    required int32 totalCount = 2;
+}
+
+message NormalComment
+{
+    required int64 time = 1;
+    required string nick = 2;
+    required string content = 3;
+    required bool like = 4;
+    required int32 likeCount = 5;
+}
+

@@ -1,0 +1,593 @@
+local commonHeroBagUtils = require('CommonHeroBagUtils')
+---  heroBase表
+local heroBaseTbl
+--- hero表
+local heroTbl
+---@type number 目标十星的关联id
+local targetRelationId
+---@type table 十星关联的heroid
+local targetRelaHeroIdsArr
+---@type number 十星关联的五星英雄id
+local targetRelaHeroIdsMoreFive
+---@type table 自己已有的能用的五星英雄
+local allCanSelectHeroArr
+---@type table 已选择的自己英雄数组
+local selectedMineHeroArr
+
+---上方当前已选择英雄数据
+local curTopHeroData = nil
+---左边当前已选择英雄数据
+local curLeftHeroData = nil
+---上边关联英雄数据
+local curTopHeroRelationHeroData = nil
+
+---@type number 需要的英雄星级
+local needHeroStarAccount = 5
+---@type number 需要的英雄材料个数
+local needHeroNumber
+---@type number 需要的绿魂个数
+local needGreenCoin
+
+---hero break
+local heroBreakDataFromTbl
+
+---@type table 选择出来的目标英雄数组
+local heroListBookHeroArr
+---@type table 当前目标英雄的数组
+local curHeroListBookHeroArr
+
+---@type table 选择出来的自己的背包英雄数组
+local allBagHeroArr
+---@type table 当前类别下自己的背景英雄的数组
+local curBagHeroArr
+
+---材料选中的临时数组
+local matOldSelectedTempIndexArr = {}
+
+local selfRaceId
+local selfSortId = HeroSortEnum.SortHeroByLevel
+
+---获取英雄突破表
+local function GetHeroBreakDataFromTable()
+    local data = {}
+    local tbl = ResTblContainer:GetTable(HeroBreakLevel.tblName)
+    local ids = tbl:GetCol(HeroBreakLevel.id)
+    for i = 0, ids.Length - 1 do
+        local id = ids[i]
+        local infos = tbl:GetRow(id, HeroBreakLevel.grade, HeroBreakLevel.level, HeroBreakLevel.soulCoin, HeroBreakLevel.coin)
+        local grade = tonumber(infos[0])
+        if data[grade] == nil then
+            data[grade] = {}
+        end
+        data[grade][tonumber(infos[1])] = {
+            soulCoin = tonumber(infos[2]),
+            coin = tonumber(infos[3])
+        }
+    end
+    return data
+end
+
+function DoInit()
+    heroBaseTbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    heroTbl = ResTblContainer:GetTable(Hero.actorTbl)
+    needHeroNumber = GetConstValue("ChangeHeroCount")
+    needGreenCoin = GetConstValue("GreenSoulCount")
+    if heroBreakDataFromTbl == nil then
+        heroBreakDataFromTbl = GetHeroBreakDataFromTable()
+    end
+end
+
+---是否可以点击置换按钮
+local function CanClickExchangeBtn()
+    local playerStepStoneCoin = tonumber(appData:checkData("PlayerInfo").stepStoneCoin)
+    if curTopHeroData ~= nil and curLeftHeroData ~= nil and selectedMineHeroArr ~= nil and #selectedMineHeroArr >= needHeroNumber and playerStepStoneCoin >= needGreenCoin then
+        return true
+    else
+        return false
+    end
+end
+
+---显示提示信息
+local function ShowHintTip(localStr)
+    CsBridge.hintUILayer:ShowHintBox(Language:getStr(localStr), 2)
+end
+
+---初始化界面所需要的数据
+function OnCommand_InitViewData()
+    selectedMineHeroArr = nil
+    curTopHeroData = nil
+    allBagHeroArr = nil
+    targetRelaHeroIdsArr = nil
+    targetRelaHeroIdsMoreFive = nil
+    allCanSelectHeroArr = nil
+    curLeftHeroData = nil
+    curTopHeroRelationHeroData = nil
+    curBagHeroArr = nil
+    matOldSelectedTempIndexArr = nil
+    heroListBookHeroArr = nil
+    local costConsume = {}
+    costConsume.id = 4
+    costConsume.typeId = 1
+    costConsume.count = needGreenCoin
+    costConsume.mineCount = tonumber(appData:checkData("PlayerInfo").stepStoneCoin)
+    self:SendNotification("InitViewData", needHeroNumber, costConsume)
+    self:SendNotification("SetExchangeBtnState", CanClickExchangeBtn())
+end
+
+---获取十星置换关联英雄id
+local function GetExTenTargetRelationHeroId()
+    if heroTbl == nil or heroBaseTbl == nil then
+        return
+    end
+    targetRelationId = heroTbl:GetInt(curTopHeroData.heroId, Hero.relationId)
+    local heroIds = GetIds(Hero.actorTbl)
+    targetRelaHeroIdsArr = {}
+    for i = 0, heroIds.Length - 1 do
+        local heroId = heroIds[i]
+        local tempRelationId = heroTbl:GetInt(heroId, Hero.relationId)
+        if tempRelationId == targetRelationId then
+            table.insert(targetRelaHeroIdsArr, heroId)
+        end
+    end
+    for i = 1, #targetRelaHeroIdsArr do
+        local targetId = targetRelaHeroIdsArr[i]
+        local quality = heroBaseTbl:GetInt(targetId, HeroBase.quality)
+        if quality == needHeroStarAccount and targetId ~= curTopHeroData.heroId then
+            targetRelaHeroIdsMoreFive = tonumber(targetId)
+        end
+    end
+end
+
+---获取关联十星置换的自己已有的英雄
+local function GetExTenTargetRelationHeroArr()
+    ---自己拥有的英雄数组
+    allCanSelectHeroArr = {}
+    commonHeroBagUtils.GetMyHeroList(allCanSelectHeroArr, 1, function(pbHero)
+        return pbHero.heroId == targetRelaHeroIdsMoreFive
+    end, GetNoDelHeroLockDuty)
+end
+
+---初始化材料
+local function InitSelectMineHeroData()
+    GetExTenTargetRelationHeroId()
+    GetExTenTargetRelationHeroArr()
+end
+
+---打开选择材料界面
+function OnCommand_OpenMaterialSelect(objs)
+    if curTopHeroData ~= nil then
+        if selectedMineHeroArr == nil or #selectedMineHeroArr <= 0 then
+            selectedMineHeroArr = {}
+            InitSelectMineHeroData()
+        else
+            selectedMineHeroArr[1].anim = false
+            selectedMineHeroArr[1].IsSelected = true
+        end
+        CsBridge.CacheAssetsByModule(self.Module, function()
+            CsBridge.OpenView("HeroComposeMaterialSelectView", "ExTenHeroModel")
+        end, "HeroComposeMaterialSelectView")
+    else
+        ShowHintTip("ExHeroTips_ChoiceTarget")
+    end
+end
+
+---用初始化的结果显示在界面上
+function OnCommand_InitMaterialSelectData()
+    if allCanSelectHeroArr ~= nil then
+        self:SendNotification("InitMaterialSelectView", allCanSelectHeroArr, #allCanSelectHeroArr == 0)
+    else
+        self:SendNotification("InitMaterialSelectView", {}, #{} == 0)
+    end
+end
+
+---取消选择一个
+function OnCommand_CancelSelectMaterial(objs)
+    if objs ~= nil then
+        local tempHeroData = objs[0]
+        local tempIndex = 0
+        if #selectedMineHeroArr > 0 then
+            for i = 1, #selectedMineHeroArr do
+                local selectedHero = selectedMineHeroArr[i]
+                if selectedHero.uid == tempHeroData.uid then
+                    selectedHero.selected = false
+                    tempIndex = i
+                end
+            end
+        end
+        table.remove(selectedMineHeroArr, tempIndex)
+        self:SendNotification("CancelSelectMaterial", tempHeroData)
+    end
+end
+
+---选中一个
+function OnCommand_SelectMaterial(objs)
+    if objs ~= nil then
+        if #selectedMineHeroArr < needHeroNumber then
+            local index = tonumber(objs[0])
+            local indexHero = allCanSelectHeroArr[index + 1]
+            if ShowSoulImprintedTip(indexHero) then
+                return
+            end
+            if DownHeroFromFormation(self,indexHero,index) then
+                return
+            end
+            indexHero.selected = true
+            table.insert(selectedMineHeroArr, indexHero)
+            self:SendNotification("SelectMaterial", index + 1)
+
+        else
+            ShowHintTip("HeroCompose_MatEnough")
+        end
+    end
+end
+
+---材料界面确定按钮点击事件
+function OnCommand_ConfirmSelectMaterial()
+    if selectedMineHeroArr ~= nil and #selectedMineHeroArr <= needHeroNumber then
+        matOldSelectedTempIndexArr = {}
+        for i = 1, #selectedMineHeroArr do
+            matOldSelectedTempIndexArr[i] = selectedMineHeroArr[i].uid
+        end
+        self:SendNotification("ChoseRightMaterial", selectedMineHeroArr)
+        self:SendNotification("SetExchangeBtnState", CanClickExchangeBtn())
+    end
+end
+
+---未确定关闭材料界面
+function OnCommand_NoSelectMaterial()
+    selectedMineHeroArr = {}
+    for i = 1, #allCanSelectHeroArr do
+        local canSelectHero = allCanSelectHeroArr[i]
+        if matOldSelectedTempIndexArr ~= nil and #matOldSelectedTempIndexArr > 0 then
+            local select = false
+            for j = 1, #matOldSelectedTempIndexArr do
+                if canSelectHero.uid == matOldSelectedTempIndexArr[j] then
+                    select = true
+                end
+            end
+            canSelectHero.selected = select
+            canSelectHero.IsSelected = select
+            if select then
+                table.insert(selectedMineHeroArr, canSelectHero)
+            end
+        else
+            canSelectHero.selected = false
+            canSelectHero.IsSelected = false
+        end
+    end
+end
+
+---确定和服务器进行置换十星
+function OnCommand_SureExchangeHero(objs)
+    local playerStepStoneCoin = tonumber(appData:checkData("PlayerInfo").stepStoneCoin)
+    if curTopHeroData == nil then
+        ShowHintTip("ExHeroTips_ChoiceTarget")
+    elseif curLeftHeroData == nil then
+        ShowHintTip("ExHeroTips_ChoiceMine")
+    elseif selectedMineHeroArr == nil or #selectedMineHeroArr < needHeroNumber then
+        ShowHintTip("EquipmentCompose_NotMat")
+    elseif playerStepStoneCoin < needGreenCoin then
+        ShowHintTip("1016")
+    else
+        CsBridge.CacheAssetsByModule(self.Module, function()
+            local view = CsBridge.OpenView("ExHeroTipsView", "ExTenHeroModel", false, true)
+        end, "ExHeroTipsView")
+    end
+end
+
+---初始化提示界面
+function OnCommand_InitHeroTipsViewData(objs)
+    self:SendNotification("InitHeroTipsViewData", curLeftHeroData, curTopHeroData)
+end
+
+---二次确认点击
+function OnCommand_TwiceSureExchange(objs)
+    local req = {}
+    req.heroId = curTopHeroData.heroId
+    req.mainUid = curLeftHeroData.uid
+    req.subUids = {}
+    for i = 1, #selectedMineHeroArr do
+        req.subUids[i] = selectedMineHeroArr[i].uid
+    end
+    HttpRequest("heroSubstitution", "HeroSubstitutionReq", "HeroSubstitutionResp", req, OnHeroSubstitutionReq)
+end
+
+local function FormatNewHeroData()
+    local pbs = appData:checkAllItems("HeroItem")
+    local newHero = {}
+    newHero.typeId = ItemTypeEnum.Hero
+    newHero.count = 1
+    local uid = curLeftHeroData.uid
+    for i = 0, pbs.Length - 1 do
+        local pbHero = pbs[i]
+        if pbHero.uid == uid then
+            newHero.id = pbHero.heroId
+            newHero.uid = pbHero.uid
+            break
+        end
+    end
+
+    newHero.heroId = curLeftHeroData.heroId
+    newHero.grade = curLeftHeroData.grade
+    newHero.level = curLeftHeroData.level
+    newHero.weaponId = curLeftHeroData.weaponId or 0
+    newHero.hatId = curLeftHeroData.hatId or 0
+    newHero.clothId = curLeftHeroData.clothId or 0
+    newHero.shoesId = curLeftHeroData.shoesId or 0
+    newHero.distillationStar = curLeftHeroData.distillationStar
+    newHero.distillationLevel = curLeftHeroData.distillationLevel
+    newHero.breakLevel = curLeftHeroData.breakLevel
+    newHero.race = curLeftHeroData.race
+    newHero.dutyInPve = curLeftHeroData.dutyInPve
+    newHero.lock = curLeftHeroData.lock
+    newHero.quality = curLeftHeroData.quality
+    newHero.jewelIds = curLeftHeroData.jewelIds
+
+    return newHero
+end
+
+---置换返回
+function OnHeroSubstitutionReq(obj)
+    if obj ~= nil then
+        table.insert(obj.results, FormatNewHeroData())
+        self:SendNotification("RefreshPreviewBtn", true)
+        self:SendNotification("RefreshQuickBtn", Language:getStr("HeroDecomposition_PutOnAll"))
+        self:SendNotification("ClearView")
+        self:HideView("ExHeroTipsView");
+        ClearData();
+        PopRewardView(self, obj.results)
+    end
+end
+
+---打开选择十星目标界面
+function OnCommand_OpenTenStarListBook()
+    if curLeftHeroData == nil and (selectedMineHeroArr == nil or #selectedMineHeroArr <= 0) then
+        if curTopHeroData ~= nil then
+            curTopHeroData.anim = false
+        end
+        CsBridge.CacheAssetsByModule(self.Module, function()
+            local view = CsBridge.OpenView("HeroListBookView", "ExTenHeroModel", true, true)
+        end, "HeroListBookView", "HeroItemSlot")
+    end
+end
+
+---选择全部的十星英雄
+local function InitBookHeroListData()
+    heroListBookHeroArr = {}
+    local qualityTbl = ResTblContainer:GetTable(HeroQuality.actorTbl)
+    local heroTbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    for i, data in pairs(global_heroBaseArr) do
+        if CanToTenStar(data) then
+            local hero = {
+                uid = i,
+                fakeUid = true,
+                heroId = data.id,
+                quality = data.quality,
+                isNotOwn = false,
+                isOpen = CheckHeroOpen(data.id),
+                showBaseAttr = true
+            }
+            hero.grade = qualityTbl:GetInt(hero.quality, HeroQuality.maxGrade)
+            hero.level = GetHeroMaxLevel(hero.grade)
+            if hero.isOpen then
+                hero.distillationStar = hero.quality >= BREAK_QUALITY and 3 or 0
+                hero.distillationLevel = GetDistillMaxLevel(hero.distillationStar + hero.quality)
+                hero.breakLevel = hero.quality >= BREAK_QUALITY and table.count(heroBreakDataFromTbl[hero.quality]) or 0
+                hero.race = heroTbl:GetInt(hero.heroId, HeroBase.group)
+                hero.job = heroTbl:GetInt(hero.heroId, HeroBase.job)
+                hero.skill = GetHeroSkillArr(hero)
+                hero.distillation = GetHeroDistillation(hero)
+                hero.isBookHero = true
+                table.insert(heroListBookHeroArr, hero)
+            end
+        end
+    end
+    table.sort(heroListBookHeroArr, SortHeroByDescQuality)
+end
+
+---英雄类型切换
+local function HeroListBookScreenHero(raceId)
+    local heroArr
+    heroArr = heroListBookHeroArr
+    if heroArr == nil or #heroArr == 0 then
+        return
+    end
+    curHeroListBookHeroArr = {}
+    for _, hero in ipairs(heroArr) do
+        if raceId == 0 then
+            table.insert(curHeroListBookHeroArr, hero)
+        elseif raceId == hero.race then
+            table.insert(curHeroListBookHeroArr, hero)
+        end
+    end
+
+    table.sort(curHeroListBookHeroArr, SortHeroByQuality)
+end
+
+---初始化全部十星英雄
+function OnCommand_InitBookListData(objs)
+    curHeroListBookHeroArr = {}
+    heroListBookHeroArr = {}
+    InitBookHeroListData()
+    HeroListBookScreenHero(objs[0])
+    self:SendNotification("InitBookListData", curHeroListBookHeroArr)
+end
+
+---切换目标十星英雄类型
+function OnCommand_HeroListBookScreenHero(objs)
+    HeroListBookScreenHero(objs[0])
+    self:SendNotification("InitBookListData", curHeroListBookHeroArr)
+end
+
+---选取了目标十星英雄
+function OnCommand_ChoseHeroBookListOneData(objs)
+    if objs ~= nil then
+        curTopHeroData = objs[0]
+        selectedMineHeroArr = nil
+        curLeftHeroData = nil
+        self:SendNotification("ChoseHeroBookListOneDataEx", curTopHeroData)
+        self:SendNotification("SetExchangeBtnState", CanClickExchangeBtn())
+    end
+end
+
+---打开自己的英雄背包
+function OnCommand_OpenMineHero(objs)
+    if curTopHeroData ~= nil then
+        if curLeftHeroData ~= nil then
+            curLeftHeroData.anim = false
+        end
+        CsBridge.CacheAssetsByModule(self.Module, function()
+            local view = CsBridge.OpenView("HeroMineView", "ExTenHeroModel", true, true)
+        end, "HeroMineView", "HeroItemSlot")
+    else
+        ShowHintTip("ExHeroTips_ChoiceTarget")
+    end
+end
+
+---是否可以置换
+local function CanExchange(target)
+    if target == nil then
+        target = HeroGroupType.AllGroupType
+    end
+    if target >= HeroGroupType.Water and target <= HeroGroupType.Fire and curTopHeroData.race >= HeroGroupType.Water and curTopHeroData.race <= HeroGroupType.Fire then
+        return true
+    elseif target >= HeroGroupType.Light and target <= HeroGroupType.Night and curTopHeroData.race >= HeroGroupType.Light and curTopHeroData.race <= HeroGroupType.Night then
+        return true
+    else
+        return false
+    end
+end
+
+---初始化自己已经有的十星英雄
+local function InitMineListData()
+    ---自己拥有的英雄数组
+    allBagHeroArr = {}
+    commonHeroBagUtils.GetMyHeroList(allBagHeroArr, 10, function(pbHero)
+        local curGroup = heroBaseTbl:GetInt(pbHero.heroId, HeroBase.group)
+        return CanExchange(curGroup) and curTopHeroData.heroId ~= pbHero.heroId
+    end)
+end
+
+---英雄类型切换
+local function ScreenMineHero()
+    curBagHeroArr = {}
+    commonHeroBagUtils.ScreenHero(selfRaceId, selfSortId, curBagHeroArr, allBagHeroArr)
+    local sortBtnStr = selfSortId == HeroSortEnum.SortHeroByLevel and Language:getStr("SortByQuality") or Language:getStr("SortByLevel")
+    self:SendNotification("InitMineListData", curBagHeroArr, sortBtnStr)
+end
+
+---初始化自己的英雄背包界面
+function OnCommand_InitMineListData(objs)
+    curBagHeroArr = {}
+    allBagHeroArr = {}
+    selfRaceId = objs[0]
+    InitMineListData()
+    ScreenMineHero()
+    local heroNum, bagNum = #allBagHeroArr, commonHeroBagUtils.CheckHeroBagNum()
+    local heroNumStr = heroNum .. "/" .. bagNum
+    self:SendNotification("RefreshHeroBagCount", heroNumStr, false)
+end
+
+---切换英雄类型
+function OnCommand_ScreenMineHero(objs)
+    selfRaceId = objs[0]
+    ScreenMineHero()
+end
+
+---排序英雄
+function OnCommand_ReSortMineHero()
+    selfSortId = selfSortId == HeroSortEnum.SortHeroByLevel and HeroSortEnum.SortHeroByQuality or HeroSortEnum.SortHeroByLevel
+    ScreenMineHero()
+end
+
+---确认选择了自己的十星英雄
+local function ChoseMyOneHero()
+    self:SendNotification("ChoseMyOneHeroEx", curLeftHeroData)
+    self:SendNotification("SetExchangeBtnState", CanClickExchangeBtn())
+    self:SendNotification("ChoseMyOneHero")
+end
+
+---选取了自己的十星
+function OnCommand_ChoseMyOneHero(objs)
+    if objs ~= nil then
+        local heroIndex = objs[1]
+        local tempHeroData = curBagHeroArr[heroIndex + 1]
+        if ShowSoulDesImprintView(tempHeroData, self) then
+            return
+        end
+        if DownHeroFromFormation(self,tempHeroData,heroIndex) then
+            return
+        end
+        curLeftHeroData = tempHeroData
+        ChoseMyOneHero()
+    end
+end
+
+---扩展背包点击指令
+function OnCommand_ExtendHeroBag()
+    commonHeroBagUtils.ExtendHeroBag(function()
+        local heroNum, bagNum = #allBagHeroArr, commonHeroBagUtils.CheckHeroBagNum()
+        local heroNumStr = heroNum .. "/" .. bagNum
+        self:SendNotification("RefreshHeroBagCount", heroNumStr, true)
+    end)
+end
+
+---选了目标十星之后，出现本地五星的数据
+function OnCommand_InitTargetRelationHero(objs)
+    InitSelectMineHeroData()
+    local tbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    local hero = {
+        heroId = targetRelaHeroIdsMoreFive,
+        distillationStar = tbl:GetInt(targetRelaHeroIdsMoreFive, HeroBase.passiveStr),
+        race = tbl:GetInt(targetRelaHeroIdsMoreFive, HeroBase.group),
+        lock = false,
+        quality = tbl:GetInt(targetRelaHeroIdsMoreFive, HeroBase.quality),
+        model = tbl:Get(targetRelaHeroIdsMoreFive, HeroBase.model),
+        name = tbl:Get(targetRelaHeroIdsMoreFive, HeroBase.title),
+        IsSelected = false
+    }
+    hero.job = tbl:GetInt(hero.heroId, HeroBase.job)
+    curTopHeroRelationHeroData = hero
+    self:SendNotification("InitTargetRelationHero", hero)
+end
+
+---清除这次操作的所有数据
+function ClearData()
+    targetRelationId = nil
+    targetRelaHeroIdsArr = nil
+    targetRelaHeroIdsMoreFive = nil
+    allCanSelectHeroArr = nil
+    selectedMineHeroArr = nil
+    curTopHeroData = nil
+    curLeftHeroData = nil
+    curTopHeroRelationHeroData = nil
+    heroListBookHeroArr = nil
+    curHeroListBookHeroArr = nil
+    allBagHeroArr = nil
+    curBagHeroArr = nil
+    matOldSelectedTempIndexArr = nil
+end
+
+function DoOnExit()
+    heroBaseTbl = nil
+    heroTbl = nil
+    targetRelationId = nil
+    targetRelaHeroIdsArr = nil
+    targetRelaHeroIdsMoreFive = nil
+    allCanSelectHeroArr = nil
+    selectedMineHeroArr = nil
+    curTopHeroData = nil
+    curLeftHeroData = nil
+    curTopHeroRelationHeroData = nil
+    needHeroStarAccount = nil
+    needHeroNumber = nil
+    needGreenCoin = nil
+    heroBreakDataFromTbl = nil
+    heroListBookHeroArr = nil
+    curHeroListBookHeroArr = nil
+    allBagHeroArr = nil
+    curBagHeroArr = nil
+    matOldSelectedTempIndexArr = nil
+    selfRaceId = nil
+    selfSortId = nil
+end

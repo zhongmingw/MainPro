@@ -1,0 +1,341 @@
+local settingVersionUtils = require "SettingVersionUtils"
+local yield_return = (require "cs_coroutine").yield_return
+
+local initFinished = 0
+
+local btnsObj
+local topRightObj
+
+local userName
+local pwd
+local zone
+
+local co
+
+local watiServerImg
+local startTipImg
+local loginSpine
+
+local loginData
+local isEnterGame = false
+local waitLoginSpine = false
+
+local changeAcountResp
+
+local t
+
+local isInit = false
+
+local waitBroadcast = true
+
+local hasLogin = false
+
+local sdkReturn = false
+
+function OnProgress(progress, updatingHint, updatedHint)
+    if (progress >= 1) then
+        --print(updatedHint)
+    else
+        --print(updatingHint)
+    end
+end
+
+local function DoLoginSuccess(str)
+    if (not hasLogin) and str ~= "" and str ~= nil then
+        local req = { uid = str }
+        req.zone = zone
+        if (not sdkReturn) then
+            sdkReturn = true
+            settingVersionUtils.UpdateserverURL()
+            HttpRequest(CsBridge.sDKHelper.loginUrl, "AnonLoginReq", "GlobalAnonLoginResp", req, OnGlobalAnonLoginResp)
+        end
+    end
+end
+
+local function OnLoginSuccess(obj)
+    local str = tostring(obj)
+    DoLoginSuccess(str)
+end
+
+function DoInit()
+    self.Anim = 0
+    settingVersionUtils.SubscribeLoginSuccess(OnLoginSuccess)
+end
+
+function InitUI()
+    topRightObj = self:GetGameObjectAtPath("TopRight")
+    btnsObj = self:GetGameObjectAtPath("Btns")
+    watiServerImg = self:GetComponentAtPath("Bottom/waitServerTxt", CLS_TEXT)
+    startTipImg = self:GetComponentAtPath("Bottom/startTipTxt", CLS_TEXT)
+
+    loginSpine = self:GetComponentAtPath("LoginSpine", CLS_SKELETONGRAPHIC)
+    settingVersionUtils.InitLoginViewSDKAccountBtn(self)
+end
+
+function SetParamDataList(obj)
+    if obj ~= nil then
+        loginData = obj[0]
+    end
+end
+
+function onInitFinish()
+    initFinished = 1
+    startTipImg.gameObject:SetSelfActive(true)
+    watiServerImg.gameObject:SetSelfActive(false)
+    if t then
+        t:DoKill(true)
+    end
+    t = CsBridge.TweenUtils.TextFadeInAndOut(startTipImg, 0.8)
+    t:DoPlay()
+    topRightObj:SetSelfActive(true)
+    btnsObj:SetSelfActive(true)
+    if loginData ~= nil and loginData.isRelogin then
+        waitBroadcast = false
+        OnEnterBtnClick(nil)
+    elseif loginData ~= nil and loginData.isAutoLogin then
+        waitBroadcast = false
+        CsBridge.MsgCenter.Broadcast(CsBridge.SysMsgDef.Notify_SessionExpired, true)
+        OnEnterBtnClick(nil)
+    else
+        --弹公告
+        OnNoticeBtnClick(nil)
+    end
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    ConnectServer()
+    waitLoginSpine = true
+    loginSpine:PlayAnimation("born", false, function()
+        waitLoginSpine = false
+        loginSpine:PlayAnimation("loop", true)
+        if loginData == nil or not loginData.isAutoLogin then
+            OnNoticeBtnClick(nil)
+        end
+    end)
+end
+
+function OnClose()
+    startTipImg.gameObject:SetSelfActive(false)
+    watiServerImg.gameObject:SetSelfActive(false)
+end
+
+function ConnectServer()
+    startTipImg.gameObject:SetSelfActive(false)
+    watiServerImg.gameObject:SetSelfActive(true)
+    if t then
+        t:DoKill(true)
+    end
+    t = CsBridge.TweenUtils.TextFadeInAndOut(watiServerImg, 0.8)
+    t:DoPlay()
+    CsBridge.httpBehaviour.serverURL = CsBridge.configUtil:loadStrValue("server")
+    co = coroutine.create(function()
+        local isConnected = false
+        local connectCount = 0
+        while (not isConnected) do
+            local httpDone = false
+            CsBridge.httpBehaviour:ConnectServer(function(connnect)
+                httpDone = true
+            end)
+            while not httpDone do
+                yield_return(0)
+            end
+            if (CsBridge.httpBehaviour.IsServerConnected) then
+                isConnected = true
+            else
+                connectCount = connectCount + 1
+                if connectCount > 5 then
+                    connectCount = 0
+                    local wait = true
+                    CsBridge.messageManager:showWarning("", Language:getStr("404"), Language:getStr("networking_retry"), function()
+                        wait = false
+                        connectCount = 0
+                    end)
+                    while wait do
+                        yield_return(0)
+                    end
+                else
+                    yield_return(0)
+                end
+            end
+        end
+        if isConnected then
+            onInitFinish()
+        end
+    end)
+    assert(coroutine.resume(co))
+end
+
+function DoExit()
+    self.Module = nil
+    settingVersionUtils.UnsubscribeLoginSuccess(OnLoginSuccess)
+    initFinished = nil
+    btnsObj = nil
+    topRightObj = nil
+    userName = nil
+    pwd = nil
+    zone = nil
+    co = nil
+    watiServerImg = nil
+    startTipImg = nil
+    loginSpine = nil
+    loginData = nil
+    isEnterGame = nil
+    waitLoginSpine = nil
+    changeAcountResp = nil
+    t = nil
+    isInit = nil
+    waitBroadcast = nil
+    hasLogin = nil
+    sdkReturn = nil
+    settingVersionUtils = nil
+end
+
+function OnNoticeBtnClick(sender)
+    if hasLogin then
+        return
+    end
+    if initFinished == 1 and not waitLoginSpine and not isEnterGame then
+        CsBridge.CacheAssetsByModule(self.Module, function()
+            CsBridge.OpenView("LoginBroadcastView", "LoginModel", false, true)
+            self:SendCommand("GetLoginBroadcast")
+        end, "LoginBroadcastView")
+    end
+end
+
+function OnNotification_GetLoginBroadcast(objs)
+    waitBroadcast = objs[0].type == 2
+end
+
+function OnEnterBtnClick(sender)
+    if hasLogin then
+        return
+    end
+    if initFinished == 1 and not isEnterGame and not waitBroadcast then
+        CsBridge.httpBehaviour.serverURL = CsBridge.configUtil:loadStrValue("server")
+        isEnterGame = true
+        if loginData ~= nil and loginData.userName ~= nil and loginData.pwd ~= nil then
+            userName = loginData.userName
+            pwd = loginData.pwd
+            zone = CsBridge.UnityHelper.GetString("local_zone")
+        else
+            userName = CsBridge.UnityHelper.GetString("local_userName")
+            pwd = CsBridge.UnityHelper.GetString("local_pwd")
+            zone = CsBridge.UnityHelper.GetString("local_zone")
+        end
+        if CsBridge.sDKHelper.enableSDK then
+            isEnterGame = false
+            sdkReturn = false
+            CsBridge.sDKHelper:login(DoLoginSuccess)
+        else
+            isEnterGame = false
+            DoSendAnonLoginReq()
+        end
+    end
+end
+
+function DoSendAnonLoginReq()
+    if (userName == nil or string.len(userName) == 0) then
+        local req = { uid = CsBridge.httpBehaviour.udid }
+        req.zone = zone
+        settingVersionUtils.DoAnonLogin(req, OnGlobalAnonLoginResp)
+    else
+        local req = settingVersionUtils.GetAcountLoginReq(userName, pwd)
+        req.zone = zone
+        settingVersionUtils.DoAcountLogin(req, OnGlobalAnonLoginResp, OnAccountResp)
+    end
+end
+
+function OnAccountResp(resp)
+    if not hasLogin then
+        hasLogin = true
+        CsBridge.UnityHelper.SetString("local_userName", userName)
+        CsBridge.UnityHelper.SetString("local_pwd", pwd)
+        CsBridge.sDKHelper:OnLogin(userName)
+
+        EnterMainView(resp)
+    end
+end
+
+--匿名登录成功
+function OnGlobalAnonLoginResp(resp)
+    if not hasLogin then
+        hasLogin = true
+        if (resp.firstLogin == true) then
+            CsBridge.sDKHelper:OnRegister(resp.playerId)
+            CsBridge.sDKHelper:createRole(resp.zone, resp.playerId, resp.playerId)
+        end
+        CsBridge.sDKHelper:OnLogin(resp.playerId)
+        if resp.userName ~= nil and resp.pwd ~= nil then
+            CsBridge.UnityHelper.SetString("local_userName", resp.userName)
+            CsBridge.UnityHelper.SetString("local_pwd", resp.pwd)
+        end
+        EnterMainView(resp)
+    end
+end
+
+function EnterMainView(resp)
+    if _G.ShowLoadResCount then
+        _G.LoadResCount = 20.5
+        CsBridge.messageManager:FristConfirmBox("LoadConfirm", Language:getStr("LoadConfirm"),
+            string.format(Language:getStr("Load_Confirm"), tostring(_G.LoadResCount)), Language:getStr("local_cancel"),
+            function()
+                CS.UnityEngine.Application.Quit()
+            end,
+            Language:getStr("local_confirm"),
+            function()
+                appData:clear()
+                CsBridge.httpBehaviour.serverURL = resp.url
+                local req = { type = 1 }
+                CsBridge.httpBehaviour:CheckData("enterGame", {}, function()
+                    CsBridge.MsgCenter.Broadcast(CsBridge.SysMsgDef.Notify_RecordOnline)
+                    CsBridge.moduleManager:ResetMainModule("MainModule", onLoad)
+                end)
+            end
+        )
+    else
+        appData:clear()
+        CsBridge.httpBehaviour.serverURL = resp.url
+        local req = { type = 1 }
+        CsBridge.httpBehaviour:CheckData("enterGame", {}, function()
+            CsBridge.MsgCenter.Broadcast(CsBridge.SysMsgDef.Notify_RecordOnline)
+            CsBridge.moduleManager:ResetMainModule("MainModule", onLoad)
+        end)
+    end
+end
+
+function OnAccountBtnClick(sender)
+    if (initFinished == 1) then
+        settingVersionUtils.OnAccountBtnClick(DoOpenAccountView)
+    end
+end
+
+function DoOpenAccountView()
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        CsBridge.OpenView("AccountView", "AccountModel", false, true)
+    end, "AccountView")
+end
+
+function OnRegisterBtnClick(sender)
+    if (initFinished == 1) then
+        CsBridge.CacheAssetsByModule(self.Module, function()
+            CsBridge.OpenView("RegisterView", "RegisterModel", false, true)
+        end, "RegisterView")
+    end
+end
+
+function OnFixBtnClick(sender)
+    CsBridge.messageManager:showAlertView("", Language:getStr("Login_Fix"),
+        Language:getStr("local_cancel"), nil, Language:getStr("local_confirm"),
+        function()
+            appData:clear()
+        end
+    )
+end
+
+function onLoad()
+    MsgCenter:Broadcast(Notify_OnMain)
+end

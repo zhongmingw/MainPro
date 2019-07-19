@@ -1,0 +1,57 @@
+--[[
+	file: DailyDiscountActivityUtils.lua
+	author: zhangyue
+	description: DailyDiscountActivity utilities
+]]
+
+local DailyDiscountItemStatusEnum =
+{
+	disabled = 0,
+	enabled = 1,
+}
+
+local function BuyDailyDiscountItem(itemData, onFinished, currentActivityID, model)
+	local finishedCbk = function(resp)
+		local confirmCbk = function()
+			onFinished(currentActivityID)
+		end		
+		PopRewardView(model, itemData.rewards, confirmCbk)
+	end
+	DoPayActivity(itemData.activityId, itemData, finishedCbk)
+end
+
+local function CreatePayItem(dailyDiscountItem)
+	local item = {}
+	item.id = dailyDiscountItem.payId
+	item.price = dailyDiscountItem.price
+	item.pid = dailyDiscountItem.pId
+	item.title = dailyDiscountItem.title
+	item.desp = dailyDiscountItem.description
+	item.activityId = dailyDiscountItem.activityId
+	item.rewards = dailyDiscountItem.rewards
+	return item
+end
+
+local function GetItemViewData(activityData)
+	local allItemData = {}
+	for id, item in pairs(activityData.items) do
+		local itemViewData = {}
+		local itemEnabled = item.status == DailyDiscountItemStatusEnum.enabled
+		itemViewData.showBuyBtn = itemEnabled
+		itemViewData.rest = string.format(Language:getStr("Global_97"), tostring(item.remain))
+		itemViewData.rewards = item.rewards
+		itemViewData.currency = item.currencySign
+		itemViewData.price = item.currencySign..item.price / 100
+		itemViewData.vipExp = "+" .. tostring(item.vip)
+		itemViewData.data = CreatePayItem(item)
+		itemViewData.showPrice = CheckPayData(item.payId).showPrice
+		table.insert(allItemData, itemViewData)
+	end
+	return allItemData
+end
+
+return{
+		BuyDailyDiscountItem = BuyDailyDiscountItem,
+		CreatePayItem = CreatePayItem,
+		GetItemViewData = GetItemViewData,
+}

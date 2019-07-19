@@ -1,0 +1,116 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-04-08 13:57:50
+
+local typeTogArr
+
+local originCrystalNumTxt
+local crystalDustNumTxt
+
+local summonFlag
+
+local curView
+
+local isInit = false
+
+function DoInit()
+    self.Shadow = 1
+end
+
+function IsSetAnchor()
+	return true
+end
+
+function InitUI()	
+    typeTogArr = {}
+    local typeTog = self:GetComponentAtPath("Top/TypeTogGroup",CLS_RECTTRANSFORM)
+    for i=0,typeTog.childCount-1 do
+        table.insert(typeTogArr,typeTog:GetChild(i):GetComponent("ToggleArchly"))
+    end
+
+    originCrystalNumTxt = self:GetComponentAtPath("Top/OriginCrystal/NumTxt",CLS_TEXT)
+    crystalDustNumTxt = self:GetComponentAtPath("Top/CrystalDust/NumTxt",CLS_TEXT)
+    summonFlag = self:GetGameObjectAtPath("Top/TypeTogGroup/SummonTog/NewFlag")
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitData")
+end
+
+function OnNotification_OpenTypeView(objs)
+    typeTogArr[objs[0]].isOn = true
+end
+
+function OnNotification_RefreshView(objs)
+    local curType = objs[0]
+    if curView ~= nil then
+		curView:HideView(curView.gameObject.name)
+    end 
+    if curType == 1 then
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            curView = CsBridge.OpenView("ElementalSummonView","DragonCrystalModel",false,true)
+        end, "ElementalSummonView","SummonItemSlot")
+    elseif curType == 2 then
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            curView = CsBridge.OpenView("HeroConversionView","DragonCrystalModel",false,true)
+        end, "HeroConversionView","HeroItemSlot")
+    end
+end
+
+function OnNotification_RefreshSummonRedFlag(objs)
+    summonFlag:SetSelfActive(objs[0])
+end 
+
+function OnTypeTogGroupClick(isOn, index)
+    if not isOn then
+        return
+    end
+    self:SendCommand("SwitchType",index+1)
+end
+
+function OnMaskClick(sender)
+	Close()
+end 
+
+function OnCloseBtnClick(sender)
+	Close()
+end 
+
+function Close() 
+	self:SendCommand("CloseView",function()
+		self:ReturnBack()
+	end)
+end
+
+function OnNotification_RefreshTopView(objs)
+    if objs[0] then
+        local t = CsBridge.TweenUtils.TextChangeColor(originCrystalNumTxt,1,0,42/255,0.15,function()
+            originCrystalNumTxt.text = GetValueAbbreviation(objs[1])
+        end)
+        t:DoPlay()
+    else
+        originCrystalNumTxt.text = GetValueAbbreviation(objs[1])
+    end
+    if objs[2] then
+        local t = CsBridge.TweenUtils.TextChangeColor(crystalDustNumTxt,1,0,42/255,0.15,function()
+            crystalDustNumTxt.text = GetValueAbbreviation(objs[3])
+        end)
+        t:DoPlay()
+    else
+        crystalDustNumTxt.text = GetValueAbbreviation(objs[3])
+    end
+end
+
+function DoExit()
+    typeTogArr = nil
+    originCrystalNumTxt = nil
+    crystalDustNumTxt = nil
+    summonFlag = nil
+    curView = nil
+    isInit = nil
+end

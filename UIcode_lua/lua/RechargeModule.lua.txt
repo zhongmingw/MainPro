@@ -1,0 +1,15 @@
+function DoInit()
+
+end
+
+function AssetNames(objs)
+	local arr={"RechargeView"}
+	return arr
+end
+
+function OnEnter(objs,onFinished)
+	self:OpenView("RechargeView","RechargeModel")
+	if(onFinished ~= nil)then
+		onFinished()  
+	end
+end

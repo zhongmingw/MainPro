@@ -1,0 +1,22 @@
+function OnHonorCityRewardItemSlotBindValue(slot, data)
+	local selfTrans = slot.transform
+
+	local rankTxt = selfTrans:GetComponentAtPath("rankNumTxt", CLS_TEXT)
+	rankTxt.text = data.rank
+
+	local ribbonImageObj = selfTrans:GetGameObjectAtPath("rankIcon")
+	ribbonImageObj:SetActive(data.showRibbon)
+
+	local ribbonBgImg = selfTrans:GetGameObjectAtPath("rankNumBg")
+	ribbonBgImg:SetActive(data.showRibbon)
+	if data.showRibbon then
+		CsBridge.IconData.SetIconByName(ribbonImageObj, data.ribbonIcon)
+	end
+	local itemGrid = selfTrans:GetComponentAtPath("RewardGrid", CLS_UI_ITEM_GRID)
+	if data.rewardItems then
+        itemGrid:RefreshItemSlots(data.rewardItems, slot.m_grid.viewBase.gameObject, "ItemSlot")
+    end
+
+    local selectedImgObj = selfTrans:GetGameObjectAtPath("selectIcon")
+	selectedImgObj:SetActive(data.myRank <= data.max and data.myRank >= data.min)
+end

@@ -1,0 +1,186 @@
+--[[
+	file: HeroRatingModel.lua
+	author: hangang
+	description: Hero rating logics
+]]
+
+local reviewCharCount
+local maxReviewCount = 200
+
+local currentHeroID
+local cachedReviews
+
+
+------initialization-------
+function DoInit()
+	reviewCharCount = tonumber(GetConstValue("heroReviewCharCount")) or 10
+	MsgCenter:Subscribe(Notify_HeroRating_HeroChanged, OnHeroChanged)
+end
+
+function OnHeroChanged(heroID)
+	currentHeroID = heroID
+	RefreshView()
+end
+
+------Rating logics-------
+function GetReviews(heroID)
+	local req = {}
+	req.heroId = heroID
+	req.beginIndex = 1
+	req.endIndex = maxReviewCount
+	HttpBackgroundRequest("checkHeroComments", "CheckHeroCommentsReq", "CheckHeroCommentsResp", req, OnGetReviewResp)
+end
+
+function OnGetReviewResp(resp)
+	if resp then	
+		cachedReviews = {}
+		if resp.comments then
+			for k, item in pairs(resp.comments) do
+				local review = {}
+				review.id = item.time
+				review.time = item.time
+				review.playerName = item.nick
+				review.content = item.content
+				review.liked = item.like
+				review.likeCount = item.likeCount
+
+				table.insert(cachedReviews, review)
+			end
+		end
+
+		self:SendNotification("RefreshView", GetViewData(cachedReviews))
+	end
+end
+
+function PostReview(heroID, content)
+	if CsBridge.UnityHelper.GetStringLen(content) > reviewCharCount then
+		local text = Language:getStr("HeroReviewTooLong")
+		text = string.format(text, tostring(math.floor(reviewCharCount / 2)))
+		CsBridge.hintUILayer:ShowHintBox(text)
+		return
+	end
+
+	local req = {}
+	req.heroId = heroID
+	req.comments = content
+	HttpRequest("commentHero", "CommentHeroReq", "CommentHeroResp", req, OnPostReviewResp)
+end
+
+function OnPostReviewResp(resp)
+	self:HideView("HeroRatingComposeView")
+	RefreshView()
+end
+
+function LikeReview(reviewID)
+	currentReviewID = reviewID
+
+	local req = {}
+	req.heroId = currentHeroID
+	req.time = reviewID
+	req.like = true
+	HttpRequest("likeHeroComment", "LikeHeroCommentReq", "LikeHeroCommentResp", req, OnLikeReviewResp)
+end
+
+function OnLikeReviewResp(resp)
+	local review = GetReview(currentReviewID)
+	review.liked = true
+	review.likeCount = review.likeCount + 1
+
+	self:SendNotification("UpdateReview", GetItemViewDataByID(currentReviewID))
+end
+
+function GetReview(reviewID)
+	for k, review in pairs(cachedReviews) do
+		if review.id == reviewID then
+			return review
+		end
+	end
+
+	return nil
+end
+
+------Commands-------
+function OnCommand_GetBaseViewData(objs)
+	currentHeroID = objs[0]
+	RefreshView()
+end
+
+function OnCommand_PostReview(objs)
+	local content = objs[0]
+	PostReview(currentHeroID, content)
+end
+
+function OnCommand_LikeReview(objs)
+	local reviewID = objs[0]
+	if not AssertLikeEnabled(reviewID) then
+		return
+	end
+
+	LikeReview(reviewID)
+end
+
+function AssertLikeEnabled(reviewID)
+	local review = GetReview(reviewID)
+	if review.liked then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("AlreadyLikedHint"))
+		return false
+	end
+
+	return true
+end
+
+function OnCommand_OpenComposeView(objs)
+	local confirmCbk = function(content)
+		PostReview(currentHeroID, content)
+	end
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			local view = CsBridge.OpenView("HeroRatingComposeView", "HeroRatingModel",true,true)
+			view:SetParamDataList(confirmCbk)
+		end, 
+		"HeroRatingComposeView")
+end
+
+------View Controller-------
+function RefreshView()
+	GetReviews(currentHeroID)
+end
+
+function GetViewData(data)
+	local viewData = {}
+	local reviewList = {}
+	viewData.reviewList = reviewList
+	viewData.heroID = currentHeroID
+	for k, review in pairs(cachedReviews) do		
+		table.insert(reviewList, GetItemViewData(review))
+	end
+	
+	return viewData
+end
+
+function GetItemViewData(review)
+	local itemViewData = {}
+	itemViewData.id = review.id
+	itemViewData.playerName = review.playerName
+	itemViewData.date = GLuaFormatTime(review.time, "yyyy-MM-dd")
+	itemViewData.liked = review.liked
+	itemViewData.likeCount = GetValueAbbreviation(review.likeCount)
+	itemViewData.content = review.content
+	return itemViewData
+end
+
+function GetItemViewDataByID(reviewID)
+	local review = GetReview(reviewID)
+	return GetItemViewData(review)
+end
+
+function DoOnExit()
+	MsgCenter:Unsubscribe(Notify_HeroRating_HeroChanged, OnHeroChanged)
+	self.Module = nil
+	reviewCharCount = nil
+	maxReviewCount = nil
+
+	currentHeroID = nil
+	cachedReviews = nil
+end

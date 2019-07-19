@@ -1,0 +1,15 @@
+
+function OnEquipmentItemSlotBindValue(slot,data)
+
+	slot.m_SelectSprite=slot.transform:Find("SeletedSprite").gameObject
+	slot:UnSelected()
+
+	local itemBase_TF=slot.transform:Find("ItemBase")
+	local hint_Sprite=slot.transform:Find("HintSprite"):GetComponent("UnityEngine.UI.Image")
+
+	BindItemBaseValue(itemBase_TF,data.reward)
+	hint_Sprite.gameObject:SetActive(data.showHint)
+	if	data.localInfo~=nil then
+		count_Lab.text=tostring(data.localInfo.count) 
+	end
+end

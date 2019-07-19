@@ -1,0 +1,147 @@
+local loadedSignItemSlot=require "SignItemSlot"
+
+local sign_Lab
+local signCount_Lab
+
+local sign_Btn
+
+local dailySignGrid
+
+local dailyRewardsData={}
+local curIndex = 0
+local curData = {}
+local RESIGN_DIAMOND_VAL=0
+
+local refreshActivityCallback
+
+function DoInit()
+
+	signCount_Lab = self.transform:Find("Dynamic/SignCountTxt"):GetComponent(CLS_TEXT)
+	sign_Lab = self.transform:Find("Dynamic/SignBtn/SignTxt"):GetComponent(CLS_TEXT)
+	sign_Btn=self.transform:Find("Dynamic/SignBtn"):GetComponent("ButtonArchly")
+
+	dailySignGrid = self.transform:Find("Dynamic/DailySignGrid"):GetComponent("UIItemGrid")
+
+	RESIGN_DIAMOND_VAL=GetConstValue("dailyRewardRetroactiveSignPrice")
+end
+
+function OnOpen()
+    local dailyRewardInfo = appData:checkData("DailyRewardInfo")
+    curIndex=dailyRewardInfo.maxAvaliableId
+	dailyRewardsData=GetDailyRewardsData(dailyRewardInfo)
+	local count = 0
+	if dailyRewardInfo.takenIds~=nil then
+		count=#(dailyRewardInfo.takenIds)
+	end
+    signCount_Lab.text=count.."/"..#dailyRewardsData
+ 	dailySignGrid:RefreshItemSlots(dailyRewardsData,self.gameObject,"SignItemSlot")
+	dailySignGrid:SelectItemSlot(curIndex-1)
+	curData=dailyRewardsData[curIndex]
+	if curData.signed then
+		RefreshGrid()
+	end
+end
+
+function SetParamDataList(objs)
+	refreshActivityCallback = objs[0]
+end 
+
+function GetDailyRewardsData(dailyRewardInfo)
+	local tbl=ResTblContainer:GetTable(DailyReward.tblName)
+    local ids = tbl:GetCol(DailyReward.keyid)
+    local dailyRewardsData={}
+    for i=0,ids.Length-1 do
+		if dailyRewardInfo.round==tbl:GetInt(tonumber(ids[i]),DailyReward.round) then
+			local data = {}
+			data.id=tbl:GetInt(tonumber(ids[i]),DailyReward.id)
+			data.rewards=GetRewardFromTbl(tbl:Get(tonumber(ids[i]),DailyReward.rewardStr))
+			data.maxAvaliableId=curIndex
+			data.signed=false
+			if dailyRewardInfo.takenIds~=nil and next(dailyRewardInfo.takenIds)~=nil then
+				for k,v in ipairs(dailyRewardInfo.takenIds) do
+					if data.id==v then
+						data.signed=true
+					end
+				end
+			end
+			table.insert(dailyRewardsData,data)
+		end
+    end
+    return dailyRewardsData
+end
+
+function OnDailySignGridItemBtnClick(obj)
+	local data = obj.m_data
+	if data.id>data.maxAvaliableId then
+		return
+	end
+	if data.signed then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("Signed"))
+		return
+	end
+	dailySignGrid:SelectItemSlot(obj.gameObject)
+	obj.IsSelected=true
+	curData = obj.m_data
+	if curData.id==curData.maxAvaliableId then
+		sign_Lab.text=Language:getStr("Sign")
+	else
+		sign_Lab.text=Language:getStr("Unsigned")
+	end
+end
+
+function OnSignBtnClick(sender)
+	if curData.signed then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("Signed"))
+		return
+	end
+	if curData.id==curData.maxAvaliableId then
+		self:SendCommand("SignDailyReward",curData.id)
+	elseif curData.id<curData.maxAvaliableId then
+	    CsBridge.messageManager:PopMsgBox("",string.format(Language:getStr("Unsigned_Desp"),RESIGN_DIAMOND_VAL),Language:getStr("local_confirm"),OnConfirmCallBack,Language:getStr("local_cancel"),nil);
+	end
+end
+
+function OnConfirmCallBack()
+	self:SendCommand("SignDailyReward",curData.id)
+end
+
+function OnNotification_Received(objs)
+    local dailyRewardInfo = appData:checkData("DailyRewardInfo")
+    signCount_Lab.text=#(dailyRewardInfo.takenIds).."/"..#dailyRewardsData
+	curData.signed=true
+	if refreshActivityCallback ~= nil then
+		refreshActivityCallback()
+	end 
+	RefreshGrid()
+end
+
+function RefreshGrid()
+	dailySignGrid:SingleRefreshSlot(curData)
+	for i,data in ipairs(dailyRewardsData) do
+		if data.id>=data.maxAvaliableId then
+			break
+		end
+		if not data.signed then
+			curData=data
+			curIndex=data.id
+			dailySignGrid:SelectItemSlot(curIndex-1)
+			sign_Lab.text=Language:getStr("Unsigned")
+			return
+		end
+	end
+	sign_Lab.text=Language:getStr("Signed")
+	sign_Btn.interactable=false
+end
+
+function DoExit()
+	loadedSignItemSlot = nil
+	sign_Lab = nil
+	signCount_Lab = nil
+	sign_Btn = nil
+	dailySignGrid = nil
+	dailyRewardsData = nil
+	curIndex = nil
+	curData = nil
+	RESIGN_DIAMOND_VAL = nil
+	refreshActivityCallback = nil
+end

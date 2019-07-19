@@ -1,0 +1,499 @@
+--[[
+	file: LeagueMatchModel.lua
+	author: hangang
+	description: League details view controller
+]]
+
+require "LeagueUtils"
+
+local PATH_PLAYER_RED = "LeftPlayer"
+local INTERVAL_FETCH_DATA = 10000
+local TICKER_NAME = "Ticker_LeagueMatchModel"
+
+local cachedMatch
+local cachedOwnPlayerInfo
+local redPlayerCard, blackPlayerCard
+
+local lastFetchTime
+
+------initialization------------------------------------------------------------------------
+function DoInit()
+	cachedOwnPlayerInfo = appData:checkData("PlayerInfo")
+end
+
+------Updating------------------------------------------------------------------------------
+function Updating()
+	if cachedMatch.state ~= LeagueMatchState.Finished then
+		local delay = 60000
+		local endTime = cachedMatch.settleTime + delay
+		local onLooping = RefreshMatch
+		local onFinished = RefreshDetailsView
+		local interval = 0.5
+		Timer:AddTicker(TICKER_NAME, endTime, onLooping, onFinished, interval)
+		lastFetchTime = CsBridge.timeManager.ServerTime
+	end
+end
+
+function RefreshMatch()
+	local now = CsBridge.timeManager.ServerTime
+	if now - lastFetchTime >= INTERVAL_FETCH_DATA then
+		lastFetchTime = now
+		TryUpdateMatchData()
+	else
+		RefreshCountdown()
+	end
+end
+
+------View events handler-----------------------------------------------------------------
+function OnCommand_GetBaseViewData(objs)
+	cachedMatch = objs[0]
+	Updating()
+	RefreshDetailsView()
+end
+
+function OnCommand_BetBtnClicked(objs)
+	local playerItemName = objs[0]
+	local player = playerItemName == PATH_PLAYER_RED
+		and LeagueMatchPlayer.RedPlayer or LeagueMatchPlayer.BlackPlayer
+	OpenBettingView(player)
+end
+
+function OnCommand_CheckBtnClicked(objs)
+	local playerItemName = objs[0]
+	ShowPlayerInfoView(playerItemName)
+end
+
+function OnCommand_PlayerBaseClicked(objs)
+	local playerItemName = objs[0]
+	ShowPlayerInfoView(playerItemName)
+end
+
+function ShowPlayerInfoView(playerItemName)
+	local playerInfo = playerItemName == PATH_PLAYER_RED
+		and redPlayerCard.playerInfo or blackPlayerCard.playerInfo
+	local formation = playerItemName == PATH_PLAYER_RED
+		and cachedMatch.redPlayer.formation or cachedMatch.blackPlayer.formation
+
+	if playerInfo then
+		OpenPlayerInfoView(self, playerInfo, "LeagueMatchDetailsView", formation)
+	end
+end
+
+function OnCommand_FormationBtnClicked(objs)
+	if CheckSetFormationEnabled() then
+		OpenFormationView(self, UpdateAllFormation, UpdateFormation)
+	end
+end
+
+function OnCommand_ReplayClicked(objs)
+	OpenReplayView(self, cachedMatch, "LeagueMatchDetailsView")
+end
+
+function OnCommand_Closing(objs)
+	updatingCtrnFinished = true
+end
+
+function OnCommand_OpenTipView(objs)
+	local data = objs[0]
+	local itemType = data.typeId
+	if itemType == ItemTypeEnum.Hero then
+		ShowHeroTip(self, data.id, 1, 1)
+	else
+		ShowTip(self, itemType, data.id)
+	end
+end
+
+function OnCommand_BonusBannerClicked(objs)
+	local itemID = GetBonusItemID()
+	local itemType = ItemTypeEnum.Resource
+	ShowTip(self, itemType, itemID)
+end
+
+function OnCommand_CurrencyBannerClicked(objs)
+	local itemID = GetBetItemID()
+	local itemType = ItemTypeEnum.Resource
+	ShowTip(self, itemType, itemID)
+end
+
+------Helpers-----------------------------------------------------------------------------
+function RefreshDetailsView()
+	local match = cachedMatch
+	local playerInfo = match.redPlayer.baseInfo
+	local redPlayerID, redPlayerZone = playerInfo.userId, playerInfo.zone
+	playerInfo = match.blackPlayer.baseInfo
+	local blackPlayerID, blackPlayerZone = playerInfo.userId, playerInfo.zone
+	local formationType = FormationTypeEnum.FormationType_PVP
+	local callback = function(resp)
+		redPlayerCard.combat = resp.redCombat
+		blackPlayerCard.combat = resp.blackCombat
+		local viewData = GetDetailsViewData(cachedMatch)
+		self:SendNotification("RefreshDetailsView", viewData)
+	end
+	local callback1 = function(resp)
+		blackPlayerCard = resp or {}
+		FetchPlayerPower(callback, match.IDOnServer)
+	end
+	local callback2 = function(resp)
+		redPlayerCard = resp
+		if IsNilOrEmpty(blackPlayerID) then
+			callback1()
+		else
+			FetchPlayerCard(callback1, blackPlayerID, blackPlayerZone, formationType)
+		end
+	end
+
+	FetchPlayerCard(callback2, redPlayerID, redPlayerZone, formationType)
+end
+
+function GetDetailsViewData(match)
+	local viewData = {}
+	viewData.countdownData = GetCountdownViewData()
+	local myAmountText, myOddsText = FormateBettingInfo(match)
+	viewData.myAmountText, viewData.myOddsText = myAmountText, myOddsText
+	viewData.winRewards = match.winRewards
+	viewData.loseRewards = match.loseRewards
+	
+	viewData.leftResultText = ""
+	viewData.rightResultText = ""
+	if match.state == LeagueMatchState.Finished then
+		viewData.leftResultText = match.winner == LeagueMatchPlayer.RedPlayer
+			and ResultText.Win or ResultText.Lose
+		viewData.leftResultColor = match.winner == LeagueMatchPlayer.RedPlayer
+			and ResultText.WinColor or ResultText.LoseColor
+		viewData.rightResultText = match.winner == LeagueMatchPlayer.BlackPlayer
+			and ResultText.Win or ResultText.Lose
+		viewData.rightResultColor = match.winner == LeagueMatchPlayer.BlackPlayer
+			and ResultText.WinColor or ResultText.LoseColor
+	end
+		
+	viewData.scoreText = FormatMatchScore(match)
+	viewData.leftPlayerData = GetMatchDetailsViewPlayerData(
+		match.redPlayer, 
+		match.blackPlayer, 
+		redPlayerCard,
+		match.ownBetting)
+	viewData.rightPlayerData = GetMatchDetailsViewPlayerData(
+		match.blackPlayer, 
+		match.redPlayer, 
+		blackPlayerCard,
+		match.ownBetting)
+
+	local itemID = GetBetItemID()
+	viewData.currencyIcon = ResTblContainer:GetPropToStr
+		(itemID,Resource.icon,Resource.ResourceTbl)
+	viewData.currencyAmount = GetValueAbbreviation(GetBalance(itemID))
+	itemID = GetBonusItemID()
+	viewData.bonusIcon = ResTblContainer:GetPropToStr
+		(itemID,Resource.icon,Resource.ResourceTbl)
+	viewData.bonusAmount = GetValueAbbreviation(GetBalance(itemID))
+
+	return viewData
+end
+
+local function FormatCountdownText(match, countdownData)
+	local isMatchPlayer = IsMatchPlayer()
+	if match.level > LeagueMatchLevel.Audition then
+		if isMatchPlayer then
+			countdownData.countdownHeader = Language:getStr(CountdownHeaders_Player[match.state])
+		else
+			countdownData.countdownHeader = Language:getStr(CountdownHeaders_Audience[match.state])
+		end
+
+		local targetTime = CsBridge.timeManager.ServerTime
+		if match.state == LeagueMatchState.Lineup then
+			if isMatchPlayer then
+				local now = CsBridge.timeManager.ServerTime
+				if now > match.lineupTime then
+					targetTime = match.time + MATCH_DELAY
+					countdownData.countdownHeader = Language:getStr(CountdownHeaders_Player[LeagueMatchState.Preparing])
+				else
+					targetTime = match.lineupTime
+				end
+			else
+				targetTime = match.betTime
+			end
+		elseif match.state == LeagueMatchState.Preparing then
+			targetTime = match.time + MATCH_DELAY
+		elseif match.state == LeagueMatchState.Processing then
+			targetTime = match.settleTime + MATCH_DELAY
+		end
+
+		countdownData.countdownText = CheckTimeRemain(targetTime, false)
+	else
+		if isMatchPlayer then
+			countdownData.countdownHeader = Language:getStr(CountdownHeaders_Player[match.state])
+		else
+			countdownData.countdownHeader = Language:getStr(CountdownHeaders_Audition[match.state])
+		end
+
+		local targetTime = CsBridge.timeManager.ServerTime
+		if match.state == LeagueMatchState.Lineup then
+			if isMatchPlayer then
+				local now = CsBridge.timeManager.ServerTime
+				if now > match.lineupTime then
+					targetTime = match.time + MATCH_DELAY
+					countdownData.countdownHeader = Language:getStr(CountdownHeaders_Player[LeagueMatchState.Preparing])
+				else
+					targetTime = match.lineupTime
+				end
+			else
+				targetTime = match.time + MATCH_DELAY
+			end
+		elseif match.state == LeagueMatchState.Preparing then
+			targetTime = match.time + MATCH_DELAY
+		elseif match.state == LeagueMatchState.Processing then
+			targetTime = match.settleTime + MATCH_DELAY
+		end
+		
+		countdownData.countdownText = CheckTimeRemain(targetTime, false)
+	end
+end
+
+function GetCountdownViewData()
+	local countdownData = {}
+	local match = cachedMatch
+	countdownData.replayEnabled = match.state >= LeagueMatchState.Processing
+	countdownData.countdownVisible = match.state < LeagueMatchState.Finished
+	if countdownData.countdownVisible then
+		FormatCountdownText(match, countdownData)
+	else
+		countdownData.tipsText = Language:getStr("MatchEndedTips")
+	end
+
+	return countdownData
+end
+
+function FormatMatchScore(match)
+	if match.state >= LeagueMatchState.Processing then
+		local process = match.process or 0
+		local winCount, loseCount = 0, 0		
+		local redWinIDs = match.redWinBattleIDs
+		for battleID = 1, process do
+			for j, redID in pairs(match.redWinBattleIDs) do
+				if redID == battleID then
+					winCount = winCount + 1
+				end
+			end
+			for j, blackID in pairs(match.blackWinBattleIDs) do
+				if blackID == battleID then
+					loseCount = loseCount + 1
+				end
+			end
+		end
+
+		return tostring(winCount) .. " : " .. tostring(loseCount)
+	else
+		return ""
+	end
+end
+
+function FormateBettingInfo(match)
+	local amountText, oddsText = "", ""
+	local bettingData = match.ownBetting
+	if bettingData then
+		amountText = tostring(bettingData.count)
+		oddsText = FormatOdds(bettingData.odds)
+	end
+
+	return amountText, oddsText, betted
+end
+
+function GetMatchDetailsViewPlayerData(playerData, opponentData, playerCard, bettingData)
+	local match = cachedMatch
+	local playerViewData = {}
+	playerViewData.unionName = playerCard.union
+	playerViewData.unionBanner = ResTblContainer:GetPropToStr(playerCard.unionIcon, GuildBanner.banner, GuildBanner.tblName)
+	playerViewData.playerName = FormatPlayerName(playerData.baseInfo)
+	playerViewData.powerText = tostring(playerCard.combat)
+
+	local matchFinished = match.state == LeagueMatchState.Finished
+	local winner = GetWinnerData(match)
+	local isWinner = winner ~= nil and IsPlayerBaseEqual(winner.baseInfo, playerData.baseInfo)
+	playerViewData.showWinText = matchFinished and isWinner
+	playerViewData.showLoseText = matchFinished and not isWinner
+	playerViewData.showMask = matchFinished and not isWinner
+	playerViewData.playerInfo = playerData.baseInfo
+
+	playerViewData.showFormationBtn = 
+		match.state == LeagueMatchState.Lineup and
+		playerViewData.playerInfo.userId == cachedOwnPlayerInfo.userId and
+		playerViewData.playerInfo.zone == cachedOwnPlayerInfo.zone
+	playerViewData.showCheckBtn = 
+		match.state == LeagueMatchState.Lineup and
+		opponentData.baseInfo.userId == cachedOwnPlayerInfo.userId and
+		opponentData.baseInfo.zone == cachedOwnPlayerInfo.zone
+
+	playerViewData.betLocked = playerData.betLocked
+	playerViewData.showBetBtn = 
+		match.level ~= LeagueMatchLevel.Audition and
+		match.state == LeagueMatchState.Lineup and
+		bettingData == nil and
+		not playerViewData.showFormationBtn and
+		not playerViewData.showCheckBtn and
+		not playerViewData.betLocked
+
+	if match.state == LeagueMatchState.Lineup
+		and playerViewData.playerInfo.userId == cachedOwnPlayerInfo.userId
+	then
+		local now = CsBridge.timeManager.ServerTime
+		if now > match.lineupTime then
+			playerViewData.showFormationBtn = false
+		end
+	end
+
+	playerViewData.showBetLocked = 
+		match.state == LeagueMatchState.Lineup and
+		playerData.betLocked and
+		(not playerViewData.showCheckBtn) and
+		(not playerViewData.showFormationBtn)
+	
+	playerViewData.betAmountText = tostring(playerData.betAmount)
+	playerViewData.oddsText = FormatOdds(playerData.odds)
+	playerViewData.betted = bettingData and 
+		(playerViewData.playerInfo.userId == bettingData.bettedPlayerID
+		and playerViewData.playerInfo.zone == bettingData.bettedPlayerZone)
+
+	return playerViewData
+end
+
+function RefreshCountdown()
+	local viewData = GetCountdownViewData()
+	self:SendNotification("RefreshCountdown", viewData)
+end
+
+function OpenBettingView(player)
+	if CheckBettingEnabled() then
+		local confirmCbk = function(amount)
+			DoBet(player, amount)
+		end
+		local currencyID = GetBetItemID()
+		local currencyIcon = ResTblContainer:GetPropToStr(currencyID,Resource.icon,Resource.ResourceTbl)
+		CsBridge.CacheAssetsByModule(self.Module,
+			function()
+				local view = CsBridge.OpenView("LeagueBetView","LeagueMatchModel", false, true)
+				view:SetParamDataList(confirmCbk, currencyIcon)
+			end,
+			"LeagueBetView")
+	end
+end
+
+function DoBet(player, amount)
+	local roundID, turnID = cachedMatch.roundID, cachedMatch.IDOnServer
+	if amount < 0  then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("1196"))
+	else
+		Bet(OnBetFinished, roundID, turnID, player, amount)
+	end
+end
+
+function OnBetFinished(resp)
+	CsBridge.hintUILayer:ShowHintBox(Language:getStr("BetSucceeded"))
+	self:HideView("LeagueBetView")
+	TryUpdateMatchData()
+end
+
+function TryUpdateMatchData()
+	FetchMatchData(
+		function(resp)
+			local match = cachedMatch
+			local matchData = resp.matchInfo
+			match.ownBetting = matchData.selfStakeRecord
+			if match.ownBetting then
+				match.ownBetting.bettedPlayerID = match.ownBetting.redWin 
+					and match.redPlayer.baseInfo.userId or match.blackPlayer.baseInfo.userId
+				match.ownBetting.bettedPlayerZone = match.ownBetting.redWin 
+					and match.redPlayer.baseInfo.zone or match.blackPlayer.baseInfo.zone
+			end
+
+			local player = match.redPlayer
+			player.odds = matchData.redOdds
+			player.betAmount = matchData.redTotalStake
+			player = match.blackPlayer
+			player.odds = matchData.blackOdds
+			player.betAmount = matchData.blackTotalStake
+			RefreshDetailsView()
+		end, 
+		cachedMatch.roundID, 
+		cachedMatch.IDOnServer)
+end
+
+function CheckBettingEnabled()
+	local match = cachedMatch
+	local betted = match.ownBetting ~= nil
+	if betted then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("1195"))
+		return false
+	end
+
+	local bettingFinished = match.state ~= LeagueMatchState.Lineup
+	if bettingFinished then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("1192"))
+		return false
+	end
+	
+	return true
+end
+
+function UpdateFormation(index, formation, finishedCbk)
+	local cbk = function(resp)
+		if finishedCbk then
+			finishedCbk(resp)
+		end
+		OnUpdateFormationFinished()
+	end
+	UpdateLeagueFormation(cbk, index, formation)
+end
+
+function OnUpdateFormationFinished()
+	CsBridge.hintUILayer:ShowHintBox(Language:getStr("saveFormationOK"))
+	TryUpdateMatchData()
+end
+
+function UpdateAllFormation(formations, isClose)
+	local cbk = function(resp)
+		local close = isClose == nil and true or isClose
+		if close then
+			self:HideView("CrossFormationView")
+			OnUpdateFormationFinished()
+		end
+	end
+	UpdateAllLeagueFormation(cbk, formations)
+end
+
+function CheckSetFormationEnabled()
+	local match = cachedMatch
+	local bettingFinished = match.state ~= LeagueMatchState.Lineup
+	if bettingFinished then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("UpdateFormationClosedTips"))
+		return false
+	end
+	
+	return true
+end
+
+function IsMatchPlayer()
+	local isRedPlayer = cachedMatch.redPlayer.baseInfo.userId == cachedOwnPlayerInfo.userId
+		and cachedMatch.redPlayer.baseInfo.zone == cachedOwnPlayerInfo.zone
+	local isBlackPlayer = cachedMatch.blackPlayer.baseInfo.userId == cachedOwnPlayerInfo.userId
+		and cachedMatch.blackPlayer.baseInfo.zone == cachedOwnPlayerInfo.zone
+
+	return isRedPlayer or isBlackPlayer
+end
+
+function OnClose()
+	Timer:StopTicker(TICKER_NAME)
+end
+
+function DoOnExit()
+	Timer:StopTicker(TICKER_NAME)
+	PATH_PLAYER_RED = nil
+	INTERVAL_FETCH_DATA = nil
+	TICKER_NAME = nil
+
+	cachedMatch= nil
+	cachedOwnPlayerInfo= nil
+	redPlayerCard= nil
+	blackPlayerCard= nil
+
+	lastFetchTime= nil
+end

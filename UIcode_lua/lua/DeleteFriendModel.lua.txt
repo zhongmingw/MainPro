@@ -1,0 +1,111 @@
+--[[
+	file: DeleteFriendModel.lua
+	author: hangang
+	description: DeleteFriendView's view controller
+
+	version 1.0:File created
+]]
+
+local cachedFriendList
+local utils = require "FriendUtils"
+
+--Helper functions
+local DeleteFriends
+local GetViewData
+local RefreshView
+local ShowPlayerInfoView
+
+------initialization----------------------------------------------------------------
+function DoInit()
+end
+
+function DoOnExit()
+	cachedFriendList = nil
+	utils = nil
+end
+
+------View events handler-----------------------------------------------------------------
+function OnCommand_GetBaseViewData(objs)
+    RefreshView()
+end
+
+function OnCommand_DeleteBtnClicked(objs)
+	local selectedList = objs[0]
+	DeleteFriends(selectedList)
+end
+
+function OnCommand_FriendIconClicked(objs)
+	local itemData = objs[0]
+	ShowPlayerInfoView(itemData)
+end
+
+------Helpers-----------------------------------------------------------------------------
+RefreshView = function()
+	local finishedCallback = function(resp)
+		if resp and resp.friends then
+			cachedFriendList = resp.friends
+		else
+			cachedFriendList = {}
+		end
+		local viewData = GetViewData(cachedFriendList)
+		self:SendNotification("RefreshView", viewData)
+	end
+    utils.FetchFriends(finishedCallback)
+end
+
+GetViewData = function(friendList)
+	local viewData = {}
+	viewData.count = #friendList.."/"..utils.GetMaxFriendCount()
+	viewData.friends = {}
+
+	local itemViewData
+	for k, friend in pairs(friendList) do
+		itemViewData = {}
+		itemViewData.friend = friend
+		local baseData = friend.friendBasicInfoResp
+		itemViewData.playerInfo = baseData
+		itemViewData.name = baseData.nick
+		itemViewData.lastOnlineTime = baseData.lastOnlineTime
+		itemViewData.timeText = CsBridge.timeManager:checkTimePass(baseData.lastOnlineTime)
+		itemViewData.offlineTimeType = utils.GetOfflineTimeType(baseData.lastOnlineTime)
+		itemViewData.checked = false
+
+		table.insert(viewData.friends, itemViewData)
+	end
+
+	table.sort(viewData.friends, function(a, b)
+		return a.lastOnlineTime > b.lastOnlineTime
+	end)
+	viewData.showEmptyTips = #viewData.friends < 1
+
+	return viewData
+end
+
+DeleteFriends = function(selectedList)
+	local confirmCbk = function()
+		local idList = {}
+		for k, item in pairs(selectedList) do
+			local targetUserID = FormatUserID(item.playerInfo.userId, item.playerInfo.zone)
+			table.insert(idList, targetUserID)
+		end
+		utils.RemoveFriends(RefreshView, idList)
+	end
+	local title = Language:getStr("hint")
+	local text = string.format(Language:getStr("DeleteFriendsTips"), #selectedList)
+	local cancelText = Language:getStr("local_cancel")
+	local confirmText = Language:getStr("local_confirm")
+	local cancelCbk = nil
+	CsBridge.messageManager:showAlertView(title, text, cancelText, cancelCbk, confirmText, confirmCbk)
+end
+
+ShowPlayerInfoView = function(data)
+	local uid = data.playerInfo.userId
+	local zone = data.playerInfo.zone
+	local isLocal = false
+	CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			local view = CsBridge.OpenView("PlayerInfoView", "PlayerInfoModel", true)
+			view:SetParamDataList(isLocal, uid, zone)
+		end, 
+		"PlayerInfoView","AchievementItemSlot")
+end

@@ -1,0 +1,47 @@
+local maxHp = 0
+local curHp = 0
+local curAnger = 0
+local maxAnger = 0
+
+local race_Sprite
+local defHp_Slider
+local bloodBack_Slider
+local hpBack_Sprite
+local blood_Slider
+local anger_Slider
+local hp_Sprite
+local angerMaxSfx
+
+function Awake()
+
+end
+
+function Start()
+    race_Sprite = self.transform:Find("RaceSprite"):GetComponent(CLS_IMAGE)
+    defHp_Slider = self.transform:Find("defHpSlider"):GetComponent(CLS_SLIDER)
+    bloodBack_Slider = self.transform:Find("bloodBackSlider"):GetComponent(CLS_SLIDER)
+    hpBack_Sprite = bloodBack_Slider.fillRect:GetComponent(CLS_IMAGE)
+    blood_Slider = self.transform:Find("bloodSlider"):GetComponent(CLS_SLIDER)
+    anger_Slider = self.transform:Find("angerSlider"):GetComponent(CLS_SLIDER)
+    hp_Sprite = blood_Slider.fillRect:GetComponent(CLS_IMAGE)
+	angerMaxSfx = self.transform:Find("energybar_p"):GetComponent(CLS_SKELETONGRAPHIC)
+end
+
+function OnDestroy()
+
+end
+
+function DoExit()
+    maxHp = nil
+    curHp = nil
+    curAnger = nil
+    maxAnger = nil
+    race_Sprite = nil
+    defHp_Slider = nil
+    bloodBack_Slider = nil
+    hpBack_Sprite = nil
+    blood_Slider = nil
+    anger_Slider = nil
+    hp_Sprite = nil
+    angerMaxSfx = nil
+end

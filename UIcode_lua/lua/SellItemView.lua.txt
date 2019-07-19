@@ -1,0 +1,230 @@
+local data
+local DirtyFun
+local isSellBtn=false
+
+local img_icon
+local img_quality
+
+local txt_order
+local img_race
+local go_debrisFlag
+
+local starListObj
+local starArr={}
+local star_6
+local star_7
+
+local go_SellBtn
+local go_ComposeBtn
+local go_UseBtn
+
+local itemType--物品类型
+
+local input
+local curNum=0
+local maxNum=0
+
+function DoInit()
+	img_icon=self.transform:Find("Dynamic/item/iconImg"):GetComponent("UnityEngine.UI.Image")
+	img_quality=self.transform:Find("Dynamic/item/qualityImg"):GetComponent("UnityEngine.UI.Image")
+	img_race=self.transform:Find("Dynamic/item/race"):GetComponent("UnityEngine.UI.Image")
+	txt_order=self.transform:Find("Dynamic/item/order"):GetComponent(CLS_TEXT)
+	go_debrisFlag=self.transform:Find("Dynamic/item/debrisFlag").gameObject
+
+	go_SellBtn=self.transform:Find("Dynamic/Btns/SellBtn").gameObject
+	go_ComposeBtn=self.transform:Find("Dynamic/Btns/ComposeBtn").gameObject
+	go_UseBtn=self.transform:Find("Dynamic/Btns/UseBtn").gameObject
+
+	starListObj=self.transform:Find("Dynamic/item/Stars/starList").gameObject
+	star_6=self.transform:Find("Dynamic/item/Stars/star6").gameObject
+	star_7=self.transform:Find("Dynamic/item/Stars/star7").gameObject
+	for  i = 1,5 do
+		local obj=starListObj.transform:Find("star"..i).gameObject
+		table.insert(starArr,obj)
+	end
+
+	input= self.transform:Find("Dynamic/SellInput"):GetComponent("UnityEngine.UI.InputField")
+end
+
+function OnNotification_InitSellItem(objs)
+	data=objs[0]
+	DirtyFun=objs[1]
+	isSellBtn=objs[2]
+	OnReset()
+end 
+
+function OnReset()
+	ShowBaseInfo() 	--基础信息
+	ShowContent()	--主要内容
+	ShowBtns()
+end
+
+function ShowBaseInfo()
+	SetIconByItemId(img_icon.gameObject,data.itemId)
+	SetQualityByItemId(img_quality.gameObject,data.itemId)
+
+	SetItemSpecial(txt_order,go_debrisFlag,data.itemId)
+	SetDebrisInfo(img_race,starListObj,starArr,star_6,star_7,data.itemId)
+end
+
+function ShowContent()
+	--物品类型
+	itemType = ResTblContainer:GetPropToInt(data.itemId,ItemBase.type,ItemBase.actorTbl)
+	if(itemType==3)then--英雄碎片
+		local val=ResTblContainer:GetPropToInt(data.itemId,PiecesComposition.count,PiecesComposition.actorTbl)
+		maxNum=math.floor(data.count/val)
+	else
+		maxNum=data.count
+	end
+	curNum=maxNum
+	CheckCurNum()
+end
+
+function OnSellInputInputValChanged(sender,val)
+	curNum=tonumber(val)
+	CheckCurNum()
+end
+
+function OnAddBtnClick(sender)
+	curNum=curNum+1
+	CheckCurNum()
+end
+
+function OnReduceBtnClick(sender)
+	curNum=curNum-1
+	CheckCurNum()
+end
+
+
+--检测当前值是否在范围内
+function CheckCurNum()
+	if(curNum>maxNum)then
+		curNum=maxNum
+	elseif(curNum<1)then
+		curNum=1
+	end
+	input.text=tostring(curNum)
+end
+
+function ShowBtns()
+	go_SellBtn:SetActive(false)
+	go_ComposeBtn:SetActive(false)
+	go_UseBtn:SetActive(false)
+
+	--是否出售按钮进来的
+	if(isSellBtn==true)then
+		go_SellBtn:SetActive(true)
+	else
+		if(itemType==3)then--英雄碎片
+			go_ComposeBtn:SetActive(true)
+		elseif(itemType==4)then--宝箱
+			go_UseBtn:SetActive(true)
+		end
+	end
+end
+
+function OnComposeBtnClick(sender)
+	local req={}
+	req.id=data.itemId
+	req.count=curNum
+	HttpRequest("composePieces", "ComposePiecesReq", "ComposePiecesResp", req,OnComposePiecesResp)
+end
+
+function OnComposePiecesResp(resp)
+	if(resp~=nil and resp.rewards~=nil)then
+		CsBridge.CacheAssetsByModule(self.Module,function()
+			DirtyFun()
+			local view=CsBridge.OpenView("GetItemView","GetItemModel",false,true)
+			view:SetParamDataList(resp.rewards)
+			CloseView()
+		end, "GetItemView")
+	end
+end
+
+function OnUseBtnClick(sender)
+	local req={}
+	req.uid=0
+	req.id=data.itemId
+	req.count=curNum
+	HttpRequest("openTreasure", "OpenTreasureReq", "OpenTreasureResp", req,OnOpenTreasureResp)
+end
+
+function OnOpenTreasureResp(resp)
+	if(resp.rewards~=nil)then
+		CsBridge.CacheAssetsByModule(self.Module,function()
+			DirtyFun()
+			local view=CsBridge.OpenView("GetItemView","GetItemModel",false,true)
+			view:SetParamDataList(resp.rewards)
+			CloseView()
+		end, "GetItemView")
+	end
+end
+
+
+function OnSellBtnClick(sender)
+	local req={}
+	req.sellList={}
+	local newData={}
+	newData.id=data.itemId
+	newData.count=curNum
+	table.insert(req.sellList,newData)
+	HttpRequest("sellPackItem", "SellReq", "SellResp", req,OnSellRespResp)
+end
+
+function OnSellRespResp(resp)
+	if(resp.coin~=0)then
+		CsBridge.CacheAssetsByModule(self.Module,function()
+			DirtyFun()
+			--默认获得金币资源
+			local itemArr={}
+			local newData={}
+			newData.typeId=1
+			newData.id=1
+			newData.count=resp.coin
+			table.insert(itemArr,newData)
+			local view=CsBridge.OpenView("GetItemView","GetItemModel",false,true)
+			view:SetParamDataList(itemArr)	
+			CloseView()
+		end, "GetItemView")
+	end
+end
+
+function CloseView()
+	--关闭2层界面
+	OnCloseBtnClick(nil)
+	self:HideView("BagTipView")
+end
+
+
+function OnCloseBtnClick(sender)
+	self:HideView(self.gameObject.name)
+end
+
+---界面关闭触发
+function DoExit()
+    data = nil
+	DirtyFun = nil
+	isSellBtn = nil
+
+	img_icon = nil
+	img_quality = nil
+
+	txt_order = nil
+	img_race = nil
+	go_debrisFlag = nil
+
+	starListObj = nil
+	starArr = nil
+	star_6 = nil
+	star_7 = nil
+
+	go_SellBtn = nil
+	go_ComposeBtn = nil
+	go_UseBtn = nil
+
+	itemType = nil
+
+	input = nil
+	curNum = nil
+	maxNum = nil
+end

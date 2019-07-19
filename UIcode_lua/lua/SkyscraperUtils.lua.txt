@@ -1,0 +1,131 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-05-27 14:33:07
+]]
+
+local OpenType = {
+    NoExtraReward = 1,
+    ExtraReward = 2,
+}
+
+local SkyscraperExtraReward = {
+    tblName = "SkyscraperExtraReward",
+    id = "id",
+    extraRewardStr = "extraRewardStr",
+}
+
+local function ShowHintBox(desp, level)
+    local ERROR_LEVEL = 2
+    level = level or ERROR_LEVEL
+    CsBridge.hintUILayer:ShowHintBox(desp,level)
+end
+
+local function GetNextTakenId(curId)
+    local ids = ResTblContainer:GetCol(SkyscraperExtraReward.tblName,SkyscraperExtraReward.id)
+    for i=0,ids.Length-1 do
+        local id = tonumber(ids[i])
+        if id > curId then
+            return id
+        end
+    end
+    return -1
+end
+
+local function CheckHasReceiveRewards()
+    local skyTowerItem = appData:checkData("SkyTowerItem")
+    if skyTowerItem == nil then
+        return false
+    end
+    local ids = ResTblContainer:GetCol(SkyscraperExtraReward.tblName,SkyscraperExtraReward.id)
+    local playerCurId = skyTowerItem.id
+    local canTakenIds = {}
+    for i=0,ids.Length-1 do
+        local id = tonumber(ids[i])
+        if id > playerCurId then
+            break
+        end
+        table.insert(canTakenIds, id)
+    end
+    local extraRewards = skyTowerItem.extraRewards or {}
+    return #canTakenIds > #extraRewards
+end
+
+local function GetSkyscraperExtraTblData()
+    local data = {}
+    local tbl = ResTblContainer:GetTable(SkyscraperExtraReward.tblName)
+    local ids = tbl:GetCol(SkyscraperExtraReward.id)
+    for i=0,ids.Length-1 do
+        local id = tonumber(ids[i])
+        local rewardStr = tbl:Get(id,SkyscraperExtraReward.extraRewardStr)
+        local rewards = GetRewardFromTbl(rewardStr)
+        local rewardData = {
+            id = id,
+            rewards = rewards
+        }
+        table.insert(data, rewardData)
+    end
+    return data
+end
+
+local function RequestGetSkyTowerExtraReward(id, onFinished)
+    local req = {
+        stageId = id,
+    }
+    HttpRequest("getSkyTowerExtraReward","SkyTowerExtraRewardReq","SkyTowerExtraRewardResp",req,onFinished)
+end
+
+local function CheckSkyTowerRedFlagByOpenType(openType)
+    if openType == OpenType.NoExtraReward then
+        return false
+    elseif openType == OpenType.ExtraReward then
+        return CheckHasReceiveRewards()
+    end
+end
+
+local function CheckNoExtraRewardUpdateViewData(data)
+    for _,level in ipairs(data.levels) do
+        level.showRewards = true
+    end
+    return {
+        curId = data.curId,
+        levels = data.levels,
+        index = data.index,
+        skyTowerItem = data.skyTowerItem,
+        skyScraperKeyLimit = data.skyScraperKeyLimit,
+    }
+end
+
+local function CheckExtraRewardUpdateViewData(data)
+	local hasReceiveRewards = CheckHasReceiveRewards()
+	local spineAnimName = hasReceiveRewards and "full_stand" or "empty_stand"
+    return {
+		curId = data.curId,
+		levels = data.levels,
+		index = data.index,
+        spineAnimName = spineAnimName,
+        skyTowerItem = data.skyTowerItem,
+        skyScraperKeyLimit = data.skyScraperKeyLimit,
+        showSpine = true,
+    }
+end
+
+local function CheckUpdateViewDataByOpenType(openType,data)
+    if openType == OpenType.NoExtraReward then
+        return CheckNoExtraRewardUpdateViewData(data)
+    elseif openType == OpenType.ExtraReward then
+        return CheckExtraRewardUpdateViewData(data)
+    end
+end
+
+return {
+    ShowHintBox = ShowHintBox,
+    CheckHasReceiveRewards = CheckHasReceiveRewards,
+    GetSkyscraperExtraTblData = GetSkyscraperExtraTblData,
+    RequestGetSkyTowerExtraReward = RequestGetSkyTowerExtraReward,
+    GetNextTakenId = GetNextTakenId,
+    OpenType = OpenType,
+    CheckSkyTowerRedFlagByOpenType = CheckSkyTowerRedFlagByOpenType,
+    CheckUpdateViewDataByOpenType = CheckUpdateViewDataByOpenType,
+}

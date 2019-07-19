@@ -1,0 +1,83 @@
+---@type table toggle数组
+local toggleArr = {}
+---@type Client.Library.ToggleArchly 灵魂印刻的toggle
+local imprintTog
+---@type Client.Library.ToggleArchly 英雄分解toggle
+local decompositionTog
+
+---@type UnityEngine.GameObject 没有开放
+local unImprintTogObj
+
+---@type number 当前子界面
+local curSubViewIndex = AltarSubViewTypeEnum.HeroDecompositionView
+
+function DoInit()
+    self.Shadow = 1
+    imprintTog = self:GetComponentAtPath("Top/TypeTogGroup/ImprintTog", CLS_TOGGLE_ARCHLY)
+    decompositionTog = self:GetComponentAtPath("Top/TypeTogGroup/DecompositionTog", CLS_TOGGLE_ARCHLY)
+    unImprintTogObj = self:GetGameObjectAtPath("Top/TypeTogGroup/UnImprintTog", CLS_BUTTON_ARCHLY)
+    toggleArr[1] = decompositionTog
+    toggleArr[2] = imprintTog
+end
+
+---设置toggle到正确的状态上
+local function SetToggleState(index)
+    for i = 1, #toggleArr do
+        if i == index then
+            toggleArr[i].isOn = true
+        else
+            toggleArr[i].isOn = false
+        end
+    end
+end
+
+---打开界面时传入的参数
+function SetParamDataList(objs)
+    curSubViewIndex = objs[0]
+end
+
+function OnAnimationFinished()
+    self:SendCommand("GetTogBtnState")
+    self:SendCommand("OpenSubView", curSubViewIndex)
+end
+
+---获取到标签的状态
+function OnNotification_GetTogBtnState(objs)
+    local states = objs[0]
+    unImprintTogObj:SetSelfActive(not states.imprintTogState)
+    imprintTog.gameObject:SetSelfActive(states.imprintTogState)
+end
+
+---成功打开子界面
+function OnNotification_OpenSubView(objs)
+    if objs then
+        local index = objs[0]
+        curSubViewIndex = index
+        SetToggleState(curSubViewIndex)
+    end
+end
+
+---TogGroup点击
+function OnTypeTogGroupClick(isOn, index)
+    if isOn then
+        self:SendCommand("OpenSubView", index)
+    end
+end
+
+---为开放灵魂印刻
+function OnUnImprintTogClick()
+    UIOpen(UI_OPEN_TYPE_SOULIMPRINT)
+end
+
+function OnCloseBtnClick()
+    self:SendCommand("ClearView")
+    self:ReturnBack()
+end
+
+function DoExit()
+    self:SendCommand("ClearView")
+    toggleArr = nil
+    imprintTog = nil
+    decompositionTog = nil
+    curSubViewIndex = nil
+end

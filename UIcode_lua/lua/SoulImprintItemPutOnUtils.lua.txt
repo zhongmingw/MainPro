@@ -1,0 +1,41 @@
+---快速装备纹章
+local QuickPutOnSoulImprintItem = function(curHero, callback)
+    local req = {}
+    req.heroUid = curHero.uid
+    HttpRequest("quicklyPutOnEmblem", "QuickPutOnEmblemReq", "QuickPutOnEmblemResp", req, function(resp)
+        if resp then
+            if callback then
+                callback(resp)
+            end
+        end
+    end)
+end
+
+---脱下一个纹章
+local PutOffSoulImprintItemFromHero = function(emblemOwnerUid, callback)
+    local req = {}
+    req.heroUid = emblemOwnerUid
+    HttpRequest("takeOffEmblem", "TakeOffEmblemReq", "TakeOffEmblemResp", req, function(resp)
+        if callback then
+            callback(resp)
+        end
+    end)
+end
+
+---穿上纹章
+local PutOnSoulImprintItemToHero = function(curHero, newSouItemInfo, callback)
+    local req = {}
+    req.heroUid = curHero.uid
+    req.emblemUid = newSouItemInfo.itemInfo.uid
+    HttpRequest("putOnEmblem", "PutOnEmblemReq", "PutOnEmblemResp", req, function(resp)
+        if callback then
+            callback(resp)
+        end
+    end)
+end
+
+return {
+    QuickPutOnSoulImprintItem = QuickPutOnSoulImprintItem,
+    PutOffSoulImprintItemFromHero = PutOffSoulImprintItemFromHero,
+    PutOnSoulImprintItemToHero = PutOnSoulImprintItemToHero,
+}

@@ -1,0 +1,21 @@
+
+á
+UpLottery.proto	UpLotterystage.proto"&
+GetSummonUpActivityReq
+acId ("¨
+GetSummonUpActivityResp
+summonUpCall (
+summonUpCallPrice (
+summonUpRefreshPrice (
+up (2.stage.RewardItem
+pool (2.stage.RewardItem".
+SummonUpCallReq
+acId (
+count ("Y
+SummonUpCallResp&
+rewardItems (2.stage.RewardItem
+up (2.stage.RewardItem""
+SummonUpRefreshReq
+acId ("4
+SummonUpRefreshResp
+up (2.stage.RewardItem

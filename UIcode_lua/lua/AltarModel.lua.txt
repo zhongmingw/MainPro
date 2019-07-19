@@ -1,0 +1,47 @@
+---@type Client.Library.ViewBase
+local curSubView
+---@type number
+local curSubIndex = AltarSubViewTypeEnum.HeroDecompositionView
+
+function DoInit()
+
+end
+
+---获取分页标签的状态
+function OnCommand_GetTogBtnState()
+    local result = {}
+    result.imprintTogState = UIOpen(UI_OPEN_TYPE_SOULIMPRINT, false)
+    self:SendNotification("GetTogBtnState", result)
+end
+
+---打开子界面
+function OnCommand_OpenSubView(objs)
+    local targetSubIndex = objs[0]
+    if targetSubIndex == AltarSubViewTypeEnum.SoulImprintView then
+        if not UIOpen(UI_OPEN_TYPE_SOULIMPRINT) then
+            return
+        end
+        if curSubView then
+            curSubView:HideView(curSubView.gameObject.name)
+        end
+        curSubIndex = targetSubIndex
+        CsBridge.CacheAssetsByModule(self.Module, function()
+            curSubView = CsBridge.OpenView("SoulImprintView", "SoulImprintModel")
+        end, "SoulImprintView", "SoulPreviewAttrItemSlot")
+        self:SendNotification("OpenSubView", curSubIndex)
+    elseif targetSubIndex == AltarSubViewTypeEnum.HeroDecompositionView then
+        if curSubView then
+            curSubView:HideView(curSubView.gameObject.name)
+        end
+        curSubIndex = targetSubIndex
+        CsBridge.CacheAssetsByModule(self.Module, function()
+            curSubView = CsBridge.OpenView("HeroDecompositionView", "HeroDecompositionModel")
+        end, "HeroDecompositionView", "HeroItemSlot")
+        self:SendNotification("OpenSubView", curSubIndex)
+    end
+end
+
+function DoOnExit()
+    curSubView = nil
+    curSubIndex = nil
+end

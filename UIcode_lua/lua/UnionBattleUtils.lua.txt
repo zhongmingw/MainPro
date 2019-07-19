@@ -1,0 +1,99 @@
+--[[
+	file: UnionBattleUtils.lua
+	author: hangang
+	description: Union battle model
+]]
+
+TICKET_ID_UNION_BATTLE = 0
+
+------Http requet---------------------------------------------------------------------
+function FetchBattleStatusData(finishedCallback)
+    local req = {}
+	local url, requestCls, responseCls = "checkGuildWar", "CheckMyUnionReq", "CheckGuildWarResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function TryAddTicket(finishedCallback)
+    local req = {}
+	req.type = UI_OPEN_TYPE_UNION_BATTLE
+	req.count = 1
+	local url, requestCls, responseCls = "buyExtraChance", "BuyExtraChanceReq", "BuyExtraChanceResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function UnionBattle(finishedCallback, userID, zone, formation)
+    local req = {}
+	req.userId = userID
+	req.zone = zone
+	req.formationPos = formation
+
+	local url, requestCls, responseCls = "challengeInGuildWar", "ChallengeInGuildWarReq", "BattleInfo"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function FetchLeaderboards(finishedCallback)
+    local req = {}
+	req.count = 20
+	local url, requestCls, responseCls = "getUnionScoreRank", "GetUnionRankReq", "GetUnionScoreRankResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function FetchChallengeStatData(finishedCallback)
+    local req = {}
+	req.count = 20
+	local url, requestCls, responseCls = "getUnionAttackRank", "GetUnionRankReq", "GetUnionDailyRankResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function FetchBeChallengedStatData(finishedCallback)
+    local req = {}
+	req.count = 20
+	local url, requestCls, responseCls = "getUnionDeffendRank", "GetUnionRankReq", "GetUnionDailyRankResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function FetchMemberStatData(finishedCallback)
+    local req = {}
+	req.count = 50
+	local url, requestCls, responseCls = "getUnionMemberRank", "GetUnionRankReq", "GetUnionMemberRankResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function UpdateUnionBattleFormation(finishedCallback, formation)
+	local req={}
+	req.id = FormationTypeEnum.FormationType_Union
+	req.heroIds = formation
+	local url, requestCls, responseCls = "updateFormation", "Formation", "UpdateFormationResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+------Helpers---------------------------------------------------------------------
+function GetTicketCount()
+	local unionPB = appData:checkData("PlayerUnionRecord")
+	local freeCount = unionPB.battleChallengeCount or 0
+	local boughtCount = unionPB.battlePayCount or 0
+
+	return freeCount + boughtCount
+end
+
+function GetTicketInventory()
+	local unionPB = appData:checkData("PlayerUnionRecord")
+	local usedCount = unionPB.battlePayCountTotal or 0
+	local maxCount = GetConstValue("Guildwar4")
+	return maxCount - usedCount
+end
+
+function CaculateNextSeasonTime(now)
+	local seasonStartTime = 6 * 3600 * 1000
+	local todayMorning = GetMorning(now)
+	if (now - todayMorning) > seasonStartTime then
+		local dayLong = 86400000
+		return todayMorning + dayLong + seasonStartTime
+	else
+		return todayMorning + seasonStartTime
+	end
+end
+
+function CaculateChallengeEndTime(now)
+	return CaculateNextSeasonTime(now)
+end

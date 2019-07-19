@@ -1,0 +1,13 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2018-10-29 20:58:26
+]]
+
+function OnHalloweenHeroItemSlotBindValue(slot,data)
+    local heroBase = slot:GetComponentAtPath("HeroBase",CLS_RECTTRANSFORM)
+    local slider = slot:GetComponentAtPath("SLD",CLS_SLIDER)
+    BindHeroBaseValue(heroBase,{heroId = data.heroId,grade = data.grade,level = data.level})
+    slider.value = data.curHp/data.hp
+end

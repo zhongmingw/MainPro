@@ -1,0 +1,294 @@
+local luaChat = require "ChatWorldData"
+
+require "ChatHelper"
+require "UnionUtils"
+
+local MSG_FirstChatResp = 1001
+local MSG_receivedMsg = 1002
+local playerInfo
+local zoneChatTab = {}
+local legionChatTab = {}
+local recruitChatTab = {}
+
+local cachedUnionID = 0
+
+local ChatType = {}
+ChatType.chatType_msg = 1
+ChatType.chatType_hero = 2
+ChatType.chatType_Equip = 3
+
+function DoInit()
+    CsBridge.chatManager:ClearChatData()
+    --订阅消息
+    CsBridge.MsgCenter.Subscribe(MSG_FirstChatResp, FirstChatMsgAction)
+    --接收消息
+    CsBridge.MsgCenter.Subscribe(MSG_receivedMsg , ReceivedMsgAction)
+end
+
+function OnCommand_FirstChat(objs)	
+    CheckUnionData(
+    function(unionID)
+        self:SendNotification("SetBtnActive",unionID=="")
+		enterGame(unionID or "")	
+	end)
+end
+
+function CheckUnionData(onJoined)
+    if not UIOpen(UI_OPEN_TYPE_GUILD,false) then
+        onJoined("")
+        return 
+    end
+	local req = {}
+	req.useless = 0
+	local returnCbk = function(resp)
+		OnGetUnionInfoFinished(resp, onJoined)
+	end
+	HttpRequest("checkMyUnion", "CheckMyUnionReq", "CheckMyUnionResp", req, returnCbk)
+end
+
+function OnGetUnionInfoFinished(resp, onJoined)
+	local joined = false	
+	local authority_member = 2
+	if resp~= nil and resp.unionUserRecord ~= nil then
+		local data = resp.unionUserRecord
+		joined = data.authority >= authority_member
+	end
+
+	local unionID = joined and resp.unionUserRecord.id or ""
+	cachedUnionID = joined and tonumber(unionID) or 0
+	onJoined(tostring(unionID))
+end
+
+function FirstChatMsgAction(obj)
+    local lockZone = LockZoneChat()
+    local lockLegion = LockLegionChat()
+    local lockRecruit = LockRecruitChat()
+    local chatTab = CsBridge.chatManager:ChatItems()
+    for i=0,chatTab.Length-1 do
+        if (chatTab[i].chatGroup == ChatGroup.ChatGroup_Zone) then
+            if(not lockZone) then
+                table.insert(zoneChatTab,chatTab[i])
+            end
+        elseif (chatTab[i].chatGroup == ChatGroup.ChatGroup_Legion) then
+            if(not lockLegion) then
+                table.insert(legionChatTab,chatTab[i])
+            end
+        elseif (chatTab[i].chatGroup == ChatGroup.ChatGroup_Recruit) then
+            if (not lockRecruit) then
+                table.insert(recruitChatTab,chatTab[i])
+            end
+        end
+    end
+    table.sort(zoneChatTab, function (a,b)
+        return a.content.time > b.content.time
+    end)
+    table.sort(legionChatTab, function (a,b)
+        return a.content.time > b.content.time
+    end)
+    table.sort(recruitChatTab, function (a,b)
+        return a.content.time > b.content.time
+    end)
+    self:SendNotification("ChatConnected", zoneChatTab, legionChatTab, recruitChatTab)
+end
+
+function OnCommand_GetZoneChatTab()
+    self:SendNotification("ZoneChatTab", zoneChatTab)
+end
+
+function OnCommand_GetLegionChatTab()
+	self:SendNotification("LegionChatTab", legionChatTab)
+end
+
+function OnCommand_GetRecruitChatTab()
+    self:SendNotification("RecruitChatTab", recruitChatTab)
+end
+
+---发送完成聊天任务
+local function SendChatTask(msgData)
+    local playerInfo = appData:checkData("PlayerInfo")
+    local msgContent = msgData.content
+    if msgContent.playerId == playerInfo.userId and msgContent.zone == playerInfo.zone then
+        local req = { type = msgData.chatGroup}
+        HttpRequestEx("chatTask", "ChatTaskReq", "ChatTaskResp", req)
+    end
+end
+
+function ReceivedMsgAction(obj)
+    SendChatTask(obj)
+    if (obj.chatGroup == ChatGroup.ChatGroup_Zone) then
+        table.insert(zoneChatTab,obj)
+        table.sort(zoneChatTab, function (a,b)
+            return a.content.time > b.content.time
+        end)
+    elseif (obj.chatGroup == ChatGroup.ChatGroup_Legion) then
+        table.insert(legionChatTab,obj)
+        table.sort(legionChatTab, function (a,b)
+            return a.content.time > b.content.time
+        end)
+    elseif (obj.chatGroup == ChatGroup.ChatGroup_Recruit) then
+        table.insert(recruitChatTab,obj)
+        table.sort(recruitChatTab, function (a,b)
+            return a.content.time > b.content.time
+        end)
+    end
+    self:SendNotification("ReceivedMsg", obj.chatGroup)
+end
+
+function DoOnExit()
+    --取消订阅
+    CsBridge.MsgCenter.Unsubscribe(MSG_FirstChatResp , FirstChatMsgAction)
+    CsBridge.MsgCenter.Unsubscribe(MSG_receivedMsg , ReceivedMsgAction)
+    self.Module = nil
+
+    MSG_FirstChatResp = nil
+    MSG_receivedMsg  = nil
+    playerInfo = nil
+    zoneChatTab = nil
+    legionChatTab = nil
+    recruitChatTab = nil
+    cachedUnionID  = nil
+    ChatType = nil
+end
+
+function OnCommand_addFriendBtn(objs)
+    local userId=objs[0]
+    local zone = objs[1]
+    local req={}
+    req.userIds={}
+    table.insert(req.userIds, FormatUserID(userId, zone))
+    HttpRequest("applyFriends", "ApplyFriendsReq", "ApplyFriendsResp", req, function(resp)
+        if resp.status ~= 0 then
+            CsBridge.hintUILayer:ShowHintBox(Language:getStr("AlreadyFriend"),2)
+		else
+		    CsBridge.hintUILayer:ShowHintBox(Language:getStr("ApplyFriendSuccess"))
+        end
+    end)
+end
+
+function OnCommand_OpenShareContent(objs)
+    local chatContent = objs[0].content
+    if chatContent.contentType == ChatType.chatType_hero then
+        local infos = SplitString(chatContent.content,",")
+        ShowHeroTip(self,tonumber(infos[0]),tonumber(infos[1]),tonumber(infos[2]),tonumber(infos[3]),tonumber(infos[4]),tonumber(infos[5]))
+    end
+end
+
+function OnCommand_MaskFriend(objs)
+    local userId = objs[0]
+	local nick = objs[1]
+    local zone = objs[2]
+	MaskFriend(zone, userId,nick,nil)
+end
+
+function OnCommand_Chat(objs)
+    local banned = CheckPlayerBanned()
+    if banned then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("ChatBannedTips"))
+        return
+    end
+
+	local groupID, content = objs[0], objs[1]
+	if groupID == ChatGroup.ChatGroup_Zone then
+        if(not LockZoneChat()) then
+            chatZone(ChatType.chatType_msg,content)
+        else
+            ShowGroupLockedHint()
+        end
+    elseif groupID == ChatGroup.ChatGroup_Legion then 
+        if(not LockLegionChat()) then
+			CheckUnionData(function(unionID)
+                if unionID == "" then
+                    CsBridge.hintUILayer:ShowHintBox(Language:getStr("canNotLegion"))
+                else
+				    chatLegion(ChatType.chatType_msg,content)
+                end
+			end)            
+        else
+            ShowGroupLockedHint()
+        end
+    elseif groupID == ChatGroup.ChatGroup_Recruit then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("RecruitChatTisps"),2)
+    end
+end
+
+function CheckPlayerBanned()
+    local banned = false
+
+    local playerInfo = appData:checkData("PlayerInfo")
+    local chatStatusData = playerInfo.banSay
+    if chatStatusData then
+        if chatStatusData.beginBanSay and chatStatusData.endBanSay then
+            local startTimeStamp = tonumber(chatStatusData.beginBanSay)
+            local endTimeStamp = tonumber(chatStatusData.endBanSay)
+
+            local now = CsBridge.timeManager.ServerTime
+            banned = now >= startTimeStamp and now < endTimeStamp
+        end
+    end
+
+    return banned
+end
+
+function ShowGroupLockedHint()
+	CsBridge.hintUILayer:ShowHintBox(Language:getStr("lockChat"),2)
+end
+
+function OnCommand_ResponseRecruit(dataArray)
+	if cachedUnionID > 0 then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("1105"))
+		return
+	end
+
+	local data = dataArray[0]
+
+	local recruitData = UnserializeRcruitStr(data.content.content)
+	local unionIDIdx = 0
+	local recruitStrArray = SplitString(tostring(recruitData.data),"|")
+	local unionID = tonumber(recruitStrArray[unionIDIdx])
+
+	if recruitData.type == ChatRcruitType.union then
+		ApplyUnion(unionID);--print("unionID:" ..unionID)
+	end
+end
+
+function ApplyUnion(unionID)
+	if not AssertApplyEnabled() then
+		return
+	end
+
+	local req = {}
+	req.id = unionID
+	local returnCbk = function(resp)
+		if resp.status == ServerEnum_ApplyResponse.ApplicationReceived then
+			CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionApplicationRecieved"))
+		elseif resp.status == ServerEnum_ApplyResponse.Granted then
+			CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionSucceededJoined"))
+			self:ReturnBack(function()
+				MsgCenter:Broadcast(Notify_JoinUnion, unionID)
+			end)			
+		end
+	end
+	HttpRequest("applyUnion", "ApplyUnionReq", "ApplyUnionResp", req, returnCbk)
+end
+
+function AssertApplyEnabled()
+	local enabled = true
+
+	local applyCDTime = tonumber(GetConstValue("guildExitTime")) * 1000
+	local unionPB = appData:checkData("PlayerUnionRecord")
+	local kickedoutTime = unionPB.lastKickoutTime or 0
+	local withdrawTime = unionPB.lastQuitUnionTime or 0
+	local lastOperationTime = withdrawTime
+	if lastOperationTime > 0 then
+		local endTime = lastOperationTime + applyCDTime
+		enabled = CsBridge.timeManager.ServerTime > endTime
+
+		if not enabled then 
+			local text = Language:getStr("UnionApplyCDTips")
+			text = string.format(text, CheckTimeRemain(endTime))
+			CsBridge.hintUILayer:ShowHintBox(text)
+		end
+	end
+
+	return enabled
+end

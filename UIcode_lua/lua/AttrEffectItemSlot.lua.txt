@@ -1,0 +1,26 @@
+
+function OnAttrEffectItemSlotBindValue(slot,data)
+    local attrNameTxt = slot:GetComponentAtPath("AttrName",CLS_TEXT)
+    local attrNumTxt = slot:GetComponentAtPath("AttrNum",CLS_TEXT)
+
+    local originWidth = 65.5
+    local originPosX = 97  
+    local originPoxY = -19.1
+
+    attrNameTxt.text = data.name
+    local offset = attrNameTxt.preferredWidth-originWidth
+    CsBridge.UnityHelper.SetAnchoredPosition(attrNumTxt.gameObject,originPosX+offset,originPoxY)
+    if data.isUp then
+        attrNumTxt.text = "+"..data.changeValStr
+        CsBridge.UnityHelper.SetTextColor(attrNameTxt,0,255,0)
+        CsBridge.UnityHelper.SetTextColor(attrNumTxt,0,255,0)
+        CsBridge.UnityHelper.SetOutlineColor(attrNameTxt,26,63,31)
+        CsBridge.UnityHelper.SetOutlineColor(attrNumTxt,26,63,31)
+    else
+        attrNumTxt.text = "-"..data.changeValStr
+        CsBridge.UnityHelper.SetTextColor(attrNameTxt,255,0,42)
+        CsBridge.UnityHelper.SetTextColor(attrNumTxt,255,0,42)
+        CsBridge.UnityHelper.SetOutlineColor(attrNameTxt,51,10,10)
+        CsBridge.UnityHelper.SetOutlineColor(attrNumTxt,51,10,10)
+    end
+end

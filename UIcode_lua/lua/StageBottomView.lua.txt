@@ -1,0 +1,485 @@
+local bottom1_TF
+local bottom2_TF
+local mapBtn_Center_TF
+local timer_TF
+local process_slider
+local time_Lab 
+local fightBtn_GO
+local NextChapterBtn_GO
+local NextStageBtn_GO 
+local box_Spine
+local diffTogGrid
+local stageFormationType_CONST = 3
+
+local itemRoot, coinRoot
+local fxEndPos
+
+local itemArr={}
+local coinArr={}
+
+local waiting = true
+local initCoin = false
+local stopCoroutine = false
+
+local RES_REWARD_CYCLE
+local OTHER_REWARD_CYCLE
+local enable = false
+
+local trophied = false
+
+local isInit = false
+
+local diff
+
+local TICKER_SETFIGHTBTNSTATE = "ticker_SetFightBtnState_StageBottomView"
+
+local lightImg
+local oldLightActive = false
+local TIMER_LIGHT = "Timer_Light"
+local SetLight
+
+local function SetDiffName()
+	self:SendCommand("UpdateStageBottomDiffData")
+end
+
+function DoInit()
+	self.Anim=0
+	local viewTrans = self.transform
+	bottom1_TF=viewTrans:Find("Bottom1")
+	bottom2_TF=viewTrans:Find("Bottom2")
+	mapBtn_Center_TF=viewTrans:Find("MapBtn")
+	fightBtn_GO = viewTrans:GetGameObjectAtPath("Bottom1/FightBtn")
+	NextChapterBtn_GO = viewTrans:GetGameObjectAtPath("Bottom1/NextChapterBtn")
+	NextStageBtn_GO = viewTrans:GetGameObjectAtPath("Bottom1/NextStageBtn")
+	timer_TF = viewTrans:Find("Bottom1/TimerGO")
+	process_slider = timer_TF:GetComponentAtPath("progress" ,"UnityEngine.UI.Slider")
+	time_Lab = timer_TF:GetComponentAtPath("TimeTxt" ,CLS_TEXT)
+	box_Spine = viewTrans:GetComponentAtPath("Bottom1/TrophyBtn" ,"SkeletonGraphic")
+	diffTogGrid = viewTrans:GetComponentAtPath("Bottom2/ScrollRect/Viewport/DiffTogGroup",CLS_UI_ITEM_GRID)
+	RES_REWARD_CYCLE=GetConstValue("campaignResourceRewardCycle")
+	OTHER_REWARD_CYCLE=GetConstValue("campaignOtherRewardCycle")
+	itemRoot=viewTrans:Find("Bottom1/ItemRoot")
+	lightImg = viewTrans:GetComponentAtPath("Bottom1/LightImg", CLS_IMAGE)
+	for i=0,itemRoot.childCount-1 do
+		local item_TF = itemRoot:GetChild(i)
+		table.insert(itemArr,item_TF)
+	end
+	coinRoot=viewTrans:Find("Bottom1/CoinRoot")
+	for i=0,coinRoot.childCount-1 do
+		local coin_TF = coinRoot:GetChild(i)
+		table.insert(coinArr,coin_TF)
+	end
+	MsgCenter:Subscribe(Notify_OnHeroDead,StageMsgAction)
+	MsgCenter:Subscribe(Notify_InitCoin,InitCoin)
+	MsgCenter:Subscribe(Notify_TakeCoin,TakeCoin)
+	MsgCenter:Subscribe(Notify_StopCoin,StopCoin)
+	CsBridge.MsgCenter.Subscribe(CsBridge.SysMsgDef.Notify_LanguageChanged, SetDiffName)
+
+	fxEndPos = box_Spine.transform:CheckPosition()
+end 
+
+
+
+function InitUI()
+
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		isInit = true
+		self:SendCommand("UpdateStageBottomDiffData")
+	end
+end 
+
+function Active()
+	self:SendCommand("FightBtnChanged")
+end
+
+function OnNotification_RefreshStageBottomDiffView(objs)
+	local data = objs[0]
+	CsBridge.CacheAssetsByModule(self.Module,function()
+		diffTogGrid:RefreshItemSlots(data,self.gameObject,"DiffItemSlot")
+	end,"DiffItemSlot")
+end
+
+function OnNotification_RefreshSingleStageBottomDiff(objs)
+	local data = objs[0]
+	diffTogGrid:SingleRefreshSlot(data)
+end
+
+function OnDiffItemSlotBindValue(slot, data)
+	local iconImg = slot:GetGameObjectAtPath("Center/iconImg")
+	local nameTxt = slot:GetComponentAtPath("Center/nameTxt",CLS_TEXT)
+	local centerTrans = slot:GetComponentAtPath("Center",CLS_RECTTRANSFORM)
+	local centerPos = centerTrans:CheckLocalPosition()
+	local selectPosY = 25
+	local unselectPosY = 0
+	local duration = 0.1
+
+	CsBridge.IconData.SetIconByName(iconImg, data.icon)
+	nameTxt.text = data.name
+	if data.selected then
+		CsBridge.TweenUtils.MoveTo(centerTrans,centerPos.x,selectPosY,duration)
+	else
+		CsBridge.TweenUtils.MoveTo(centerTrans,centerPos.x,unselectPosY,duration)
+	end
+end
+
+function StageMsgAction(obj)
+	local startPos= CsBridge.Vector3ForLua.CreateVector3ForLua(obj.x, obj.y, obj.z)
+	CsBridge.UnityHelper.ChildrenFlyCurve(itemRoot,startPos,fxEndPos,0.8,
+		function ()
+			CsBridge.BattleUtils.AttackedMaterialShow(box_Spine)
+			CsBridge.audioManager:PlayUI("bag")
+			CsBridge.timeManager:Timer(0.1,function ()
+				if self == nil or self.Module == nil then
+					return
+				end
+				box_Spine:ChangeMaterial("boxidel_Material")
+			end)
+		end)
+end
+
+SetLight = function(closeLight)
+	self:SendCommand("UpdateLight", closeLight)
+end
+
+function InitCoin(obj)
+	if obj~=0 then
+		initCoin = true
+		fightBtn_GO:SetSelfActive(false)
+		NextChapterBtn_GO:SetSelfActive(false)
+		NextStageBtn_GO:SetSelfActive(false)
+		timer_TF.gameObject:SetSelfActive(false)
+	end
+end
+
+function TakeCoin(obj)
+	local startPos= CsBridge.Vector3ForLua.CreateVector3ForLua(obj.x, obj.y, obj.z)
+	CsBridge.UnityHelper.ChildrenFlyCurve(coinRoot,startPos,fxEndPos,0.3,
+		function ()
+			CsBridge.BattleUtils.AttackedMaterialShow(box_Spine)
+			CsBridge.audioManager:PlayUI("bag")
+			CsBridge.timeManager:Timer(0.1,function ()
+				if self == nil or self.Module == nil then
+					return
+				end
+				box_Spine:ChangeMaterial("boxidel_Material")
+			end)
+		end)
+end
+
+function StopCoin(obj)
+	initCoin = false
+	SetLight()
+	self:SendCommand("FightBtnChanged")
+end
+
+function OnDoUnhide()
+	self:SendCommand("FightBtnChanged")
+end
+
+function OnNotification_InitStageData(objs)
+    local stageItem = objs[0]
+	local onHookStageItem = objs[1]
+	bottom2_TF.gameObject:SetSelfActive(true)
+	bottom2_TF.gameObject:SetSelfActive(false)
+	SetLight()
+end
+
+function OnNotification_BoxWalk(objs)
+	if box_Spine then
+		box_Spine:PlayAnimation("walk",true,nil,nil)
+	end
+end
+
+function OnNotification_FightBtnChanged(objs)
+	if box_Spine then
+		local stageItem = objs[0]
+		local onHookStageItem = objs[1]
+		if not initCoin then 
+			SetFightBtnState(stageItem,onHookStageItem)
+		end
+		SetTrophyBtnState(stageItem,onHookStageItem)
+	end
+end
+
+function OnNotification_RefreshLight(objs)
+	local newLightActive = objs[0] 
+	if oldLightActive == newLightActive or initCoin then
+		return
+	end
+	oldLightActive = newLightActive
+	lightImg.gameObject:SetSelfActive(newLightActive)
+	if newLightActive then
+		local interval = 2
+		local function onLooping()
+			local t1 = CsBridge.TweenUtils.DOImageAlphaValue(lightImg, 1, 0.8, function ()
+				local t2 = CsBridge.TweenUtils.ScaleTo(lightImg.transform,1.3,1.3,0.8)
+				local t3 = CsBridge.TweenUtils.DOImageAlphaValue(lightImg, 0, 0.8, function()
+					CsBridge.UnityHelper.SetlocalScale(lightImg.gameObject,1,1,1)
+				end)
+				t2:DoPlay()
+				t3:DoPlay()
+			end)
+			t1:DoPlay()
+		end
+		Timer:AddNonstopTicker(TIMER_LIGHT, onLooping, interval)
+	else
+		Timer:StopTicker(TIMER_LIGHT)
+	end
+end
+
+function SetFightBtnState(stageItem,onHookStageItem)
+    local stageId = stageItem.difficulty*10000+stageItem.chapter*100+stageItem.stage
+    local onHookStageId = onHookStageItem.difficulty*10000+onHookStageItem.chapter*100+onHookStageItem.stage
+	local nextStageId = GetNextStageId(stageId) or (stageId+1)
+	local nextOnHookStageId = GetNextStageId(onHookStageId)
+	if nextStageId==onHookStageId then
+		local fightInterval = ResTblContainer:GetPropToInt(nextStageId,Campaign.time,Campaign.actorTbl)
+		local targetTime = stageItem.onHookTime+fightInterval*1000
+		if CsBridge.timeManager.ServerTime >= targetTime then
+			fightBtn_GO:SetSelfActive(true)
+			timer_TF.gameObject:SetSelfActive(false)
+		else
+			local closeLight = true
+			SetLight(closeLight)
+			stopCoroutine=false
+			fightBtn_GO:SetSelfActive(false)
+			timer_TF.gameObject:SetSelfActive(true)
+			local dur = (targetTime - CsBridge.timeManager.ServerTime)/1000
+			process_slider.value = 0
+			CsBridge.timeManager:UpdateFrame(dur, function(passedTime)
+				process_slider.value = passedTime / dur
+			end, function()
+				if self ~= nil and self.Module ~= nil then
+					if CsBridge.timeManager.ServerTime>= targetTime then
+						fightBtn_GO:SetSelfActive(true)
+						timer_TF.gameObject:SetSelfActive(false)
+						SetLight()
+					end
+				end
+			end, function()
+				return stopCoroutine or self == nil or self.Module == nil
+			end)
+			Timer:AddTicker(TICKER_SETFIGHTBTNSTATE,targetTime,function (targetTime)
+				if self == nil or self.Module == nil then
+					return
+				end
+				time_Lab.text=CheckTimeRemain(targetTime)
+			end,function ()
+				if self ~= nil and self.Module ~= nil then
+					if CsBridge.timeManager.ServerTime>= targetTime then
+						fightBtn_GO:SetSelfActive(true)
+						timer_TF.gameObject:SetSelfActive(false)
+						SetLight()
+					end
+				end
+			end,nil)
+		end
+	elseif onHookStageId<=nextStageId then
+		stopCoroutine=true
+		Timer:StopTicker(TICKER_SETFIGHTBTNSTATE)
+		fightBtn_GO:SetSelfActive(false)
+		timer_TF.gameObject:SetSelfActive(false)
+	end
+	NextChapterBtn_GO:SetSelfActive(nextOnHookStageId and (nextOnHookStageId%100 == 1 and onHookStageId%100~=0 and stageId>=onHookStageId))
+	NextStageBtn_GO:SetSelfActive(nextOnHookStageId and ((onHookStageId < nextStageId and nextOnHookStageId%100~=1) or onHookStageId%100==0))
+end
+
+function SetTrophyBtnState(stageItem,onHookStageItem)
+	enable = false
+	if onHookStageItem.stage~=0 then
+		enable = (onHookStageItem.preGoldRewards~=nil and next(onHookStageItem.preGoldRewards)~=nil)
+				or (onHookStageItem.preOtherRewards~=nil and next(onHookStageItem.preOtherRewards)~=nil)
+		local formation=appData:checkItem("Formation",tostring(stageFormationType_CONST))  
+		if formation==nil or formation.heroIds==nil or next(formation.heroIds)==nil then
+			enable = false
+			return 
+		end
+		local lastSwitchTime = onHookStageItem.lastSwitchTime~=nil and onHookStageItem.lastSwitchTime or 0
+		local resourceStartTime = onHookStageItem.resourceStartTime>lastSwitchTime and onHookStageItem.resourceStartTime or lastSwitchTime
+		local otherStartTime = onHookStageItem.otherStartTime>lastSwitchTime and onHookStageItem.otherStartTime or lastSwitchTime
+		if not enable then
+			enable = resourceStartTime+RES_REWARD_CYCLE*1000<=CsBridge.timeManager.ServerTime or otherStartTime+OTHER_REWARD_CYCLE*1000<=CsBridge.timeManager.ServerTime
+		end
+		if not enable then
+			box_Spine:PlayAnimation("empty_stand",true,nil,nil)
+			CsBridge.timeManager:Await(self.gameObject,
+				function ()
+					return resourceStartTime+RES_REWARD_CYCLE*1000>=CsBridge.timeManager.ServerTime and otherStartTime+OTHER_REWARD_CYCLE*1000>=CsBridge.timeManager.ServerTime and self ~= nil and self.Module ~= nil
+				end,
+				function ()
+					if self == nil or self.Module == nil then
+						return
+					end
+					enable=true
+					box_Spine:PlayAnimation("full_stand",true,nil,nil)
+				end)
+		else
+			box_Spine:PlayAnimation("full_stand",true,nil,nil)
+		end
+	else
+		box_Spine:PlayAnimation("empty_stand",true,nil,nil)
+	end
+end
+
+function OnNextChapterBtnClick(sender)
+	self:SendCommand("OpenNextStageDetailView")
+end
+
+function OnNextStageBtnClick(sender)
+	self:SendCommand("OpenNextStageDetailView")
+end
+
+function OnTrophyBtnClick(sender)
+	if not enable then
+		return 
+	end
+	enable=false
+	self:SendCommand("TakeOnHookRewards")
+	box_Spine:PlayAnimation("clickon",false,nil,nil)
+end
+
+function OnFightBtnClick(sender)
+	CsBridge.CacheAssetsByModule(self.Module,function()
+		CsBridge.textureRender:RendererScreen(self.Module.rawImage,
+			function ()
+				local view=CsBridge.OpenView("FormationView","FormationModel")
+				view:SetParamDataList(1,BattleCallBack,SaveFormationCallback,2)
+			end)
+	end, "FormationView","HeroItemSlot")
+end
+
+function OnFormationBtnClick(sender)
+	CsBridge.CacheAssetsByModule(self.Module,function()
+        local view=CsBridge.OpenView("StageFormationView","StageModel")
+        view.transform.parent:SetAsLastSibling()
+	end, "StageFormationView","HeroItemSlot")
+end
+
+function OnMapBtnClick(sender)
+	CsBridge.TweenUtils.MoveToByAnchored(bottom1_TF,0,-360,0.3,function()
+	    bottom1_TF.gameObject:SetSelfActive(false)
+	end)
+	MsgCenter:Broadcast(Notify_ShowMap,
+		function ()
+		    bottom2_TF.gameObject:SetSelfActive(true)
+			CsBridge.TweenUtils.MoveToByAnchored(bottom2_TF,0,0,0.3,nil)
+			mapBtn_Center_TF.gameObject:SetSelfActive(false)
+		end)
+end
+
+function OnCloseBtnClick(sender)
+	mapBtn_Center_TF.gameObject:SetSelfActive(true)
+	CsBridge.TweenUtils.MoveToByAnchored(bottom2_TF,0,-160,0.3,
+		function()
+		    bottom2_TF.gameObject:SetSelfActive(false)
+		    bottom1_TF.gameObject:SetSelfActive(true)
+			CsBridge.TweenUtils.MoveToByAnchored(bottom1_TF,0,0,0.3,nil)
+			MsgCenter:Broadcast(Notify_HideMap)
+		end)
+	isInit = false
+end
+
+function OnDiffTogGroupCenterClick(obj)
+	local data = obj.m_data
+	self:SendCommand("SelectDiff",data)
+end
+
+function BattleCallBack(formationPos)
+	self:SendCommand("EnterBattle",formationPos)
+end
+
+function SaveFormationCallback(formationPos)
+	self:SendCommand("SaveFormation",formationPos)
+end
+
+function OnNotification_EnterBattle(objs)
+	self:HideView("FormationView")
+	MsgCenter:Broadcast(Notify_OnBattle)
+	local battleInfo = objs[0]
+    ShowBattleModule(battleInfo,self)
+end
+
+function OnClose()
+	Timer:StopTicker(TICKER_SETFIGHTBTNSTATE)
+end
+
+function DoExit()
+	MsgCenter:Unsubscribe(Notify_OnHeroDead,StageMsgAction)
+	MsgCenter:Unsubscribe(Notify_InitCoin,InitCoin)
+	MsgCenter:Unsubscribe(Notify_TakeCoin,TakeCoin)
+	MsgCenter:Unsubscribe(Notify_StopCoin,StopCoin)
+	CsBridge.MsgCenter.Unsubscribe(CsBridge.SysMsgDef.Notify_LanguageChanged, SetDiffName)
+	Timer:StopTicker(TICKER_SETFIGHTBTNSTATE)
+	self.Module=nil
+	bottom1_TF = nil
+	bottom2_TF = nil
+	mapBtn_Center_TF = nil
+	timer_TF = nil
+	process_slider = nil
+	time_Lab  = nil
+	fightBtn_GO = nil
+	NextChapterBtn_GO = nil
+	NextStageBtn_GO  = nil
+	box_Spine = nil
+	stageFormationType_CONST = nil
+
+	itemRoot, coinRoot = nil
+	fxEndPos = nil
+
+	itemArr = nil
+	coinArr = nil
+
+	waiting = nil
+	initCoin = nil
+	stopCoroutine = nil
+
+	enable = nil
+
+	trophied = nil
+
+	diff = nil
+	isInit = nil
+	TICKER_SETFIGHTBTNSTATE = nil	
+	
+	lightImg = nil
+	oldLightActive = nil
+	SetLight = nil
+	Timer:StopTicker(TIMER_LIGHT)
+	TIMER_LIGHT = nil
+	self = nil
+end
+
+function IsFightable()
+    return fightBtn_GO.activeSelf
+end
+
+function OnNotification_Trophied()
+    trophied = true
+end
+
+function ResetTrophy()
+    trophied = false
+end	
+
+function FinishTrophy()
+    return trophied
+end
+
+function ShowLeft()
+    MsgCenter:Broadcast(Notify_GuideView, "ShowLeft")
+end
+
+function ShowRight()
+    MsgCenter:Broadcast(Notify_GuideView, "ShowRight")
+end
+
+function HideAll()
+    MsgCenter:Broadcast(Notify_GuideView, "HideAll")
+end
+
+function ShowAll()
+    MsgCenter:Broadcast(Notify_GuideView, "ShowAll")
+end

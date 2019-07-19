@@ -1,0 +1,82 @@
+--[[
+	file: LeagueMatchView.lua
+	author: hangang
+	description: League Match base view
+]]
+
+
+--Cached UI items
+local currentTabIndex = 0
+local childToggles
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 1     --shadow type
+	InitUI()            --cache UI items
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+
+	childToggles = {}
+	local path = "Top/TogGroup"
+	local togglesRoot = selfTrans:Find(path)
+	for i = 0, togglesRoot.childCount - 1 do
+		local toggle = togglesRoot:GetChild(i):GetComponent(CLS_TOGGLE_ARCHLY)
+		local toggleIdx = toggle.Index
+		childToggles[toggleIdx] = toggle
+	end
+end
+
+--On animation finished event--------------------------------------------------------
+function OnAnimationFinished()
+	self:SendCommand("InitLeagueMatchView")
+end
+
+--UIController events handlers-------------------------------------------------------
+function OnNotification_RefershLeagueMatchView(objs)
+	local viewData = objs[0]
+	local availableTabs = viewData.availableTabs
+	for idx = 1, #childToggles do
+		local toggle = childToggles[idx]
+		toggle.gameObject:SetActive(false)
+		for k, availableIdx in pairs(availableTabs) do
+			if idx == availableIdx then
+				toggle.gameObject:SetActive(true)
+				break
+			end
+		end
+	end
+
+	local defaultToggle = childToggles[viewData.defaultTab]
+	defaultToggle.isOn = false
+	defaultToggle.isOn = true
+end
+
+--UI event handlers-------------------------------------------------------------------
+function OnTogGroupClick(isOn, index)
+	if currentTabIndex == index then
+		return
+	end
+	currentTabIndex = index
+	self:SendCommand("OpenChildView", currentTabIndex)
+end
+
+--On closing--------------------------------------------------------------------------
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close()
+	self:SendCommand("CloseLeagueMatchView")
+	self:ReturnBack()
+end
+
+function DoExit()
+	currentTabIndex = nil
+	childToggles = nil
+end

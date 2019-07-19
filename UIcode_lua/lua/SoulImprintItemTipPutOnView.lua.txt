@@ -1,0 +1,154 @@
+local soulImprintItemSlot = require('SoulImprintItemSlot')
+local soulItemTipsAttrItemSlot = require('SoulItemTipsAttrItemSlot')
+
+---@type UnityEngine.TextMesh 名字
+local nameTxt
+---@type UnityEngine.TextMesh 类型
+local summaryTxt
+---@type UnityEngine.GameObject 头像
+local soulImprintItemSlotObj
+---@type Client.Library.ItemSlot
+local soulImprintItemSlotCp
+---@type UnityEngine.TextMesh 描述
+local despTxt
+---@type UnityEngine.GameObject 按钮的父节点
+local btnsObj
+---@type UnityEngine.GameObject 取下按钮
+local unWearBtnObj
+---@type UnityEngine.GameObject 替换按钮
+local exchangeBtnObj
+---@type UnityEngine.GameObject 镶嵌按钮
+local wearBtnObj
+---@type UnityEngine.GameObject 使用按钮
+local useBtnObj
+---@type Client.Library.UIItemGrid
+local attrGrid
+
+---@type table 属性集合
+local propTxtArr = {}
+---@type table 英雄属性
+local viewData
+
+function DoInit()
+    self.Shadow = 1
+    self.Anim = 8
+    nameTxt = self:GetComponentAtPath("Center/Base/NameTxt", CLS_TEXT)
+    summaryTxt = self:GetComponentAtPath("Center/Base/Type/SummaryTxt", CLS_TEXT)
+    soulImprintItemSlotObj = self:GetGameObjectAtPath("Center/Base/SoulImprintItemSlot")
+    despTxt = self:GetGameObjectAtPath("Center/DespTxt", CLS_TEXT)
+    soulImprintItemSlotCp = CsBridge.UnityHelper.GetOrAddComponent(soulImprintItemSlotObj, CLS_ITEM_SLOT)
+    attrGrid = self:GetComponentAtPath("Center/AttrGrid", CLS_UI_ITEM_GRID)
+    btnsObj = self:GetGameObjectAtPath("Center/Btns")
+    unWearBtnObj = self:GetGameObjectAtPath("Center/Btns/UnWearBtn")
+    exchangeBtnObj = self:GetGameObjectAtPath("Center/Btns/ExchangeBtn")
+    wearBtnObj = self:GetGameObjectAtPath("Center/Btns/WearBtn")
+    useBtnObj = self:GetGameObjectAtPath("Center/Btns/UseBtn")
+end
+
+---初始化按钮的状态
+local function InitBtnsState(showBtn)
+    btnsObj:SetActive(showBtn.btnParentState or showBtn.btnParentState and false)
+    unWearBtnObj:SetActive(showBtn.unWearBtnState or showBtn.unWearBtnState and false)
+    exchangeBtnObj:SetActive(showBtn.exchangeBtnState or showBtn.exchangeBtnState and false)
+    wearBtnObj:SetActive(showBtn.wearBtnState or showBtn.wearBtnState and false)
+    useBtnObj:SetActive(showBtn.useBtnState or showBtn.useBtnState and false)
+end
+
+---显示描述信息
+local function ShowDesp(despValue)
+    local despObj = despTxt.gameObject
+    if despValue == "" or despValue == nil then
+        despObj:SetSelfActive(false)
+        return
+    end
+    local desp_rt = despTxt:GetComponent("RectTransform")
+    despObj:SetSelfActive(true)
+    despTxt.text = despValue
+    CsBridge.UnityHelper.SetUISizeDelta(desp_rt, desp_rt.sizeDelta.x, desp_rt.preferredHeight)
+end
+
+---显示属性
+local function ShowProps(props)
+    if props and #props > 0 then
+        attrGrid.gameObject:SetActive(true)
+        attrGrid:RefreshItemSlots(props, self.gameObject, "SoulItemTipsAttrItemSlot")
+    else
+        attrGrid.gameObject:SetActive(false)
+    end
+end
+
+---初始化界面
+local function InitSoulImprintItemInfo()
+    if viewData then
+        local itemInfo = viewData.itemInfo
+        local base = viewData.base
+        local props = viewData.props
+        local showBtn = viewData.showBtn
+        nameTxt.text = base.nameTxt
+        summaryTxt.text = base.typeTxt
+        ShowDesp(base.despTxt)
+        OnSoulImprintItemSlotBindValue(soulImprintItemSlotCp, itemInfo)
+        ShowProps(props)
+        InitBtnsState(showBtn)
+    end
+end
+
+function SetParamDataList(objs)
+    if objs then
+        viewData = objs[0]
+    end
+    InitSoulImprintItemInfo()
+end
+
+function OnAnimationFinished()
+
+end
+
+function IsSetAnchor()
+    self.transform.parent:SetAsLastSibling()
+    return true
+end
+
+---遮罩点击
+function OnMaskClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+---卸载纹章点击
+function OnUnWearBtnClick()
+    self:HideView(self.gameObject.name)
+    self:SendCommand("UnWearSoulImprintItem", viewData)
+end
+
+---置换纹章点击
+function OnExchangeBtnClick()
+    self:HideView(self.gameObject.name)
+    self:SendCommand("ExchangeSoulImprintItem", viewData)
+end
+
+---镶嵌纹章点击
+function OnWearBtnClick()
+    self:HideView(self.gameObject.name)
+    self:SendCommand("WearSoulImprintItem", viewData)
+end
+
+---使用按钮点击
+function OnUseBtnClick()
+    self:HideView(self.gameObject.name,false)
+    self:SendCommand("UseSoulImprintItem", viewData)
+end
+
+function OnClose()
+
+end
+
+function DoExit()
+    nameTxt = nil
+    summaryTxt = nil
+    soulImprintItemSlotObj = nil
+    soulImprintItemSlotCp = nil
+    despTxt = nil
+    btnsObj = nil
+    propTxtArr = nil
+    viewData = nil
+end

@@ -1,0 +1,33 @@
+function OnMonopolyGoodsItemSlotBindValue(slot,data)
+	-- body
+	local itemBase = slot:GetComponentAtPath("ItemSlot",CLS_RECTTRANSFORM)
+    local priceImg = slot:GetGameObjectAtPath("PriceImg")
+    local priceTxt = slot:GetComponentAtPath("PriceTxt",CLS_TEXT)
+    local buyBtn = slot:GetComponentAtPath("BuyBtn",CLS_BUTTON_ARCHLY)
+    local buyIconImg = slot:GetGameObjectAtPath("BuyBtn/IconImg")
+    local buyNumTxt = slot:GetComponentAtPath("BuyBtn/NumTxt",CLS_TEXT)
+    local LimitTipsText = slot:GetGameObjectAtPath("LimitTipsText")
+    local limitNumberText = slot:GetComponentAtPath("LimitNumberText",CLS_TEXT)
+    BindItemBaseValue(itemBase,data.reward)
+    ShowOneConsume(priceImg,priceTxt,{
+        typeId = data.cost.typeId,
+        id = data.cost.id,
+        count = data.cost.count*2
+    })
+
+    ShowOneConsume(buyIconImg,buyNumTxt,{
+        typeId = data.cost.typeId,
+        id = data.cost.id,
+        count = data.cost.count
+    })
+    SetFontColorWithEnough(buyNumTxt,function()
+        return CheckItemEnough(data.cost.id,data.cost.typeId,data.cost.count,false)
+    end,color2)
+
+    limitNumberText.text = data.curCount .. "/" .. data.count
+    SetFontColorWithEnough(limitNumberText,function ()
+        return data.curCount < data.count
+    end,color2)
+
+    buyBtn.Gray = data.curCount >= data.count
+end

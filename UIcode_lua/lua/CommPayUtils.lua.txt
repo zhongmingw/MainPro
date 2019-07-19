@@ -1,0 +1,303 @@
+CardTbl={}
+CardTbl.tblName="Card"
+CardTbl.activityid="activityid"
+CardTbl.reward="reward"
+CardTbl.desp="desp"
+CardTbl.value="value"
+CardTbl.transid="transid"
+CardTbl.preBuyTime="preBuyTime"
+CardTbl.vipRewards="vipRewards"
+
+PayTbl={}
+PayTbl.tblName="payTbl"
+PayTbl.id="id"
+PayTbl.sortorder="sortorder"
+PayTbl.pid="pid"
+PayTbl.title="title"
+PayTbl.desp="desp"
+PayTbl.reward="reward"
+PayTbl.addreward="addreward"
+PayTbl.icon="icon"
+PayTbl.currencySign="currencySign"
+PayTbl.price="price"
+PayTbl.USPrice="us"
+PayTbl.FRPrice="fr"
+PayTbl.HantPrice="zh-hant"
+PayTbl.enPrice="en"
+PayTbl.JapanPrice="japan"
+PayTbl.type="type"
+PayTbl.clientShow="clientShow"
+PayTbl.currency="currency"
+PayTbl.firstAdd="firstAdd"
+PayTbl.vip="vip"
+
+function GetPrice(price)
+    return string.format("%.2f",price/100)
+end
+
+function GetShowPrice(currencySign, price)
+    return currencySign..GetPrice(price)
+end
+
+function GetRemainDay(endTime)
+    local dayCount = 0
+    local now = CsBridge.timeManager.ServerTime
+    if endTime and now < endTime then
+        local DELEMITER = " : ";
+        local ZERO_STRING = "0";
+        local SPACE_STRING = " ";
+        local KEY_DAY = "days";
+        local timeSpan = CsBridge.TimeSpan.FromMilliseconds(endTime - now + 1000);
+
+        local days = timeSpan.Days
+        local hours = timeSpan.Hours
+        local minutes = timeSpan.Minutes
+        local seconds = timeSpan.Seconds
+        if hours > 0 or minutes > 0 or seconds > 0 then
+            dayCount = days + 1
+        else
+            dayCount = days
+        end
+    end
+    return dayCount
+end
+
+function FormatCardDays(cardData)
+    local restDays = 0
+    if cardData then
+        restDays = GetRemainDay(cardData.endTime)
+    end
+
+    local formatStr = restDays > 1 and "RestDays" or "RestDay"
+    return string.format(Language:getStr(formatStr), restDays)
+end
+
+function GetRemainTimeData(viewData, endTime)
+    local GREEN_DAY = 3
+    viewData.endDayStr = ""
+    viewData.showRemainTime = false
+    viewData.showGreenTxt = false
+    if endTime and endTime > 0 then
+        local ONE = 1
+        local remainDay = GetRemainDay(endTime)
+        viewData.showGreenTxt = remainDay <= GREEN_DAY and remainDay > 0
+        viewData.showRemainTime = remainDay > 0
+        viewData.dayStr = remainDay <= ONE and Language:getStr("Day") or Language:getStr("DayForMore")
+        viewData.endDayStr = tostring(remainDay)
+    end
+end
+
+function CheckPayData(id)
+    local newData={}
+    newData.id=id
+    local tbl = ResTblContainer:GetTable(PayTbl.tblName)
+    newData.sortorder=tbl:GetInt(id,PayTbl.sortorder)
+    local pidItem = appData:checkItem("PidMapItem",tostring(id))
+    if pidItem ~= nil then
+        newData.pid=pidItem.pid
+    end
+    newData.title=tbl:Get(id,PayTbl.title)
+    newData.desp=tbl:Get(id,PayTbl.desp)
+    newData.reward=tbl:GetInt(id,PayTbl.reward)
+    newData.addreward=tbl:GetInt(id,PayTbl.addreward)
+    newData.icon=tbl:Get(id,PayTbl.icon)
+    newData.price=tbl:GetInt(id,PayTbl.price)
+    newData.showPrice=GetShowPrice(tbl:Get(id,PayTbl.currencySign), newData.price)
+    newData.type=tbl:GetInt(id,PayTbl.type)
+    newData.firstAdd=tbl:GetInt(id,PayTbl.firstAdd)
+    newData.currency=tbl:Get(id,PayTbl.currency)
+    newData.currencySign=tbl:Get(id,PayTbl.currencySign)
+    newData.vip=tbl:GetInt(id,PayTbl.vip)
+    newData.isFirst = CheckIsFirstBuy(newData) and newData.firstAdd > 0
+    newData.buyBtnTxt = Language:getStr("buy")
+    newData.canBuy = true
+
+    if newData.type == PayTableTypeEnum.Card or
+            newData.type == PayTableTypeEnum.Subscribe then
+        newData.isCard = true
+        newData.reward = GetCardReward(newData.id)
+        local cardData = appData:checkItem("CycleCardItem",tostring(newData.id))
+        newData.daysLeft = FormatCardDays(cardData)
+        newData.showCD = cardData ~= nil
+        newData.showReward = true
+    end
+    if newData.type == PayTableTypeEnum.Subscribe then
+        newData.isFirst = false
+        newData.showReward = true
+        newData.canBuy = false
+        newData.reward = tbl:GetInt(id,PayTbl.reward)
+        newData.showReward = newData.reward and newData.vip
+        newData.buyBtnTxt = string.format(Language:getStr("DayForFree"), GetConstValue("SubscribeFreeDay"))
+    end
+    return newData
+end
+
+function GetCardReward(pid)
+    local tbl = ResTblContainer:GetTable(CardTbl.tblName)
+    local ids = tbl:GetCol(CardTbl.activityid)
+	for i = 0, ids.Length - 1 do
+		local id = tonumber(ids[i])
+		local transID = tbl:GetInt(id, CardTbl.transid)
+		if transID == pid then
+			return tbl:GetInt(id, CardTbl.reward)
+		end
+	end
+end
+
+function GetPreBuyTime(payId)
+    local tbl=ResTblContainer:GetTable(CardTbl.tblName)
+	local ids=tbl:GetCol(CardTbl.activityid)
+	for i=0,ids.Length - 1 do
+	    local transId=tonumber(tbl:Get(ids[i],CardTbl.transid))
+	    if transId==payId then
+	        return tonumber(tbl:Get(ids[i],CardTbl.preBuyTime))
+	    end
+	end
+	return 0
+end
+function CheckCanBuy(type,payId)
+    if type == nil then
+        type = ResTblContainer:GetPropToInt(payId,PayTbl.type,PayTbl.tblName)
+    end
+    if type == 1 then
+        local items = appData:checkAllItems("CycleCardItem")
+        local card = appData:checkItem("CycleCardItem",tostring(payId))
+        if card == nil then
+            return true
+        else
+            local preBuyTime=GetPreBuyTime(payId)
+            local serverTime=CsBridge.timeManager.ServerTime
+            if serverTime > (card.endTime - preBuyTime * 24 * 60 * 60 * 1000) then
+                return true
+            else
+                return false
+            end
+        end
+    else
+        return true
+    end
+end
+
+function CheckIsFirstBuy(data)
+    if data.type ~= 0 then
+        return false
+    else
+        local item = appData:checkItem("NormalChargeItem",tostring(data.id))
+        if item == nil then
+            return true
+        else
+            return item.chargedTimes <= 0
+        end
+    end
+end
+
+function DoPay(data,onFinished)
+    DoPayActivity(0,data,onFinished)
+end
+
+function DoPayActivity(activityId,data,onFinished)
+    local req = {}
+    req.activityId=activityId
+    req.payId=data.id
+    HttpRequest("charge", "ChargeReq", "ChargeResp", req, function (resp)
+        local orderId=resp.orderId
+        local tbl = ResTblContainer:GetTable(PayTbl.tblName)
+        local currency=tbl:Get(data.id,PayTbl.currency)
+		CsBridge.sDKHelper:OnCharging(orderId, currency, data.price);
+        local function PaySuccessCallback(success)
+            if success then
+                local req = {}
+                req.orderId=orderId
+                HttpRequest("ship", "ShipReq", "ShipResp", req, function (shipResp)
+                    if shipResp and shipResp.results then
+                        for i,v in ipairs(shipResp.results) do
+                            if v.result == 3 then
+                                data.isFirst=CheckIsFirstBuy(data)
+                                if(CsBridge.sDKHelper.enableSDK) then
+                                    CsBridge.sDKHelper:OnChargeFinished(v.orderId, tostring(resp.type), currency, data.price);
+                                else
+                                    CsBridge.sDKHelper:OnChargeFinished(v.orderId, tostring(resp.type), currency, data.price / 100);
+                                end
+                                if onFinished then
+                                    onFinished(data)
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+        if resp.consumeType ~= ConsumeType.EasyCost then
+            CsBridge.sDKHelper:PayByType(resp.type,activityId,data.id,data.pid,orderId,data.price,currency,data.title,data.desp, resp.consumeType, PaySuccessCallback)
+        else
+            CsBridge.sDKHelper:Pay(resp.type,activityId,data.id,data.pid,orderId,data.price,currency,data.title,data.desp, PaySuccessCallback)
+        end
+    end)
+end
+
+function CheckFailedOrder(onFinished)
+    local req = {}
+    local playerInfo = appData:checkData("PlayerInfo")
+    local gem = playerInfo.payGem + playerInfo.rewardGem
+    HttpRequest("ship", "ShipReq", "ShipResp", req, function (shipResp)
+		if shipResp and shipResp.results then
+			for i,v in ipairs(shipResp.results) do
+				if v.result == 3 then
+					if(CsBridge.sDKHelper.enableSDK) then
+						CsBridge.sDKHelper:OnChargeFinished(v.orderId, "", "", "");
+					else			
+						CsBridge.sDKHelper:OnChargeFinished(v.orderId, "", "", "");
+					end
+				end
+            end
+			local info = appData:checkData("PlayerInfo")
+            local gem1 = info.payGem + info.rewardGem
+            if (gem1 - gem > 0) then
+				local rewards = {
+					{
+						typeId = ItemTypeEnum.Resource,
+						id = ResourceEnum.Gem,
+						count = gem1 - gem
+					}
+				}
+                if onFinished then
+                    onFinished(rewards)
+                end
+			end
+		end
+    end)
+end
+
+---显示提示信息
+local function ShowHintTip(localStr)
+    CsBridge.hintUILayer:ShowHintBox(Language:getStr(localStr), 2)
+end
+
+---显示订阅和通行证的提示
+function ShowUseSubscribeItemTip(stateResult)
+    if stateResult.canUse == true then
+        return true
+    else
+        if stateResult.subEndTime <= 0 then
+            ShowHintTip("CanSubscribeTwice")
+        else
+            ShowHintTip("SubscribeItemAlreadyHave")
+        end
+        return false
+    end
+    return true
+end
+
+---是否可以购买订阅
+function CheckCanBuySubscribe(itemData)
+    if itemData.type == PayTableTypeEnum.Subscribe then
+        if itemData.stateResult.canPayBuy then
+            return true
+        else
+            ShowHintTip("CanSubscribeTwice")
+            return false
+        end
+    else
+        return true
+    end
+end

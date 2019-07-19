@@ -1,0 +1,82 @@
+--[[
+	file: UnionBannerView.lua
+	author: hangang
+	description: View for change union banner
+]]
+
+local iconGrid
+local confirmCbk
+local viewData
+
+function SetParamDataList(obj)
+	onHideCbk = obj[0]
+end
+
+function DoInit()
+	self.Shadow = 1
+	InitUI()
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	iconGrid = self:GetComponentAtPath("bannerSV/ScrollRect/Viewport/Grid", CLS_UI_ITEM_GRID)
+end
+
+function SetParamDataList(objs)
+	viewData = objs[0]
+	confirmCbk = objs[1]
+	RefreshView(viewData)
+end
+
+function RefreshView(viewData)
+	iconGrid:RefreshItemSlots(viewData, self.gameObject, "UnionBannerItemSlot")
+end
+
+function OnUnionBannerItemSlotBindValue(slot, data)
+	local slotTrans = slot.transform
+	local imageObj = slotTrans:GetGameObjectAtPath("iconImg")
+	CsBridge.IconData.SetIconByName(imageObj, data.icon)
+	local selectionObj = slotTrans:GetGameObjectAtPath("selectionImg")
+	selectionObj:SetActive(data.selected or false)
+end
+
+function OnGridUnionBannerItemSlotClick(obj, itemIndex)
+	local iconID = obj.m_data.id
+	
+	local slotTrans = obj.transform
+	local gridTrans = iconGrid.transform
+	for i = 0, gridTrans.childCount - 1 do
+		local itemTrans = gridTrans:GetChild(i)
+		local selectionObj = itemTrans:Find("selectionImg").gameObject
+		selectionObj:SetActive(itemTrans == slotTrans)
+	end
+	if confirmCbk then
+		confirmCbk(iconID)
+	end
+end
+
+function OnNotification_CloseUnionView(obj)
+	Close()
+end
+
+function OnNotification_UpdateSettingsFinished(obj)
+	Close()
+end
+
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end 
+
+function Close() 
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	iconGrid = nil
+	confirmCbk = nil
+	viewData = nil
+end

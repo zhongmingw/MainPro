@@ -1,0 +1,21 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-05-06 20:17:22
+]]
+
+local MazeEventGrid = require "MazeEventGrid"
+
+local MazeEventItemGrid = class("MazeEventItemGrid",MazeEventGrid)
+
+function MazeEventItemGrid:Ctor(row, col, state, type, data)
+    super(self,row,col,state,type,data)
+end
+
+function MazeEventItemGrid:TriggerEvent(curPlayer)
+    self.trigger = false
+    MsgCenter:Broadcast(Notify_MazeGridTriggerEvent,self)
+end
+
+return MazeEventItemGrid

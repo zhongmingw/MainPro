@@ -1,0 +1,283 @@
+local downHeroDic={}
+
+local bookArr={}
+local bookGrid
+
+
+local go_jobPop
+local jobGrid
+local jobArr
+
+local go_racePop
+local raceGrid
+local raceArr
+
+local txt_jobName
+local txt_raceName
+
+local curJob=0
+local curRace=0
+
+function DoInit()
+	txt_jobName=self.transform:Find("Content/Btns/JobBtn/jobName"):GetComponent(CLS_TEXT)
+	txt_raceName=self.transform:Find("Content/Btns/RaceBtn/raceName"):GetComponent(CLS_TEXT)
+
+	go_jobPop=self.transform:Find("JobPop").gameObject
+	jobGrid= go_jobPop.transform:Find("ScView/ScrollRect/Viewport/JobGrid"):GetComponent("UIItemGrid")
+	go_jobPop:SetActive(false)
+
+	go_racePop=self.transform:Find("RacePop")
+	raceGrid= go_racePop.transform:Find("RaceScView/ScrollRect/Viewport/RaceGrid"):GetComponent("UIItemGrid")
+	go_racePop:SetActive(false)
+	
+
+	bookGrid= self.transform:Find("Content/BookSc/BookScrollRect"):GetComponent("ScrollRectArchly")
+
+	PackData()
+end
+
+
+function OnOpen()
+	RefreshData()
+end
+function PackData()
+
+	jobArr={}
+	for  i = 0,5 do
+		local data={}
+		data.job=i
+		table.insert(jobArr,data)
+	end
+
+	raceArr={}
+	for  i = 0,6 do
+		local data={}
+		data.race=i
+		table.insert(raceArr,data)
+	end
+	
+	downHeroDic={}
+	local pbs=appData:checkAllItems("HeroItem")
+	if(pbs==nil)then
+		return
+	end
+	local tbl=ResTblContainer:GetTable(HeroBase.actorTbl)
+	for  i = 0,pbs.Length-1 do
+		local pb=pbs[i]
+		local newData={}
+		newData.pb=pb
+		newData.heroId=pb.heroId
+		newData.level=pb.level
+		newData.grade=pb.grade
+		local quality = tbl:GetInt(pb.heroId,HeroBase.quality)
+		newData.quality=quality
+		local kv={[pb.uid]=newData}
+		table.insert(downHeroDic,kv)
+	end
+	
+	bookArr={}
+	for i, data in pairs(global_heroBaseArr) do  
+		local newData={}
+		newData.pb={}
+		newData.uid=0
+		newData.heroId=data.id
+		newData.level=1
+		newData.grade=1
+		newData.quality=data.quality
+		newData.isOwn=FilterByHeroId(data.id)
+		table.insert(bookArr,newData)
+	end
+end
+
+function  FilterByHeroId(_heroId)
+	local isOwn=false
+	for i, kv in pairs(downHeroDic) do  
+    	for key, data in pairs(kv) do 
+    		if(_heroId==data.pb.heroId)then
+				isOwn=true
+				break;
+			end
+		end 
+	end
+	return isOwn
+end
+
+
+
+
+function OnRaceBtnClick(sender)
+	go_racePop:SetActive(true)
+	raceGrid:RefreshItemSlots(raceArr,self.gameObject,"RaceItemSlot")
+end
+function OnRacePopCloseBtnClick(sender)
+	go_racePop:SetActive(false)
+end
+
+
+function OnRaceGridItemBtnClick(obj)
+	local itemData=obj:GetItemData()
+	curRace=itemData.race
+
+	local str
+	if(itemData.race==0)
+		then
+		str=Language:getStr("allItemStr")
+	else
+		local tbl=ResTblContainer:GetTable(GameBaseInfo.actorTbl)
+		str=tbl:Get("race"..itemData.race,"value")
+	end
+	txt_raceName.text=str
+	RefreshData()
+	go_racePop:SetActive(false)
+end
+
+
+function OnJobBtnClick(sender)
+	go_jobPop:SetActive(true)
+	jobGrid:RefreshItemSlots(jobArr,self.gameObject,"JobItemSlot")
+end
+function OnJobPopCloseBtnClick(sender)
+	go_jobPop:SetActive(false)
+end
+
+function OnJobGridItemBtnClick(obj)
+	local itemData=obj:GetItemData()
+	curJob=itemData.job
+
+	local str
+	if(itemData.job==0)
+		then
+		str=Language:getStr("allItemStr")
+	else
+		local tbl=ResTblContainer:GetTable(GameBaseInfo.actorTbl)
+		str=tbl:Get("job"..itemData.job,"value")
+	end
+	txt_jobName.text=str
+	RefreshData()
+	go_jobPop:SetActive(false)
+end
+
+local heroArr={}
+local heroInfo={}
+local curIndex=0
+local maxIndex=0
+
+
+function OnBookGridItemBtnClick(obj)
+	heroInfo={}
+	heroInfo=obj:GetItemData()
+	GetHeroIndex(heroInfo)
+	self:ShowModule("HeroShowModule",{heroInfo,SwithHero,curIndex,maxIndex,true},false)
+end
+
+function SwithHero(DoSetTable,oldData,isRight)
+	GetHeroIndex(oldData)
+	local nextIndex=0
+	if(isRight)then
+		nextIndex=curIndex+1
+	else
+		nextIndex=curIndex-1
+	end
+	
+	local pb=heroArr[nextIndex]
+	local newData={}
+	newData.pb={}
+	newData.uid=0
+	newData.heroId=pb.heroId
+	newData.level=1
+	newData.grade=1
+	local quality = ResTblContainer:GetPropToInt(pb.heroId,HeroBase.quality,HeroBase.actorTbl)
+	newData.quality=quality
+	
+	DoSetTable({newData,SwithHero,nextIndex,maxIndex,true})
+end
+
+function GetHeroIndex(_data)
+	curIndex=0
+	for i, data in pairs(heroArr) do  
+		if(data.heroId==_data.heroId)then
+			curIndex=i
+			break
+		end
+	end
+	maxIndex=#heroArr
+end
+
+function RefreshData()
+	heroArr={}
+	local tbl=ResTblContainer:GetTable(HeroBase.actorTbl)
+	for i, data in pairs(bookArr) do  
+		local job=tbl:GetPropToInt(data.heroId,HeroBase.job)
+		local race=tbl:GetPropToInt(data.heroId,HeroBase.group)
+		if(curJob==0)then
+			if(curRace==0)then
+				table.insert(heroArr,data)
+			elseif(curRace==race)then
+				table.insert(heroArr,data)
+			end
+		elseif(curJob==job)then
+			if(curRace==0)then
+				table.insert(heroArr,data)
+			elseif(curRace==race)then
+				table.insert(heroArr,data)
+			end
+		end
+	end
+	bookGrid:RefreshItemSlots(heroArr,self.gameObject,"BookHeroItemSlot")
+end
+
+function OnBookHeroItemSlotReset(slot,data)
+	local img_icon
+	local go_flag
+
+	local starListObj
+	local starArr={}
+
+	local star_6
+	local star_7
+
+	local txt_heroId
+	 txt_heroId=slot.transform:Find("heroId"):GetComponent(CLS_TEXT)
+
+	 go_flag=slot.transform:Find("maskFlag").gameObject
+	go_flag:SetActive(false)
+
+	 img_icon=slot.transform:Find("icon"):GetComponent("UnityEngine.UI.Image")
+
+	
+
+	 starListObj=self.transform:Find("Stars/starList").gameObject
+	star_6=self.transform:Find("Stars/star6").gameObject
+	star_7=self.transform:Find("Stars/star7").gameObject
+
+	for  i = 1,5 do
+		local obj=starListObj.transform:Find("star"..i)
+		table.insert(starArr,obj)
+	end
+	SetIconByHeroId(img_icon.gameObject,data.heroId)
+	ShowStar(data.heroId,starListObj,starArr,star_6,star_7,130)
+	
+	txt_heroId.text= tostring(data.heroId)
+	
+	if(data.isOwn==true)then
+		go_flag:SetActive(false)
+	else
+		go_flag:SetActive(true)
+	end
+end
+
+function DoExit()
+	downHeroDic=nil
+	bookArr=nil
+	bookGrid=nil
+	go_jobPop=nil
+	jobGrid=nil
+	jobArr=nil
+	go_racePop=nil
+	raceGrid=nil
+	raceArr=nil
+	txt_jobName=nil
+	txt_raceName=nil
+	curJob=nil
+	curRace=nil
+end

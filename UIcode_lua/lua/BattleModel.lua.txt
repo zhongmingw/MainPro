@@ -1,0 +1,2608 @@
+--[[
+	file: BattleModel.lua
+	author: hangang
+	description: Battle view controller
+]]
+
+local utils = require "BattleUtils"
+local battleMgr		--A state-machine
+local cachedHeroList = {}
+local cachedSceneData
+
+--------------------local functions------------------------------------------------
+local DelayTimer = utils.DelayTimer
+local CacheAllHeroData, GetBaseViewData, OpenBattleRatingView
+local InitRounds, InitBattleMgr, ResetHeroPos
+local FormatStatusData
+local PlayEnterBattleAnimation, HandleSceneEvents
+local SwitchTimeScale,SetBattleTimeScale
+local CreatePreState
+local GetMoveStartViewData
+local DoCharge, ShakeScene, UpdateAttackerAnger, GetHeroReturnBackViewData
+local PlayAttackAnimation, GetAttackerHitViewData, GetDefendersHitViewData
+local CreateHeroUpdatingState, CreateBeHitStates
+local CreateHitDefenderFlow, CreateHitAttackerFlow, CreateHitAttackFxFlow
+local UpdateStatusStates, UpdateStatusBaseData, ResetHeroAnimation
+local InitPreStateFlowStates
+local GetAttackFxItemViewData, GetAttackFxViewData
+local FormatAttackData, CacheHeroFinalStatus
+local PlayHitAnimation, ShowHitEffect, GetHittingEffectViewData
+local ShowHurtCopyEffect
+
+local GetPropToStr = function(id, columnName, tblName)
+    return ResTblContainer:GetPropToStr(id, columnName, tblName)
+end
+
+local GetTable = function(tblName)
+    return ResTblContainer:GetTable(tblName)
+end
+
+local GetPropToInt = function(id, columnName, tblName)
+    return ResTblContainer:GetPropToInt(id, columnName, tblName)
+end
+
+local GetGameBaseInfo = function(key)
+    return ResTblContainer:GetGameBaseInfo(key)
+end
+
+local SendNotification = function(eventName, eventData)
+	if eventData then
+		self:SendNotification(eventName, eventData)
+	else
+		self:SendNotification(eventName)
+	end
+end
+
+local PlaySound = function(soundCamp, soundName)
+	CsBridge.audioManager:PlaySound(soundCamp, soundName)
+end
+
+local HandleViewEvents = function(eventName, eventData)
+	if battleMgr then
+		battleMgr.HandleEvents(eventName, eventData)
+	end	
+end
+
+--------------------local functions end --------------------------------------------
+
+--------------------Enums-----------------------------------------------------------
+local ViewEvents = utils.ViewEvents
+
+--StateMachine states type define--
+local BattleStates = 
+{
+	--loading resources
+	Loading = 1,
+	--play enter animation, init bars
+	Preparing = 2,
+	--battle PreState
+	Enter = 3,	
+	--process rounds
+	Processing = 4,
+	--clearing
+	Exiting = 5,
+}
+
+local RoundStates = 
+{
+	--waiting, used by guide system to do something before round started
+	Waiting = 1,
+	--before round start,PreState
+	Enter = 2,
+	--process actions
+	Processing = 3,
+	--on round finished,PreState
+	Exiting = 4,
+}
+
+local ActionStates = 
+{
+	--waiting for the fixed interval between actions
+	Waiting = 1,
+	--before action start,PreState
+	Enter = 2,
+	--process attacker and defender flows
+	Processing = 3,
+	--on action finished,PreState
+	Exiting = 4,
+}
+
+--一次完整的攻击过程
+local MoveStates =
+{
+	--SetSiblingIndex/Init mask/Reset hero model spine,etc...
+	Preparing = 1,
+	--then Move to target 
+	Charging = 2,
+	--Play attack animation
+	--Play skill effects
+	Attacking = 3,
+	--Targets been hitted,play hitted animation and effects,
+	--Attacker return back
+	Hitting = 4,
+}
+
+--攻击命中后，进攻者的状态机
+local HitAttackerFlowStates = 
+{
+	--playing attack animation
+	Attacking = 1,
+	--return back
+	Reposition = 2,
+	--after attack,update states and base data
+	UpdateState = 3,
+	--be hit back,play be hit animation and effects
+	--if been killed,this state exit on enter
+	HittingBack = 4,
+	--play be killed animation and effects
+	--if survived,this state exit on enter
+	Killing = 5,
+	--play revive animation and effects
+	--if not revived,this state exit on enter
+	Reviving = 6,
+	--update states and base data after revive
+	Revived = 7,
+}
+
+--攻击命中后，被攻击影响者的状态列表
+--包含直接受击者和间接影响者，间接影响者只加状态，无攻击特效和受击动画
+local HitDefenderFlowStates = 
+{
+	--show attack effects
+	Attacking = 1,
+	--attack effect hit,update states and base data
+	UpdateState = 2,
+	--play be hit animation and effects,update states and base data
+	Hitting = 3,
+	--play be killed animation and effects
+	--if survived,this state exit on enter
+	Killing = 4,
+	--play revive animation and effects
+	--if not revived,this state exit on enter
+	Reviving = 5,
+	--update states and base data after revive
+	Revived = 6,
+}
+
+--攻击命中后，攻击特效的状态机
+local HitAttackFxFlowStates =
+{
+	Attacking = 1,
+}
+
+--战斗开始、回合开始/结束、行动开始/结束时，更新所有英雄状态的状态机
+local PreStateFlowStates = 
+{
+	--play be killed animation and effects
+	--if survived,this state exit on enter
+	Killing = 100,
+	--play revive animation and effects
+	--if not revived,this state exit on enter
+	Reviving = 200,
+	--update states and base data
+	UpdateStates = 300,
+}
+
+local HitOtherHeroFlowStates =
+{
+	--wait ViewEvents.AttackFxHitEvent
+	Waiting = 1,
+	--copy hurt, show copy effect
+	Copying = 2,
+	--play be hit animation and effects,update states and base data
+	Hitting = 3,
+	--play be killed animation and effects
+	--if survived,this state exit on enter
+	Killing = 4,
+	--play revive animation and effects
+	--if not revived,this state exit on enter
+	Reviving = 5,
+	--update states and base data after revive
+	Revived = 6,
+	--update states and base data
+	--if Copying state enabled,this state exit immediately
+	UpdateStates = 7,
+}
+
+--StateMachine states type define End--
+
+--受击类型
+local DefendType = 
+{
+	Idle = 0,
+	NormalAttack = 1,
+	Hurted = 2,
+	SkillAttack = 3,
+	PassiveSkillAttack = 4,
+	--Killed = 5,--服务器不再使用，被SoldierStatus.beKilled代替
+	Cured = 6,
+	AddStates = 7,
+	CopyHurt = 8,
+}
+
+--状态变化类型
+local HeroStateUpdateType =
+{
+	Added = 1,
+	Removed = 2,
+	Updated = 3,
+}
+
+
+local SpineAnimState = utils.SpineAnimState
+local SpineBone = utils.SpineBone
+local SpineEvents = utils.SpineEvents
+
+--动态数据变化类型，这些类型并非互斥的
+local UpdatedDataType=
+{
+    StateChange = 1,   --1-状态变化
+    AngerChange = 2,    --2-怒气变化
+    HpChange = 4,       --4-生命，伤害变化
+    AnimChange = 8,     --8-动作变化
+    PosChange = 16,     --16-交换位置
+    MaxHpChange = 32,    --32-最大生命变化
+}
+
+--英雄射程类型
+local AttackRangeType=
+{
+    Melee = 1,      --近战
+    Ranged = 2      --远程
+}
+
+--技能攻击特效类型
+local AttackEffectType = utils.AttackEffectType
+
+--声音阵营
+local SoundCamp=
+{
+	player = 2,        
+    enemy = 3,                
+}
+
+--攻击方式，服务器定义的枚举
+local AttackType = 
+{
+	Idle = 0,
+	Normal = 1,
+	Skill = 3,
+	PassiveSkill = 4,
+}
+
+--播放速度
+local TimeScaleConfig =
+{
+	Default = 1.1,
+	Fast = 2,
+}
+
+--是否抖动屏幕
+local ShakeConfig = 
+{
+	Enabled = 1,
+	Disabled = 0,
+}
+--------------------Enums End------------------------------------------------------------
+
+--------------View Signals---------------------------------------------------------------
+--battle logic Entrance
+function OnCommand_InitBattle(objs)
+	local battleInfo = objs[0]
+	battleInfo.fastforwardEnabled = true
+	battleInfo.skipEnabled = true
+	battleInfo.roundCount = battleInfo.rounds and #battleInfo.rounds or 0
+	if not UIOpen(UI_OPEN_TYPE_TWICESPEED, false) then
+		battleInfo.timeScale = TimeScaleConfig.Default
+		battleInfo.fastforwardEnabled = false
+	else
+		local savedConfig = tonumber(CsBridge.UnityHelper.GetString("timeScale"))
+		battleInfo.timeScale = savedConfig and savedConfig or TimeScaleConfig.Default
+	end
+	if not UIOpen(UI_OPEN_TYPE_SKIPBATTLE, false) then
+		battleInfo.skipEnabled = false
+	end
+	if battleInfo.isRecord then
+		battleInfo.skipEnabled = true
+		battleInfo.fastforwardEnabled = true
+	end
+	CacheAllHeroData(battleInfo)
+	cachedSceneData = utils.GetSceneData(battleInfo.sceneId)
+	--utils.LogAllRoundData(battleInfo)
+	InitBattleMgr(battleInfo)
+	local onBattleMgrFinished = function()
+	end
+	battleMgr.Enter(onBattleMgrFinished)
+end
+
+function OnCommand_ViewEvents(objs)
+	local eventName = objs[0]
+	local eventData = objs.Length > 1 and objs[1] or nil
+	HandleViewEvents(eventName, eventData)
+end
+
+--------------View Signals End-----------------------------------------------------------------
+
+-------------------Attack flow states ---------------------------------------------------------
+--States reused by PreState/Hit flows
+--Logics of Updating hero states,hiting,killing and reviving
+
+local function CreateHittingState(stateType, data, revived)
+	local heroData, statusData = data.heroData, data.statusData
+	local defendType = statusData.animData.defendData.defendType
+	local actorId = statusData.uid
+
+	local state = utils.CreateState(stateType, data, "HittingState"..actorId)
+	state.OnEnter = function()
+		state.baseDataUpdated = true
+		if statusData.baseViewData then
+			state.baseDataUpdated = false
+			SendNotification("UpdateHeroBaseData", statusData.baseViewData)
+		end
+
+		state.statesUpdated = true
+		if statusData.statesViewData then
+			state.statesUpdated = false		
+			SendNotification("UpdateHeroStates", statusData.statesViewData)
+		end
+
+		state.hitAnimationFinished = true
+		if not statusData.finalData.underControl
+			and (defendType == DefendType.Hurted 
+				or defendType == DefendType.CopyHurt)
+		then
+			state.hitAnimationFinished = false
+			PlayHitAnimation(actorId)
+		end
+
+		state.hitEffectFinished = true
+		if not statusData.beKilled 
+			and data.hurtSfxData
+		then
+			state.hitEffectFinished = false
+			ShowHitEffect(actorId, data.hurtSfxData)
+		else
+			state.CheckAllFlowFinished()
+		end
+	end
+	state.CheckAllFlowFinished = function()
+		local allFinished = state.hitAnimationFinished
+			and state.hitEffectFinished
+			and state.baseDataUpdated
+			and state.statesUpdated
+		if allFinished then
+			state.Exit()
+		end
+		return allFinished
+	end
+	state.OnEvents = function(eventName, eventData)
+		if eventData and eventData.actorId == actorId then
+			if eventName == ViewEvents.HitAnimationFinished then
+				ResetHeroAnimation(statusData)
+				state.hitAnimationFinished = true
+			elseif eventName == ViewEvents.HitFxFinished then
+				state.hitEffectFinished = true
+			elseif eventName == ViewEvents.HitFxSoundEvent then
+				PlaySound(eventData.soundCamp, eventData.soundName)
+			elseif eventName == ViewEvents.ActorBaseDataUpdated then
+				state.baseDataUpdated = true
+			elseif eventName == ViewEvents.ActorStateUpdated then
+				state.statesUpdated = true
+			end
+			state.CheckAllFlowFinished()
+		end
+	end
+
+	return state
+end
+
+local function CreateKillingState(stateType, statusData, heroData)
+	local actorId = statusData.uid
+	local state = utils.CreateState(stateType, statusData, "Killing State")
+	state.OnEnter = function()
+		local dieSfxData = cachedSceneData.dieSfxData
+		local viewData = GetHittingEffectViewData(actorId, dieSfxData, false)
+		viewData.soundEventName = ViewEvents.KilledFxSoundEvent
+		viewData.finishedEventName = ViewEvents.KilledFxFinished
+
+		local statusBaseData = statusData.baseData
+		local revived = statusBaseData and statusBaseData.revived or false
+		viewData.shouldClearEffect = not revived
+		SendNotification("ShowKilledEffect", viewData)
+	end
+	state.OnEvents = function(eventName, eventData)
+		if eventData and eventData.actorId == actorId then
+			if eventName == ViewEvents.KilledFxSoundEvent then
+				PlaySound(eventData.soundCamp, eventData.soundName)
+			elseif eventName == ViewEvents.KilledFxFinished then
+				state.Exit()
+			end
+		end
+	end
+	return state
+end
+
+local function CreateRevivingState(stateType, statusData)
+	local actorId = statusData.uid
+	local state = utils.CreateState(stateType, statusData, "Reviving State")
+	state.OnEnter = function()
+		local reviveSfxData = cachedSceneData.reviveSfxData
+		local viewData = GetHittingEffectViewData(actorId, reviveSfxData, false)
+		viewData.heroStatus = statusData.finalData
+		viewData.soundEventName = ViewEvents.RevivedFxSoundEvent
+		viewData.finishedEventName = ViewEvents.RevivedFxFinished
+		SendNotification("ShowRevivedEffect", viewData)
+	end
+	state.OnEvents = function(eventName, eventData)
+		if eventData and eventData.actorId == actorId then
+			if eventName == ViewEvents.RevivedFxFinished then
+				state.Exit()
+			elseif eventName == ViewEvents.RevivedFxSoundEvent then
+				PlaySound(eventData.soundCamp, eventData.soundName)
+			end
+		end
+	end
+	return state
+end
+
+--@param data table
+--[[eg:
+	data = {
+		heroData = heroData,
+		statusData = statusData,
+		hurtSfxData = hurtSfxData,
+	}
+]]
+--@param statesTypeOfStateMachine table states type of Hitting,Killing and Reviving
+--[[eg:
+	statesTypeOfStateMachine = {
+		hitting = HitAttackerFlowStates.HittingBack,
+		killing = HitAttackerFlowStates.Killing,
+		reviving = HitAttackerFlowStates.Reviving,
+		revived = HitAttackerFlowStates.revived,
+	}
+]]
+CreateBeHitStates = function(data, statesTypeOfStateMachine)
+	local states = {}
+	local statusData = data.statusData
+	local heroData = data.heroData
+	local stateTypes = statesTypeOfStateMachine
+	local defendType = statusData.animData.defendData.defendType
+	local beKilled = statusData.baseData.beKilled
+	local revived = statusData.baseData.revived
+
+	local stateType = stateTypes.hitting
+	if stateType then
+		local state = CreateHittingState(stateType, data, revived)
+		table.insert(states, state)
+	end
+
+	stateType = stateTypes.killing
+	if stateType and beKilled then
+		local state = CreateKillingState(stateType, statusData, heroData)
+		table.insert(states, state)
+	end
+
+	stateType = stateTypes.reviving
+	if stateType and revived then
+		local state = CreateRevivingState(stateType, statusData)
+		table.insert(states, state)
+
+		local revivedStatusData = {}
+		revivedStatusData.uid = statusData.uid
+		revivedStatusData.baseViewData = statusData.revivedBaseData
+		revivedStatusData.statesViewData = statusData.revivedStatesData
+		local revivedState = CreateHeroUpdatingState(
+			stateTypes.revived, revivedStatusData, "HitState_Revived")
+		table.insert(states, revivedState)
+	end
+
+	return states
+end
+
+CreateHeroUpdatingState = function(stateTypeOfStateMachine, heroStatus, name)
+	local statusData = heroStatus
+	local actorId = statusData.uid
+	name = (name or "HeroStatesUpdatingState") .. actorId
+	local state = utils.CreateState(stateTypeOfStateMachine, statusData, name)
+	state.OnEnter = function()
+		state.baseDataUpdated = true
+		if statusData.baseViewData then
+			state.baseDataUpdated = false
+			SendNotification("UpdateHeroBaseData", statusData.baseViewData)
+		end
+
+		state.statesUpdated = true
+		if statusData.statesViewData then
+			state.statesUpdated = false			
+			SendNotification("UpdateHeroStates", statusData.statesViewData)
+		else
+			state.CheckAllFlowFinished()
+		end
+	end
+	state.CheckAllFlowFinished = function()
+		local allFinished = state.baseDataUpdated and state.statesUpdated
+		if allFinished then
+			state.Exit()
+		end
+		return allFinished
+	end
+	state.OnEvents = function(eventName, eventData)
+		if eventData and eventData.actorId == actorId then
+			if eventName == ViewEvents.ActorBaseDataUpdated then
+				state.baseDataUpdated = true
+			elseif eventName == ViewEvents.ActorStateUpdated then
+				state.statesUpdated = true
+			end
+			state.CheckAllFlowFinished()
+		end
+	end
+
+	return state
+end
+
+-------------------Attack flow states End-------------------------------------------------------
+
+-------------------Hit-AttackerFlow stateMachine -----------------------------------------------
+
+local function CreateReturnBackState(data)
+	local state = utils.CreateState(
+		HitAttackerFlowStates.Reposition, data, "AttackerFlowState_ReturnBack")
+	local isMeleeAttack = data.attackRangeType == AttackRangeType.Melee
+	state.cachedViewData = isMeleeAttack 
+		and GetHeroReturnBackViewData(data.attackerData) or nil
+	state.OnEnter = function()
+		if isMeleeAttack then
+			SendNotification("RepositionHero", state.cachedViewData)
+		else
+			state.Exit()
+		end
+	end
+	state.OnEvents = function(eventName, eventData)
+		if eventName == ViewEvents.HeroRepositioned then
+			state.Exit()
+		end
+	end
+	state.OnExit = function()
+		ResetHeroAnimation(data.attackerStatus)
+	end
+	return state
+end
+
+local function InitAttackerFlowStates(data)
+	local states = {}
+
+	local state = utils.CreateState(
+		HitAttackerFlowStates.Attacking, data, "AttackerFlowState_Attacking")
+	state.OnEvents = function(eventName, eventData)
+		if eventName == ViewEvents.AttackFinished then
+			state.Exit()
+		end
+	end
+	table.insert(states, state)
+	
+	local state = CreateReturnBackState(data)
+	table.insert(states, state)
+
+	local attackerStatus = data.attackerStatus
+	local attackerData = data.attackerData
+
+	local defendData = attackerStatus.animData.defendData
+	if defendData then
+		local skillId = attackerStatus.animData.defendData.defendSubskillId
+		local subskillData = attackerData.assetsData.subskillMap[skillId]
+		if not subskillData
+			and not attackerStatus.baseData.revived
+		then
+			local state = CreateHeroUpdatingState(
+				HitAttackerFlowStates.UpdateState, 
+				attackerStatus,
+				"AttackerFlowState_Updating"
+			)
+			table.insert(states, state)
+		end
+		local paramData = {
+			heroData = attackerData,
+			statusData = attackerStatus,
+			hurtSfxData = subskillData and subskillData.hurtSfx or nil
+		}
+		local stateTypes = {
+			hitting = subskillData and HitAttackerFlowStates.HittingBack or nil,
+			killing = HitAttackerFlowStates.Killing,
+			reviving = HitAttackerFlowStates.Reviving,
+			revived = HitAttackerFlowStates.Revived,
+		}
+		local betHitStates = CreateBeHitStates(paramData, stateTypes)
+		for k, item in pairs(betHitStates) do
+			table.insert(states, item)
+		end
+	else
+		local state = CreateHeroUpdatingState(
+			HitAttackerFlowStates.UpdateState, 
+			attackerStatus,
+			"AttackerFlowState_Updating"
+		)
+		table.insert(states, state)
+	end	
+
+	return states
+end
+
+local function InitHitFlowBaseData(flow)
+	flow.finished = false
+	flow.OnExit = function()
+		flow.finished = true
+	end
+end
+
+CreateHitAttackerFlow = function(data)
+	local flow = utils.CreateStateMachine(
+		data, InitAttackerFlowStates, "Action_Hit_AttackerFlow")
+	flow.id = data.attackerStatus.uid
+	InitHitFlowBaseData(flow)
+	return flow
+end
+
+-------------------Hit-AttackerFlow stateMachine End--------------------------------------------
+
+-------------------Hit-DefenderFlow stateMachine -----------------------------------------------
+
+local function InitDefenderFlowStates(data)
+	local states = {}
+	local defenderData, statusData, subskillData = 
+		data.defenderData, data.statusData, data.subskillData
+
+	local state = utils.CreateState(
+		HitDefenderFlowStates.Attacking, statusData, "DefenderFlowState_Attacking")
+	state.OnEvents = function(eventName, eventData)
+		if eventName == ViewEvents.AttackFxHitEvent then
+			state.Exit()
+		end
+	end
+	table.insert(states, state)
+
+	local defendData = statusData.animData.defendData
+	if defendData then
+		if not subskillData 
+			and not statusData.baseData.revived 
+		then
+			local state = CreateHeroUpdatingState(
+				HitDefenderFlowStates.UpdateState, 
+				statusData,
+				"DefenderFlowState_Updating"
+			)
+			table.insert(states, state)
+		end
+		local paramData = {
+			heroData = defenderData,
+			statusData = statusData,
+			hurtSfxData = subskillData and subskillData.hurtSfx or nil
+		}
+		local stateTypes = {
+			hitting = subskillData and HitDefenderFlowStates.Hitting or nil,
+			killing = HitDefenderFlowStates.Killing,
+			reviving = HitDefenderFlowStates.Reviving,
+			revived = HitDefenderFlowStates.Revived,
+		}
+		local beHitStates = CreateBeHitStates(paramData, stateTypes)
+		table.insertto(states, beHitStates)
+	else
+		CS.UnityEngine.Debug.LogError("Error:No defendData on defender flow!")
+		local state = CreateHeroUpdatingState(
+			HitDefenderFlowStates.UpdateState, 
+			statusData,
+			"DefenderFlowState_Updating"
+		)
+		table.insert(states, state)
+	end
+	return states
+end
+
+CreateHitDefenderFlow = function(defenderData, statusData, subskillData)
+	local paramData = {
+		defenderData = defenderData,
+		statusData = statusData,
+		subskillData = subskillData,
+	}
+	local flow = utils.CreateStateMachine(
+		paramData, InitDefenderFlowStates, "Action_Hit_DefenderFlow")
+	flow.id = statusData.uid
+	InitHitFlowBaseData(flow)
+	return flow
+end
+
+-------------------Hit-DefenderFlow stateMachine End--------------------------------------------
+
+-------------------Hit-AttackFxFlow stateMachine -----------------------------------------------
+
+local function InitAttackFxFlowStates(data)
+	local states = {}
+	local defenderData, statusData, subskillData = 
+		data.defenderData, data.statusData, data.subskillData
+
+	local state = utils.CreateState(
+		HitAttackFxFlowStates.Attacking, statusData, "AttackFxFlowState_Attacking")
+	state.OnEnter = function()
+		local viewData = GetAttackFxViewData(data)
+		if #viewData > 0 then
+			SendNotification("ShowAttackEffect", viewData)
+		else
+			HandleViewEvents(ViewEvents.AttackFxHitEvent)
+			HandleViewEvents(ViewEvents.AttackFxFinished)
+		end
+	end
+	state.OnEvents = function(eventName, eventData)
+		if eventName == ViewEvents.AttackFxFinished then
+			state.Exit()
+		elseif eventName == ViewEvents.AttackFxSoundEvent then
+			PlaySound(eventData.soundCamp, eventData.soundName)
+		end
+	end
+	table.insert(states, state)
+
+	return states
+end
+
+CreateHitAttackFxFlow = function(data)
+	local flow = utils.CreateStateMachine(
+		data, InitAttackFxFlowStates, "Action_Hit_AttackFxFlow")
+	flow.id = 0
+	InitHitFlowBaseData(flow)
+	return flow
+end
+
+-------------------Hit-AttackFxFlow stateMachine End---------------------------------------------
+
+-------------------Hit-OtherHeroFlow stateMachine -----------------------------------------------
+local function CreateCopyHurtState(statusData)
+	local state = utils.CreateState(
+		HitOtherHeroFlowStates.Copying, statusData, "HitOtherHeroFlowState_Copying")
+	state.OnEnter = function()
+		ShowHurtCopyEffect(statusData)
+	end
+	state.OnEvents = function(eventName, eventData)
+		if eventName == ViewEvents.HurtCopyFxFinished
+			and eventData.actorId == statusData.uid
+		then
+			state.Exit()
+		end
+	end
+		
+	return state
+end
+
+local function InitHitOtherHeroFlowStates(statusData)
+	local states = {}
+	local actorId = statusData.uid
+
+	local state = utils.CreateState(
+		HitOtherHeroFlowStates.Waiting, statusData, "HitOtherHeroFlowState_Waiting")
+	state.OnEvents = function(eventName, eventData)
+		if eventName == ViewEvents.AttackFxHitEvent then
+			state.Exit()
+		end
+	end
+	table.insert(states, state)
+
+	if statusData.relateActorId	then
+		local copyHurtState = CreateCopyHurtState(statusData)
+		table.insert(states, copyHurtState)
+		local paramData = {
+			heroData = cachedHeroList[actorId],
+			statusData = statusData,
+		}
+		local stateTypes = {
+			hitting = HitOtherHeroFlowStates.Hitting,
+			killing = HitOtherHeroFlowStates.Killing,
+			reviving = HitOtherHeroFlowStates.Reviving,
+			revived = HitOtherHeroFlowStates.Revived,
+		}
+		local beHitStates = CreateBeHitStates(paramData, stateTypes)
+		table.insertto(states, beHitStates)
+	else
+		table.insertto(states, InitPreStateFlowStates(statusData))
+	end
+
+	return states
+end
+
+local function CreateHitOtherHeroFlow(statusData)
+	local flow = utils.CreateStateMachine(
+		statusData, InitHitOtherHeroFlowStates, "Action_Hit_OtherHeroFlow")
+	flow.id = statusData.uid
+	InitHitFlowBaseData(flow)
+	return flow
+end
+
+-------------------Hit-OtherHeroFlow stateMachine End--------------------------------------------
+
+-------------------Move stateMachine and states--------------------------------------------------
+
+local function InitMoveHitStateFlows(data)
+	local flows = {}
+	
+	local flow = CreateHitAttackerFlow(data)
+	table.insert(flows, flow)
+
+	local statusDataList = data.defenderStatusList
+	local defenderDataList = data.defenderDataList
+	local subskillList = data.attackerData.assetsData.subskillMap
+	for k, statusData in pairs(statusDataList) do
+		local skillId = statusData.animData.defendData.defendSubskillId
+		local subskillData = subskillList[skillId]
+		local uid = statusData.uid		
+		local defenderData = defenderDataList[uid]
+		flow = CreateHitDefenderFlow(defenderData, statusData, subskillData)
+		table.insert(flows, flow)
+	end
+
+	local otherStatusList = data.otherStatusList
+	if otherStatusList then
+		for i, statusData in ipairs(otherStatusList) do
+			flow = CreateHitOtherHeroFlow(statusData)
+			table.insert(flows, flow)
+		end
+	end
+
+	flow = CreateHitAttackFxFlow(data)
+	table.insert(flows, flow)
+
+	return flows
+end
+
+local function CreateMoveHitState(data)
+	local state = utils.CreateState(MoveStates.Hitting, data, "Move_Hiting")	
+	state.flows = InitMoveHitStateFlows(data)--flows are state machines
+	state.OnFlowFinished = function(flow)
+		flow.finished = true
+		state.CheckAllFlowFinished()
+	end
+	state.OnEnter = function()
+		for i, flow in ipairs(state.flows) do
+			flow.Enter(state.OnFlowFinished)
+		end
+	end
+	state.CheckAllFlowFinished = function()
+		local allFinished = true
+		for k, item in pairs(state.flows) do
+			if not item.finished then
+				allFinished = false
+				break
+			end
+		end		
+		if allFinished then
+			state.Exit()
+		end
+		return allFinished
+	end
+	state.OnEvents = function(eventName, eventData)
+		for k, flow in pairs(state.flows) do
+			flow.HandleEvents(eventName, eventData)
+		end
+	end
+	state.OnExit = function()
+		SendNotification("ResetMove")
+	end
+	
+	return state
+end
+
+local function CreateMoveAttackState(data)
+	local state = utils.CreateState(MoveStates.Attacking, data, "Move_Attacking")
+	state.OnEnter = function()
+		state.flowData = PlayAttackAnimation(data)
+	end
+	state.OnEvents = function(eventName, eventData)
+		if eventName == ViewEvents.AttackHitEvent then
+			state.Exit()
+		end
+	end	
+	return state
+end
+
+local function CreateMoveChargeState(data)
+	local state = utils.CreateState(MoveStates.Charging, data, "Move_Charging")
+	state.OnEnter = function()
+		local skillId = data.attackerStatus.animData.attackData.attackSkillId
+		local attackRangeType = data.attackRangeType
+		if attackRangeType == AttackRangeType.Ranged then
+			state.Exit()
+		else
+			DoCharge(state.data)
+		end
+	end
+	state.OnEvents = function(eventName, eventData)
+		if eventName == ViewEvents.ChargeFinished then
+			state.Exit()
+		end
+	end	
+	return state
+end
+
+local function CreateMovePreparingState(data)
+	local state = utils.CreateState(MoveStates.Preparing, data, "Move_Preparing")
+	state.OnEnter = function()
+		local viewData = GetMoveStartViewData(state.data)
+		SendNotification("InitMove", viewData)
+	end
+	state.OnEvents = function(eventName, eventData)
+		if eventName == ViewEvents.MoveInited then
+			state.Exit()
+		end
+	end
+	
+	return state
+end
+
+local function InitMoveStates(data)
+	local states = {}
+	local state = CreateMovePreparingState(data)
+	table.insert(states, state)
+
+	state = CreateMoveChargeState(data)
+	table.insert(states, state)
+
+	state = CreateMoveAttackState(data)
+	table.insert(states, state)
+
+	state = CreateMoveHitState(data)
+	table.insert(states, state)
+
+	return states
+end
+
+-------------------Move stateMachine End----------------------------------------------------------
+
+-------------------Action stateMachine and states-------------------------------------------------
+
+local function CreateActionFightState(stateType, data)
+	local state = utils.CreateState(stateType, data, "ActionFightState")
+	state.formatedData = FormatAttackData(data)
+	state.move = utils.CreateStateMachine(state.formatedData, InitMoveStates, "Move")
+	state.OnMoveFinished = function(move)
+		state.Exit()
+	end
+	state.OnEnter = function()
+		state.move.Enter(state.OnMoveFinished)
+	end
+	state.OnEvents = function(eventName, eventData)
+		state.move.HandleEvents(eventName, eventData)
+	end
+	state.OnExit = function()
+		state.move = nil
+		SendNotification("ResetFight", viewData)
+	end
+	return state
+end
+
+local function CreateActionBaseState(stateType, data)
+	local state = CreatePreState(stateType, data, 
+		"ActionState_" .. (stateType == ActionStates.Enter and "Enter" or "Exiting"))
+	return state
+end
+
+local function CreateActionWaitingState(stateType, data)
+	local state = utils.CreateState(stateType, data, "ActionWaitingState")
+	local finishedEvent = ViewEvents.ActionWaitingFinished
+	state.OnEnter = function()
+		local viewData = {}
+		viewData.eventName = finishedEvent
+		viewData.delay = tonumber(ResTblContainer:GetGameBaseInfo("actionDelay"))
+		SendNotification("ActionStarted", viewData)
+	end
+	state.OnEvents = function(eventName, eventData)
+		if eventName == finishedEvent then
+			state.Exit()
+		end
+	end
+
+	return state
+end
+
+
+local function InitActionStates(data)
+	local states = {}
+	local stateData
+
+	local state = CreateActionWaitingState(ActionStates.Waiting, data)
+	table.insert(states, state)
+	
+	stateData = data.startActionEffects
+	if stateData then
+		local state = CreateActionBaseState(ActionStates.Enter, stateData)
+		table.insert(states, state)
+	end
+
+	stateData = data.attackActionEffects
+	if stateData then
+		local state = CreateActionFightState(ActionStates.Processing, stateData)
+		table.insert(states, state)
+	end
+
+	stateData = data.endActionEffects
+	if stateData then
+		local state = CreateActionBaseState(ActionStates.Exiting, stateData)
+		table.insert(states, state)
+	end
+	
+	return states
+end
+
+local function InitActions(data)
+	local actions = {}
+	for index = 1, #data do
+		local action = utils.CreateStateMachine(data[index], InitActionStates, "Action")
+		action.id = index
+		table.insert(actions, action)
+	end
+	return actions
+end
+
+-------------------Action stateMachine End-------------------------------------------------------
+
+-------------------Round stateMachine and states-------------------------------------------------
+
+local function CreateRoundProcessingState(stateType, data)
+	local state = utils.CreateState(stateType, data, "RoundProcessingState")
+	state.actions = InitActions(data)
+	state.EnterAction = function(action)
+		state.currentAction = action
+		action.Enter(state.OnActionFinished)
+	end
+	state.OnActionFinished = function(action)
+		local actionId = action.id
+		local nextAction = state.actions[actionId + 1]
+		if nextAction then
+			state.EnterAction(nextAction)
+		else
+			state.Exit()
+		end
+	end
+	state.OnEnter = function(finishedCbk)
+		local action1 = state.actions[1]
+		state.EnterAction(action1)
+	end
+	state.OnEvents = function(eventName, eventData)
+		local action = state.currentAction
+		if action then
+			action.HandleEvents(eventName, eventData)
+		end
+	end
+	state.OnExit = function()
+		state.actions = nil
+	end
+	return state
+end
+
+local function CreateRoundBaseState(stateType, data)
+	local state = CreatePreState(stateType, data, 
+		"RoundState_" .. stateType == RoundStates.Enter and "Enter" or "Exiting")	
+	return state
+end
+
+local function CreateRoundWaitingState(stateType, roundData)
+	local state = utils.CreateState(stateType, roundData, "RoundWaitingState")
+	state.OnEnter = function()
+		if not roundData.pauseOnStart then
+			state.Exit()
+		end
+	end
+	state.OnEvents = function(eventName, eventData)
+		if eventName == ViewEvents.RoundWaitingFinished then
+			state.data.pauseOnStart = false
+			state.Exit()
+		end
+	end
+
+	return state
+end
+
+local function InitRoundStates(roundData)
+	local states = {}
+	local state, stateData
+
+	state = CreateRoundWaitingState(RoundStates.Waiting, roundData)
+	table.insert(states, state)
+
+	stateData = roundData.startRoundEffected
+	if stateData then
+		state = CreateRoundBaseState(RoundStates.Enter, stateData)
+		table.insert(states, state)
+	end
+
+	stateData = roundData.actionInfos
+	if stateData then
+		state = CreateRoundProcessingState(RoundStates.Processing, stateData)
+		table.insert(states, state)
+	end
+
+	stateData = roundData.endRoundEffected
+	if stateData then
+		state = CreateRoundBaseState(RoundStates.Exiting, stateData)
+		table.insert(states, state)
+	end
+
+	return states
+end
+
+local function OnRoundEnter(roundIdx, roundCount)
+	local viewData = {}
+	viewData.roundIdx = roundIdx
+	viewData.roundText = tostring(roundIdx)
+	viewData.progress = roundIdx / roundCount
+	SendNotification("RoundChanged", viewData)
+end
+
+InitRounds = function(roundDataList, maxRound)
+	local roundList = {}
+	local roundCount = #roundDataList
+	for index = 1, roundCount do
+		local round = utils.CreateStateMachine(
+			roundDataList[index], InitRoundStates, "Round")
+		round.id = index
+		round.OnEnter = function()
+			OnRoundEnter(index, maxRound)
+		end
+		table.insert(roundList, round)
+	end
+
+	return roundList
+end
+
+-------------------Round stateMachine End-----------------------------------------------------
+
+-------------------PreState-------------------------------------------------------------------
+--Prestate is for updating all actors' states on battle start,round start and end, action start and end
+
+InitPreStateFlowStates = function(statusData)
+	local states = {}
+
+	local uid = statusData.uid
+	local heroData = cachedHeroList[uid]
+
+	local animData = statusData.animData
+	local defendData = animData and animData.defendData or nil
+	local defendType = defendData and defendData.defendType or nil
+	local beKilled = statusData.baseData.beKilled
+	if beKilled then
+		stateType = PreStateFlowStates.Killing
+		local state = CreateKillingState(stateType, statusData, heroData)
+		table.insert(states, state)
+	end
+
+	local baseData = statusData.baseData
+	local revived = baseData and baseData.revived or false
+	if revived then
+		stateType = PreStateFlowStates.Reviving
+		local state = CreateRevivingState(stateType, statusData)
+		table.insert(states, state)
+	end
+
+	if not beKilled
+		or (beKilled and revived)
+	then
+		local stateType = PreStateFlowStates.UpdateStates
+		local state = CreateHeroUpdatingState(
+			stateType, statusData, "PreState")
+		table.insert(states, state)
+	end
+	
+	return states
+end
+
+local function CreatePreStateHeroFlow(statusData)
+	local flow = utils.CreateStateMachine(
+		statusData, InitPreStateFlowStates, "PreStateHeroFlow")
+	flow.id = statusData.uid
+	InitHitFlowBaseData(flow)
+	flow.OnEvents = function(eventName, eventData)
+		local consumed = false
+		if eventData.actorId ~= flow.id then
+			consumed = true
+		end
+		return consumed
+	end
+	return flow
+end
+
+local function InitPreStateFlows(data)
+	local flows = {}
+	if data then
+		for k, statusData in pairs(data) do
+			table.insert(flows, CreatePreStateHeroFlow(statusData))
+		end
+	end
+	return flows
+end
+
+CreatePreState = function(stateType, data, stateName)
+	local formatedData = {}
+	for k, item in pairs(data) do
+		table.insert(formatedData, FormatStatusData(item))
+	end
+	--Cache hero final status(be controled,animation name, material name,etc...)
+	for i, statusData in ipairs(formatedData) do		
+		CacheHeroFinalStatus(statusData)
+	end
+	
+	local state = utils.CreateState(stateType, formatedData, stateName)	
+	state.flows = InitPreStateFlows(formatedData)--flows are state machines
+	state.OnEnter = function()
+		for k, flow in pairs(state.flows) do
+			flow.finished = false
+			flow.Enter(function()
+				flow.finished = true
+				state.CheckAllFlowFinished()
+			end)
+		end
+		state.CheckAllFlowFinished()
+	end
+	state.CheckAllFlowFinished = function()
+		local allFinished = true
+		for k, item in pairs(state.flows) do
+			if not item.finished then
+				allFinished = false
+				break
+			end
+		end		
+		if allFinished then
+			state.Exit()
+		end
+		return allFinished
+	end
+	state.OnEvents = function(eventName, eventData)
+		for k, flow in pairs(state.flows) do
+			flow.HandleEvents(eventName, eventData)
+		end
+	end
+	return state
+end
+
+-------------------PreState End-------------------------------------------------------------------
+
+-------------------Battle stateMachine and states-------------------------------------------------
+local function CreateBattleLoadingState(stateData)
+	local battleInfo = stateData
+	local state = utils.CreateState(BattleStates.Loading, battleInfo, "BattleLoadingState")
+	state.cachedViewData = GetBaseViewData(battleInfo)
+	state.OnEnter = function()
+		local battleType = battleInfo.battleEndInfo.type
+		local assetsData = utils.GetAssetsName(battleInfo.sceneId, cachedHeroList, battleType)
+		local onCaching = function(process)
+			CsBridge.loadUIMgr:UpdateProcess(process)
+		end
+		local onCacheFinished = function()
+			OpenBattleRatingView(battleInfo)
+			SendNotification("InitScene", state.cachedViewData)
+		end
+		CsBridge.UnityHelper.LuaCallCacheCacheAssets(
+			false,
+			self.Module.ModuleName,
+			onCaching,
+			onCacheFinished,
+			assetsData)
+	end
+	state.OnEvents = function(eventName, eventData)
+		if eventName == ViewEvents.SceneInited then
+			CsBridge.loadUIMgr:Hide()
+			state.Exit()
+		end		
+	end
+	return state
+end
+
+local function CreateBattlePreparingState(stateData)
+	local battleInfo = stateData
+	local state = utils.CreateState(
+		BattleStates.Preparing, battleInfo, "BattlePreparingState")
+	state.headViewData = utils.GetAllHeroHeadViewData(cachedHeroList)
+	state.OnEnter = function()
+		SetBattleTimeScale(battleInfo.timeScale)
+		ResetHeroPos()
+		
+		state.headViewInited = false
+		state.enterAnimationFinished = false
+		PlayEnterBattleAnimation()
+	end
+	state.OnEvents = function(eventName, eventData)
+		if eventName == ViewEvents.EnterAnimationFinished then
+			state.enterAnimationFinished = true
+			SendNotification("UpdateAllHeroHeadView", state.headViewData)
+		elseif eventName == ViewEvents.ActorBaseDataUpdated then
+			state.headViewInited = true
+		end
+
+		if state.headViewInited  
+			and state.enterAnimationFinished 
+		then
+			state.Exit()
+		end
+	end
+	return state
+end
+
+local function CreateBattleEnterState(stateData)
+	local battleInfo = stateData
+	local stateData = battleInfo.startBattleEffected
+	if stateData then
+		local state = CreatePreState(
+			BattleStates.Enter,  stateData, "BattleEnterState")
+		return state
+	end
+end
+
+local function CreateBattleProcessingState(stateData)
+	local battleInfo = stateData
+	local state = utils.CreateState(BattleStates.Processing, battleInfo, "BattleProcessingState")
+	state.rounds = InitRounds(battleInfo.rounds, battleInfo.maxRound)
+	state.EnterRound = function(round)
+		state.currentRound = round
+		round.Enter(state.OnRoundFinished)
+	end
+	state.OnRoundFinished = function(round)
+		if state.paused then
+			return
+		end
+
+		local nextRound = state.rounds[round.id + 1]
+		if nextRound then
+			state.EnterRound(nextRound)
+		else
+			state.Exit()
+		end
+	end
+	state.OnEnter = function()
+		local round1 = state.rounds[1]
+		state.EnterRound(round1)
+	end
+	state.OnEvents = function(eventName, eventData)
+		if eventName == ViewEvents.PauseOnRound then
+			local roundId = eventData
+			for i, roundData in ipairs(battleInfo.rounds) do
+				if roundData.roundid == roundId then
+					roundData.pauseOnStart = true
+					break
+				end
+			end
+		elseif state.currentRound then
+			state.currentRound.HandleEvents(eventName, eventData)
+		end
+	end
+	return state
+end
+
+local function CreateBattleExitingState(stateData)
+	local battleInfo = stateData
+	local state = utils.CreateState(BattleStates.Exiting, battleInfo, "BattleExitingState")
+	state.OnEnter = function()
+		SendNotification("ClearView")
+	end
+	state.OnEvents = function(eventName, eventData)
+		if eventName == ViewEvents.ViewCleared then
+			CS.UnityEngine.Time.timeScale = 1
+			if battleInfo.showBattleEndView then
+				self:HideView("BattleView", nil, false)
+				utils.OpenBattleEndView(battleInfo, self, function()
+					self:ReturnBack()
+				end)
+			else
+				self:ReturnBack()
+			end
+		end
+	end
+	return state
+end
+
+local function InitBattleStates(battleData)
+	local states = {}
+	local state = CreateBattleLoadingState(battleData)
+	table.insert(states, state)
+
+	state = CreateBattlePreparingState(battleData)
+	table.insert(states, state)
+
+	state = CreateBattleEnterState(battleData)
+	table.insert(states, state)
+
+	state = CreateBattleProcessingState(battleData)
+	table.insert(states, state)
+
+	state = CreateBattleExitingState(battleData)
+	table.insert(states, state)
+	
+	return states
+end
+
+InitBattleMgr = function(battleInfo)
+	battleMgr = utils.CreateStateMachine(battleInfo, InitBattleStates, "BattleMgr")
+	battleMgr.data = battleInfo
+	battleMgr.GetExitingState = function()
+		for k, state in pairs(battleMgr.states) do
+			if state.type == BattleStates.Exiting then
+				return state
+			end
+		end
+	end
+	battleMgr.Skip = function()
+		if battleInfo.skipEnabled then
+			battleMgr.currentState.Stop()
+			local exitingState = battleMgr.GetExitingState()
+			battleMgr.EnterState(exitingState)
+		else
+			UIOpen(UI_OPEN_TYPE_SKIPBATTLE, true)
+		end
+	end
+	battleMgr.SwitchTimeScale = function()
+		SwitchTimeScale(battleMgr)
+	end
+	battleMgr.OnEvents = function(eventName, eventData)
+		return HandleSceneEvents(eventName, eventData, battleMgr)
+	end
+end
+
+-------------------Battle state machine End------------------------------------------------------
+
+----------Update hero states---------------------------------------------------------------------
+
+local function AddDefHPEffect(heroData, stateData)
+	local dynamicData = heroData.dynamicData
+	local statusHpValue = stateData.statusValue.value
+	local defHpData = dynamicData.defHpData
+	local lastDefHpValue = defHpData and defHpData.defHpValue or 0
+	if not defHpData then
+		defHpData = {}
+		dynamicData.defHpData = defHpData
+	end
+	defHpData.defHpValue = lastDefHpValue + statusHpValue
+
+	local viewData = {}
+	viewData.shouldCreateFx = lastDefHpValue <= 0
+	viewData.effectType = utils.HeroStateEffectType.DefHP
+	local key = 3
+	local sfxId = GetPropToInt(key, DefHpStr.sfxId, DefHpStr.tblName)
+	viewData.sfxId = sfxId
+	viewData.sfxName = GetPropToStr(sfxId, WeaponSfx.sfxName, WeaponSfx.tblName)
+	viewData.boneName = GetPropToStr(sfxId, WeaponSfx.pos, WeaponSfx.tblName)
+	defHpData.sfxName = viewData.sfxName
+	viewData.uid = stateData.uid
+	viewData.actorId = heroData.uid
+	local curHp, maxHp = dynamicData.curHp, dynamicData.maxHp
+	viewData.bloodSliderValue, viewData.defSliderValue = 
+		utils.FormatDefHpViewData(defHpData.defHpValue, curHp, maxHp)
+	viewData.hpRatio = curHp / maxHp
+	return viewData
+end
+
+local function AddDotEffect(heroData, stateData, configStr)
+	local uid = stateData.uid
+	local actorId = heroData.uid
+	local dynamicData = heroData.dynamicData
+	local heroDotList = dynamicData.dotList
+
+	local viewData = {}
+	viewData.uid = uid
+	viewData.actorId = actorId
+	viewData.effectType = utils.HeroStateEffectType.Dot
+
+	local stateDotList = {}
+	local statesMap = heroData.dynamicData.statesMap
+	statesMap[uid].dotData = stateDotList
+	local newDotList = {}
+	viewData.dotList = newDotList
+
+	local strs = SplitString(configStr, ";")
+	local dotTbl = GetTable(DotStrEffect.tblName)
+	local weaponTbl = GetTable(WeaponSfx.tblName)
+	for i = 0, strs.Length-1 do
+		local dotType = tonumber(SplitString(strs[i],",")[0])
+		local dotData = heroDotList[dotType]
+		if dotData then
+			dotData.refCount = dotData.refCount + 1
+		else
+			dotData = {}
+			dotData.dotType = dotType
+			dotData.actorId = actorId
+			dotData.refCount = 1
+			local sfxId = dotTbl:GetInt(dotType, DotStrEffect.sfxId)
+			dotData.sfxId = sfxId
+			dotData.sfxName = weaponTbl:Get(sfxId, WeaponSfx.sfxName)
+			dotData.boneName = weaponTbl:Get(sfxId, WeaponSfx.pos)
+
+			heroDotList[dotType] = dotData
+			table.insert(newDotList, dotData)			
+		end
+		table.insert(stateDotList, dotData)
+	end
+	return viewData
+end
+
+local function AddStateEffect(heroData, stateData, configStr, recycleOnFinished)
+	local effectData={}
+	local uid = stateData.uid
+
+	local strs = SplitString(configStr, ";")
+	local effectTbl = GetTable(EffectStrEffect.tblName)
+	local weaponTbl = GetTable(WeaponSfx.tblName)
+	for i = 0, strs.Length-1 do
+		local subStrs = SplitString(strs[i], ",")
+		local effectType = tonumber(subStrs[0])
+		local effectNum = tonumber(subStrs[2])
+		local effect={}
+		local columnName = effectNum > 0 
+			and EffectStrEffect.posSfxId or EffectStrEffect.negSfxId
+		local sfxId = effectTbl:GetInt(effectType, columnName)
+		effect.sfxId = sfxId
+		effect.sfxName=weaponTbl:Get(sfxId, WeaponSfx.sfxName)
+		effect.boneName=weaponTbl:Get(sfxId, WeaponSfx.pos)
+
+		columnName = effectNum>0 
+			and EffectStrEffect.posIcon or EffectStrEffect.negIcon		    
+		effect.icon = effectTbl:Get(effectType, columnName)
+		table.insert(effectData,effect)
+	end
+
+	local viewData = {}
+	viewData.uid = uid
+	viewData.actorId = heroData.uid
+	viewData.effectType = utils.HeroStateEffectType.Effect
+	viewData.recycleOnFinished = recycleOnFinished
+	viewData.effectData = effectData
+
+	local statesMap = heroData.dynamicData.statesMap
+	statesMap[uid].stateEffect=viewData
+	return viewData
+end
+
+local function AddCtrlEffect(heroData, stateData, configStr)
+	local uid = stateData.uid	
+	local ctrlType = configStr
+	local dynamicData = heroData.dynamicData
+	local heroCtrlList = dynamicData.ctrlList
+
+	local ctrlData
+	local oldCtrlData = heroCtrlList[ctrlType]
+	if oldCtrlData then
+		oldCtrlData.refCount = oldCtrlData.refCount + 1
+		ctrlData = table.copy(oldCtrlData)
+	else
+		ctrlData = {}
+		ctrlData.refCount = 1
+		ctrlData.ctrlType = ctrlType
+		heroCtrlList[ctrlType] = ctrlData
+
+		local effectTblName = ControlEffect.tblName
+		local weaponTblName = WeaponSfx.tblName
+		local sfxId = GetPropToInt(ctrlType, ControlEffect.sfxId, effectTblName)
+		ctrlData.sfxId = sfxId
+		ctrlData.sfxName = GetPropToStr(sfxId, WeaponSfx.sfxName, weaponTblName)
+		ctrlData.boneName = GetPropToStr(sfxId, WeaponSfx.pos, weaponTblName)
+		ctrlData.playType = GetPropToInt(ctrlType, ControlEffect.playType, effectTblName)
+		ctrlData.materialName = GetPropToStr(ctrlType, ControlEffect.material, effectTblName)
+		ctrlData.actorId = heroData.uid
+		ctrlData.effectType = utils.HeroStateEffectType.Ctrl	
+	end
+
+	ctrlData.uid = uid
+	local statesMap = dynamicData.statesMap
+	statesMap[uid].ctrlData = ctrlData
+	table.insert(dynamicData.ctrlSequence, ctrlData)
+	return ctrlData.refCount == 1 and ctrlData or nil
+end
+
+local function AddSpecialEffect(heroData, stateData, effectId)
+	local heroSpecialEffects = heroData.dynamicData.specialEffects
+	local oldEffect = heroSpecialEffects[effectId]
+	if oldEffect then
+		oldEffect.refCount = oldEffect.refCount + 1
+		return nil
+	end
+
+	local uid = stateData.uid
+	local viewData = {}
+	viewData.uid = uid
+	viewData.actorId = heroData.uid
+	viewData.effectType = utils.HeroStateEffectType.Special
+	viewData.specialEffectId = effectId
+	viewData.refCount = 1
+
+	local GetSfxConfig = function(sfxId)
+		local weaponTblName = WeaponSfx.tblName
+		local sfxName = GetPropToStr(sfxId, WeaponSfx.sfxName, weaponTblName)
+		local boneName = GetPropToStr(sfxId, WeaponSfx.pos, weaponTblName)
+		return sfxName, boneName
+	end
+
+	--base effects, initialize first
+	local tblName = SpecialEffect.tblName
+	local sfxId = GetPropToStr(effectId, SpecialEffect.sfxId, tblName)
+	local baseEffectData
+	if not IsNilOrEmpty(sfxId) then
+		baseEffectData = {}
+		baseEffectData.uid = uid
+		baseEffectData.sfxId = sfxId
+		baseEffectData.sfxName, baseEffectData.boneName = GetSfxConfig(sfxId)
+	end
+	viewData.baseEffectData = baseEffectData
+
+	--effects of utils.StateSpecialEffectType, initialize after baseEffectData
+	local Effects = utils.StateSpecialEffectType
+	local effectData = {}
+	effectData.uid = uid
+	effectData.specialEffectType = effectId
+	if effectId == Effects.Transform then
+		effectData.scale = tonumber(GetGameBaseInfo("commonBossScale"))
+	elseif effectId == Effects.ChangeCamp then
+		effectData.shouldReverse = true
+	elseif effectId == Effects.SwapPos or 
+		effectId == Effects.Invisible 
+	then
+		effectData.sfxId = GetPropToStr(effectId, SpecialEffect.triggleId, tblName)
+		effectData.sfxName, effectData.boneName = GetSfxConfig(sfxId)
+		--for SwapPos
+		effectData.newPos = heroData.dynamicData.pos		
+		--for Invisible
+		effectData.destination = cachedSceneData.exilePos
+	else
+		effectData = nil
+	end
+	viewData.effectData = effectData
+	
+	local statesMap = heroData.dynamicData.statesMap
+	statesMap[uid].specialData = viewData
+	heroSpecialEffects[effectId] = viewData
+	return viewData
+end
+
+local function AddHeroState(heroData, stateData, recycleOnFinished)
+	local dynamicData = heroData.dynamicData
+	local statesMap = dynamicData.statesMap
+	local uid = stateData.uid
+	local cachedStateData = statesMap[uid]
+	if not cachedStateData then
+		cachedStateData = {}
+		cachedStateData.uid = uid
+		statesMap[uid] = cachedStateData
+	end
+
+	local viewData = {}
+	viewData.uid = uid
+	viewData.actorId = heroData.uid
+	local stateEffects = {}
+	viewData.stateEffects = stateEffects
+
+	local stateId = stateData.templateid
+	local tblName = StateBase.actorTbl
+	local configStr = GetPropToStr(stateId, StateBase.defHp, tblName)
+	if not IsNilOrEmpty(configStr) then
+		table.insert(stateEffects, 
+			AddDefHPEffect(heroData, stateData))
+	end
+
+	configStr = GetPropToStr(stateId, StateBase.dot, tblName)
+	if not IsNilOrEmpty(configStr) then
+		table.insert(stateEffects, 
+			AddDotEffect(heroData, stateData, configStr, recycleOnFinished))
+	end
+
+	configStr = GetPropToStr(stateId, StateBase.effect, tblName)
+	if not IsNilOrEmpty(configStr) then
+		table.insert(stateEffects, 
+			AddStateEffect(heroData, stateData, configStr, recycleOnFinished))
+	end
+
+	configStr = GetPropToStr(stateId, StateBase.ctrl, tblName)
+	if not IsNilOrEmpty(configStr) then
+		table.insert(stateEffects, 
+			AddCtrlEffect(heroData, stateData, configStr))
+	end
+
+	configStr = GetPropToStr(stateId, StateBase.specialId, tblName)
+	if not IsNilOrEmpty(configStr) then
+		table.insert(stateEffects, 
+			AddSpecialEffect(heroData, stateData, tonumber(configStr))
+		)
+	end
+	
+	return viewData
+end
+
+local function GetHeroNewStatesViewData(heroData, states)
+	local statesViewData = {}
+	for i, stateData in ipairs(states) do
+		if stateData.statusType == HeroStateUpdateType.Added then
+			local laterRemovingState = utils.FindLaterState(
+				states, i, stateData.uid, HeroStateUpdateType.Removed)
+			local recycleOnFinished = laterRemovingState ~= nil
+			local itemViewData = AddHeroState(heroData, stateData, recycleOnFinished)
+			table.insert(statesViewData, itemViewData)
+		end
+	end
+	return #statesViewData > 0 and statesViewData or nil
+end
+
+local function UpdateHeroState(heroData, stateData)
+	local TYPE_SHIELD = 1
+	if stateData.statusValue.type ~= TYPE_SHIELD then
+		return nil
+	end
+
+	local dynamicData = heroData.dynamicData
+	local defHpData = dynamicData.defHpData
+	if not defHpData then
+		return nil
+	end
+	local defHpValue = stateData.statusValue.value
+	defHpData.defHpValue = defHpValue
+	dynamicData.defHpData = defHpValue == 0
+		and nil or defHpData
+
+	local viewData = {}
+	viewData.uid = stateData.uid
+	viewData.actorId = heroData.uid
+	local curHp, maxHp = dynamicData.curHp, dynamicData.maxHp
+	viewData.bloodSliderValue, viewData.defSliderValue = 
+		utils.FormatDefHpViewData(defHpValue, curHp, maxHp)
+	viewData.hpRatio = curHp / maxHp
+	viewData.shouldClearEffect = defHpValue == 0
+	viewData.sfxName = defHpData.sfxName
+	return viewData
+end
+
+local function GetHeroUpdatedStatesViewData(heroData, states)
+	local viewData
+	for i, stateData in ipairs(states) do
+		if stateData.statusType == HeroStateUpdateType.Updated then
+			viewData = UpdateHeroState(heroData, stateData)			
+		end
+	end
+	return viewData
+end
+
+local function RemoveDotEffect(heroData, stateDotList)
+	if not stateDotList then 
+		return nil 
+	end
+
+	local removeSfxNames = {}
+	local heroDotList = heroData.dynamicData.dotList
+	for k, stateDot in pairs(stateDotList) do
+		local dotType = stateDot.dotType
+		local heroDot = heroDotList[dotType]
+		heroDot.refCount = heroDot.refCount - 1
+		if heroDot.refCount == 0 then
+			heroDotList[dotType] = nil
+			table.insert(removeSfxNames, stateDot.sfxName)
+		end
+	end
+
+	return #removeSfxNames > 0 and removeSfxNames or nil
+end
+
+local function RemoveCtrlEffect(heroData, stateId)
+	local dynamicData = heroData.dynamicData
+	local ctrlSequence = dynamicData.ctrlSequence
+	local ctrlType
+	for i, ctrlData in pairs(ctrlSequence) do
+		if ctrlData.uid == stateId then
+			ctrlSequence[i] = nil
+			ctrlType = ctrlData.ctrlType
+			break
+		end
+	end
+	local heroCtrlList = dynamicData.ctrlList
+	local oldCtrlData = heroCtrlList[ctrlType]
+	if not oldCtrlData then
+		return nil
+	end
+
+	oldCtrlData.refCount = oldCtrlData.refCount - 1
+	if oldCtrlData.refCount == 0 then
+		heroCtrlList[ctrlType] = nil
+		return oldCtrlData.sfxName
+	end
+end
+
+local function RemoveSpecialEffect(heroData, specialData, stateId)
+	local specialEffectId = specialData.specialEffectId
+	local heroSpecialEffects = heroData.dynamicData.specialEffects
+	local oldEffect = heroSpecialEffects[specialEffectId]
+	oldEffect.refCount = oldEffect.refCount - 1
+	if oldEffect.refCount > 0 then
+		return nil
+	else
+		heroSpecialEffects[specialEffectId] = nil
+	end
+
+	local Effects = utils.StateSpecialEffectType
+	if specialEffectId == Effects.Transform then
+		specialData.effectData.scale = tonumber(GetGameBaseInfo("commonScale"))
+	elseif specialEffectId == Effects.Invisible then
+		specialData.effectData.newPos = heroData.dynamicData.pos
+	end
+	local viewData = specialData
+	return viewData
+end
+
+local function GetHeroRemovedStatesViewData(heroData, currentStates)
+	local viewData = {}
+	viewData.actorId = heroData.uid
+
+	local sfxNameList = {}
+	local stateEffectList = {}
+	local specialDataList = {}
+
+	local removingStates = {}
+	local statesMap = heroData.dynamicData.statesMap
+	for i, state in ipairs(currentStates) do
+		if state.statusType == HeroStateUpdateType.Removed then
+			local stateId = state.uid
+			table.insert(removingStates, statesMap[stateId])
+			statesMap[stateId] = nil
+		end
+	end
+
+	for i, stateData in ipairs(removingStates) do
+		local stateId = stateData.uid
+		local dotSfxNames = RemoveDotEffect(heroData, stateData.dotData)
+		if dotSfxNames then			
+			table.insertto(sfxNameList, dotSfxNames)
+		end
+
+		local stateEffect = stateData.stateEffect
+		if stateEffect and not stateEffect.recycleOnFinished then
+			table.insert(stateEffectList, stateEffect)
+		end
+
+		local ctrlData = stateData.ctrlData
+		if ctrlData then			
+			local sfxName = RemoveCtrlEffect(heroData, stateId)
+			table.insert(sfxNameList, sfxName)
+		end
+
+		local specialData = stateData.specialData
+		if specialData then
+			local newData = RemoveSpecialEffect(heroData, specialData, stateId)
+			table.insert(specialDataList, newData)
+		end
+	end
+
+	viewData.sfxNameList = #sfxNameList > 0 and sfxNameList or nil
+	viewData.stateEffectList = #stateEffectList > 0 and stateEffectList or nil
+	viewData.specialDataList = #specialDataList > 0 and specialDataList or nil
+
+	return viewData
+end
+
+ResetHeroAnimation = function(statusData)
+	SendNotification("ResetHeroAnimation", statusData.finalData)
+end
+
+local function GetCtrlAnimationName(playType)
+	local Animations = utils.CtrlAnimationType
+	local animationName
+	if playType == Animations.Stun then
+		animationName = SpineAnimState.stunAnim
+	elseif playType == Animations.None then
+		animationName = SpineAnimState.idleAnim
+	end
+	return animationName
+end
+
+--统一处理控制状态
+--当目标当前存在多个控制状态时
+--	1.特效不可重复，这个在AddEffect和RemoveEffect时处理
+--	2.目标动画，定帧>眩晕
+--	3.目标材质：以heroData.dynamicData.ctrlSequence的最后一个需要替换材质的控制状态为准
+local function UpdateUniqueStates(heroData)
+	local dynamicData = heroData.dynamicData
+	local ctrlSequence = dynamicData.ctrlSequence
+	
+	--Target's animation type
+	local Animations = utils.CtrlAnimationType
+	local playType = Animations.None
+	--Target's material
+	local newMatName = heroData.assetsData.materialName
+	for i, ctrlData in pairs(ctrlSequence) do
+		local itemPlayType = ctrlData.playType
+		if playType ~= Animations.Static then
+			if itemPlayType == Animations.Static then
+				playType = itemPlayType
+			else
+				playType = itemPlayType > playType and itemPlayType or playType
+			end
+		end
+
+		local itemMatName = ctrlData.materialName
+		newMatName = IsNilOrEmpty(itemMatName) and newMatName or itemMatName
+	end
+
+	local viewData = {}
+	viewData.actorId = heroData.uid
+	--Check if animation and material changed since last update
+	local curAnimAndMat = dynamicData.curAnimAndMat
+	local lastPlayType = curAnimAndMat.playType
+	local lastMatName = curAnimAndMat.materialName
+	if playType ~= lastPlayType then
+		curAnimAndMat.playType = playType
+		viewData.playType = playType
+		viewData.animationLoop = true
+		viewData.animationName = GetCtrlAnimationName(playType)
+	end
+	if newMatName ~= lastMatName then
+		curAnimAndMat.materialName = newMatName
+		viewData.materialName = newMatName
+	end
+	if viewData.playType or viewData.materialName then
+		return viewData
+	end
+end
+
+local function GetHeroBuffViewData(heroData)
+	local viewData = {}
+	local statesMap = heroData.dynamicData.statesMap
+	local effectDataList = {}
+	for k, stateData in pairs(statesMap) do
+		local stateEffect = stateData.stateEffect
+		if stateEffect then
+			table.insert(effectDataList, stateEffect)
+		end
+	end
+	table.sort(effectDataList, function(a, b)
+		return a.uid < b.uid
+	end)
+	for i = 1, #effectDataList do
+		local effectData = effectDataList[i].effectData
+		for j = 1, #effectData do
+			local effect = effectData[j]
+			if not IsNilOrEmpty(effect.icon) then
+				table.insert(viewData, effect.icon)
+			end
+		end
+	end
+	return viewData
+end
+
+--Update hero states' data by new statusData, and return formated view data
+UpdateStatusStates = function(heroData, statusData)
+	local statesData = statusData.states
+	if not statesData then
+		return nil
+	end
+
+	local viewData = {}
+	viewData.actorId = heroData.uid
+
+	viewData.newStates = GetHeroNewStatesViewData(heroData, statesData)
+	viewData.updatingData = GetHeroUpdatedStatesViewData(heroData, statesData)
+	viewData.removingData = GetHeroRemovedStatesViewData(heroData, statesData)
+	viewData.uniqueData = UpdateUniqueStates(heroData)
+	viewData.buffData = GetHeroBuffViewData(heroData)
+	
+	return viewData
+end
+
+----------Update hero states End--------------------------------------------------------------------
+
+UpdateStatusBaseData = function(heroData, statusData)		
+	local dynamicData = heroData.dynamicData
+	if statusData.posData then
+		dynamicData.pos = statusData.posData.targetPos
+	end
+
+	local hurtsData = statusData.hurtsData
+	local statusBaseData = statusData.baseData
+	if not hurtData and not statusBaseData then
+		return nil
+	end
+
+	local viewData = {}
+	viewData.uid = statusData.uid
+	viewData.actorId = heroData.uid
+	if hurtsData then
+		viewData.beHurted = true
+		local hurtViewData = {}
+		viewData.hurtViewData = hurtViewData
+		for k, hurtData in pairs(hurtsData) do
+			hurtData.actorId = viewData.actorId
+			table.insert(hurtViewData, utils.FormatHurtViewData(hurtData))
+		end
+	end
+
+	if not statusBaseData then
+		return viewData
+	end
+
+	local newMaxHp, newHp = statusBaseData.maxHp, statusBaseData.curHp
+	if newMaxHp or newHp then
+		dynamicData.maxHp = newMaxHp and newMaxHp or dynamicData.maxHp
+		dynamicData.curHp = newHp and newHp or dynamicData.curHp
+
+		viewData.hpChanged = true
+		local curHp, maxHp = dynamicData.curHp, dynamicData.maxHp
+		viewData.hpRatio = curHp / maxHp
+
+		if dynamicData.defHpData then
+			viewData.defHpChanged = true
+			local defHpValue = dynamicData.defHpData.defHpValue
+			viewData.bloodSliderValue, viewData.defSliderValue = 
+				utils.FormatDefHpViewData(defHpValue, curHp, maxHp)
+		end
+	end
+
+	local newAnger = statusBaseData.curAnger
+	if newAnger then
+		dynamicData.curAnger = newAnger
+		local maxAnger = dynamicData.maxAnger
+		viewData.angerChanged = true
+		viewData.angerRatio = newAnger / maxAnger
+    	viewData.angerFullfilled = newAnger >= maxAnger
+	end
+	
+	return viewData
+end
+
+PlayEnterBattleAnimation = function()
+	local viewData = {
+		soundCamp = SoundCamp.player,
+		heroCamp = utils.Camp.Left,
+	}
+	SendNotification("PlayHeroEnterAnimation", viewData)
+end
+
+local function GetBuffData()
+	local buffData = {}
+	local ids = ResTblContainer:GetIds("Buff")
+    for i=0,ids.Length-1 do
+        local data = {}
+        local id = tonumber(ids[i])
+        data.id = id
+        data.icon = ResTblContainer:GetPropToStr(id,"icon","Buff")
+        data.desc = ResTblContainer:GetPropToStr(id,"desc","Buff")
+        table.insert(buffData,data)
+    end
+	return buffData
+end
+
+local function OpenBuffStatusView()
+	CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			local view = CsBridge.OpenView("BattleBuffStatusView","BattleModel")
+			view:SetData(GetBuffData())
+		end, 
+		"BattleBuffStatusView",
+		"BattleBuffStatusItemSlot"
+	)
+end
+
+--handle scene events:Skip/Fastforward
+HandleSceneEvents = function(eventName, eventData, battleMgr)
+	local consumed = false
+	local stateType = battleMgr.currentState.type
+	if eventName == ViewEvents.Skip then
+		consumed = true
+		if stateType > BattleStates.Loading
+			and stateType < BattleStates.Exiting
+		then
+			battleMgr.Skip()
+		end
+	elseif eventName == ViewEvents.Fastforward then
+		consumed = true
+		if stateType < BattleStates.Exiting then
+			battleMgr.SwitchTimeScale()
+		end
+	elseif eventName == ViewEvents.ShowLeftAura then
+		utils.OpenAuraView(battleMgr.data.redAuraId, self)
+	elseif eventName == ViewEvents.ShowRightAura then
+		utils.OpenAuraView(battleMgr.data.blackAuraId, self)
+	elseif eventName == ViewEvents.ShowTip then
+		CsBridge.CacheAssetsByModule(
+			self.Module,
+			function()
+				CsBridge.OpenView("BattleTipGOView","BattleModel")
+			end, 
+			"BattleTipGOView")
+	elseif eventName == ViewEvents.ShowBuffTip then
+		OpenBuffStatusView()
+	end
+	return consumed
+end
+
+SetBattleTimeScale = function(timeScale)
+	CS.UnityEngine.Time.timeScale = timeScale
+	CsBridge.UnityHelper.SetString("timeScale", tostring(CS.UnityEngine.Time.timeScale));
+end
+
+SwitchTimeScale = function(battleMgr)
+	local battleInfo = battleMgr.data
+	if battleInfo.fastforwardEnabled then
+		local timeScale = battleInfo.timeScale
+		local newTimeScale = (timeScale - TimeScaleConfig.Default) < 0.1
+			and TimeScaleConfig.Fast or TimeScaleConfig.Default
+		battleInfo.timeScale = newTimeScale
+		SetBattleTimeScale(newTimeScale)
+		SendNotification("TimeScaleChanged", GetFloat(newTimeScale))
+	else
+		UIOpen(UI_OPEN_TYPE_TWICESPEED, true)
+	end
+end
+
+ResetHeroPos = function()
+	SendNotification("SortModels")
+end
+
+FormatStatusData = function(status)
+	local statusData = {}
+	statusData.uid = status.uid
+	statusData.baseData = {}
+	statusData.baseData.revived = status.isRevive
+	statusData.baseData.beKilled = status.beKilled
+	statusData.animData = {}
+	statusData.animData.animChange = false
+	
+	local statusEnum = status.dataChange
+	local CaculateOr = utils.CaculateOr
+	if CaculateOr(statusEnum,UpdatedDataType.StateChange) then
+		if status.stateInfoList then
+			statusData.states=status.stateInfoList
+		end
+	end
+	if CaculateOr(statusEnum,UpdatedDataType.AngerChange) then
+		statusData.baseData.curAnger=status.curAnger
+	end
+	if CaculateOr(statusEnum,UpdatedDataType.HpChange) then
+		statusData.baseData.curHp=status.curHp
+	end
+	if CaculateOr(statusEnum,UpdatedDataType.AnimChange) then
+		statusData.animData.animChange=true
+	end
+	if CaculateOr(statusEnum,UpdatedDataType.PosChange) then
+		statusData.posData={targetPos=status.targetPos[#(status.targetPos)]}
+	end
+	if CaculateOr(statusEnum,UpdatedDataType.MaxHpChange) then
+		statusData.baseData.maxHp=status.maxHp
+	end
+	if 	statusData.animData.animChange then
+		local attackType = status.attackType
+		if attackType ~= AttackType.Idle 
+			and attackType~=AttackType.PassiveSkill 
+		then
+			statusData.animData.attackData=
+			{
+				isSkillAttack = attackType == AttackType.Skill,
+				attackSkillId = status.attackSkillId,
+			}
+		end
+		if status.defendType ~= 0 then
+			statusData.animData.defendData =
+			{
+				defendType = status.defendType,
+				defendSubskillId = status.defendSkillId
+			}
+		end
+	end
+
+	local hurtInfoList = status.hurtInfoList
+	if hurtInfoList then
+		statusData.hurtsData = {}
+		for i, hurt in ipairs(hurtInfoList) do
+			table.insert(statusData.hurtsData, hurt)
+		end
+	end	
+
+	--Update heroData.dynamicData and build status updating view data
+	local heroData = cachedHeroList[status.uid]
+	statusData.baseViewData = UpdateStatusBaseData(heroData, statusData)	
+	statusData.statesViewData = UpdateStatusStates(heroData, statusData)
+
+	return statusData
+end
+
+GetMoveStartViewData = function(data)
+	local statusData = data.attackerStatus
+	local viewData = {}
+	viewData.attackerUid = statusData.uid
+	local siblingList = {}
+	viewData.siblingList = siblingList
+	local defenderDataList = data.defenderDataList
+	for k, heroData in pairs(defenderDataList) do
+		table.insert(siblingList, heroData.uid)
+	end
+
+	local isSkill = statusData.animData.attackData.isSkillAttack
+	viewData.shouldClearAnimTracks = isSkill
+	viewData.showMask = isSkill
+
+	local IsFighter = function(actorId)
+		if actorId == viewData.attackerUid then
+			return true
+		end
+		for k, defenderId in ipairs(defenderDataList) do
+			if actorId == defenderId then
+				return true
+			end
+		end
+		return false
+	end
+	local staticAnimHeroes = {}
+	for i, heroData in ipairs(cachedHeroList) do
+		local heroId = heroData.uid
+		if not IsFighter(heroId) then
+			table.insert(staticAnimHeroes, heroId)
+		end
+	end
+	viewData.staticAnimHeroes = 
+		next(staticAnimHeroes) and staticAnimHeroes or nil
+
+	return viewData
+end
+
+local function FindMeleeDefender(attackerId,defenders)
+	for i,statusData in ipairs(defenders) do
+		local defendType = statusData.animData.defendData.defendType
+		if statusData.uid~=attackerId 
+			and defendType == DefendType.Hurted
+		then
+			return statusData
+		end
+	end
+end
+
+local function GetChargeViewData(data)
+	local viewData = {}
+	local attacker = data.attackerData
+	local attackerId = attacker.uid
+	viewData.actorId = attackerId
+	local offset = tonumber(GetGameBaseInfo("reachOff"))
+	viewData.offsetX = attacker.heroInfo.camp == utils.Camp.Left 
+		and -offset or offset
+	viewData.duration = tonumber(GetGameBaseInfo("reachTime"))
+	local targetHeroStatusData = FindMeleeDefender(attackerId, data.defenderStatusList)
+	viewData.targetHeroId = targetHeroStatusData.uid
+	return viewData
+end
+
+DoCharge = function(data)
+	local viewData = GetChargeViewData(data)
+	SendNotification("Charge", viewData)
+end
+
+GetHeroReturnBackViewData = function(heroData)
+	local viewData = {}
+	viewData.actorId = heroData.uid
+	viewData.duration = tonumber(GetGameBaseInfo("reachTime"))
+	viewData.posId = heroData.dynamicData.pos
+	viewData.camp = heroData.heroInfo.camp
+	return viewData
+end
+
+ShakeScene = function(data)
+	local actorId = data.attackerData.heroInfo.actorId
+	local config = GetPropToInt(actorId, SkillBase.isShake, SkillBase.actorTbl)
+	if config == ShakeConfig.Enabled then
+		SendNotification("ShakeBattleRoot")
+	end
+end
+
+UpdateAttackerAnger = function(heroData, statusData)
+	local baseData = statusData.baseData
+	if baseData then
+		heroData.dynamicData.curAnger = baseData.curAnger
+		local viewData = utils.GetHeroHeadViewData(heroData.heroInfo, heroData.dynamicData)
+		SendNotification("OnAngerChanged", viewData)
+	end
+end
+
+PlayAttackAnimation = function(data)
+	local attackData = data.attackerStatus.animData.attackData
+	local uid = data.attackerStatus.uid
+	local animName = attackData.isSkillAttack 
+		and SpineAnimState.skillAnim or SpineAnimState.attackAnim
+	local viewData = {
+		uid = uid,
+		animName = animName,
+		loop = false,
+	}
+	SendNotification("PlayAttackAnimation", viewData)
+end
+
+CacheAllHeroData = function(battleInfo)
+    for i,hero in ipairs(battleInfo.redHeroList) do
+    	local heroData = utils.GetSingleHeroData(hero)
+    	if heroData then
+			cachedHeroList[hero.uid]=heroData
+	    end
+    end
+    for i,hero in ipairs(battleInfo.blackHeroList) do
+    	local heroData = utils.GetSingleHeroData(hero)
+    	if heroData then
+			cachedHeroList[hero.uid]=heroData
+	    end
+    end
+end
+
+GetBaseViewData = function(battleInfo)
+	local viewData = {}
+	viewData.sceneData = cachedSceneData
+	viewData.heroList = utils.GetHerosBaseViewData(cachedHeroList)
+
+	local auraData = {}
+	auraData.leftAuraId = battleInfo.redAuraId
+	auraData.rightAuraId = battleInfo.blackAuraId
+	local battleType = battleInfo.battleEndInfo.type
+	auraData.shouldReplaceAuraName = battleType == BattleType.League 
+		or battleType == BattleType.Arena
+	if auraData.shouldReplaceAuraName then		
+		auraData.leftAuraName = Language:getStr("redAura")
+		auraData.rightAuraName = Language:getStr("blackAura")
+	end
+	viewData.auraData = auraData
+
+	viewData.roundId = "1"
+	viewData.roundCount = "/"..tostring(battleInfo.maxRound)
+	viewData.progress = 1 / battleInfo.maxRound
+	viewData.skipBtnEnabled = utils.GetBattleCanBeSkiped(battleInfo.sceneId)
+		or battleInfo.isRecord 
+	viewData.timeScale = GetFloat(battleInfo.timeScale)
+
+	return viewData
+end
+
+OpenBattleRatingView = function(battleInfo)	
+	local battleType = battleInfo.battleEndInfo.type
+	if battleType == BattleType.League then
+		local hideOtherView = false
+		local enableAnimation = false
+		local view = CsBridge.OpenView(
+			"BattleRatingView", "BattleRatingModel",hideOtherView, enableAnimation)
+		view:SetParamDataList(battleInfo)
+	end
+end
+
+GetAttackFxItemViewData = function(attackerId, defenderStatusData, attackSfxData)
+	local statusData = defenderStatusData
+	local viewData = {}
+	viewData.attackerId = attackerId
+	viewData.defenderId = statusData.uid
+
+	local defendData = statusData.animData.defendData
+	local skillId =  defendData and defendData.defendSubskillId or -1
+	local effectType = GetPropToInt(skillId, Subskill.attackType, Subskill.tblName)
+	viewData.effectType = effectType
+
+	viewData.soundCamp = SoundCamp.player
+	viewData.soundName = attackSfxData.soundName
+	viewData.effectName = attackSfxData.name
+	viewData.hurtBoneName = SpineBone.hurtPos
+	
+	viewData.boneName = SpineBone.attackPos
+	if effectType == AttackEffectType.Direct
+		or effectType == AttackEffectType.Indirect
+	then
+		viewData.boneName = attackSfxData.boneName
+	end
+
+	local defenderId = statusData.uid
+	viewData.uid = defenderId
+	viewData.actorId = defenderId
+	if effectType == AttackEffectType.Unique then
+		local defenderData = cachedHeroList[defenderId]
+		local defenderCamp = defenderData.heroInfo.camp
+		viewData.shouldReverse = defenderCamp == Camp.Left
+	end
+
+	return viewData
+end
+
+GetAttackFxViewData = function(data)
+	local attackerData = data.attackerData
+	local attackerId = attackerData.uid
+	local defenderStatusList = data.defenderStatusList
+	local subskillList = attackerData.assetsData.subskillMap
+	local viewData = {}
+	local defenderCount = #defenderStatusList
+	for i, defenderStatusData in ipairs(defenderStatusList) do
+		local skillId = defenderStatusData.animData.defendData.defendSubskillId
+		local effectType = GetPropToInt(
+			skillId, Subskill.attackType, Subskill.tblName)
+		local isTheLastOne = i == defenderCount
+		if effectType >= AttackEffectType.Direct
+			and effectType <= AttackEffectType.Parabola
+		then
+			if effectType ~= AttackEffectType.Unique
+				or (effectType == AttackEffectType.Unique and isTheLastOne)
+			then
+				local subskillData = subskillList[skillId]
+				local itemViewData = GetAttackFxItemViewData(
+					attackerId, defenderStatusData, subskillData.attackSfx)
+				table.insert(viewData, itemViewData)
+				itemViewData.shouldSendSignal = isTheLastOne or defenderCount == 1
+			end
+		end
+	end
+	return viewData	
+end
+
+CacheHeroFinalStatus = function(statusData)
+	local uid = statusData.uid
+	local heroData = cachedHeroList[uid]
+	local curAnimAndMat = heroData.dynamicData.curAnimAndMat
+	local finalData = {}
+	finalData.actorId = uid
+	finalData.underControl = heroData.IsUnderControl()
+	finalData.playType = curAnimAndMat.playType
+	finalData.animationName = GetCtrlAnimationName(finalData.playType)
+	finalData.animationLoop = true
+	finalData.materialName = curAnimAndMat.materialName
+
+	statusData.finalData = finalData
+end
+
+local function RemoveSpecialViewData(newStates, specialEffectType)
+	if not newStates then
+		return nil
+	end
+	for k, stateData in pairs(newStates) do
+		local stateEffects = stateData.stateEffects
+		for j, effect in pairs(stateEffects) do
+			if effect.effectType == utils.HeroStateEffectType.Special 
+				and effect.effectData.specialEffectType == specialEffectType
+			then
+				table.remove(newStates, k)
+				return stateData
+			end
+		end
+	end
+end
+
+local function FormatRevivedData(statusData)
+	local revived = statusData.baseData.revived
+	if not revived then return end
+
+	local hitViewData = statusData.baseViewData
+	local revivedViewData = table.copy(hitViewData)
+	revivedViewData.angerChanged = false
+	revivedViewData.beHurted = false
+	statusData.revivedBaseData = revivedViewData
+
+	hitViewData.hpRatio = 0
+	hitViewData.bloodSliderValue = 0
+	hitViewData.defSliderValue = 0
+
+	local statesViewData = statusData.statesViewData
+	local dataBeforeRevive = {
+		actorId = statesViewData.actorId,
+		newStates = {},
+	}
+	local swapPosStateData = RemoveSpecialViewData(
+		statesViewData.newStates, utils.StateSpecialEffectType.SwapPos)
+	table.insert(dataBeforeRevive.newStates, swapPosStateData)
+	statusData.revivedStatesData = statesViewData
+	statusData.statesViewData = next(dataBeforeRevive.newStates) and dataBeforeRevive or nil
+end
+
+FormatAttackData = function(data)
+	local formatedData = {}
+	local defenderDataList = {}
+	local defenderStatusList = {}
+	local otherStatusList = {}
+	local statusData, uid
+	local IsAttacker = function(attackType)
+		return attackType == AttackType.Normal
+			or attackType == AttackType.Skill
+	end
+
+	local allStatusData = {}
+	for k, status in pairs(data) do
+		statusData = FormatStatusData(status)
+		FormatRevivedData(statusData)
+		local uid = statusData.uid
+		local animData = statusData.animData
+		local heroData = cachedHeroList[uid]
+		if IsAttacker(status.attackType) then
+			formatedData.attackerStatus = statusData
+			formatedData.attackerData = heroData
+		else
+			if status.defendSkillId > 0 then
+				defenderDataList[uid] = heroData
+				table.insert(defenderStatusList, statusData)
+			else
+				table.insert(otherStatusList, statusData)
+			end
+		end
+		table.insert(allStatusData, statusData)
+	end
+
+	--If other hero's hurted by DefendType.CopyHurt,Cache hurt source
+	local firstDefenderId = defenderStatusList[1].uid
+	for k, statusData in pairs(otherStatusList) do
+		local defendData = statusData.animData.defendData
+		if defendData 
+			and defendData.defendType == DefendType.CopyHurt 
+		then
+			statusData.relateActorId = firstDefenderId
+		end
+	end
+
+	--Cache hero final status(be controled,animation name, material name,etc...)
+	for i, statusData in ipairs(allStatusData) do		
+		CacheHeroFinalStatus(statusData)
+	end
+
+	formatedData.defenderDataList = defenderDataList
+	formatedData.defenderStatusList = defenderStatusList
+	formatedData.otherStatusList = otherStatusList
+
+	local skillId = formatedData.attackerStatus.animData.attackData.attackSkillId
+	local attackRangeType = GetPropToInt(
+		skillId, SkillBase.attackType, SkillBase.actorTbl)
+	formatedData.attackSkillId = skillId
+	formatedData.attackRangeType = attackRangeType
+	return formatedData
+end
+
+PlayHitAnimation = function(actorId)
+	local viewData = {}
+	viewData.actorId = actorId
+	viewData.animName = SpineAnimState.hurtAnim
+	viewData.nextAnimName = SpineAnimState.idleAnim
+	SendNotification("PlayHitAnimation", viewData)
+end
+
+ShowHitEffect = function(actorId, hurtSfxData)
+	local viewData = GetHittingEffectViewData(actorId, hurtSfxData, true)
+	viewData.soundEventName = ViewEvents.HitFxSoundEvent
+	viewData.finishedEventName = ViewEvents.HitFxFinished
+	SendNotification("ShowHitEffect", viewData)
+end
+
+GetHittingEffectViewData = function(actorId, effectData, effectReversed)
+	local viewData = {}
+	viewData.actorId = actorId
+	viewData.effectName = effectData.name
+	viewData.boneName = effectData.boneName
+	viewData.shouldReverse = effectReversed
+	viewData.soundCamp = SoundCamp.enemy
+	viewData.soundName = effectData.soundName
+	return viewData
+end
+
+ShowHurtCopyEffect = function(statusData)
+	local sfxData = {
+		name = cachedSceneData.copyHurtSfxData.name,
+		boneName = SpineBone.attackPos,
+	}
+	local viewData = GetAttackFxItemViewData(
+		statusData.relateActorId, statusData, sfxData
+	)
+
+	SendNotification("ShowHurtCopyEffect", viewData)
+end
+
+function DoOnExit()
+	utils = nil
+	battleMgr = nil
+	cachedHeroList = nil
+	cachedSceneData = nil
+	ViewEvents  = nil
+	BattleStates  = nil
+	RoundStates = nil
+	ActionStates = nil
+	MoveStates = nil
+	HitAttackerFlowStates = nil
+	HitDefenderFlowStates = nil
+	HitAttackFxFlowStates = nil
+	PreStateFlowStates = nil
+	HitOtherHeroFlowStates = nil
+	DefendType = nil
+	HeroStateUpdateType = nil
+	SpineAnimState = nil
+	SpineBone = nil
+	SpineEvents = nil
+	UpdatedDataType = nil
+	AttackRangeType = nil
+	AttackEffectType = nil
+	SoundCamp = nil
+	AttackType = nil
+	TimeScaleConfig = nil
+	ShakeConfig = nil
+end

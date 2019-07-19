@@ -1,0 +1,130 @@
+local timeTxt
+local rewardGrid
+
+local inited=false
+
+local TICKER_NAME = "ticker_FriendRewardView"
+
+function DoInit()
+    self.Anim = 1
+    self.Shadow = 1
+end
+
+function IsSetAnchor()
+    return true
+end
+
+function OnMaskClick(sender)
+    DoClose()
+end
+
+function OnCloseBtnClick(sender)
+    DoClose()
+end
+
+function DoClose()
+	--self:Active("FriendGenView")
+	--self:Active("FriendBossView")
+    self:HideView("FriendRewardView")
+end
+
+function InitUI()
+    timeTxt = self:GetComponentAtPath("other/numberTxt" ,CLS_TEXT) --self.transform:Find("other/numberTxt"):GetComponent(CLS_TEXT)
+    rewardGrid = self:GetComponentAtPath("other/equipSV/ScrollRect/Viewport/Grid" ,CLS_UI_ITEM_GRID) --self.transform:Find("other/equipSV/ScrollRect/Viewport/Grid"):GetComponent(CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+    if not inited then
+        InitUI()
+        inited=true
+    end
+    self:SendCommand("InitFriendReward")
+end
+
+function OnNotification_InitFriendReward(objs)
+    local data=objs[0]
+	if (data.seasonEndTime > CsBridge.timeManager.ServerTime) then
+        Timer:AddTicker(TICKER_NAME,data.seasonEndTime,function (target)
+            if self == nil or self.Module == nil then
+                return
+            end
+            timeTxt:SetText(CheckTimeRemain(target,false))
+        end,function ()
+            self:SendCommand("ReInitFriendReward")
+        end,nil)
+	else
+	    timeTxt:SetText("-")
+	end
+    rewardGrid:RefreshItemSlots(data.ranks, self.gameObject, "FriendRewardItemSlot")
+end
+
+function OnFriendRewardItemSlotBindValue(slot,data)
+    local rankTxt = slot:GetComponentAtPath("numberTxt" ,CLS_TEXT)
+    local icon = slot:GetGameObjectAtPath("icon")
+    local iconBackground = slot:GetComponentAtPath("icon/bgImg" ,CLS_IMAGE)
+    local iconTxt = slot:GetComponentAtPath("icon/number01Txt" ,CLS_TEXT)
+    local item01 = slot:GetGameObjectAtPath("items/ItemBase01")
+    local item02 = slot:GetGameObjectAtPath("items/ItemBase02")
+    local item03 = slot:GetGameObjectAtPath("items/ItemBase03")
+    if data.max <= 3 then
+        icon:SetSelfActive(true)
+        rankTxt.gameObject:SetSelfActive(false)
+        CsBridge.IconData.SetIconByName(iconBackground.gameObject, "new_com_paiming"..data.max)
+        iconTxt.text=tostring(data.max)
+    else
+        icon:SetSelfActive(false)
+        rankTxt.gameObject:SetSelfActive(true)
+        if data.max > 100000 then
+            rankTxt.text=tostring(data.min).."+"
+        else
+            rankTxt.text=tostring(data.min).."-"..tostring(data.max)
+        end
+    end
+    for i = 1,#data.rewards do
+        if i == 1 then
+            item01:SetSelfActive(true)
+            BindItemBaseValue(item01.transform,data.rewards[1])
+        elseif i == 2 then
+            item02:SetSelfActive(true)
+            BindItemBaseValue(item02.transform,data.rewards[2])
+        elseif i == 3 then
+            item03:SetSelfActive(true)
+            BindItemBaseValue(item03.transform,data.rewards[3])
+        end
+    end
+    if #data.rewards == 1 then
+        item02:SetSelfActive(false)
+        item03:SetSelfActive(false)
+    elseif #data.rewards == 2 then
+        item03:SetSelfActive(false)
+    end
+end
+
+function OnGridItemBase01Click(obj)
+    local data=obj.m_data
+    ShowRewardTip(self,data.rewards[1])    
+end
+
+function OnGridItemBase02Click(obj)
+    local data=obj.m_data
+    ShowRewardTip(self,data.rewards[2])
+end
+
+function OnGridItemBase03Click(obj)
+    local data=obj.m_data
+    ShowRewardTip(self,data.rewards[3])
+end
+
+function OnClose()
+    rewardGrid:ClearItems()
+    Timer:StopTicker(TICKER_NAME)
+end
+
+function DoExit()
+	self.Module=nil
+    Timer:StopTicker(TICKER_NAME)
+    timeTxt = nil
+    rewardGrid = nil
+    inited = nil
+    TICKER_NAME = nil
+end

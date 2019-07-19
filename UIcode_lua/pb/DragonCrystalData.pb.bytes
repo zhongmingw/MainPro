@@ -1,0 +1,25 @@
+
+‡
+DragonCrystalData.protoDragonCrystalDatastage.proto":
+HeroConversionRecord
+heroUid (
+	heroNewId ("4
+SummonByCrystalReq
+groupId (
+count ("9
+SummonByCrystalResp"
+rewards (2.stage.RewardItem"$
+HeroConversionReq
+heroUid ("'
+HeroConversionResp
+	heroNewId (";
+HeroConversionSaveReq
+heroUid (
+	heroNewId ("(
+HeroConversionSaveResp
+status ("=
+HeroConversionCancelReq
+heroUid (
+	heroNewId ("*
+HeroConversionCancelResp
+status (

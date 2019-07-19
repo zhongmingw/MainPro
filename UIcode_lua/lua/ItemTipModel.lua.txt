@@ -1,0 +1,295 @@
+require "PetUtils"
+require "JewelUtils"
+local itemOperateUtils = require "ItemOperateUtils"
+
+local reward = {}
+local itemId 
+local itemTable
+local curItemBaseData
+local itemCount 
+local equipMode --1 wear 2 exchange
+local relicMode
+local dirtyFun
+local closeFun
+local jumpFun
+
+function DoInit()
+
+end
+
+function InitProperties()
+
+end
+
+function DoEnable()
+
+end
+
+function OnCommand_InitData(objs)
+    reward=objs[0]
+    itemId=reward.id
+    if reward.typeId == ItemTypeEnum.Item then
+        local infos=ResTblContainer:GetRowFromTbl(ItemBase.actorTbl,tostring(itemId),ItemBase.type,ItemBase.quality,ItemBase.title,ItemBase.summary,ItemBase.sellable,ItemBase.systemId)
+        curItemBaseData = {}
+        curItemBaseData.id=tonumber(itemId)
+        curItemBaseData.type=tonumber(infos[0])
+        curItemBaseData.quality=tonumber(infos[1])
+        curItemBaseData.title=infos[2]
+        curItemBaseData.summary=infos[3]
+        curItemBaseData.sellable=tonumber(infos[4])
+        curItemBaseData.typeId=2
+        curItemBaseData.heroUid=reward.heroUid
+        curItemBaseData.systemId = tonumber(infos[5])
+        curItemBaseData.curHero = reward.curHero
+    elseif reward.typeId == ItemTypeEnum.Resource then
+        local infos=ResTblContainer:GetRowFromTbl(Resource.ResourceTbl,tostring(itemId),Resource.name)
+        curItemBaseData = {}
+        curItemBaseData.id=tonumber(itemId)
+        curItemBaseData.title=infos[0]
+        curItemBaseData.typeId=1
+    elseif reward.typeId == 0 then --符文
+        curItemBaseData = {}
+        curItemBaseData.id=itemId
+        curItemBaseData.typeId=reward.typeId
+        curItemBaseData.title=ResTblContainer:GetPropToStr(itemId,Rune.name,Rune.tblName)
+        curItemBaseData.summary=Language:getStr("RuneSummary")
+        curItemBaseData.hasMaxLevel=reward.hasMaxLevel
+        curItemBaseData.attrs=reward.attrs
+    elseif reward.typeId == ItemTypeEnum.Relic then --神器
+        curItemBaseData = {}
+        curItemBaseData.id=itemId
+        curItemBaseData.level=reward.level or 1
+        curItemBaseData.quality=reward.quality
+        curItemBaseData.typeId=reward.typeId
+        curItemBaseData.title=ResTblContainer:GetPropToStr(itemId,Relic.name,Relic.tblName)
+        curItemBaseData.summary=Language:getStr("RelicSummary")
+        curItemBaseData.hasMaxLevel=reward.hasMaxLevel
+        curItemBaseData.curHero = reward.curHero
+        curItemBaseData.attrs = GetRelicAttrs(curItemBaseData.id,curItemBaseData.level)
+        if reward.curHero and curItemBaseData.attrs.activateAttrs ~= nil then
+            curItemBaseData.triggerActivateProp = CheckOtherActivate(curItemBaseData.attrs.activateAttrs.cond,reward.curHero)
+        elseif reward.owner ~= nil and reward.owner ~=0 and curItemBaseData.attrs.activateAttrs ~= nil then
+            curItemBaseData.triggerActivateProp = CheckRelicActivate(curItemBaseData.attrs.activateAttrs.cond,reward.owner)
+        end
+    elseif reward.typeId == ItemTypeEnum.IconFrame then --炫彩头像
+        local infos=ResTblContainer:GetRowFromTbl(AvatarBox.tblName,tostring(itemId),AvatarBox.name,AvatarBox.icon,AvatarBox.iconSpine,AvatarBox.product)
+        curItemBaseData = {}
+        curItemBaseData.id=itemId
+        curItemBaseData.typeId=reward.typeId
+        curItemBaseData.summary=Language:getStr("HeadBoxSummary")
+        curItemBaseData.title=infos[0]
+        curItemBaseData.icon=infos[1]
+        curItemBaseData.iconSpine=infos[2]
+        curItemBaseData.product=infos[3]
+    elseif reward.typeId == ItemTypeEnum.Jewel then
+        curItemBaseData = {}
+        curItemBaseData.owner = reward.owner
+        curItemBaseData.id = itemId
+        curItemBaseData.typeId = reward.typeId
+        curItemBaseData.curHero = reward.curHero
+        curItemBaseData.summary = Language:getStr("JewelSummary")
+        local tbl = ResTblContainer:GetTable(Jewel.tblName)
+        curItemBaseData.tag = reward.type or tbl:GetInt(curItemBaseData.id, Jewel.type)
+        curItemBaseData.title = reward.name or tbl:Get(curItemBaseData.id, Jewel.name)
+        curItemBaseData.quality = reward.quality or tbl:GetInt(curItemBaseData.id, Jewel.quality)
+        curItemBaseData.effects = reward.effects or JewelUtils.GetJewelEffectsById(reward.id)
+    end
+end
+
+function OnCommand_InitExtraData(objs)
+    itemCount = objs[0]
+    dirtyFun = objs[1]
+    if objs.Length == 3 then
+        closeFun = objs[2] 
+    end
+end
+
+function OnCommand_InitJumpData(objs)
+    jumpFun = objs[0]
+end 
+
+--todo:wear exchange none compare
+function OnCommand_InitEquipData(objs)
+    equipMode = objs[0]
+    dirtyFun = objs[1]
+    if objs.Length == 3 then
+        closeFun = objs[2] 
+    end
+end
+
+function OnCommand_InitItemData(objs)
+    self:SendNotification("InitItemData")
+end
+
+function OnCommand_ItemBaseInfo(objs)
+    self:SendNotification("ItemBaseInfo",curItemBaseData)
+end
+
+function OnCommand_ItemDespInfo(objs)
+    local desp = ""
+    if reward.typeId == 2 then
+        desp = ResTblContainer:GetPropToStr(itemId,ItemBase.desp,ItemBase.actorTbl)
+    elseif reward.typeId == 1 then      
+        desp = ResTblContainer:GetPropToStr(itemId,Resource.desp,Resource.ResourceTbl)
+    end
+    self:SendNotification("ItemDespInfo",desp)
+end
+
+function OnCommand_PropsInfo(objs)
+    if curItemBaseData.typeId == 1 or curItemBaseData.typeId == 3 then
+        return
+    end
+
+    local propInfos = {}
+    local propStr = ""
+    if curItemBaseData.typeId == 2 and curItemBaseData.type==1 then
+        propStr = ResTblContainer:GetPropToStr(itemId,Equipment.propStr,Equipment.actorTbl)
+        GetProp(propStr,propInfos)
+        self:SendNotification("PropsInfo",propInfos)
+    elseif curItemBaseData.typeId == 0 then --符文
+        self:SendNotification("PropsInfo",curItemBaseData.attrs)
+    elseif curItemBaseData.typeId == 4 then --神器
+        self:SendNotification("PropsInfo",curItemBaseData.attrs.baseAttrs)
+    elseif curItemBaseData.typeId == ItemTypeEnum.Jewel then
+        local heroInfo = nil
+        if curItemBaseData.curHero then
+            heroInfo = curItemBaseData.curHero
+        elseif curItemBaseData.owner and curItemBaseData.owner ~= 0 then
+            heroInfo = appData:checkItem("HeroItem", curItemBaseData.owner)
+        end
+        self:SendNotification("JewelPropsInfo",curItemBaseData.effects, heroInfo)
+    end
+end
+
+function OnCommand_ItemSuitInfo(objs)
+    if curItemBaseData.typeId~=2 then
+        return
+    end
+    if curItemBaseData.type~=1 then
+        return
+    end
+    local suitId = ResTblContainer:GetPropToStr(itemId,Equipment.suitId,Equipment.actorTbl)
+    if suitId=="" then
+        return
+    end
+    local suitInfos = ResTblContainer:GetRowFromTbl(EquipmentSuits.actorTbl,suitId,EquipmentSuits.title,EquipmentSuits.fightingProps1,EquipmentSuits.fightingProps2,EquipmentSuits.fightingProps3)
+    local suitData = {}
+    suitData.suitName=suitInfos[0]
+    local heroData = curItemBaseData.curHero or appData:checkItem("HeroItem",curItemBaseData.heroUid)
+    suitData.suitNum=GetEquipSuitNum(tonumber(suitId),heroData)
+    heroUid = nil
+    suitData.suitProps={}
+    for i=1,3 do
+        GetProp(suitInfos[i],suitData.suitProps)
+    end   
+    self:SendNotification("ItemSuitInfo",suitData)
+end
+
+function OnCommand_ItemActivateInfo(objs)
+    if curItemBaseData.typeId ~= 4 then
+        return
+    end
+    if curItemBaseData.attrs.activateAttrs == nil then
+        return
+    end
+    self:SendNotification("ItemActivateInfo",curItemBaseData.attrs.activateAttrs,curItemBaseData.triggerActivateProp)
+end
+
+function OnCommand_ItemTagInfo(objs)
+    if curItemBaseData.sellable==nil then
+        return
+    end 
+    if not curItemBaseData.sellable then
+        self:SendNotification("ItemTagInfo")
+    end
+end
+
+function OnCommand_ItemBtnsInfo(objs)
+    --if curItemBaseData.sellable then
+    if equipMode ~= nil then
+        curItemBaseData.equipMode = equipMode
+    end
+    self:SendNotification("ItemBtnsInfo",curItemBaseData,itemCount)
+    --end
+end
+
+function OnCommand_EquipAction(objs)
+    local action = objs[0]
+    if action == 1 then
+        dirtyFun.wear(function()
+            equipMode = nil
+            self:SendNotification("CloseTipView")
+        end,curItemBaseData.id)
+    elseif action == 2 then
+        dirtyFun.exchange(function()
+            equipMode = nil
+            self:SendNotification("CloseTipView")
+        end)
+    elseif action == 3 then
+        dirtyFun.unWear(function()
+            equipMode = nil
+            self:SendNotification("CloseTipView")
+        end)
+    elseif action == 4 then
+        dirtyFun.upStar(function()
+            equipMode = nil
+            self:SendNotification("CloseTipView")
+        end)
+    end
+    if closeFun ~= nil then
+        closeFun = nil
+    end
+end
+
+function OnCommand_Jump(objs)
+    if jumpFun ~= nil then
+        jumpFun()
+        jumpFun = nil
+        self:SendNotification("CloseTipView")
+    end
+end
+
+function OnCommand_CloseTipView(objs)
+    equipMode = nil
+    if closeFun ~= nil then
+        closeFun()
+        --dirtyFun = nil
+        closeFun = nil
+    end
+end 
+
+function OnCommand_InitEquipLevelUp(objs)
+    if curItemBaseData.typeId == 0 then --符文
+        MsgCenter:Broadcast(Notify_OpenRuneLevelUpConversionView,1)
+    else --神器
+        MsgCenter:Broadcast(Notify_OpenRelicLevelUpView)
+    end
+end
+
+---使用按钮点击
+function OnCommand_OperateItem(objs)
+    local operateType = objs[0]
+    local dealInfo = {
+        item = {
+            id = itemId,
+            typeId = 2,
+            count = itemCount,
+            type = curItemBaseData.type,
+        }
+    }
+    itemOperateUtils.OperateItem(self.Module, dealInfo, operateType, dirtyFun)
+end
+
+function DoOnExit()
+    reward = nil
+    itemId  = nil
+    itemTable = nil
+    curItemBaseData = nil
+    itemCount  = nil
+    equipMode  = nil
+    relicMode = nil
+    dirtyFun = nil
+    closeFun = nil
+    jumpFun = nil
+    itemOperateUtils = nil
+end

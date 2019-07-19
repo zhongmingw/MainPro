@@ -1,0 +1,77 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-01-30 17:30:24
+
+local isInit = false
+
+local titleTxt
+local itemGrid
+
+function DoInit()
+    self.Shadow = 1
+    self.Anim = 8
+end
+
+function IsSetAnchor()
+    self.transform.parent:SetAsLastSibling()
+    return true
+end
+
+function InitUI() 
+    titleTxt = self:GetComponentAtPath("BGS/TitleTxt",CLS_TEXT)
+    nothingObj = self:GetGameObjectAtPath("Center/Nothing")
+    itemGrid = self:GetComponentAtPath("Center/itemSV/ScrollRect/Viewport/ItemGrid" ,CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitItemSelectData")
+end
+
+function OnClose()
+    nothingObj:SetSelfActive(false)
+    itemGrid:ClearItems()
+    titleTxt.text = ""
+end
+
+function OnNotification_RefreshItemSelectView(objs)
+    local matArr = objs[0]
+    local title = objs[1]
+    titleTxt.text = title
+    nothingObj:SetSelfActive(#matArr == 0)
+    itemGrid:RefreshItemSlots(matArr,self.gameObject,"ItemSlot")
+end
+
+function OnNotification_RefreshSingleSelectItem(objs)
+    local item = objs[0]
+    itemGrid:SingleRefreshSlot(item)
+end
+
+function OnNotification_CloseItemSelectView(objs)
+    self:HideView(self.gameObject.name)
+end
+
+function OnItemGridItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("SelectItem", data)
+end
+
+function OnConfirmBtnClick(sender)
+    self:SendCommand("ConfirmSelectItem")
+    self:HideView(self.gameObject.name)
+end
+
+function OnMaskClick(sender)
+    self:SendCommand("CancelConfirmSelectItem")
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+     isInit = nil
+     titleTxt = nil
+     itemGrid = nil
+end

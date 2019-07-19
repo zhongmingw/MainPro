@@ -1,0 +1,9 @@
+
+function OnAttrItemSlotBindValue(slot,data)
+	local txt_name=slot:GetComponentAtPath("name",CLS_TEXT)
+	local txt_num=slot:GetComponentAtPath("num",CLS_TEXT)
+
+	txt_name:SetText(tostring(data.name))
+	txt_num:SetText(tostring(data.DoNum))
+end
+

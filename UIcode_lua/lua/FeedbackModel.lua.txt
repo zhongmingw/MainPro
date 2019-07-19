@@ -1,0 +1,12 @@
+function OnCommand_SendFeedback(obj)
+    local req = {
+        content = obj[0]
+    }
+    HttpRequest("sendFeedback", "SendFeedbackReq", "SendFeedbackResp", req, OnSendFeedback)
+end
+
+function OnSendFeedback(resp)
+    if(resp.result==0) then
+        self:SendNotification("SendSuccess")  
+    end
+end

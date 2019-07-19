@@ -1,0 +1,278 @@
+local soulImprintItemSlot = require('SoulImprintItemSlot')
+
+---@type Client.Library.ToggleArchly 全部toggle
+local allTog
+---@type Client.Library.ToggleArchly 攻击toggle
+local attackTog
+---@type Client.Library.ToggleArchly 防御
+local defendTog
+---@type Client.Library.ToggleArchly 速度
+local speedTog
+---@type Client.Library.ItemSlot 中间的itemGrid
+local itemGrid
+---@type UnityEngine.Transform 分页光标
+local raceFlagObjTrans
+---@type UnityEngine.GameObject 没有任何东西的时候的提示
+local centerTipsObj
+---@type UnityEngine.TextMesh 消耗
+local costResTxt
+---@type UnityEngine.UI.Image 图片
+local costImage
+---@type UnityEngine.GameObject 自己的资源
+local costMineValueObj
+---@type UnityEngine.UI.Image 自己的资源图片
+local mineResImg
+---@type UnityEngine.TextMesh 自己的资源txt
+local mineResValueTxt
+---@type UnityEngine.Transform
+local spParentTrans
+
+---@type table 分页Toggle集合
+local raceTogArr = {}
+---@type table 界面数据
+local viewData = {}
+---@type table 自己的资源
+local selfConsume = nil
+
+---@type table 分页类型
+local SoulImprintItemType = {
+    All = 0, ---所有
+    Attack = 1, ---攻击
+    Defend = 2, ---防御
+    Speed = 3, ---速度
+}
+
+---@type number 当前所在分页
+local curRace = SoulImprintItemType.All
+
+function DoInit()
+    self.Anim = 1
+    self.Shadow = 1
+    local selfTrans = self.transform
+    allTog = self:GetComponentAtPath("ToggleGroup/AllToggle", CLS_TOGGLE_ARCHLY)
+    attackTog = self:GetComponentAtPath("ToggleGroup/AttackToggle", CLS_TOGGLE_ARCHLY)
+    defendTog = self:GetComponentAtPath("ToggleGroup/DefendToggle", CLS_TOGGLE_ARCHLY)
+    speedTog = self:GetComponentAtPath("ToggleGroup/SpeedToggle", CLS_TOGGLE_ARCHLY)
+    table.insert(raceTogArr, allTog)
+    table.insert(raceTogArr, attackTog)
+    table.insert(raceTogArr, defendTog)
+    table.insert(raceTogArr, speedTog)
+    itemGrid = self:GetComponentAtPath("Center/ScrollRect/Viewport/HeroGrid", CLS_UI_ITEM_GRID)
+    raceFlagObjTrans = selfTrans:Find("ToggleGroup/ToggleTag")
+    centerTipsObj = self:GetGameObjectAtPath("CenterTips")
+    costResTxt = self:GetComponentAtPath("Bottom/CostValue", CLS_TEXT)
+    costImage = self:GetComponentAtPath("Bottom/CostValue/CostImage", CLS_IMAGE)
+    costMineValueObj = self:GetGameObjectAtPath("CostMineValue")
+    mineResImg = self:GetComponentAtPath("CostMineValue/IconImg", CLS_IMAGE)
+    mineResValueTxt = self:GetComponentAtPath("CostMineValue/NumberTxt", CLS_TEXT)
+    spParentTrans = self:GetGameObjectAtPath("SpParent").transform
+end
+
+---重置选择分类的当前tag到当前分页上面去
+local function ReSetTogPosToTarget()
+    for i = 1, #raceTogArr do
+        if i == curRace + 1 then
+            raceTogArr[i].isOn = true
+        else
+            raceTogArr[i].isOn = false
+        end
+    end
+    local targetX = raceTogArr[curRace + 1].transform.localPosition.x
+    local t1 = CsBridge.TweenUtils.MoveTo(raceFlagObjTrans, targetX, raceFlagObjTrans.localPosition.y, 0, nil)
+    t1:DoPlay()
+end
+
+---切换分页
+local function ScreenSoulItem(race)
+    if not raceTogArr[race + 1].isOn then
+        local offset = 10
+        if curRace > race then
+            offset = -offset
+        end
+        curRace = race
+        raceTogArr[curRace + 1].isOn = true
+        local targetX = raceTogArr[curRace + 1].transform.localPosition.x
+        local t1 = CsBridge.TweenUtils.MoveTo(raceFlagObjTrans, targetX + offset, raceFlagObjTrans.localPosition.y, 0.15, function()
+            local t2 = CsBridge.TweenUtils.MoveTo(raceFlagObjTrans, targetX, raceFlagObjTrans.localPosition.y, 0.05)
+            t2:DoPlay()
+        end)
+        t1:DoPlay()
+        self:SendCommand("ScreenSoulImprintItem", curRace)
+    end
+end
+
+---刷新界面
+local function RefreshView()
+    if viewData == nil or #viewData <= 0 then
+        centerTipsObj.gameObject:SetActive(true)
+    else
+        centerTipsObj.gameObject:SetActive(false)
+    end
+    itemGrid:RefreshItemSlots(viewData, self.gameObject, "SoulImprintItemSlot")
+end
+
+function SetParamDataList(objs)
+    if objs then
+        curRace = objs[0]
+        ReSetTogPosToTarget()
+    end
+end
+
+function OnAnimationFinished()
+    self:SendCommand("InitSoulImprintItem", curRace)
+    self:SendCommand("InitDesSoulImprintCost")
+    ReSetTogPosToTarget()
+end
+
+function Active()
+    local playerInfo = appData:checkData("PlayerInfo")
+    curRace = CsBridge.prefHelper:checkInt("SoulImprintItemRace" .. playerInfo.userId)
+    ReSetTogPosToTarget()
+    self:SendCommand("InitSoulImprintItem", curRace)
+    self:SendCommand("InitDesSoulImprintCost")
+end
+
+---初始化消耗资源,自己拥有的数量
+function OnNotification_InitDesSoulImprintCost(objs)
+    if objs then
+        selfConsume = objs[0]
+        ShowOneConsume(mineResImg, mineResValueTxt, selfConsume)
+    end
+end
+
+---初始化背包
+function OnNotification_InitSoulImprintItem(objs)
+    if objs then
+        viewData = objs[0]
+    end
+    RefreshView()
+end
+
+---刷新消耗
+function OnNotification_RefreshCostValue(objs)
+    local costName = objs[0]
+    local costValue = objs[1]
+    CsBridge.IconData.SetIconByName(costImage.gameObject, costName)
+    costResTxt.text = costValue
+end
+
+---选取了一个
+function OnNotification_SelectSoulImprintItem(objs)
+    local index = objs[0]
+    local itemData = itemGrid:GetItemDataByIndex(index)
+    if itemData then
+        itemData.data.IsSelected = true
+        itemData.IsSelected = true
+    end
+end
+
+---反选了一个
+function OnNotification_CancelSelectSoulImprintItem(objs)
+    local index = objs[0]
+    local itemData = itemGrid:GetItemDataByIndex(index)
+    if itemData then
+        itemData.data.IsSelected = false
+        itemData.IsSelected = false
+    end
+end
+
+---卸载了一个纹章
+function OnNotification_UnWearSoulImprintItem(objs)
+    local index = objs[0]
+    local itemData = itemGrid:GetItemDataByIndex(index)
+    itemData.itemSlot.m_data.emblemOwnerUid = 0
+    OnSoulImprintItemSlotBindValue(itemData.itemSlot, itemData.itemSlot.m_data)
+end
+
+---成功解封
+function OnNotification_SureToDeSoulImprintItem(objs)
+    local anima = objs[0]
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local spineGo = CsBridge.objectCache:CreateObject(anima.spineAssetName, true, spParentTrans)
+        local spine = spineGo:GetComponent(CLS_SKELETONGRAPHIC)
+        spine:PlayAnimation(anima.spineAnimName, false, nil, function()
+            local name = spineGo.name
+            if anima.callBack then
+                anima.callBack()
+            end
+            self:SendCommand("InitSoulImprintItem", curRace)
+            CS.UnityEngine.GameObject.Destroy(spineGo)
+            CsBridge.objectCache:ClearGroup(name, true)
+        end)
+    end, anima.spineAssetName)
+    self:SendCommand("InitDesSoulImprintCost")
+end
+
+---所有点击
+function OnAllToggleClick()
+    ScreenSoulItem(SoulImprintItemType.All)
+end
+
+---工具类型的点击
+function OnAttackToggleClick()
+    ScreenSoulItem(SoulImprintItemType.Attack)
+end
+
+---防御类型的点击
+function OnDefendToggleClick()
+    ScreenSoulItem(SoulImprintItemType.Defend)
+end
+
+---速度类型的点击
+function OnSpeedToggleClick()
+    ScreenSoulItem(SoulImprintItemType.Speed)
+end
+
+---item点击事件
+function OnHeroGridSoulImprintItemSlotClick(obj)
+    if obj.m_data.IsSelected then
+        self:SendCommand("CancelSelectSoulImprintItem", obj.m_data)
+    else
+        self:SendCommand("SelectSoulImprintItem", obj.m_data)
+    end
+end
+
+---确定按钮点击
+function OnSureBtnClick()
+    self:SendCommand("SureToDeSoulImprintItem")
+end
+
+---自己的资源点击
+function OnCostMineValueClick(obj)
+    self:SendCommand("ShowSelfDesImprintRes")
+end
+
+---关闭按钮点击
+function OnCloseBtnClick()
+    self:HideView(self.gameObject.name)
+end
+
+---遮罩点击
+function OnMaskClick()
+    self:HideView(self.gameObject.name)
+end
+
+function OnClose()
+    self:SendCommand("CloseDesImprintView")
+    itemGrid:RefreshItemSlots({}, self.gameObject, "SoulImprintItemSlot")
+end
+
+function DoExit()
+    allTog = nil
+    attackTog = nil
+    defendTog = nil
+    speedTog = nil
+    itemGrid = nil
+    raceFlagObjTrans = nil
+    centerTipsObj = nil
+    costResTxt = nil
+    costImage = nil
+    costMineValueObj = nil
+    mineResImg = nil
+    mineResValueTxt = nil
+    raceTogArr = nil
+    viewData = nil
+    selfConsume = nil
+    SoulImprintItemType = nil
+    curRace = nil
+end

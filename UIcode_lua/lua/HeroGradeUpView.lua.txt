@@ -1,0 +1,228 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-03-23 18:49:26
+
+ 
+local cache=CsBridge.objectCache
+local tweenUtils=CsBridge.TweenUtils
+
+local GameObjectDestroy = CsBridge.GameObject.Destroy
+
+local effectObj
+local gradeUpSpine
+
+local arrowCG
+local num2CG
+
+local bottomCG
+
+local waitSpineAnim = false
+
+local levelCGAnim
+local hpCGAnim 
+local attackCGAnim 
+local defCGAnim 
+local speedCGAnim 
+local arrowCGAnim 
+local num2CGAnim
+local bottomCGAnim
+
+local attrViewList
+
+local isInit = false
+
+local function InitAttrView(list, nameTxt, curNumTxt, nextNumTxt, cg)
+	local view = {
+		nameTxt = nameTxt,
+		curNumTxt = curNumTxt,
+		nextNumTxt = nextNumTxt,
+		cg = cg
+	}
+	table.insert(list, view)
+end
+
+function DoInit()
+	self.Shadow = 1
+end 
+
+function IsSetAnchor()
+	self.transform.parent:SetAsLastSibling()
+    return true
+end
+
+function InitUI()
+    effectObj=self:GetGameObjectAtPath("Effect")
+
+    local txt_levelName=self:GetComponentAtPath("Center/AttrList/Level/Name",CLS_TEXT)
+	local txt_levelNum1=self:GetComponentAtPath("Center/AttrList/Level/LevelNum1",CLS_TEXT)
+    local txt_levelNum2=self:GetComponentAtPath("Center/AttrList/Num2/LevelNum2",CLS_TEXT)
+    
+    local txt_hpName=self:GetComponentAtPath("Center/AttrList/Hp/Name",CLS_TEXT)
+	local txt_hpNum1=self:GetComponentAtPath("Center/AttrList/Hp/HpNum1",CLS_TEXT)
+	local txt_hpNum2=self:GetComponentAtPath("Center/AttrList/Num2/HpNum2",CLS_TEXT)
+	
+	local txt_attackName=self:GetComponentAtPath("Center/AttrList/Attack/Name",CLS_TEXT)
+	local txt_attackNum1=self:GetComponentAtPath("Center/AttrList/Attack/AttackNum1",CLS_TEXT)
+	local txt_attackNum2=self:GetComponentAtPath("Center/AttrList/Num2/AttackNum2",CLS_TEXT)
+	
+	local txt_defName=self:GetComponentAtPath("Center/AttrList/Def/Name",CLS_TEXT)
+	local txt_defNum1=self:GetComponentAtPath("Center/AttrList/Def/DefNum1",CLS_TEXT)
+	local txt_defNum2=self:GetComponentAtPath("Center/AttrList/Num2/DefNum2",CLS_TEXT)
+	
+	local txt_speedName=self:GetComponentAtPath("Center/AttrList/Speed/Name",CLS_TEXT)
+	local txt_speedNum1=self:GetComponentAtPath("Center/AttrList/Speed/SpeedNum1",CLS_TEXT)
+	local txt_speedNum2=self:GetComponentAtPath("Center/AttrList/Num2/SpeedNum2",CLS_TEXT)
+	
+	local levelCG=self:GetComponentAtPath("Center/AttrList/Level",CLS_CANVAS_GROUP)
+	local hpCG=self:GetComponentAtPath("Center/AttrList/Hp",CLS_CANVAS_GROUP)
+	local attackCG=self:GetComponentAtPath("Center/AttrList/Attack",CLS_CANVAS_GROUP)
+	local defCG=self:GetComponentAtPath("Center/AttrList/Def",CLS_CANVAS_GROUP)
+	local speedCG=self:GetComponentAtPath("Center/AttrList/Speed",CLS_CANVAS_GROUP)
+
+	attrViewList = {}
+	InitAttrView(attrViewList, txt_levelName, txt_levelNum1, txt_levelNum2, levelCG)
+	InitAttrView(attrViewList, txt_hpName, txt_hpNum1, txt_hpNum2, hpCG)
+	InitAttrView(attrViewList, txt_attackName, txt_attackNum1, txt_attackNum2, attackCG)
+	InitAttrView(attrViewList, txt_defName, txt_defNum1, txt_defNum2, defCG)
+	InitAttrView(attrViewList, txt_speedName, txt_speedNum1, txt_speedNum2, speedCG)
+
+	arrowCG=self:GetComponentAtPath("Center/AttrList/Arrow",CLS_CANVAS_GROUP)
+	num2CG=self:GetComponentAtPath("Center/AttrList/Num2",CLS_CANVAS_GROUP)
+	bottomCG=self:GetComponentAtPath("Bottom",CLS_CANVAS_GROUP)
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+	end 
+	self:SendCommand("InitGradeUpShowData")
+end 
+
+function DoExit()
+	 
+	cache = nil
+	tweenUtils = nil
+
+	GameObjectDestroy = nil
+
+	effectObj = nil
+	gradeUpSpine = nil
+
+	arrowCG = nil
+	num2CG = nil
+
+	bottomCG = nil
+
+	waitSpineAnim = nil
+
+	levelCGAnim = nil
+	hpCGAnim  = nil
+	attackCGAnim  = nil
+	defCGAnim  = nil
+	speedCGAnim  = nil
+	arrowCGAnim  = nil
+	num2CGAnim = nil
+	bottomCGAnim = nil
+
+	attrViewList = nil
+
+	isInit = nil
+end
+
+local function ShowAttr(nameTxt, curNumTxt, nextNumTxt, attr)
+	nameTxt.text = attr.name
+	curNumTxt.text = GetValueAbbreviation(attr.curValue)
+	nextNumTxt.text = GetValueAbbreviation(attr.nextValue)
+end
+
+local function ShowAttrList(attrs)
+	local targetAlpha = 1
+	local duration = 0.3
+	local delayArr = {
+		0,0.1,0.2,0.3,0.4
+	}
+	for i,attr in ipairs(attrs) do
+		local attrView = attrViewList[i]
+		ShowAttr(attrView.nameTxt,attrView.curNumTxt,attrView.nextNumTxt,attr)
+		attrView.tweener = tweenUtils.FadeTo(attrView.cg, targetAlpha, duration)
+		attrView.tweener:DoDelay(delayArr[i])
+		attrView.tweener:DoPlay()
+	end
+
+	arrowCGAnim = tweenUtils.FadeTo(arrowCG,targetAlpha,duration)
+	arrowCGAnim:DoDelay(0.8)
+	num2CGAnim = tweenUtils.FadeTo(num2CG,targetAlpha,duration)
+	num2CGAnim:DoDelay(1)
+
+	arrowCGAnim:DoPlay()
+	num2CGAnim:DoPlay()
+end
+
+local function ShowSpine()
+	waitSpineAnim = true
+	local spineName = "HeroGradeUpSpine"
+	CsBridge.CacheAssetsByModule(self.Module,function()
+		local obj = cache:CreateObject(spineName, true)
+		obj.transform:SetParent(effectObj.transform,false)
+		gradeUpSpine = obj:GetComponent(CLS_SKELETONGRAPHIC)
+		gradeUpSpine:PlayAnimation("apear",false,function()
+			waitSpineAnim = false
+			bottomCGAnim = tweenUtils.FadeTo(bottomCG,1,0.3)
+			bottomCGAnim:DoPlay(1.5)
+			bottomCGAnim:DoPlay()
+			if gradeUpSpine ~= nil then
+				gradeUpSpine:PlayAnimation("stand",true)
+			end
+		end)
+	end, spineName)
+end
+
+local function CloseTweener(t)
+	if t then
+		t:DoKill(true)
+	end
+end 
+
+local function Close()
+	if waitSpineAnim then
+		return
+	end
+	for i,v in ipairs(attrViewList) do
+		CloseTweener(v.tweener)
+	end
+	CloseTweener(arrowCGAnim)
+	CloseTweener(num2CGAnim)
+	CloseTweener(bottomCGAnim)
+	if gradeUpSpine ~= nil then
+		local name = gradeUpSpine.name
+		GameObjectDestroy(gradeUpSpine.gameObject)
+		cache:ClearGroup(name, true)
+		gradeUpSpine = nil
+	end
+	self:HideView(self.gameObject.name)
+end 
+
+function OnNotification_RefreshGradeUpShow(objs)
+	ShowSpine()
+	local attrs = objs[0]
+	ShowAttrList(attrs)
+end 
+
+function OnConfirmBtnClick(sender)
+	Close()
+end
+
+function OnMaskClick(sender)
+	Close()
+end 
+
+function OnClose() 
+	for i,v in ipairs(attrViewList) do
+		v.cg.alpha = 0
+	end
+	arrowCG.alpha = 0
+	num2CG.alpha = 0
+	bottomCG.alpha = 0
+end

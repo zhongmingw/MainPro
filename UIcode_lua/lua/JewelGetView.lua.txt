@@ -1,0 +1,75 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-02-11 15:56:42
+
+local isInit = false
+
+local jewelGetSpine
+local itemBase
+local itemObj
+local tipTxt
+local waitAnim = false
+
+function DoInit()	
+    self.Shadow = 2
+    self.Anim = 0
+end
+
+function InitUI()
+    jewelGetSpine = self:GetComponentAtPath("Center/JewelGetSpine",CLS_SKELETONGRAPHIC)
+    itemBase = self:GetComponentAtPath("Center/ItemSlot",CLS_RECTTRANSFORM)
+    itemObj = itemBase.gameObject
+    tipTxt = self:GetGameObjectAtPath("Center/TipTxt")
+end
+
+function IsSetAnchor()
+    self.transform.parent:SetAsLastSibling()
+    return true
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+end
+
+function OnClose()
+    itemObj:SetSelfActive(false)
+    tipTxt:SetSelfActive(false)
+    self:SendCommand("CloseView")
+end
+
+function OnNotification_RefreshJewelGetView(objs)
+    local jewel = objs[0]
+    local extraAnim = "extracting"
+    local bornAnim = "bron"
+    local loopAnim = "loop"
+    waitAnim = true
+    BindItemBaseValue(itemBase, jewel)
+    jewelGetSpine:PlayAnimation(extraAnim,false,function()
+        itemObj:SetSelfActive(true)
+        jewelGetSpine:PlayAnimation(bornAnim,false,function()
+            waitAnim = false
+            jewelGetSpine:PlayAnimation(loopAnim,true)
+            tipTxt:SetSelfActive(true)
+        end)
+    end)
+end
+
+function OnMaskClick(sender)
+    if not waitAnim then
+        self:HideView(self.gameObject.name)
+    end
+end
+
+function DoExit()
+    isInit = nil
+
+    jewelGetSpine = nil
+    itemBase = nil
+    itemObj = nil
+    tipTxt = nil
+    waitAnim  = nil
+end

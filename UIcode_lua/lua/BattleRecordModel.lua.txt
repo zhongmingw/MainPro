@@ -1,0 +1,163 @@
+local battleInfos = {}
+local hurtDic = {}
+local cureDic = {}
+local defendDic = {}
+local redHurtArr={}
+local blackHurtArr={}
+local redCureArr={}
+local blackCureArr={}
+local redDefendArr = {}
+local blackDefendArr = {}
+local maxHurtNum = 0
+local maxCureNum = 0
+local maxDefendNum = 0
+
+function DoInit()
+
+end
+
+local function CountHurtNumInSoldierStatusList(SoldierStatusList)
+	if SoldierStatusList~=nil then
+		for i,soldierStatus in pairs(SoldierStatusList) do
+			if soldierStatus.hurtInfoList~=nil then
+				for i,hurt in pairs(soldierStatus.hurtInfoList) do
+					if hurt.hurtType==1 or hurt.hurtType==3 or hurt.hurtType==4 then
+						if hurtDic[hurt.uid] ~=nil then
+							hurtDic[hurt.uid]=hurtDic[hurt.uid]+hurt.hurtNum
+						else
+							hurtDic[hurt.uid]=hurt.hurtNum
+						end
+						if defendDic[soldierStatus.uid] ~=nil then
+							defendDic[soldierStatus.uid] = defendDic[soldierStatus.uid]+hurt.hurtNum
+						else
+							defendDic[soldierStatus.uid] = hurt.hurtNum
+						end
+					elseif hurt.hurtType==2 then
+						if cureDic[hurt.uid] ~=nil then
+							cureDic[hurt.uid]=cureDic[hurt.uid]+hurt.hurtNum
+						else
+							cureDic[hurt.uid]=hurt.hurtNum
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
+local function InitHurtAndCureDic(battleInfo)
+	hurtDic = {}
+	cureDic = {}
+	defendDic = {}
+	CountHurtNumInSoldierStatusList(battleInfo.startBattleEffected)
+	if battleInfo.rounds~=nil then
+		for roundIndex,roundInfo in pairs(battleInfo.rounds) do
+			CountHurtNumInSoldierStatusList(roundInfo.startRoundEffected)
+			if roundInfo.actionInfos~=nil then
+				for actionIndex,actionInfo in pairs(roundInfo.actionInfos) do
+					CountHurtNumInSoldierStatusList(actionInfo.startActionEffects)
+					CountHurtNumInSoldierStatusList(actionInfo.attackActionEffects)
+					CountHurtNumInSoldierStatusList(actionInfo.endActionEffects)
+				end
+			end
+			CountHurtNumInSoldierStatusList(roundInfo.endRoundEffected)
+		end
+	end
+end
+
+local function InitHeroArr(heroList,hurtArr,cureArr,defendArr)
+    local monsterTbl=ResTblContainer:GetTable(Monster.actorTbl)
+	local heroTbl=ResTblContainer:GetTable(Hero.actorTbl)
+	local heroTab = {}
+	for k,hero in pairs(heroList) do
+		heroTab[hero.uid] = true
+		local heroData=
+		{
+			heroId=hero.isMonster == 1 and monsterTbl:GetInt(hero.templateid, Monster.actorId) or heroTbl:GetInt(hero.templateid, Hero.soldierId);
+			grade=hero.isMonster == 1 and 1 or hero.grade;
+			level=hero.level;
+			distillationStar=hero.distillationStar;
+			distillationLevel=hero.distillationLevel;
+			breakLevel = hero.breakLevel;
+		}
+		local hurtData = {}
+		hurtData.value=hurtDic[hero.uid]~=nil and hurtDic[hero.uid] or 0
+		maxHurtNum=hurtData.value>maxHurtNum and hurtData.value or maxHurtNum
+		hurtData.heroData=heroData
+		table.insert(hurtArr,hurtData)
+
+		local cureData = {}
+		cureData.value=cureDic[hero.uid]~=nil and cureDic[hero.uid] or 0
+		maxCureNum=cureData.value>maxCureNum and cureData.value or maxCureNum
+		cureData.heroData=heroData
+		table.insert(cureArr,cureData)
+
+		local defendData = {}
+		defendData.value=defendDic[hero.uid]~=nil and defendDic[hero.uid] or 0
+		maxDefendNum=defendData.value>maxDefendNum and defendData.value or maxDefendNum
+		defendData.heroData=heroData
+		table.insert(defendArr,defendData)
+	end
+end
+
+function OnCommand_OnReset(objs)
+	battleInfos = objs[0]
+	maxHurtNum = 0
+	maxCureNum = 0
+	maxDefendNum = 0
+	redHurtArr={}
+	redCureArr={}
+	blackHurtArr={}
+	blackCureArr={}
+	redDefendArr = {}
+    blackDefendArr = {}
+    for k,battleInfo in pairs(battleInfos) do
+		InitHurtAndCureDic(battleInfo)
+		InitHeroArr(battleInfo.redHeroList,redHurtArr,redCureArr,redDefendArr)
+		InitHeroArr(battleInfo.blackHeroList,blackHurtArr,blackCureArr,blackDefendArr)
+    end
+
+	self:SendNotification("OnReset",maxHurtNum,maxCureNum,maxDefendNum)
+end
+
+function OnCommand_RefreshHurtInfo()
+	local hurtArr = {}
+	local num = #redHurtArr > #blackHurtArr and #redHurtArr or #blackHurtArr
+	if num > 0 then
+		for i=1,num do
+			local data = {}
+			data.redArr = redHurtArr[i]
+			data.blackArr = blackHurtArr[i]
+			table.insert(hurtArr,data)
+		end
+	end
+	self:SendNotification("RefreshHurtInfo",hurtArr)
+end
+
+function OnCommand_RefreshCureInfo()
+	local cureArr = {}
+	local num = #redCureArr > #blackCureArr and #redCureArr or #blackCureArr
+	if num > 0 then
+		for i=1,num do
+			local data = {}
+			data.redArr = redCureArr[i]
+			data.blackArr = blackCureArr[i]
+			table.insert(cureArr,data)
+		end
+	end
+	self:SendNotification("RefreshCureInfo",cureArr)
+end
+
+function OnCommand_RefreshDefendInfo()
+	local defendArr = {}
+	local num = #redDefendArr > #blackDefendArr and #redDefendArr or #blackDefendArr
+	if num > 0 then
+		for i=1,num do
+			local data = {}
+			data.redArr = redDefendArr[i]
+			data.blackArr = blackDefendArr[i]
+			table.insert(defendArr,data)
+		end
+	end
+	self:SendNotification("RefreshDefendInfo",defendArr)
+end

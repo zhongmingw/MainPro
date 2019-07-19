@@ -1,0 +1,119 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-11-05 11:32:12
+
+require "GBGoodsItemSlot"
+
+local isInit = false
+
+local titleImgObj, countdownTxt, titleArtImg, descTxt
+local viewData
+local goodsGrid
+
+local curIndex = -1
+
+function DoInit()	
+    self.Anim = 0
+    self.Shadow = 0
+end
+
+function InitUI()
+    titleImgObj = self:GetGameObjectAtPath("BGS/bgImg")
+    countdownTxt = self:GetComponentAtPath("BGS/TimeTxt",CLS_TEXT)
+    titleArtImg = self:GetComponentAtPath("BGS/TitleArtImg",CLS_LOCALIZE)
+    descTxt = self:GetComponentAtPath("BGS/DespTxt",CLS_TEXT)
+    goodsGrid = self:GetComponentAtPath("Center/recordSV/ScrollRect/Viewport/GoodsGrid",CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+end
+
+function OnNotification_RefreshActivityView(objs)
+	if self.gameObject.activeInHierarchy then
+		viewData = objs[0]
+		RefreshView(viewData)
+    end
+    self:SendCommand("InitGBGoods")
+end
+
+function RefreshView(data)
+    descTxt.text = data.desc
+    SetServerActivityArtFontByImage(titleArtImg,data.image)
+    countdownTxt.text = data.restTime
+    CsBridge.IconData.SetRawImageByName(titleImgObj, data.image)
+    titleImgObj:SetSelfActive(true)
+end
+
+function OnNotification_RefreshGBGoods(objs)
+    local items = objs[0]
+    if curIndex ~= -1 then
+        for i,v in ipairs(items) do
+            goodsGrid:RefreshSlot(v,i-1)
+        end
+    else
+        goodsGrid:RefreshItemSlots(items,self.gameObject,"GBGoodsItemSlot")
+    end
+end
+
+function OnNotification_RefreshCountdown(objs)
+	local data = objs[0]
+	RefreshCountdown(data)
+end
+
+function RefreshCountdown(countdownData)
+	if not viewData then--not ready
+		return
+	end
+
+	local currentActivityID = viewData.id
+	for activityID, restTime in pairs(countdownData) do
+		if activityID == currentActivityID then
+			countdownTxt.text = restTime
+			return
+		end
+	end
+end
+
+function OnHelpBtnClick(sender)
+    self:SendCommand("ShowGBInfoView")
+end
+
+function OnRewardGridItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("OpenTipView",data)
+end
+
+function OnGoodsGridBuyBtnClick(obj)
+    local data = obj.m_data
+    curIndex = obj.m_index
+    self:SendCommand("GroupBuy",data)
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function OnMaskClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function OnNotification_CloseActivityView(obj)
+    curIndex = -1
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+     isInit = nil
+     titleImgObj = nil 
+     countdownTxt = nil 
+     titleArtImg = nil 
+     descTxt = nil
+     viewData = nil
+     goodsGrid = nil
+     curIndex = nil
+end

@@ -1,0 +1,130 @@
+require "JewelGainActivityItemSlot"
+
+local bannerImgObj
+local nameImgLocalize
+local timeCountTxt
+local overTipsObj
+local targetItemGrid
+local ruleTxt
+local viewData
+
+local selfView
+
+function DoInit()
+    selfView = self
+    selfView.Anim = 0
+    bannerImgObj = selfView:GetGameObjectAtPath("Banner/BannerImg")
+    nameImgLocalize = selfView:GetComponentAtPath("Banner/nameImg", CLS_LOCALIZE)
+    timeCountTxt = selfView:GetComponentAtPath("Banner/TimeCountTxt", CLS_TEXT)
+    overTipsObj = selfView:GetGameObjectAtPath("Banner/OverTxt")
+    targetItemGrid = selfView:GetComponentAtPath("TargetSV/ScrollRect/Viewport/TaskSVGrid", CLS_UI_ITEM_GRID)
+    ruleTxt = selfView:GetComponentAtPath("Rule/RuleTxt", CLS_TEXT)
+    
+end
+
+---设置下面的奖励列表
+local function SetSVGridItem(targetList)
+    if targetList then
+        targetItemGrid:RefreshItemSlots(targetList, selfView.gameObject, "JewelGainActivityItemSlot")
+    end
+end
+
+---设置活动剩余时间
+local function SetActivityRestTime()
+    if not IsNilOrEmpty(viewData.restTime) then
+        overTipsObj:SetActive(true)
+        timeCountTxt.text = viewData.restTime
+    else
+        overTipsObj:SetActive(false)
+    end
+end
+
+---刷新界面
+local function RefreshView(data)
+    if selfView.gameObject.activeInHierarchy then
+        if viewData then
+            ruleTxt.text = viewData.desc
+            CsBridge.IconData.SetRawImageByName(bannerImgObj, viewData.image)
+            if not IsNilOrEmpty(viewData.image) then
+                nameImgLocalize.gameObject:SetActive(true)
+                SetServerActivityArtFontByImage(nameImgLocalize, viewData.image)
+            else
+                nameImgLocalize.gameObject:SetActive(false)
+            end
+            SetActivityRestTime()
+            if viewData.targetList and #viewData.targetList > 0 then
+                SetSVGridItem(viewData.targetList)
+            end
+        else
+            targetItemGrid:ClearItems()
+        end
+    end
+end
+
+---刷新活动倒计时
+local function RefreshCountdown(countdownData)
+    if not viewData then
+        return
+    end
+
+    local currentActivityID = viewData.id
+    for activityID, restTime in pairs(countdownData) do
+        if activityID == currentActivityID then
+            overTipsObj:SetActive(true)
+            timeCountTxt.text = restTime
+            if restTime == "" then
+                overTipsObj:SetActive(false)
+            end
+            return
+        end
+    end
+end
+
+---获取界面数据
+function OnNotification_RefreshActivityView(objs)
+    if self.gameObject.activeInHierarchy then
+        viewData = objs[0]
+        RefreshView(viewData)
+    end
+end
+
+---刷新活动倒计时
+function OnNotification_RefreshCountdown(objs)
+    local data = objs[0]
+    RefreshCountdown(data)
+end
+
+---关闭活动界面前先隐藏自己
+function OnNotification_CloseActivityView(obj)
+    self:HideView(selfView.gameObject.name)
+end
+
+---下面任务的item点击事件
+function OnRewardGridItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("OpenTipView", data)
+end
+function OnTaskSVGridItemSlotClick(obj)
+    
+end
+
+---下面任务的收取按钮点击
+function OnTaskSVGridReceiveBtnClick(obj)
+    local data = obj.m_data
+    local activityType = viewData and viewData.activityType
+    self:SendCommand("TargetGetReward", data,activityType)
+end
+
+function OnClose()
+    targetItemGrid:ClearItems()
+end
+
+function DoExit()
+    bannerImgObj = nil
+    nameImgLocalize = nil
+    timeCountTxt = nil
+    overTipsObj = nil
+    targetItemGrid = nil
+    viewData = nil
+    selfView = nil
+end

@@ -1,0 +1,42 @@
+--[[
+	file: LeagueWinView.lua
+	author: hangang
+	description: LeagueWinView
+]]
+
+local playerBaseTrans
+local nameTxt
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 2     --shadow type
+	playerBaseTrans = self.transform:Find("Center/Winner/PlayerBase")
+    nameTxt = self:GetComponentAtPath("Center/Winner/playerNameTxt", CLS_TEXT)
+end
+
+--On animation finished event--------------------------------------------------------
+function OnAnimationFinished()
+	self:SendCommand("OnAnimationFinished")	
+end
+
+--UIController events handlers-------------------------------------------------------
+function SetData(data)
+    local viewData = data
+	BindPlayerBaseInfoValue(playerBaseTrans, viewData.playerInfo)
+    nameTxt.text = viewData.playerName
+end
+
+--On closing--------------------------------------------------------------------------
+function OnMaskClick(sender)
+	Close()
+end
+
+function Close() 
+	self:HideView("LeagueWinView")
+end
+
+
+function DoExit()
+	playerBaseTrans = nil
+	nameTxt = nil
+end

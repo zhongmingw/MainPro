@@ -1,0 +1,59 @@
+--[[
+	file: UnionSignRewardView.lua
+	author: hangang
+	description: Display union daily sign rewards
+]]
+
+local currentGrid, newGrid
+local maxLevelTipsObj
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 1     --shadow type
+	InitUI()            --cache UI items
+end 
+
+function InitUI()
+	currentGrid = self:GetComponentAtPath("Center/CurRewardsGrid" ,CLS_UI_ITEM_GRID)
+	newGrid = self:GetComponentAtPath("Center/NewRewardsGrid" ,CLS_UI_ITEM_GRID)
+	maxLevelTipsObj = self:GetGameObjectAtPath("Center/maxLevelTips")
+end
+
+function SetParamDataList(objs)
+    local viewData = objs[0]
+    RefreshView(viewData)
+end
+
+function RefreshView(viewData)
+	currentGrid:RefreshItemSlots(viewData.currentRewards,self.gameObject,"ItemSlot")
+	newGrid:RefreshItemSlots(viewData.newRewards,self.gameObject,"ItemSlot")
+	maxLevelTipsObj:SetActive(#viewData.newRewards == 0)
+end
+
+--UI event handlers-------------------------------------------------------------------
+function OnCurRewardsGridItemSlotClick(obj)
+	self:SendCommand("OpenTipView", obj.m_data)
+end
+
+function OnNewRewardsGridItemSlotClick(obj)
+	self:SendCommand("OpenTipView", obj.m_data)
+end
+
+--On closing--------------------------------------------------------------------------
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close() 
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	currentGrid = nil
+	newGrid = nil
+	maxLevelTipsObj = nil
+end

@@ -1,0 +1,20 @@
+function DoInit()
+
+end
+
+function AssetNames(objs)
+    local arr = {
+        "DailyLotteryView",
+        "ItemSlot",
+    }
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    local activityId = objs[0]
+    local view = self:OpenView("DailyLotteryView", "DailyLotteryModel")
+    view:SendCommand("InitDailyLotteryView", activityId)
+    if (onFinished ~= nil) then
+        onFinished()
+    end
+end

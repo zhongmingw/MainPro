@@ -1,0 +1,56 @@
+require "AttrItemSlot"
+local HeroAttrData = require "HeroAttrData"
+local isInit = false
+local attrGrid
+local centerObj 
+
+function DoInit()
+	self.Shadow = 1
+	self.Anim = 8
+end
+
+local function InitUI()
+	centerObj = self:GetGameObjectAtPath("Center")
+	attrGrid= self:GetComponentAtPath("Center/AttrSv/AttrScrollRect/Viewport/AttrGrid",CLS_UI_ITEM_GRID)
+	centerObj:SetSelfActive(true)
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+	end
+	self:SendCommand("InitAttrDetailData")
+end 
+
+function IsSetAnchor()
+	self.transform.parent:SetAsLastSibling()
+    return true
+end
+
+function DoExit()
+	isInit = nil
+	HeroAttrData = nil
+	attrGrid = nil
+	centerObj = nil
+end
+
+function SetParamDataList(obj)
+	local curHero=obj[0]
+	self:SendCommand("InitData",curHero)
+end
+
+function OnClose()
+	centerObj:SetSelfActive(false)
+end 
+
+function OnNotification_RefreshAttrDetailView(objs)
+	local data = objs[0]
+	centerObj:SetSelfActive(true)
+	attrGrid:RefreshItemSlots(data,self.gameObject,"AttrItemSlot")
+end
+
+function OnCloseBtnClick(sender)
+	self:HideView(self.gameObject.name)
+end
+

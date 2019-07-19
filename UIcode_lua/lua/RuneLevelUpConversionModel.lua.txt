@@ -1,0 +1,287 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-03-27 10:43:25
+local utils = require "HeroBagUtils"
+
+local RuneViewType = {
+    LevelUp = 1,
+    Conversion = 2
+}
+
+local curHero
+local runeViewType
+local runeLock = false
+local runeDataFromTbl
+
+local function UpdateHeroRuneData(hero)
+    if hero == nil then
+        return
+    end
+    local newHero = appData:checkItem("HeroItem",hero.uid)
+    hero.runeData = newHero.rune
+    hero.rune = utils.GetHeroRune(newHero.rune)
+end
+
+local function GetRuneConsume()
+    local consume = {}
+    local runeTbData = runeDataFromTbl[curHero.rune.level]
+    curHero.rune.lockCost = runeTbData.lockCost
+    curHero.rune.transformConsumption = runeTbData.transformConsumption
+    curHero.rune.upgradeConsumption = runeTbData.upgradeConsumption
+
+    if runeViewType == RuneViewType.LevelUp then
+        consume = curHero.rune.upgradeConsumption
+    else 
+        consume = curHero.rune.transformConsumption
+    end
+    return consume
+end
+
+local function GetLevelUpRune()
+    local rune = {}
+    rune.level = curHero.rune.level+1 
+    if runeDataFromTbl[rune.level] == nil then
+        return nil
+    end
+    rune.attrIds = {}
+    rune.attrs = {}
+    local runeTbData = runeDataFromTbl[rune.level]
+    local oldAttrIds = curHero.rune.attrIds
+    if runeLock then
+        for i=1, runeTbData.attributeNum do
+            if oldAttrIds[i] == nil then
+                table.insert(rune.attrs,{val="????",name=""})
+            else
+                table.insert(rune.attrIds, oldAttrIds[i])
+                table.insert(rune.attrs, runeTbData.attrs[oldAttrIds[i]])    
+            end
+        end
+    else
+        for i=1, runeTbData.attributeNum do
+            table.insert(rune.attrs,{val="????",name=""})
+        end
+    end
+    rune.name = runeDataFromTbl[rune.level].name
+    return rune
+end
+
+local function GetConversionRune(newAttrs)
+    local rune = {}
+    rune.level = curHero.rune.level
+    rune.attrs = {}
+    local runeTbData = runeDataFromTbl[rune.level]
+    if newAttrs == nil then
+        for i=1, runeTbData.attributeNum do
+            table.insert(rune.attrs,{val="????",name=""})
+        end
+    else
+        for i=1, #newAttrs do
+            table.insert(rune.attrs, runeTbData.attrs[newAttrs[i]])
+        end
+    end
+    rune.name = runeDataFromTbl[rune.level].name
+    return rune
+end
+
+local function RuneCancelConversion()
+    utils.RequestRuneConversionCancel(curHero.uid,nil)
+end
+
+local function CheckRuneConversionRecord()
+    local runeRecord = appData:checkData("RuneConversionRecord")
+    if runeRecord ~= nil and runeRecord.heroUid == curHero.uid then
+        RuneCancelConversion()
+    end
+end
+
+local function CheckConversionCost()
+    local notEnoughArr = CheckMulResEnough(curHero.rune.transformConsumption)
+    if #notEnoughArr ~= 0 then
+        local name = GetNameByResId(notEnoughArr[1])
+        utils.ShowHintBox(string.format(Language:getStr("ResNotEnough"), name))
+        return false
+    end
+    return true
+end
+
+local function CheckRuneLevelUpCost(showHint)
+    local costArr = {}
+    if runeLock then
+        for i,v in ipairs(curHero.rune.lockCost) do
+            table.insert(costArr, v)
+        end
+    end
+    for i,v in ipairs(curHero.rune.upgradeConsumption) do
+        table.insert(costArr, v)
+    end
+    local notEnoughArr = CheckMulResEnough(costArr)
+    showHint = showHint or true
+    if #notEnoughArr ~= 0 and showHint then
+        local name = GetNameByResId(notEnoughArr[1])
+        utils.ShowHintBox(string.format(Language:getStr("ResNotEnough"), name))
+        for i,v in ipairs(notEnoughArr) do
+            if v == ResourceEnum.Rune then
+                utils.CheckConditionPkg(self,GetConditionReqData(ConditionPackageType.RuneLevelUp,curHero.rune.level))
+                break
+            end
+        end
+        return false
+    end
+    return true
+end
+
+function DoInit()
+    runeDataFromTbl = utils.GetRuneDataFromTbl()
+end
+
+function InitProperties()
+end
+
+function DoOnExit()
+    utils = nil
+
+    RuneViewType = nil
+
+    curHero = nil
+    runeViewType = nil
+    runeLock = nil
+    runeDataFromTbl = nil
+end
+
+function OnCommand_InitData(objs)
+    curHero,runeViewType = objs[0],objs[1]
+end
+
+function OnCommand_InitRuneLevelUpConversionData(objs)
+    runeLock = false
+    CheckRuneConversionRecord()
+    local viewData = {
+        refreshOldRune = true,
+        oldRune = curHero.rune,
+        refreshNewRune = true,
+        newRune = GetRuneConsume(),
+        lockCost = nil
+    }
+    self:SendNotification("RefreshLevelUpConversionView",viewData)
+    local newRune = runeViewType == RuneViewType.LevelUp and GetLevelUpRune() or GetConversionRune()
+    local runeLevelUp = runeViewType == RuneViewType.LevelUp
+    self:SendNotification("RefreshNewRune",newRune,runeLevelUp)
+    local anim = false
+    local coin, runeDust, gem = GetBalance(ResourceEnum.Coin),GetBalance(ResourceEnum.Rune),GetBalance(ResourceEnum.Gem)
+    self:SendNotification("RefreshRuneTopView",runeLevelUp, anim, coin, runeDust, gem)
+end
+
+function OnCommand_RuneLevelUp(objs)
+    if utils.CheckRuneMaxLevel(curHero,runeDataFromTbl) then
+        utils.ShowHintBox(Language:getStr("RuneMaxLevel"))
+        return
+    end
+    if not CheckRuneLevelUpCost() then
+        return
+    end
+    local isLock = 0
+    if runeLock then
+        isLock = 1
+    end
+    local onFinished = function(resp)
+        if resp then
+            UpdateHeroRuneData(curHero)
+            local viewData = {
+                refreshOldRune = true,
+                oldRune = curHero.rune,
+                refreshNewRune = true,
+                newRune = GetRuneConsume(),
+                lockCost = runeLock and curHero.rune.lockCost or nil
+            }
+            self:SendNotification("RefreshLevelUpConversionView",viewData)
+            local newRune = GetLevelUpRune()
+            local runeLevelUp = runeViewType == RuneViewType.LevelUp
+            self:SendNotification("RefreshNewRune",newRune,runeLevelUp)
+            local anim = true
+            local coin, runeDust = GetBalance(ResourceEnum.Coin),GetBalance(ResourceEnum.Rune)
+            local gem = runeLock and GetBalance(ResourceEnum.Gem) or nil   
+            self:SendNotification("RefreshRuneTopView",runeLevelUp, anim, coin, runeDust, gem)
+            self:SendNotification("ShowRuneEffect")
+            MsgCenter:Broadcast(Notify_UpdateHeroSingleEquip)
+            MsgCenter:Broadcast(Notify_UpdateHeroRuneRedTip)
+            MsgCenter:Broadcast(Notify_UpdateCurHero)
+        end
+    end
+    utils.RequestRuneUpgrade(curHero.uid,isLock,onFinished)
+end
+
+function OnCommand_RuneConversion(objs)
+    if not CheckConversionCost() then
+        return 
+    end
+    local onFinished = function(resp)
+        if resp then
+            local viewData = {
+                refreshOldRune = false,
+                oldRune = nil,
+                refreshNewRune = false,
+                newRune = nil,
+                lockCost = nil
+            }
+            self:SendNotification("RefreshLevelUpConversionView",viewData)
+            local newRune = GetConversionRune(resp.attributes)
+            local runeLevelUp = runeViewType == RuneViewType.LevelUp
+            self:SendNotification("RefreshNewRune",newRune,runeLevelUp)
+            self:SendNotification("WaitConfirmConvertion")
+            local anim = true
+            local coin, runeDust = GetBalance(ResourceEnum.Coin),GetBalance(ResourceEnum.Rune)
+            self:SendNotification("RefreshRuneTopView",runeLevelUp,anim,coin,runeDust,nil)
+        end
+    end
+    utils.RequestRuneConversion(curHero.uid,onFinished)
+end
+
+function OnCommand_RuneSaveConversion(objs)
+    local onFinished = function(resp)
+        if resp.status == 0 then
+            UpdateHeroRuneData(curHero)
+            local viewData = {
+                refreshOldRune = true,
+                oldRune = curHero.rune,
+                refreshNewRune = true,
+                newRune = GetRuneConsume(),
+                lockCost = nil
+            }
+            self:SendNotification("RefreshLevelUpConversionView",viewData)
+            local newRune = GetConversionRune()
+            local runeLevelUp = runeViewType == RuneViewType.LevelUp
+            self:SendNotification("RefreshNewRune",newRune,runeLevelUp)
+            MsgCenter:Broadcast(Notify_UpdateHeroSingleEquip)
+            MsgCenter:Broadcast(Notify_UpdateCurHero)
+        end
+    end
+    utils.RequestRuneConversionSave(curHero.uid,onFinished)
+end
+
+function OnCommand_RuneCancelConversion(objs)
+    CheckRuneConversionRecord()
+end
+
+function OnCommand_RuneLock(objs)
+    if utils.CheckRuneMaxLevel(curHero,runeDataFromTbl) then
+        utils.ShowHintBox(Language:getStr("RuneMaxLevel"))
+        return
+    end
+    runeLock = objs[0]
+    local viewData = {
+        refreshOldRune = false,
+        oldRune = nil,
+        refreshNewRune = false,
+        newRune = nil,
+        lockCost = runeLock and curHero.rune.lockCost or nil
+    }
+    self:SendNotification("RefreshLevelUpConversionView",viewData)
+    local newRune = GetLevelUpRune()
+    local runeLevelUp = runeViewType == RuneViewType.LevelUp
+    self:SendNotification("RefreshNewRune",newRune,runeLevelUp)
+end
+
+function OnCommand_OnClose(objs)
+    curHero = nil
+end

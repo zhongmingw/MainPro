@@ -1,0 +1,69 @@
+--[[
+	file: UnionRenameView.lua
+	author: hangang
+	description: View for change union name
+]]
+
+local contentInput, priceTxt, priceImg
+local viewData, confirmCbk
+
+function DoInit()
+	self.Shadow = 1
+	InitUI()
+end 
+
+function InitUI()
+	contentInput = CsBridge.GetInputFromView(self, "Center/NameInput")
+	priceTxt = self:GetComponentAtPath("Buttons/ConfirmBtn/priceTxt" ,CLS_TEXT)
+	priceImg = self:GetGameObjectAtPath("Buttons/ConfirmBtn/priceImg")
+end
+
+function SetParamDataList(objs)
+	viewData = objs[0]
+	confirmCbk = objs[1]
+	RefreshView(viewData)
+end
+
+function RefreshView(data)
+	contentInput.text = data.name
+	--priceTxt.text = data.priceText
+	ShowOneConsume(priceImg,priceTxt,viewData.consume)
+	SetFontColor(priceTxt, viewData.priceColor)
+end
+
+function OnConfirmBtnClick(sender)
+	if IsEmptyInput() then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("EmptyUnionName"))
+	else
+		confirmCbk(contentInput.text)
+	end
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function IsEmptyInput()
+	local newName = contentInput.text
+	return newName == nil or newName == "" 
+end
+
+function OnNotification_CloseUnionView(obj)
+	Close()
+end
+
+function OnNotification_UpdateSettingsFinished(obj)
+	Close()
+end
+
+function Close()
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	contentInput = nil
+	priceTxt = nil
+	priceImg = nil
+	viewData = nil
+	confirmCbk = nil
+end

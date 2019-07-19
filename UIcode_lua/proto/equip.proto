@@ -1,0 +1,59 @@
+package equip;
+
+message PutOnEquipReq 
+{
+	required int32 equipId = 1;
+	required int32 heroId = 2;
+}
+message PutOnEquipResp 
+{
+	required int32 status = 1;
+}
+
+message TakeOffEquipReq 
+{
+	required int32 type = 1;
+	required int32 heroId = 2;
+}
+message TakeOffEquipResp 
+{
+	required int32 status = 1;
+}
+
+message TakeOffAllEquipReq 
+{
+	required int32 heroId = 1;
+}
+message TakeOffAllEquipResp 
+{
+	required int32 status = 1;
+}
+
+message PutOnAllEquipReq 
+{
+	required int32 heroId = 1;
+}
+message PutOnAllEquipResp 
+{
+	required int32 status = 1;
+}
+
+message HeroLevelUpReq 
+{
+	required int32 uid = 1;
+}
+message HeroLevelUpResp 
+{
+	required int32 status = 1;
+}
+
+message HeroGradeUpReq
+{
+	required int32 uid = 1;
+}
+message HeroGradeUpResp 
+{
+	required int32 status = 1;
+}
+
+

@@ -1,0 +1,99 @@
+--[[
+	file: SummonGiftActivityView.lua
+	author: hangang
+	description:������ʾ"�ٻ����"��ʱ�
+		viewData��ʽ�μ�ServerActivityModel.GetActivityBaseViewData,ServerActivityModel.GetActivityItemsViewData
+]]
+
+require "SummonGiftActivityItemSlot"
+require "IconData"
+require "TipHelper"
+
+local titleImgObj, titleTxt, countdownTxt, descTxt
+local itemsGrid
+local titleArtTxt
+local viewData
+
+function DoInit()
+	self.Shadow = CS.Client.Library.ShadowType.None
+	InitUI()
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	local path = "Center/Title/titleImg"
+	titleImgObj = self:GetGameObjectAtPath(path)
+
+	path = "Center/Title/countdownTxt"
+	countdownTxt = self:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Center/Title/titleTxt"
+	titleTxt = self:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Center/Description/descTxt"
+	descTxt = self:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Center/giftSV/ScrollRect/Viewport/Grid"
+	itemsGrid = self:GetComponentAtPath(path ,CLS_UI_ITEM_GRID)
+	titleArtTxt = self:GetComponentAtPath("Center/Title/TitleArtImg",CLS_LOCALIZE)
+end
+
+function OnNotification_RefreshActivityView(objs)
+	if self.gameObject.activeInHierarchy then
+		viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function RefreshView(data)
+	if data.title and data.title~="" then
+		titleTxt.text = data.title
+	else
+		SetServerActivityArtFontByImage(titleArtTxt,data.image)
+	end
+	countdownTxt.text = data.restTime
+	descTxt.text = data.desc
+	CsBridge.IconData.SetRawImageByName(titleImgObj, data.image)
+	itemsGrid:RefreshItemSlots(data.itemList, self.gameObject, "SummonGiftActivityItemSlot")
+end
+
+function OnNotification_RefreshCountdown(objs)
+	local data = objs[0]
+	RefreshCountdown(data)
+end
+
+function RefreshCountdown(countdownData)
+	if not viewData then--not ready
+		return
+	end
+
+	local currentActivityID = viewData.id
+	for activityID, restTime in pairs(countdownData) do
+		if activityID == currentActivityID then
+			countdownTxt.text = restTime
+			return
+		end
+	end
+end
+
+function OnGridHeroItemSlotClick(obj)
+	self:SendCommand("OpenTipView",{id=obj.m_data.heroId,typeId=ItemTypeEnum.Hero})
+end 
+
+function OnRewardGridItemSlotClick(obj)
+	self:SendCommand("OpenTipView",obj.m_data)
+end 
+
+function OnNotification_CloseActivityView(obj)
+	self:HideView("SummonGiftActivityView")
+end
+
+function DoExit()
+	titleImgObj = nil
+	titleTxt = nil
+	countdownTxt = nil
+	descTxt = nil
+	itemsGrid = nil
+	titleArtTxt = nil
+	viewData = nil
+end

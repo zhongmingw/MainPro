@@ -1,0 +1,68 @@
+
+function OnAutoTaskItemSlotBindValue(slot,data)
+	local taskName_Lab=slot:GetComponentAtPath("TaskNameTxt",CLS_TEXT)
+	local time_Lab=slot:GetComponentAtPath("TimeGO/TimeTxt",CLS_TEXT)
+	local timer_Lab=slot:GetComponentAtPath("TimerGO/TimerTxt",CLS_TEXT)
+	local complete_Lab=slot:GetComponentAtPath("TimerGO/CompleteTxt",CLS_TEXT)
+	local complete_Sprite=slot:GetComponentAtPath("TaskProgressSlider/CompleteSprite",CLS_IMAGE)
+	local resumeCount_Lab=slot:GetComponentAtPath("HasteBtn/ResumeCountTxt",CLS_TEXT)
+
+	local lock_Sprite=slot:GetComponentAtPath("LockBtn/LockSprite",CLS_IMAGE)
+	local taskQuality_Sprite = slot:GetComponentAtPath("TaskQualitySprite",CLS_IMAGE)
+	local itemSlotGrid=slot:GetComponentAtPath("ItemSlotGird",CLS_UI_ITEM_GRID)
+
+
+	local starRoot = slot:GetComponentAtPath("StarRoot",CLS_RECTTRANSFORM)
+
+	local startBtnGO = slot:GetGameObjectAtPath("StartBtn")
+	local completeBtnGO = slot:GetGameObjectAtPath("CompleteBtn")
+	local hasteBtnGO = slot:GetGameObjectAtPath("HasteBtn")
+	local hasteIconImg = slot:GetGameObjectAtPath("HasteBtn/iconImg")
+	local upRewardVedioImg = slot:GetGameObjectAtPath("HasteBtn/UpRewardVedioImg")
+	local cancelGO = slot:GetGameObjectAtPath("CancelBtn")
+
+	local timeGO = slot:GetGameObjectAtPath("TimeGO")
+	local timerGO = slot:GetGameObjectAtPath("TimerGO")
+
+	local taskProgress_Slider = slot:GetComponentAtPath("TaskProgressSlider",CLS_SLIDER)
+	taskName_Lab.text=data.taskName
+	ShowAutoTaskQuality(data.taskQuality,starRoot)
+	startBtnGO:SetSelfActive(data.endTime==0)
+	completeBtnGO:SetSelfActive(false)
+	hasteBtnGO:SetSelfActive(data.endTime~=0)
+	hasteIconImg:SetSelfActive(not data.showUpRewardVedio)
+	resumeCount_Lab.gameObject:SetSelfActive(not data.showUpRewardVedio)
+	upRewardVedioImg:SetSelfActive(data.showUpRewardVedio)
+	cancelGO:SetSelfActive(data.endTime~=0)
+	timeGO:SetSelfActive(data.endTime==0)
+	timerGO:SetSelfActive(data.endTime~=0)
+	complete_Sprite.gameObject:SetSelfActive(false)
+	local icon = ResTblContainer:GetPropToStr(data.taskQuality,AutoTaskQuality.icon,AutoTaskQuality.tblName)
+	CsBridge.IconData.SetIconByName(taskQuality_Sprite.gameObject,icon)
+	if data.endTime==0 then
+		taskProgress_Slider:SetSliderValue(0)
+    	time_Lab:SetText(CsBridge.timeManager:checkTimeShow(data.taskTime*1000))
+	elseif data.timeOver then
+		taskProgress_Slider:SetSliderValue(1)
+		timer_Lab.gameObject:SetSelfActive(false)
+		complete_Lab.gameObject:SetSelfActive(true)
+		complete_Sprite.gameObject:SetSelfActive(true)
+		hasteBtnGO:SetSelfActive(false)
+		cancelGO:SetSelfActive(false)
+		completeBtnGO:SetSelfActive(true)
+	else
+		timer_Lab.gameObject:SetSelfActive(true)
+		complete_Lab.gameObject:SetSelfActive(false)
+		complete_Sprite.gameObject:SetSelfActive(false)
+		timer_Lab.text = CheckTimeRemain(data.endTime, false)
+		taskProgress_Slider:SetSliderValue(1-(data.endTime-CsBridge.timeManager.ServerTime)/(data.taskTime*1000))
+		resumeCount_Lab:SetText(tostring(GetTaskHasteResume(data.endTime-CsBridge.timeManager.ServerTime)))
+	end
+
+	if data.locked then
+		CsBridge.IconData.SetIconByName(lock_Sprite.gameObject,"new_com_suoding")
+	else
+		CsBridge.IconData.SetIconByName(lock_Sprite.gameObject,"new_com_jiesuo")
+	end
+	itemSlotGrid:RefreshItemSlots(data.rewardItems,slot.m_grid.viewBase.gameObject,"ItemSlot")
+end

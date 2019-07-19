@@ -1,0 +1,44 @@
+--[[
+	file: GeneralActivityItemSlot.lua
+	author: hangang
+	description:������ʾ�ƹݺͺ�ս�߻�������б�����
+]]
+local GRID_HEIGHT_INCLUDE_PROGRESS = -3--grid中有进度条时
+local GRID_HEIGHT_NOT_PROGRESS = -38--grid中没有进度条时
+
+function OnGeneralActivityItemSlotBindValue(slot, data)
+	local selfTrans = slot.transform
+
+	local slider = slot:GetComponentAtPath("slider" ,CLS_SLIDER)
+	slider.value = data.progress
+	slider.gameObject:SetSelfActive(not data.isProgressHide)
+	local progressTxt = slot:GetComponentAtPath("slider/progressTxt" ,CLS_TEXT)
+	progressTxt.text = data.progressText
+
+	local descTxt = slot:GetComponentAtPath("nameTxt" ,CLS_TEXT)
+	descTxt.text = data.desc
+
+	local rewardGrid = selfTrans:Find("rewardGrid")
+	ShowRewards(rewardGrid, data.rewards)
+	if data.isProgressHide then
+		CsBridge.UnityHelper.SetAnchoredPosition(rewardGrid.gameObject,0,GRID_HEIGHT_NOT_PROGRESS)
+	else
+		CsBridge.UnityHelper.SetAnchoredPosition(rewardGrid.gameObject,0,GRID_HEIGHT_INCLUDE_PROGRESS)
+	end
+
+	local getObj = selfTrans:GetGameObjectAtPath("Get")
+	getObj:SetSelfActive(data.finished)
+end
+
+function ShowRewards(rewardGrid, rewards)	
+	local rewardCount = #rewards
+	for i = 0, rewardGrid.childCount - 1 do
+		local itemTrans = rewardGrid:GetChild(i)
+		if i < rewardCount then
+			itemTrans.gameObject:SetActive(true)
+			BindItemBaseValue(itemTrans, rewards[i+1])
+		else
+			itemTrans.gameObject:SetActive(false)
+		end
+	end
+end

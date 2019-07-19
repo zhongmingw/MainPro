@@ -1,0 +1,10 @@
+
+
+function OnTurnTableItemSlotBindValue(slot,data)
+    local itemBaseTF = slot.transform:Find("ItemBase")
+    BindItemBaseValue(itemBaseTF,data.reward)
+    slot.gameObject:SetSelfAndChildrenGray(data.disable)
+    if data.anim then
+        data.anim = false
+    end
+end

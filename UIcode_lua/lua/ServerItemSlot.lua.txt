@@ -1,0 +1,23 @@
+function OnServerItemSlotBindValue(slot,data)
+	local slotTrans = slot.transform
+    local playerTF = slotTrans:Find("Player")
+    local serverNameTxt = slotTrans:GetComponentAtPath("ServerNameTxt" ,CLS_TEXT)
+    local switchBtnObj = slotTrans:GetGameObjectAtPath("SwitchBtn")
+    local atServerFlag = slotTrans:GetGameObjectAtPath("AtServerFlag")
+    local playerNameTxt = slotTrans:GetComponentAtPath("NameTxt" ,CLS_TEXT)
+
+    serverNameTxt:SetText(data.name)
+    if data.player ~= nil then
+        playerTF.gameObject:SetSelfActive(true)
+        BindPlayerBaseInfoValue(playerTF,data.player)
+        playerNameTxt:SetText(data.player.name)
+        atServerFlag:SetSelfActive(data.player.atServer)
+        switchBtnObj:SetSelfActive(not data.player.atServer)
+    else
+        playerTF.gameObject:SetSelfActive(false)
+        playerNameTxt:SetText("")
+        atServerFlag:SetSelfActive(false)
+        switchBtnObj:SetSelfActive(true)
+    end
+end
+

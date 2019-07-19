@@ -1,0 +1,32 @@
+import "stage.proto";
+package SevenDaysLogin;
+
+message SevenLoginActivityReq 
+{
+    required int32 acId = 1;//活动id
+}
+
+message SevenLoginActivityResp 
+{
+    repeated SevenLoginRewardInfo sevenLoginRewards = 1;//每一天的信息
+    required int32 day = 2;//当前天数
+    repeated int32 days = 3;//已经领取过的天数
+}
+//每一天的信息
+message SevenLoginRewardInfo 
+{
+    required int32 day = 1;//天数
+    repeated stage.RewardItem rewardItems = 2;//奖励
+    required string icon = 3;//图标
+    required string backgroud = 4;//背景图
+}
+
+message SevenLoginRewardReq 
+{
+    required int32 day = 1;//指定天数
+}
+
+message SevenLoginRewardResp 
+{
+    repeated stage.RewardItem rewardItems = 1;//获得的奖励
+}

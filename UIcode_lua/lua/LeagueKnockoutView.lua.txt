@@ -1,0 +1,132 @@
+--[[
+	file: LeagueKnockoutView.lua
+	author: hangang
+	description: League knockout match list view
+]]
+
+require "KnockoutMatchItemSlot"
+
+local matchGrid
+local countdownTxt, countdownHeaderTxt, tipsTxt
+local countdownObj, seasonTipsObj
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 0     --shadow type
+	InitUI()            --cache UI items
+end 
+
+function InitUI()
+	local path = "Center/MatchSV/ScrollRect/Viewport/Grid"
+	matchGrid = self:GetComponentAtPath(path, CLS_UI_ITEM_GRID)
+
+	local viewTrans = self.transform
+	path = "Top/SeasonFinishedTips"
+	seasonTipsObj = viewTrans:GetGameObjectAtPath(path)
+
+	path = "Top/SeasonFinishedTips/tipsTxt"
+	tipsTxt = viewTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Top/Countdown"
+	countdownObj = viewTrans:GetGameObjectAtPath(path)
+
+	path = "Top/Countdown/countdownTxt"
+	countdownTxt = viewTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Top/Countdown/countdownHeaderTxt"
+	countdownHeaderTxt = viewTrans:GetComponentAtPath(path, CLS_TEXT)
+end
+
+--UIController events handlers-------------------------------------------------------
+function OnNotification_RefreshKnockoutView(objs)
+	if self.gameObject.activeInHierarchy then
+		local viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function OnNotification_RefreshAuditionView(objs)
+	if self.gameObject.activeInHierarchy then
+		local viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function RefreshView(data)
+	matchGrid:RefreshItemSlots(data.itemList.round1ItemList, self.gameObject, "KnockoutMatchItemSlot")
+	UpdateCoundown(data.countdownData)
+end
+
+function OnNotification_RefreshKnockoutViewCD(objs)
+	local viewData = objs[0]
+	local allSlots = matchGrid:GetAllItems()
+
+	for i = 0, allSlots.Length - 1 do
+		local itemSlot = allSlots[i]
+		local turnID = itemSlot.m_data.turnID
+		local roundID = itemSlot.m_data.roundID
+		for k, itemViewData in pairs(viewData.itemList) do
+			if itemViewData.turnID == turnID and itemViewData.roundID == roundID then
+				OnKnockoutMatchItemSlotBindValue(itemSlot, itemViewData)
+				break
+			end
+		end
+	end
+
+	UpdateCoundown(viewData.countdownData)
+end
+
+function OnNotification_RefreshAuditionViewCD(objs)
+	OnNotification_RefreshKnockoutViewCD(objs)
+end
+
+function UpdateCoundown(viewData)
+	countdownObj:SetActive(viewData.countdownVisible)
+	seasonTipsObj:SetActive(not viewData.countdownVisible)
+	
+	if viewData.countdownVisible then
+		countdownTxt.text = viewData.countdownText
+		countdownHeaderTxt.text = viewData.countdownHeader
+	else
+		tipsTxt.text = viewData.tipsText
+	end
+end
+
+--UI event handlers-------------------------------------------------------------------
+function OnGridPlayer01Click(obj)
+	local playerData = obj.m_data.player1Data
+	if playerData then
+		self:SendCommand("OnKnockoutViewPlayerClicked", playerData)
+	end
+end
+
+function OnGridPlayer02Click(obj)
+	local playerData = obj.m_data.player2Data
+	if playerData then
+		self:SendCommand("OnKnockoutViewPlayerClicked", playerData)
+	end
+end
+
+function OnGridSlotImgClick(obj)
+	local itemData = obj.m_data
+	self:SendCommand("OnKnockoutViewMatchItemClicked", itemData)
+end
+
+function OnTipsBtnClick(sender)
+	self:SendCommand("OpenHelpView", self.gameObject.name)
+end
+
+--On closing--------------------------------------------------------------------------
+function OnNotification_CloseLeagueView(obj)
+	self:HideView("LeagueKnockoutView")
+end
+
+function DoExit()
+
+	matchGrid = nil
+	countdownTxt = nil 
+	countdownHeaderTxt = nil 
+	tipsTxt = nil
+	countdownObj = nil 
+	seasonTipsObj = nil
+end

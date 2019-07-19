@@ -1,0 +1,14 @@
+
+function OnSortItemSlotBindValue(slot,data)
+	local txt_name
+	txt_name=slot.transform:Find("name"):GetComponent(CLS_TEXT)
+
+	local str
+	if(data.sort==1)then
+		str=Language:getStr("levelStr")
+	elseif(data.sort==2)then
+		str=Language:getStr("qualityStr")
+	end
+	txt_name.text=str
+
+end

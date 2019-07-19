@@ -1,0 +1,28 @@
+--[[
+	file: LeagueModule.lua
+	author: hangang
+	description:League context
+]]
+
+function DoInit()
+
+end
+
+function AssetNames(objs)
+	local arr={
+		"KnockoutMatchItemSlot", 
+		"LeagueMatchView",
+		"LeagueMatchDetailsView",
+		"ItemSlot",
+		"LeagueRewardItemSlot"
+	}
+	return arr
+end
+
+function OnEnter(objs,onFinished)
+	self:OpenView("LeagueMatchView", "LeagueModel")
+	if onFinished then
+		onFinished()
+	end
+end
+

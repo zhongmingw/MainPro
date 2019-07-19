@@ -1,0 +1,57 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-03-13 20:08:40
+
+local isInit = false
+
+local togGroup
+
+function DoInit()	
+    self.Shadow = 1
+end
+
+function InitUI()
+    togGroup = self:GetComponentAtPath("BGS/TogGroup",CLS_TOGGLE_GROUP_ARCHLY)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitWorldBossData")
+end
+
+function OnLinked(data)
+    self:SendCommand("InitWorldBossPageType", data)
+end
+
+function OnClose()
+    togGroup:SetAllTogglesOff()
+end
+
+function OnNotification_RefreshWorldBossView(objs)
+    local curPageType = objs[0]
+    togGroup:SetToggleOn(curPageType - 1)
+end
+
+function OnTogGroupClick(isOn, index)
+    if not isOn then
+        return
+    end
+    self:SendCommand("OpenWorldBossPage", index+1)
+end
+
+function OnCloseBtnClick(sender)
+    self:ReturnBack()
+end
+
+function OnMaskClick(sender)
+    self:ReturnBack()
+end
+
+function DoExit()
+    isInit = nil
+    togGroup = nil
+end

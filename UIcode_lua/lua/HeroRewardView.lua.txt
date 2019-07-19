@@ -1,0 +1,154 @@
+local loadedRewardItemSlot=require "RewardItemSlot"
+local loadedRewardUtils = require "RewardUtils"
+
+
+local rewardGrid
+
+local moreBtnObj
+local backBtnObj
+local confirmBtnObj
+--local typeTogsGroup
+
+local numTxt 
+
+local summonType 
+local summonCount
+
+local index = 0
+local rewardItems
+
+function DoInit()
+	rewardGrid = self.transform:Find("Dynamic/HeroRewardGrid"):GetComponent("UIItemGrid")
+	moreBtnObj = self.transform:Find("Dynamic/Bottom/MoreBtn").gameObject
+	backBtnObj = self.transform:Find("Dynamic/Bottom/BackBtn").gameObject
+	confirmBtnObj = self.transform:Find("Dynamic/Bottom/ConfirmBtn").gameObject
+
+	numTxt = moreBtnObj.transform:Find("NumTxt"):GetComponent(CLS_TEXT)
+
+end
+
+function OnOpen()
+	CsBridge.shadowManager:ShowShadow(self.transform)
+end
+
+function OnDoUnhide()
+	HeroSummonAnim()
+end
+
+function OnNotification_Received(objs)
+	rewardItems=objs[0]
+	local rewards = nil
+	--刷新下领奖界面的按钮，从抽将过来的就显示返回和再来，其他显示确认
+	if(objs.Length <= 1) then
+		RefreshBtnView(false)
+		rewards = MergeSingleRewards({id=1019,typeId=2},rewardItems)
+		summonCount = #rewards
+	else 
+		summonType = objs[1]
+		summonCount = objs[2]
+		RefreshBtnView(true)
+		rewards = rewardItems
+	end
+	rewardGrid:RefreshItemSlots(rewards,self.gameObject,"RewardItemSlot")
+	index=0
+	for i=0,rewardGrid.transform.childCount-1 do
+		rewardGrid.transform:GetChild(i).gameObject:SetActive(false)
+	end
+end
+
+function OnAnimationFinished()
+	self.interactable=false
+	HeroSummonAnim()
+end
+
+function HeroSummonAnim()
+	index=index+1
+	if	index>summonCount then
+		self.interactable=true
+		return
+	end
+	local reward_TF=rewardGrid.transform:GetChild(index-1)
+	reward_TF.gameObject:SetActive(true)
+	local endPosX = reward_TF.localPosition.x
+	local endPosY = reward_TF.localPosition.y
+	CsBridge.UnityHelper.SetAnchoredPosition(reward_TF.gameObject,0,0)
+	CsBridge.UnityHelper.SetlocalScale(reward_TF.gameObject,0,0,0)
+	CsBridge.TweenUtils.ScaleTo(reward_TF,1,1,0.1)
+	CsBridge.TweenUtils.Rotate(reward_TF,360,0.1)
+	CsBridge.TweenUtils.MoveTo(reward_TF,endPosX,endPosY,0.1,
+	function ()
+		if rewardItems[index].typeId==3 then
+			local quality = ResTblContainer:GetPropToInt(rewardItems[index].id,HeroBase.quality,HeroBase.actorTbl)
+			if quality >=5 then
+				self:ShowModule("HeroModelModule",{rewardItems[index].id},true)
+			else 
+				HeroSummonAnim(index)
+			end 
+		else
+			HeroSummonAnim(index)
+		end
+	end)
+
+end
+
+function RefreshBtnView(isLottery)
+	numTxt.text = summonCount
+	moreBtnObj:SetActive(isLottery)
+	backBtnObj:SetActive(isLottery)
+	confirmBtnObj:SetActive(not isLottery)
+end
+
+function OnMoreBtnClick(sender)
+	--TODO:再来抽将
+	Close()
+	self:SendCommand("MoreSummon", summonType, summonCount)
+end 
+
+function OnHeroRewardGridItemBtnClick(obj)
+	local item = obj.m_data
+	if item.typeId == 3 then
+		return
+	end
+	CsBridge.CacheAssetsByModule(self.Module,function()
+		local view = CsBridge.OpenView("ItemTipView", "ItemTipModel",false,true)
+		local rewardTmp={}
+		rewardTmp.id=item.id
+		rewardTmp.typeId=item.typeId
+		rewardTmp.count=1
+		view:SetParamDataList(rewardTmp,itemBaseIndex+itemDespIndex)
+		view:SendCommand("InitItemData")
+	end, "ItemTipView")
+end 
+
+function OnConfirmBtnClick(sender)
+	Close()
+end 
+
+function OnBackBtnClick(sender)
+	Close()
+end
+
+function Close()
+	CsBridge.shadowManager:CloseShadow()
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	loadedRewardItemSlot = nil
+	loadedRewardUtils = nil
+
+
+	rewardGrid = nil
+
+	moreBtnObj = nil
+	backBtnObj = nil
+	confirmBtnObj = nil
+
+	numTxt  = nil
+
+	summonType  = nil
+	summonCount = nil
+
+	index  = nil
+	rewardItems = nil
+end

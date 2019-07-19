@@ -1,0 +1,107 @@
+--[[
+	file: GroupBuyActivityUtils.lua
+	author: zhangyue
+	description: GroupBuyActivity utilities
+]]
+
+local function GroupBuy(data, currentActivityID, onFinished, model)
+	if data.remain == 0 then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("HasMaxCount"),2)
+		return
+	end
+	if not CheckItemEnough(data.price.id,data.price.typeId,data.price.count,true) then
+		return
+	end
+	CsBridge.messageManager:PopMsgBox(Language:getStr("local_confirm"),
+	Language:getStr("HeroSummonShop_Check"),
+	Language:getStr("local_cancel"),
+	nil,
+	Language:getStr("local_confirm"),
+	function()
+		local req = {
+			acId = data.acId,
+			goodId = data.goodId
+		}
+		HttpRequest("participateGroupBuy","ParticipateGroupBuyReq","GroupBuyStatusResp",req,function(resp)
+			local confirmCbk = function()
+				onFinished(currentActivityID)
+			end
+			ShowRewardReceivedTip(model,data.goods, confirmCbk)
+		end)
+	end)
+end
+
+local function InitGroupBuyInfoData(groupBuyData, model)
+	model:SendNotification("RefreshGroupBuyInfoView",groupBuyData)
+end
+
+local function InitGBDiscountData(data, activityData)
+	local discount = data.discount
+	local groupBuyData = {}
+	activityData.groupBuyData = groupBuyData
+	local disItems = SplitString(discount, ";")
+	for i=0,disItems.Length-1 do
+		local infos = SplitString(disItems[i], ",")
+		local count = tonumber(infos[0])
+		local dis = 100-tonumber(infos[1])
+		table.insert(groupBuyData,{
+			count = count,
+			dis = dis
+		})
+	end
+
+	local items = {}
+	for k,itemData in pairs(data.goods) do
+		items[itemData.config.id] = itemData
+	end
+	activityData.items = items
+end
+
+local function GetGBDiscountByCount(count, groupBuyData)
+	local dis = 0
+	for i=1,#groupBuyData do
+		if groupBuyData[i].count > count then
+			break
+		end
+		dis = groupBuyData[i].dis
+	end
+	return dis
+end
+
+local function GetGBCountArr(groupBuyData)
+	local arr = {}
+	for i=1,#groupBuyData do
+		table.insert(arr,groupBuyData[i].count)
+	end
+	return arr
+end
+
+local function GetItemViewData(activityData)
+	local allItemData = {}
+	local groupBuyData = activityData.groupBuyData
+	for id, item in pairs(activityData.items) do
+		local itemViewData = {}
+		itemViewData.acId = item.groupBuy.activityId
+		itemViewData.goodId = item.groupBuy.goodId
+		itemViewData.remain = item.remain
+		itemViewData.buyCount = item.config.count-item.remain
+		itemViewData.maxBuyCount = item.config.count
+		itemViewData.goods = item.config.goodItem
+		itemViewData.price = item.config.priceItem[1]
+		itemViewData.curCount = item.groupBuy.count
+		itemViewData.curDiscount = GetGBDiscountByCount(itemViewData.curCount, groupBuyData)
+		itemViewData.countArr = utils.GetGBCountArr(groupBuyData)
+		itemViewData.maxCount = itemViewData.countArr[#itemViewData.countArr]
+		table.insert(allItemData, itemViewData)
+	end
+	return allItemData
+end
+
+return{
+	GroupBuy = GroupBuy,
+	InitGBDiscountData = InitGBDiscountData,
+	GetGBDiscountByCount = GetGBDiscountByCount,
+	GetGBCountArr = GetGBCountArr,
+	InitGroupBuyInfoData = InitGroupBuyInfoData,
+	GetItemViewData = GetItemViewData,
+}

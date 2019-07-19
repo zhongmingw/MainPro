@@ -1,0 +1,253 @@
+--[[
+	file: HalloweenActivityUtils.lua
+	author: zhangyue
+	description: HalloweenActivity utilities
+]]
+
+local OnFormationReady, UpdateHallowmasItem, InitHalloweenData, GetHalloweenDataFromTbl
+local UpdateAllHalloween, InitAuraArr, CalcAura, DoCheckAuraNum
+
+local Hallowmas = {
+	tblName = "Hallowmas",
+	id = "id",
+	level = "level",
+	count = "count",
+	monster = "monster",
+	reward = "reward",
+	strength = "strength"
+}
+
+local function InitHalloweenActivityData(halloweenData, model)
+	UpdateHallowmasItem(halloweenData)
+	InitHalloweenData(halloweenData)
+	UpdateAllHalloween(halloweenData)
+	InitAuraArr(halloweenData)
+	model:SendNotification("RefreshHalloweenActivityView",halloweenData.allHalloween,halloweenData.hallowmasItem)
+end
+
+local function SelectHalloweenLevel(data, halloweenData, model)
+	for i,halloween in ipairs(halloweenData.allHalloween) do
+		if halloween.level == data then
+			halloweenData.curHalloween = halloween
+			break
+		end
+	end
+	if not CheckPackItemEnough(halloweenData.hallowmasItem.id, halloweenData.curHalloween.consume.count, true) then
+		return
+	end
+	CsBridge.CacheAssetsByModule(model.Module,function()
+		CsBridge.OpenView("HalloweenActivityLevelView","ServerActivityModel",true,true)
+	end,"HalloweenActivityLevelView")
+end
+
+local function UpdateHalloweenData(halloweenData, model)
+	UpdateHallowmasItem(halloweenData)
+	UpdateAllHalloween(halloweenData)
+	model:SendNotification("RefreshHalloweenActivityView",halloweenData.allHalloween,halloweenData.hallowmasItem)
+end
+
+local function InitHalloweenActivityLevelData(halloweenData, model)
+	halloweenData.curAura = CalcAura(halloweenData)
+	model:SendNotification("RefreshHalloweenActivityLevelView",halloweenData.curHalloween,halloweenData.curAura)
+end
+
+local function BuyHalloweenCount(halloweenData, model)
+	local playerHalloweenInfo = appData:checkData("PlayerHalloweenInfo")
+	local hallowmasLimit = halloweenData.hallowmasLimit
+	if playerHalloweenInfo.count >= hallowmasLimit then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("HasMaxCount"),2)
+		return
+	end
+	if not CheckResEnough(ResourceEnum.Gem, halloweenData.hallowmasPrice, true) then
+		return
+	end
+	ShowBuyView(
+		model,
+		halloweenData.hallowmasItem.typeId,
+		halloweenData.hallowmasItem.id,
+		hallowmasLimit-playerHalloweenInfo.count,
+		ResourceEnum.Gem,
+		halloweenData.hallowmasPrice,
+		function()
+			UpdateHallowmasItem(halloweenData)
+			model:SendNotification("RefreshHallowmasItem",halloweenData.hallowmasItem)
+		end)
+end
+
+local function OpenAuraView(halloweenData, model)
+	CsBridge.CacheAssetsByModule(model.Module,
+    function()
+		local view = CsBridge.OpenView("aureoleView","FormationModel",true,true)
+		view:SetParamDataList(halloweenData.auraArr, halloweenData.curAura)
+		view.transform.parent:SetAsLastSibling()
+	end, "aureoleView","aureoleItemSlot")
+end
+
+local function HalloweenFight(halloweenData, model)
+	CsBridge.CacheAssetsByModule(model.Module,function()
+        local view=CsBridge.OpenView("FormationView","FormationModel",true,true)
+        view:SetParamDataList(FormationTypeEnum.FormationType_PVP,function(formationPos)
+            OnFormationReady(formationPos, halloweenData, model)
+        end,nil)
+    end,"FormationView","HeroItemSlot")
+end
+
+OnFormationReady = function(formationPos, halloweenData, model)
+    local req = {
+		id = halloweenData.id,
+		level = halloweenData.curHalloween.level,
+        formationPos = formationPos
+    }
+    HttpBattle("halloweenChallenge","HalloweenChallengeReq",req,function(battleInfo)
+		if battleInfo then
+			model:SendNotification("CloseLevelView")
+			ShowBattleModule(battleInfo, model)
+        end
+    end)
+end
+
+UpdateHallowmasItem = function(halloweenData)
+	if halloweenData.hallowmasItem == nil then
+		halloweenData.hallowmasItem = {
+			typeId = ItemTypeEnum.Item,
+			id = ResTblContainer:GetPropToInt(UI_OPEN_TYPE_HALLOWEEN,UIOpenBase.addCountItemId,UIOpenBase.actorTbl),
+			count = 0
+		}
+	end
+	local pb = appData:checkItem("PackItem",halloweenData.hallowmasItem.id)
+	halloweenData.hallowmasItem.count = pb == nil and 0 or pb.count
+end
+
+function InitHalloweenData(halloweenData)
+	if halloweenData.halloweenDataFromTbl == nil then
+		halloweenData.halloweenDataFromTbl = GetHalloweenDataFromTbl(halloweenData)
+	end
+end
+
+GetHalloweenDataFromTbl = function(halloweenData)
+	local data = {}
+	local tbl = ResTblContainer:GetTable(Hallowmas.tblName)
+	local ids = tbl:GetCol(Hallowmas.id)
+	for i=0,ids.Length-1 do
+		local id = tonumber(ids[i])
+		local infos = tbl:GetRow(tostring(id),Hallowmas.count,Hallowmas.monster,Hallowmas.reward,Hallowmas.strength)
+		local tData = {
+			consume = {
+				typeId = halloweenData.hallowmasItem.typeId,
+				id = halloweenData.hallowmasItem.id,
+				count = tonumber(infos[0])
+			},
+			monster = GetMonsterFormationFromTbl(infos[1]),
+			reward = GetRewardFromTbl(infos[2]),
+			strength = tonumber(infos[3])
+		}
+		data[id] = tData
+	end
+	return data
+end
+
+UpdateAllHalloween = function(halloweenData)
+	halloweenData.allHalloween = {}
+	local pbs = appData:checkAllItems("PlayerHalloween")
+	for i=0,pbs.Length-1 do
+		local pb = pbs[i]
+		local tbData = halloweenData.halloweenDataFromTbl[pb.id]
+		local halloween = {
+			level = pb.level,
+			consume = tbData.consume,
+			monster = tbData.monster,
+			reward = tbData.reward,
+			strength = tbData.strength,
+		}
+		if pb.monsterInfos == nil then
+			for i,monster in ipairs(halloween.monster) do
+				monster.hp = 1
+				monster.curHp = 1
+			end
+		else
+			for i,monsterInfo in ipairs(pb.monsterInfos) do
+				local monster = halloween.monster[monsterInfo.pos]
+				monster.curHp = monsterInfo.curHp
+				monster.hp = monsterInfo.hp
+			end
+		end
+		table.insert(halloweenData.allHalloween,halloween)
+	end
+	table.sort(halloweenData.allHalloween,function(a,b)
+		return a.level < b.level
+	end)
+end
+
+InitAuraArr = function(halloweenData)
+	if halloweenData.auraArr == nil then
+		halloweenData.auraArr={}
+		for i, data in pairs(global_auraArr) do
+			local newData={}
+			newData.id=data.id
+			newData.title=data.title
+			newData.icon=data.icon
+			newData.des=data.desp
+			newData.condition=data.cond
+			newData.isOn=false
+			newData.pos=i
+			newData.condDesp=data.condDesp
+			table.insert(halloweenData.auraArr,newData)
+		end
+	end
+end
+
+CalcAura = function(halloweenData)
+    local validAura = nil
+    --光环
+	for i, data in pairs(halloweenData.auraArr) do
+	    data.isOn=false
+	end
+	for i,data in pairs(halloweenData.auraArr) do
+		local result=SplitString(data.condition,";")
+		local isAllOK=true
+		for  i = 0,result.Length-1 do
+			local str=SplitString(result[i],",")
+			local raceId=tonumber(str[0])
+			local num=tonumber(str[1])
+			local isEnough=DoCheckAuraNum(raceId, num, halloweenData)
+			if(isEnough==false)then
+				isAllOK=false
+				break
+			end
+		end
+		data.isOn=isAllOK
+		if(isAllOK==true) then
+		    validAura=data
+			break
+		end
+	end
+	return validAura
+end
+
+DoCheckAuraNum = function(raceId, num, halloweenData)
+	local isEnough=false
+	local col=0
+	local tbl=ResTblContainer:GetTable(HeroBase.actorTbl)
+	for i,data in pairs(halloweenData.curHalloween.monster) do
+		if(data.heroId~=0) then
+			local race= tbl:GetInt(data.heroId,HeroBase.group)
+			if(raceId==race) then
+				col=col+1
+			end
+		end
+	end
+	if(col>=num)then
+		isEnough=true
+	end
+	return isEnough
+end
+
+return{
+	InitHalloweenActivityData = InitHalloweenActivityData,
+	SelectHalloweenLevel = SelectHalloweenLevel,
+	UpdateHalloweenData = UpdateHalloweenData,
+	InitHalloweenActivityLevelData = InitHalloweenActivityLevelData,
+	BuyHalloweenCount = BuyHalloweenCount,
+	OpenAuraView = OpenAuraView,
+	HalloweenFight = HalloweenFight,
+}

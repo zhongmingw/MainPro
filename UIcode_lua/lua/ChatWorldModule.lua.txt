@@ -1,0 +1,20 @@
+function DoInit()
+    -- body
+    CsBridge.chatManager:init();
+end
+
+function AssetNames(objs)
+    local arr={"ChatWorldView","ChatWorldDetailsItemSlot", "ChatRecruitItemSlot"}
+    return arr
+end
+
+function OnEnter(objs,onFinished)
+    self:OpenView("ChatWorldView","ChatWorldModel")
+    if(onFinished~=nil)then
+        onFinished()
+    end
+end
+
+function OnExit()
+    CsBridge.chatManager:close();
+end

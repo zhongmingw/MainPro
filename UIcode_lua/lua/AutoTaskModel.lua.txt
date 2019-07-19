@@ -1,0 +1,753 @@
+local UpRewardVedioUtils = require "UpRewardVedioUtils"
+local ScreenUtils = require "ScreenUtils"
+
+
+local curData
+local autoTaskData
+local downHeroDic = {}
+local upHeroDicByUid={}
+local upHeroDicByPos={}
+local countDownDic={}
+local conditionsData
+local upHeroCount = 0
+
+local waitHasteAutoTask
+
+local AUTO_TASK_NORMAL_MAX_COUNT
+local AUTO_TASK_REFRESH_ITEM_ID
+local AUTO_TASK_REFRESH_DIAMOND_VAL
+local AUTO_TASK_ADD_NORMAL_ID
+local AUTO_TASK_ADD_SENIOR_ID
+
+local UpRewardVedioCD
+local UpRewardGetLimitTime
+
+local AUTO_TASK_TIMER = "AutoTaskTimer"
+
+local RefreshType = {
+    Free = 0,
+    Gem = 1,
+    Item = 2
+}
+
+function DoInit()
+    AUTO_TASK_NORMAL_MAX_COUNT=ResTblContainer:GetPropToInt(UI_OPEN_TYPE_AUTOTASK,UIOpenBase.normalMaxCount,UIOpenBase.actorTbl)
+    AUTO_TASK_REFRESH_DIAMOND_VAL=GetConstValue("autoTaskRefreshDiamond")
+	AUTO_TASK_REFRESH_ITEM_ID=GetConstValue("autoTaskRefreshItem")
+	AUTO_TASK_ADD_NORMAL_ID=GetConstValue("autoTaskAddNormalItem")
+    AUTO_TASK_ADD_SENIOR_ID=GetConstValue("autoTaskAddSeniorItem")
+    UpRewardVedioCD = GetConstValue("TavernAdCD")*1000
+    UpRewardGetLimitTime = GetConstValue("TavernAdHaste")*1000
+    CsBridge.MsgCenter.Subscribe(Notify_UpRewardVedioGetReward,OnUpRewardVedioGetReward)
+    CsBridge.MsgCenter.Subscribe(Notify_UpRewardVedioDontReady,OnUpRewardVedioDontReady)
+end
+
+function InitProperties()
+
+end
+
+function OnCommand_InitAutoTaskData(objs)
+    local req = {}
+    req.id=4
+    HttpRequest("initPBItem", "InitPBItemReq", "InitPBItemResp", req,OnInitAutoTask)
+end
+
+function OnCommand_UpdateRefreshRemain(objs)
+    UpdateRefreshRemain()
+    self:SendNotification("UpdateRefreshBtnState",autoTaskData)
+end
+
+function OnCommand_UpdateUpRewardVedio(objs)
+    UpdateAutoTaskUpRewardVedio()
+end
+
+local function ScreenAutoTask(sort)
+    local quality = sort - 1
+    UpdateAutoTaskData(quality)
+    UpdateCountRemain()
+    UpdateAddItemRemain()
+    autoTaskData.unLockCount = GetUnLockTaskCount()
+    UpdateRefreshRemain()
+    autoTaskData.showRefresh = quality == 0
+    self:SendNotification("RefreshAutoTaskView",autoTaskData)
+end
+
+function OnCommand_UseAddItem(objs)
+    local id = objs[0]
+    local itemData = appData:checkItem("PackItem",tostring(id))
+	local count = 0
+	if itemData~=nil then
+		count=itemData.count
+    end
+    ShowExchangeView(self,2,id,count,function()
+        local sort = ScreenUtils.GetCurSort()
+        local quality = sort-1
+        UpdateAutoTaskData(quality)
+        UpdateCountRemain()
+        UpdateAddItemRemain()
+        UpdateRefreshRemain()
+        autoTaskData.showRefresh = quality == 0
+        self:SendNotification("RefreshAutoTaskView",autoTaskData)
+    end)
+end
+
+function OnInitAutoTask(resp)
+    if resp.result==0 then
+        return
+    end
+    UpdateAutoTaskData()
+    UpdateCountRemain()
+    UpdateAddItemRemain()
+    UpdateRefreshRemain()
+    autoTaskData.showRefresh = true
+    self:SendNotification("RefreshAutoTaskView",autoTaskData)
+    UpdateAutoTaskUpRewardVedio()
+    UpdateAutoTaskCountDown()
+    ScreenUtils.InitScreen(ScreenAutoTask)
+end
+
+function UpdateAutoTaskCountDown()
+    if countDownDic == nil then
+        countDownDic = {}
+    end
+    Timer:AddNonstopTicker(AUTO_TASK_TIMER,function()
+        for i,v in ipairs(autoTaskData.autoTasks) do
+            if v.endTime ~= 0 then
+                local remainTime = CheckTimeRemain(v.endTime,false)
+                if remainTime == "" then
+                    v.timeOver = true
+                    self:SendNotification("UpdateSingleAutoTask", v)
+                else
+                    countDownDic[v.id] = {
+                        resumeCount = GetTaskHasteResume(v.endTime-CsBridge.timeManager.ServerTime),
+                        progress = 1-(v.endTime-CsBridge.timeManager.ServerTime)/(v.taskTime*1000),
+                        remainTime = remainTime
+                    }
+                end
+            end
+        end
+        self:SendNotification("UpdateCountDown",countDownDic)
+    end,1)
+end
+
+function OnUpRewardVedioGetReward()
+    UpRewardVedioUtils.GetUpRewardVedioReward(UpRewardVedioID.AutoTask,waitHasteAutoTask,function(resp)
+        OnUpdateSingle(waitHasteAutoTask)
+        UpdateAutoTaskUpRewardVedio()
+        self:SendNotification("UpdateUpRewardVedioState",autoTaskData)
+    end)
+end
+
+function OnUpRewardVedioDontReady()
+    CsBridge.hintUILayer:ShowHintBox(Language:getStr("UpRewardVedioDontReady"),2)
+end
+
+function UpdateAutoTaskUpRewardVedio()
+    if not autoTaskData.upRewardVedioOpen then
+        return
+    end
+    local data = UpRewardVedioUtils.CheckUpRewardVedio(UpRewardVedioID.AutoTask)
+    autoTaskData.lastHasteAutoTaskTime = data.lastHasteAutoTaskTime
+    local showUpRewardVedio = data.showUpRewardVedio
+    for i,v in ipairs(autoTaskData.autoTasks) do
+        v.showUpRewardVedio = showUpRewardVedio and ((v.endTime - CsBridge.timeManager.ServerTime) < UpRewardGetLimitTime)
+        self:SendNotification("UpdateSingleAutoTask",v)
+    end
+end
+
+function UpdateSingleAutoTask(autoTask)
+    local autoTasks = appData:checkData("AutoTaskInfo").autoTasks
+    for i,v in ipairs(autoTasks) do
+        if v.id == autoTask.id then
+            autoTask.endTime = v.endTime
+            autoTask.heroUids = v.heroUids
+            autoTask.locked = v.locked
+            autoTask.taskName = v.taskName
+            autoTask.taskQuality = v.taskQuality
+            autoTask.heroQuality = v.heroQuality
+            autoTask.needHeroNum = v.needHeroNum
+            autoTask.camps = v.camps
+            autoTask.jobs = v.jobs
+            autoTask.rewardItems = v.rewardItems
+            autoTask.taskTime = v.taskTime
+            autoTask.timeOver = autoTask.endTime <= CsBridge.timeManager.ServerTime
+        end
+    end
+end
+
+function UpdateAutoTaskData(quality)
+    local playerAdInfo = appData:checkData("PlayerAdInfo")
+    autoTaskData = {
+        lastFreeRefreshTime = 0,
+        lastRenewTime = 0,
+        lastHasteAutoTaskTime = playerAdInfo and playerAdInfo.lastHasteAutoTaskTime or 0,
+        upRewardVedioCD = UpRewardVedioCD,
+        upRewardVedioOpen = UpRewardVedioUtils.CheckUpRewardVedio(UpRewardVedioID.AutoTask).isOpen,
+        autoTasks = {}
+    }
+    local autoTaskInfo = appData:checkData("AutoTaskInfo")
+    if autoTaskInfo then
+        autoTaskData.lastFreeRefreshTime = autoTaskInfo.lastFreeRefreshTime
+        autoTaskData.lastRenewTime = autoTaskInfo.lastRenewTime
+        if autoTaskInfo.autoTasks then
+            local q = quality or 0
+            for i,v in ipairs(autoTaskInfo.autoTasks) do
+                if q == 0 or v.taskQuality == q then
+                    local autoTask = {
+                        id = v.id,
+                        endTime = v.endTime,
+                        timeOver = v.endTime <= CsBridge.timeManager.ServerTime,
+                        heroUids = v.heroUids,
+                        locked = v.locked,
+                        taskName = v.taskName,
+                        taskQuality = v.taskQuality,
+                        heroQuality = v.heroQuality,
+                        needHeroNum = v.needHeroNum,
+                        camps = v.camps,
+                        jobs = v.jobs,
+                        rewardItems = v.rewardItems,
+                        taskTime = v.taskTime,
+                        showUpRewardVedio = false
+                    }
+                    table.insert(autoTaskData.autoTasks,autoTask)
+                end
+            end
+        end
+        autoTaskData.unLockCount = GetUnLockTaskCount()
+    end
+end
+
+function UpdateCountRemain()
+    local vipLv = appData:checkData("PlayerInfo").vip
+    autoTaskData.maxCount = ResTblContainer:GetPropToInt(vipLv,VipTbl.taskCountAdd,VipTbl.tblName)+AUTO_TASK_NORMAL_MAX_COUNT
+    autoTaskData.curCount = #autoTaskData.autoTasks
+end
+
+function UpdateAddItemRemain()
+	local normalItem = appData:checkItem("PackItem",tostring(AUTO_TASK_ADD_NORMAL_ID))
+	local seniorItem = appData:checkItem("PackItem",tostring(AUTO_TASK_ADD_SENIOR_ID))
+	autoTaskData.normalAddItemCount = normalItem~=nil and normalItem.count or 0
+	autoTaskData.seniorAddItemCount = seniorItem~=nil and seniorItem.count or 0
+end
+
+function UpdateRefreshRemain()
+    autoTaskData.refreshData = {}
+    local refreshItem = appData:checkItem("PackItem",tostring(AUTO_TASK_REFRESH_ITEM_ID))
+    if refreshItem ~= nil and refreshItem.count ~= 0 then
+        autoTaskData.refreshData.typeId = ItemTypeEnum.Item
+        autoTaskData.refreshData.id = AUTO_TASK_REFRESH_ITEM_ID
+        autoTaskData.refreshData.count = 1
+        autoTaskData.refreshData.type = RefreshType.Item
+    else
+        autoTaskData.refreshData.typeId = ItemTypeEnum.Resource
+        autoTaskData.refreshData.id = ResourceEnum.Gem
+        autoTaskData.refreshData.count = AUTO_TASK_REFRESH_DIAMOND_VAL*autoTaskData.unLockCount
+        autoTaskData.refreshData.type = RefreshType.Gem
+    end
+end
+
+function GetUnLockTaskCount()
+    local autoTaskInfo = appData:checkData("AutoTaskInfo")
+    local count = 0
+    if autoTaskData and autoTaskInfo.autoTasks then
+        for i,v in ipairs(autoTaskInfo.autoTasks) do
+            if not v.locked then
+                count = count+1
+            end
+        end
+    end
+    return count
+end
+
+function InitAutoTaskView()
+    self:SendNotification("InitAutoTaskView")  
+end
+
+function OnCommand_LockTask(objs)
+    local data = objs[0]
+    if data.heroUids ~= nil and data.endTime ~= 0 then
+        return
+    end
+    local req = {}
+    req.id=data.id
+    req.lock=not data.locked
+    HttpRequest("lockAutoTask", "LockAutoTaskReq", "LockAutoTaskResp", req, function(resp)
+        OnUpdateSingle(data)
+    end)
+end
+
+function OnCommand_LockAllTask(objs)
+    if #autoTaskData.autoTasks == 0 then
+        return 
+    end
+    local lock = objs[0]
+    local desp = lock and "AutoTaskLockAllConfirm" or "AutoTaskUnLockAllConfirm"
+    CsBridge.messageManager:PopMsgBox(Language:getStr("local_confirm"),
+    Language:getStr(desp),
+    Language:getStr("local_cancel"),nil,
+    Language:getStr("local_confirm"),function()
+        local req = {
+            id = -1,
+            lock = objs[0]
+        }
+        HttpRequest("lockAutoTask", "LockAutoTaskReq", "LockAutoTaskResp", req, function(resp)
+            if resp.result~=0 then
+                return
+            end
+            for i,v in ipairs(autoTaskData.autoTasks) do
+                UpdateSingleAutoTask(v)
+                self:SendNotification("UpdateSingleAutoTask",v)
+            end
+            UpdateAutoTaskUpRewardVedio()
+            autoTaskData.unLockCount = GetUnLockTaskCount()
+            UpdateRefreshRemain()
+            self:SendNotification("UpdateRefreshBtnState",autoTaskData)
+        end)
+    end)
+end
+
+function OnCommand_StartTask(objs)
+    for i,condition in ipairs(conditionsData) do
+        if condition.reached==false then
+            CsBridge.hintUILayer:ShowHintBox(Language:getStr("AutoTask_NotEnoughCondition"))
+            return
+        end
+    end
+    local req = {}
+    req.id=curData.id
+    req.uidList={}
+    for pos,uid in pairs(upHeroDicByPos) do
+        table.insert(req.uidList,uid)
+    end
+    HttpRequest("startAutoTask", "StartAutoTaskReq", "StartAutoTaskResp", req,
+        function(resp)
+            self:HideView("AutoTaskDetailsView")
+            OnUpdateSingle(curData)
+        end)
+end
+
+--选择等级优先的情况下，品质优先排在前面�?
+function SortHeroByLevel(a, b)
+    qualityA = ResTblContainer:GetPropToInt(a.heroId, HeroBase.quality, HeroBase.actorTbl)
+    qualityB = ResTblContainer:GetPropToInt(b.heroId, HeroBase.quality, HeroBase.actorTbl)
+    if qualityA ~= qualityB then
+        return qualityA > qualityB
+    end
+    if a.grade ~= b.grade then
+        return a.grade > b. grade
+    end
+    if a.level ~= b.level then
+        return a.level > b.level
+    end
+    return a.heroId < b.heroId
+end
+
+--选择品质排序的时候，应该由高到低�?
+function SortHeroByQuality(a, b)
+    qualityA = ResTblContainer:GetPropToInt(a.heroId, HeroBase.quality, HeroBase.actorTbl)
+    qualityB = ResTblContainer:GetPropToInt(b.heroId, HeroBase.quality, HeroBase.actorTbl)
+    if qualityA ~= qualityB then
+        return qualityA > qualityB
+    end
+    return a.heroId < b.heroId
+end
+
+function CheckConditions()
+    if upHeroCount<curData.needHeroNum then
+        self:SendNotification("CatchException","AutoTask_NoHeroNum")
+        return false
+    end
+    for i,condition in ipairs(conditionsData) do
+        if not condition.reached then
+           self:SendNotification("CatchException","AutoTask_NoCondition")
+           return false
+        end 
+    end
+    return true
+end
+
+function OnCommand_HasteTask(objs)
+    local data = objs[0]
+    if autoTaskData.upRewardVedioOpen and data.showUpRewardVedio then
+        waitHasteAutoTask = data
+        UpRewardVedioUtils.OpenUpRewardVedio(UpRewardVedioID.AutoTask,data,function(resp)
+            OnUpdateSingle(data)
+            UpdateAutoTaskUpRewardVedio()
+            self:SendNotification("UpdateUpRewardVedioState",autoTaskData)
+        end)
+    else
+        CsBridge.messageManager:PopMsgBox("",Language:getStr("HasteTask_Check"),Language:getStr("local_cancel"),nil,Language:getStr("local_confirm"),function()
+            local req = {}
+            req.id=data.id
+            HttpRequest("hasteAutoTask", "HasteAutoTaskReq", "HasteAutoTaskResp", req, function(resp)
+                OnUpdateSingle(data)
+            end)
+		end);
+    end
+end
+
+function OnCommand_CancelTask(objs)
+    local data = objs[0]
+    local req = {}
+    req.id=data.id
+    HttpRequest("cancelAutoTask", "CancelAutoTaskReq", "CancelAutoTaskResp", req,function(resp)
+        OnUpdateSingle(data)
+    end)
+end
+
+function OnCommand_CompleteTask(objs)
+    local data = objs[0]
+    local req = {}
+    req.id=data.id
+    HttpRequest("finishAutoTask", "FinishAutoTaskReq", "FinishAutoTaskResp", req,function(resp)
+        local reward = data.rewardItems[1]
+        CsBridge.hintUILayer:ShowRewardBox(reward.typeId,reward.id,reward.count)
+        local sort = ScreenUtils.GetCurSort()
+        UpdateAutoTaskData(sort-1)
+        UpdateCountRemain()
+        UpdateAddItemRemain()
+        UpdateRefreshRemain()
+        self:SendNotification("UpdateAllAutoTask",autoTaskData)
+        self:SendNotification("UpdateRemain",autoTaskData)
+        UpdateAutoTaskUpRewardVedio()
+    end)
+end
+
+function OnUpdateSingle(data)
+    UpdateSingleAutoTask(data)
+    self:SendNotification("UpdateSingleAutoTask",data)
+    autoTaskData.unLockCount = GetUnLockTaskCount()
+    UpdateRefreshRemain()
+    self:SendNotification("UpdateRefreshBtnState",autoTaskData)
+end
+
+function OnCommand_RefreshTask(objs)
+    if #autoTaskData.autoTasks == 0 then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("RefreshTask_None"))
+        return 
+    end
+    if autoTaskData.unLockCount == 0 then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("RefreshTask_Error"))
+        return
+    end
+    if autoTaskData.refreshData.type ~= RefreshType.Free then
+        if not CheckItemEnough(autoTaskData.refreshData.id,autoTaskData.refreshData.typeId,autoTaskData.refreshData.count,true) then
+            return
+        end
+    end
+    CsBridge.messageManager:FristConfirmBox("AutoTaskRefresh","",
+    Language:getStr("RefreshTask_Check"),
+    Language:getStr("local_cancel"),nil,
+    Language:getStr("local_confirm"),function()
+        local req = {}
+        req.type=autoTaskData.refreshData.type
+        HttpRequest("refreshAutoTask", "RefreshAutoTaskReq", "RefreshAutoTaskResp", req,OnRefreshTask)    
+    end)
+end
+
+function OnRefreshTask(resp)
+    if resp.result~=0 then
+        return
+    end
+
+    local sort = ScreenUtils.GetCurSort()
+    UpdateAutoTaskData(sort-1)
+    UpdateCountRemain()
+    UpdateAddItemRemain()
+    UpdateRefreshRemain()
+    self:SendNotification("UpdateAllAutoTask",autoTaskData)
+    UpdateAutoTaskUpRewardVedio()
+    self:SendNotification("UpdateRemain",autoTaskData)
+    self:SendNotification("UpdateRefreshBtnState",autoTaskData)
+end
+
+function OnCommand_OpenAutoTaskDetails(objs)
+    curData = objs[0]
+    upHeroCount=0
+    InitConditionsData()
+    InitDownHeroDic()
+    InitUpHeroDic()
+    local upHeroArr = GetUpHeroArr(data)
+    local downHeroArr = GetDownHeroArr()
+    CsBridge.CacheAssetsByModule(self.Module,
+    function()
+        CsBridge.OpenView("AutoTaskDetailsView","AutoTaskModel",true,true)
+        self:SendNotification("InitAutoTaskDetailsView",curData,conditionsData,upHeroArr,downHeroArr) 
+	end, "AutoTaskDetailsView","ItemSlot","HeroItemSlot","ConditionItemSlot")
+end
+
+function InitConditionsData()
+    conditionsData = {}
+    if curData.camps~=nil then
+        for k,camp in pairs(curData.camps) do
+            local conditionData={}
+            conditionData.reached=false
+            conditionData.type=1
+            conditionData.content=camp
+            table.insert(conditionsData,conditionData)
+        end
+    end
+    if curData.jobs~=nil then
+        for k,job in pairs(curData.jobs) do
+            local conditionData={}
+            conditionData.reached=false
+            conditionData.type=2
+            conditionData.content=job
+            table.insert(conditionsData,conditionData)
+        end
+    end
+    if curData.heroQuality~=nil and curData.heroQuality>0 then
+        local conditionData={}
+        conditionData.reached=false
+        conditionData.type=3
+        conditionData.content=curData.heroQuality
+        table.insert(conditionsData,conditionData)
+    end
+end
+
+function InitDownHeroDic()
+    local heroesData=appData:checkAllItems("HeroItem")
+    downHeroDic={}
+	if(heroesData~=nil)then
+		for  i = 0,heroesData.Length-1 do
+			local heroInfo=heroesData[i]
+			local heroData={}
+			heroData.uid=heroInfo.uid
+			heroData.heroId=heroInfo.heroId
+			heroData.level=heroInfo.level
+            heroData.grade=heroInfo.grade
+            heroData.showJob=true
+			downHeroDic[heroInfo.uid]=heroData
+		end
+	end
+end
+
+function InitUpHeroDic()
+    upHeroDicByUid={}
+    upHeroDicByPos={} 
+    if curData.heroUids~=nil then 
+        upHeroCount = #curData.heroIds
+        for pos,uid in pairs(curData.heroUids) do
+            upHeroDicByUid[uid]=pos
+            upHeroDicByPos[pos]=uid
+        end
+    end
+end
+
+function GetUpHeroArr()
+    local upHeroArr = {}
+    for i=1,curData.needHeroNum do
+        local upHeroData = {}
+        local uid = upHeroDicByPos[i]
+        if uid~=nil  then
+            local heroData = downHeroDic[uid]
+            upHeroData.uid=heroData.uid
+			upHeroData.heroId=heroData.heroId
+			upHeroData.level=heroData.level
+            upHeroData.grade=heroData.grade
+            upHeroData.showJob=true
+        else
+            upHeroData.heroId=0
+        end
+        table.insert(upHeroArr,upHeroData)
+    end
+    return upHeroArr
+end
+
+function GetDownHeroArr()
+	local downHeroArr={} 
+    for uid, heroData in pairs(downHeroDic) do 
+        heroData.showDuty=CheckHeroInDuty(heroData,HeroDuty.AUTO_TASK) 
+        table.insert(downHeroArr,heroData)
+    end
+    table.sort(downHeroArr,SortHeroByDescQuality)
+    return downHeroArr
+end
+
+function GetChangedHeroArr(uid)
+    local heroData = downHeroDic[uid]
+    local changedHeroArr = {}
+    for uid,hero in pairs(downHeroDic) do
+        if hero.heroId==heroData.heroId then
+            hero.IsSelected=upHeroDicByUid[uid]~=nil
+            table.insert(changedHeroArr,hero)
+        end
+    end
+    return changedHeroArr
+end
+
+function OnCommand_ScreenHero(objs)
+    local race = objs[0]
+    local downHeroArr = {}
+    local tbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    for uid,heroData in pairs(downHeroDic) do
+        local heroRace = tbl:GetInt(heroData.heroId,HeroBase.group)
+        if heroRace==race or race==0 then
+            table.insert(downHeroArr,heroData)
+        end
+    end
+    table.sort(downHeroArr,SortHeroByDescQuality)
+    self:SendNotification("UpdateDownHero",downHeroArr)
+end
+
+function OnCommand_SelectHeroEffect(objs)
+    if upHeroCount==curData.needHeroNum then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("heroFull"))
+        return 
+    end
+    local uid = objs[0]
+    local pos = 0
+    for i=1,curData.needHeroNum do
+        if upHeroDicByPos[i]==nil then
+            pos=i
+            break
+        end
+    end
+    self:SendNotification("SelectHeroEffect",uid,pos,objs[1])
+end
+
+function OnCommand_UpHero(objs)
+    local uid = objs[0]
+    local pos = objs[1]
+    UpHero(uid,pos)
+end
+
+function UpHero(uid,pos)
+    upHeroDicByUid[uid]=pos
+    upHeroDicByPos[pos]=uid
+    upHeroCount=upHeroCount+1
+    local heroData = downHeroDic[uid]
+    local upHeroData = {}
+    upHeroData.uid=heroData.uid
+    upHeroData.heroId=heroData.heroId
+    upHeroData.level=heroData.level
+    upHeroData.grade=heroData.grade
+    upHeroData.anim=true
+    upHeroData.showJob=true
+    local changedHeroArr = GetChangedHeroArr(uid)
+    CheckConditionsData()
+    self:SendNotification("UpHeroChanged",upHeroData,pos)
+    self:SendNotification("DownHeroChanged",changedHeroArr)
+    self:SendNotification("ConditionChanged",conditionsData)
+end
+
+function OnCommand_DownHero(objs)
+    if upHeroCount==0 then
+        return 
+    end
+    local uid = objs[0]
+    DownHero(uid)
+end
+
+function DownHero(uid)
+    local pos = upHeroDicByUid[uid]
+    upHeroDicByUid[uid]=nil 
+    upHeroDicByPos[pos]=nil
+    upHeroCount=upHeroCount-1
+    local upHeroData = {}
+    upHeroData.heroId=0
+    local changedHeroArr = GetChangedHeroArr(uid)
+    CheckConditionsData()
+    self:SendNotification("UpHeroChanged",upHeroData,pos)
+    self:SendNotification("DownHeroChanged",changedHeroArr)
+    self:SendNotification("ConditionChanged",conditionsData)
+end
+
+function OnCommand_AutoSelectHeroes(objs)
+    if upHeroCount~= 0 then
+        for uid,hero in pairs(upHeroDicByUid) do
+            DownHero(uid)
+        end
+    end
+    local pos = 1
+    local downHeroArr = GetDownHeroArr()
+    local tbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    for k,heroData in pairs(downHeroArr) do
+        local pbHero = GetPbHero(heroData)
+        if not heroData.showDuty and not pbHero.isEmblem then
+            for i,conditionData in pairs(conditionsData) do
+                if not conditionData.reached then
+                    if conditionData.type==1 then--group
+                        content = tbl:GetInt(heroData.heroId,HeroBase.group)
+                    elseif conditionData.type==2 then--job
+                        content = tbl:GetInt(heroData.heroId,HeroBase.job)
+                    else--quality
+                        content = tbl:GetInt(heroData.heroId,HeroBase.quality)
+                    end
+                    if content==conditionData.content or (conditionData.type==3 and content>=conditionData.content) then
+                        UpHero(heroData.uid,pos)
+                        pos=pos+1
+                        break
+                    end
+                end
+            end
+        end
+    end
+    for i,conditionData in pairs(conditionsData) do
+        if not conditionData.reached then
+            return 
+        end
+    end
+    for k,heroData in pairs(downHeroArr) do
+        if upHeroCount<curData.needHeroNum then
+            if not heroData.showDuty then
+                if upHeroDicByUid[heroData.uid]==nil then
+                    UpHero(heroData.uid,pos)
+                    pos=pos+1
+                end
+            end
+        else
+            break
+        end
+    end
+end
+
+function CheckConditionsData()
+    local tbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    for i,conditionData in ipairs(conditionsData) do
+        if next(upHeroDicByPos)==nil then
+            conditionData.reached=false
+        else
+            for pos,uid in ipairs(upHeroDicByPos) do
+                local heroSelectData=downHeroDic[uid]
+                if conditionData.type==1 then
+                    conditionData.reached=tbl:GetInt(heroSelectData.heroId,HeroBase.group)==conditionData.content
+                elseif conditionData.type==2 then
+                    conditionData.reached=tbl:GetInt(heroSelectData.heroId,HeroBase.job)==conditionData.content
+                else
+                    conditionData.reached=tbl:GetInt(heroSelectData.heroId,HeroBase.quality)>=conditionData.content
+                end
+                if conditionData.reached then
+                    break
+                end
+            end
+        end
+    end
+end
+
+function DoOnExit()
+    CsBridge.MsgCenter.Unsubscribe(Notify_UpRewardVedioGetReward, OnUpRewardVedioGetReward)
+    CsBridge.MsgCenter.Unsubscribe(Notify_UpRewardVedioDontReady, OnUpRewardVedioDontReady)
+    Timer:StopTicker(AUTO_TASK_TIMER)
+    self.Module = nil;
+    ScreenUtils = nil
+    curData = nil
+    autoTaskData = nil
+    downHeroDic = nil
+    upHeroDicByUid = nil
+    upHeroDicByPos = nil
+    countDownDic = nil
+    conditionsData = nil
+    upHeroCount = nil
+    waitHasteAutoTask = nil
+    AUTO_TASK_NORMAL_MAX_COUNT = nil
+    AUTO_TASK_REFRESH_ITEM_ID = nil
+    AUTO_TASK_REFRESH_DIAMOND_VAL = nil
+    AUTO_TASK_ADD_NORMAL_ID = nil
+    AUTO_TASK_ADD_SENIOR_ID = nil
+    UpRewardVedioCD = nil
+    UpRewardGetLimitTime = nil
+    AUTO_TASK_TIMER = nil
+    RefreshType = nil
+    UpRewardVedioUtils = nil
+end

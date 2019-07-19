@@ -1,0 +1,18 @@
+---初始化
+function DoInit()
+
+end
+
+---资源列表
+function AssetNames(objs)
+    local arr = { "TreasureChallengeView", "TreasureChallengeItemSlot" }
+    return arr
+end
+
+---打开模块回调
+function OnEnter(objs, onFinished)
+    local view = self:OpenView("TreasureChallengeView", "TreasureChallengeModel")
+    if (onFinished ~= nil) then
+        onFinished()
+    end
+end

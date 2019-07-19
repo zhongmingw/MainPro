@@ -1,0 +1,169 @@
+---初始化右边或者左边的获取奖励item
+local function InitLeftAndRightItemGotData(itemData, lrData, rewardRecord, canGet)
+    lrData.got = false
+    lrData.showLight = itemData.tblProgress <= itemData.curProgress and canGet and not lrData.notShow
+    if rewardRecord == nil or #rewardRecord == 0 or lrData.notShow then
+        return
+    end
+    for k = 1, #rewardRecord do
+        if rewardRecord[k] == itemData.tblProgress then
+            ---已领取
+            lrData.got = true
+            lrData.showLight = false
+        end
+    end
+end
+
+---判断是否显示刚刚到达
+local function InitSliderSelectItem(rewardTbl, itemData, ids, idTable)
+    local maxIndex = idTable.idLength - 1
+    local nextProgressIndex = idTable.index == maxIndex and maxIndex or idTable.index + 1
+    local nextProgressId = tonumber(ids[nextProgressIndex])
+    local nextProgress = tonumber(rewardTbl:Get(nextProgressId, DailyTaskExtraReward.progress))
+    local max = false
+    if nextProgress < itemData.tblProgress then
+        max = true
+        nextProgress = itemData.tblProgress
+    end
+    local curProgress = itemData.curProgress
+
+    if curProgress < nextProgress and curProgress >= itemData.tblProgress then
+        itemData.showSelect = true
+        itemData.selectIndex = idTable.useCountIndex + 1
+        return
+    end
+    if (idTable.index == maxIndex or max) and curProgress >= itemData.tblProgress then
+        itemData.showSelect = true
+        itemData.selectIndex = idTable.useCountIndex + 1
+    end
+end
+
+--- nlnsBg 是正常背景 nlsBg是正常选择背景  lnsBg是高丽正常背景 lsBg是高亮选择背景
+local function SetItemBg(item, rlData, bgs, canGet)
+    rlData.bgName = bgs.nlnsBg
+    rlData.selectBgName = bgs.nlsBg
+    if rlData.showLight == true and canGet then
+        if item.showSelect == true then
+            rlData.selectBgName = bgs.lsBg
+        else
+            rlData.bgName = bgs.lnsBg
+        end
+    end
+end
+
+---初始化背景和一些其他信息
+local function InitItemDataBgAndMore(result, item, useCountIndex, notHaveSubscribe)
+    local leftBgs = {}
+    leftBgs.nlnsBg = "new_com_Reward box01"
+    leftBgs.nlsBg = "new_com_Reward box06"
+    leftBgs.lnsBg = "new_com_Reward box05"
+    leftBgs.lsBg = "new_com_Reward box02"
+
+    local rightBgs = {}
+    rightBgs.nlnsBg = "new_com_Reward box03"
+    rightBgs.nlsBg = "new_com_Reward box08"
+    rightBgs.lnsBg = "new_com_Reward box07"
+    rightBgs.lsBg = "new_com_Reward box04"
+
+    SetItemBg(item, item.leftData, leftBgs, true)
+    SetItemBg(item, item.rightData, rightBgs, not notHaveSubscribe)
+
+    if item.leftData.showLight or item.rightData.showLight then
+        result.perfectIndex = useCountIndex + 1
+        result.haveReward = true
+    end
+end
+
+--- 初始化左右奖励
+local function InitLeftAndRightItemData(lrData, rewardStr)
+    if rewardStr == nil or rewardStr == "" then
+        lrData.notShow = true
+        return
+    end
+    lrData.rewardArr = GetRewardFromTbl(rewardStr)
+    lrData.notShow = lrData.rewardArr == nil or #lrData.rewardArr == 0
+end
+
+---获取所有的item
+local function GetAllItemArr(notHaveSubscribe)
+    local result = {}
+    result.itemArr = {}
+    result.perfectIndex = 0
+    result.haveReward = false
+    result.selectIndex = 0
+
+    local rewardTbl = ResTblContainer:GetTable(DailyTaskExtraReward.tblName)
+    local ids = ResTblContainer:GetCol(DailyTaskExtraReward.tblName, DailyTaskExtraReward.id)
+    local dailyTaskInfo = appData:checkData("DailyTaskInfo")
+
+    if ids == nil or dailyTaskInfo == nil then
+        return result
+    end
+    local startLevel = dailyTaskInfo.level
+    local idLength = ids.Length
+    local lastId = tonumber(ids[idLength - 1])
+    local useCountIndex = 0
+    local preProgress = 0
+    local preShowGetProgress = false
+    for i = 0, idLength - 1 do
+        local item = {}
+        item.id = tonumber(ids[i])
+        item.tblProgress = tonumber(rewardTbl:Get(item.id, DailyTaskExtraReward.progress))
+        item.tblNormalRewardStr = tostring(rewardTbl:Get(item.id, DailyTaskExtraReward.normalRewardStr))
+        item.tblSpecialRewardStr = tostring(rewardTbl:Get(item.id, DailyTaskExtraReward.specialRewardStr))
+        item.minLevel = tonumber(rewardTbl:Get(item.id, DailyTaskExtraReward.minLevel))
+        item.maxLevel = tonumber(rewardTbl:Get(item.id, DailyTaskExtraReward.maxLevel))
+        if startLevel >= item.minLevel and startLevel <= item.maxLevel then
+            item.progressStr = tostring(item.tblProgress)
+            item.curProgress = dailyTaskInfo.totalSeasonFinishedCount ---进度条的当前进度
+            item.maxProgress = tonumber(rewardTbl:Get(lastId, DailyTaskExtraReward.progress))
+            item.showGetProgress = item.curProgress >= item.tblProgress
+            item.showSliderOne = useCountIndex == 0
+            item.sliderValue = (item.curProgress - preProgress)/(item.tblProgress - preProgress)
+            item.preProgress = preProgress
+            item.showPreProgressObj = preProgress ~= 0
+            item.preShowGetProgress = preShowGetProgress
+            item.leftData = {}
+            item.rightData = {}
+
+            local idTable = {}
+            idTable.index = i
+            idTable.idLength = idLength
+            idTable.useCountIndex = useCountIndex
+
+            InitLeftAndRightItemData(item.leftData, item.tblNormalRewardStr)
+            InitLeftAndRightItemData(item.rightData, item.tblSpecialRewardStr)
+            InitLeftAndRightItemGotData(item, item.leftData, dailyTaskInfo.normalRewardRecord, true)
+            InitLeftAndRightItemGotData(item, item.rightData, dailyTaskInfo.specialRewardRecord, not notHaveSubscribe)
+
+            InitSliderSelectItem(rewardTbl, item, ids, idTable)
+            InitItemDataBgAndMore(result, item, useCountIndex, notHaveSubscribe)
+            if item.selectIndex ~= nil and item.selectIndex > 0 then
+                result.selectIndex = item.selectIndex
+            end
+            useCountIndex = useCountIndex + 1
+            preProgress = item.tblProgress
+            preShowGetProgress = item.showGetProgress
+            table.insert(result.itemArr, item)
+        end
+    end
+    result.perfectIndex = result.haveReward and result.perfectIndex or result.selectIndex
+    return result
+end
+
+---获取奖励
+local function GetSubscribeReward(progress, special, callback)
+    local req = {}
+    req.progress = progress
+    req.special = special
+    HttpRequest("takePassportReward", "TakePassportRewardReq", "TakePassportRewardResp", req, function(resp)
+        if resp and resp.rewardItems and callback then
+            callback(resp)
+        end
+    end)
+end
+
+return {
+    GetAllItemArr = GetAllItemArr,
+    GetSubscribeReward = GetSubscribeReward,
+}

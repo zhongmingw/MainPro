@@ -1,0 +1,283 @@
+--[[
+	file: BattleRatingView.lua
+	author: hangang
+	description: Battle rating view
+]]
+
+local barrageItemDistance = 150
+local barrageItemMinWidth = 100
+local barrageColumnCount = 3
+local minSpeed, maxSpeed = 160, 220
+local barrageData = {
+	rows = {},
+	tweeners = {},
+	flows = {},
+	data = nil,
+	rowCount = 0,
+	panelWidth = 0,
+}
+local barrageOnObj, barrageOffObj
+
+local cachedBattleInfo
+local viewData
+local barrageOn = true
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 0     --shadow type
+	InitUI()            --cache UI items    
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+
+	local path = "BarrageList/Reviews"
+	local barragePanelTrans = selfTrans:Find(path)
+	barrageData.gameObject = barragePanelTrans.gameObject
+	barrageData.panelWidth = barragePanelTrans.rect.width
+
+	barrageData.rowCount = barragePanelTrans.childCount
+	for rowIdx = 1, barrageData.rowCount do
+		local flow = {}
+		table.insert(barrageData.flows, flow)
+	end
+
+	local rows = barrageData.rows
+	for i = 0, barrageData.rowCount - 1 do
+		local rowTrans = barragePanelTrans:GetChild(i)
+
+		local row = {}
+		row.gameObject = rowTrans.gameObject
+		local items = {}
+		row.items = items
+
+		for j = 0, rowTrans.childCount - 1 do
+			local itemTrans = rowTrans:GetChild(j)
+			local item = {}
+			item.transform = itemTrans
+			item.gameObject = itemTrans.gameObject
+			item.contentTxt = itemTrans:GetComponentAtPath("contentTxt",CLS_TEXT)
+
+			table.insert(items, item)
+		end
+
+		table.insert(rows, row)
+	end
+
+	path = "BarrageSwitch/BarrageOnBtn"
+	barrageOnObj = selfTrans:GetGameObjectAtPath(path)
+	path = "BarrageSwitch/BarrageOffBtn"
+	barrageOffObj = selfTrans:GetGameObjectAtPath(path)
+end
+
+function SetParamDataList(objs)
+	cachedBattleInfo = objs[0]
+    self:SendCommand("GetBaseViewData", cachedBattleInfo)	
+end
+
+function OnAnimationFinished()
+	barrageOnObj:SetActive(true)
+	barrageOffObj:SetActive(false)
+end
+
+--UIController events handlers-------------------------------------------------------
+function OnNotification_RefreshView(objs)
+	if self.gameObject.activeInHierarchy and barrageOnObj.activeInHierarchy then
+		viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function RefreshView(data)
+	if #(data.reviewList) > 0 and barrageOn then
+		PlayBarrage()
+	else
+		ResetBarrage()
+	end
+end
+
+--UI event handlers-------------------------------------------------------------------
+function OnBarrageOnBtnClick(sender)
+	ResetBarrage()
+	barrageOnObj:SetActive(false)
+	barrageOffObj:SetActive(true)
+end
+
+function OnBarrageOffBtnClick(sender)
+	PlayBarrage()
+	barrageOnObj:SetActive(true)
+	barrageOffObj:SetActive(false)
+end
+
+function OnReviewBtnClick(sender)
+	ShowComposeView()
+end
+
+function ShowComposeView()
+	CsBridge.CacheAssetsByModule( self.Module,
+		function()
+			local view = CsBridge.OpenView("BattleRatingComposeView", "BattleRatingModel", false, true)
+			view:SetParamDataList(viewData)
+		end, 
+		"BattleRatingComposeView","BattleReviewItemSlot")
+end
+
+--Barrage--------------------------------------------------------------------------
+function PlayBarrage()
+	ResetBarrage()
+	local startPageIdx = 1
+	InitFlows(startPageIdx)
+end
+
+function ResetBarrage()
+	for k, tweener in pairs(barrageData.tweeners) do
+		tweener:DoKill()
+	end
+	barrageData.tweeners = {}
+
+	for k, row in pairs(barrageData.rows) do
+		for j, item in pairs(row.items) do
+			item.gameObject:SetActive(false)
+			item.contentTxt.text = ""
+		end
+	end
+end
+
+function InitFlows(pageIdx)
+	barrageData.data = viewData.reviewList
+	local totalReviewCount = #barrageData.data
+	local totalCellCount = barrageData.rowCount * barrageColumnCount
+
+	local startDataIdx = (pageIdx - 1) * totalCellCount
+	local currentIdx = 0
+	local lastRowSpeed = minSpeed
+	local lastRowIdx = GetLastRowIdx(pageIdx)
+	for rowIdx = 1, lastRowIdx do
+		local flow = barrageData.flows[rowIdx]
+		local row = barrageData.rows[rowIdx]
+
+		local speed = CsBridge.UnityHelper.GetRandomInt(minSpeed, maxSpeed)
+		if rowIdx == lastRowIdx then
+			flow.speed = CsBridge.UnityHelper.GetRandomInt(minSpeed, lastRowSpeed)
+		else
+			flow.speed = speed
+			lastRowSpeed = lastRowSpeed > speed and speed or lastRowSpeed
+		end
+
+		local items = row.items
+		for itemIdx = 1, barrageColumnCount do
+			currentIdx = startDataIdx + (itemIdx - 1) * barrageData.rowCount + rowIdx
+			if currentIdx <= totalReviewCount then
+				flow[itemIdx] = items[itemIdx]
+				InitFlowItem(currentIdx, rowIdx, itemIdx)
+			end
+		end
+	end
+end
+
+function GetLastRowIdx(pageIdx)
+	local rowIdx = 1
+	
+	local totalReviewCount = #barrageData.data
+	local rowCount = barrageData.rowCount
+	local totalCellCount = rowCount * barrageColumnCount
+	local restDataCount = totalReviewCount - (pageIdx - 1) * totalCellCount
+	rowIdx = restDataCount >= rowCount
+		and rowCount
+		or math.fmod(restDataCount, rowCount)
+	return rowIdx
+end
+
+function InitFlowItem(dataIdx, rowIdx, itemIdx)
+	local flow = barrageData.flows[rowIdx]
+	local animSpeed = flow.speed
+	local item = GetBarrageItem(rowIdx, itemIdx)
+	item.gameObject:SetActive(true)
+
+	--content	
+	local itemData = barrageData.data[dataIdx]
+	local textCtrl = item.contentTxt
+	textCtrl.text = itemData.content
+
+	--position
+	local itemWidth = GetItemWidth(item)
+	local x = GetLeftEdge(rowIdx, itemIdx) + itemWidth / 2
+	local y = item.transform.position.y
+	item.gameObject:SetGlobalPosition(x, y)
+
+	--animation
+	local totalCellCount = barrageData.rowCount * barrageColumnCount
+	local totalReviewCount = #barrageData.data
+	local flyFinishedCbk = function()
+		OnFlyFinished(dataIdx, rowIdx, itemIdx)
+	end
+
+	local endX = GetFlyDestinationX(itemWidth)
+	local distance = x - endX + 0.0
+	local duration  = distance / animSpeed
+	local easeFunction = 1		--liner
+	local tweener = CsBridge.TweenUtils.MoveToByWorld(
+		item.transform, 
+		endX, 
+		y, 
+		duration, 
+		flyFinishedCbk,
+		easeFunction)
+	barrageData.tweeners[dataIdx] = tweener
+end
+
+function OnFlyFinished(dataIdx, rowIdx, itemIdx)
+	--start new animation 
+	local totalReviewCount = #barrageData.data
+	local totalCellCount = barrageData.rowCount * barrageColumnCount
+	dataIdx = dataIdx + totalCellCount
+	dataIdx = dataIdx <= totalReviewCount
+		and dataIdx
+		or (itemIdx - 1) * barrageData.rowCount + rowIdx
+	InitFlowItem(dataIdx, rowIdx, itemIdx)
+end
+
+function GetFlyDestinationX(itemWidth)
+	return -(barrageData.panelWidth + itemWidth * 1.2) / 2
+end
+
+function GetLeftEdge(rowIdx, itemIdx)
+	local x = barrageData.panelWidth / 2 + barrageItemDistance
+	local prevItemIdx = itemIdx == 1 and barrageColumnCount or itemIdx - 1
+	local prevItem = GetBarrageItem(rowIdx, prevItemIdx)
+
+	if prevItem then
+		local tempX = prevItem.transform.position.x + GetItemWidth(prevItem) / 2 + barrageItemDistance
+		x = tempX > x and tempX or x
+	end
+
+	return x
+end
+
+function GetBarrageItem(rowIdx, itemIdx)
+	local row = barrageData.rows[rowIdx]
+	return row.items[itemIdx]
+end
+
+function GetItemWidth(barrageItem)
+	local width = barrageItem.contentTxt.preferredWidth
+	width = width < barrageItemMinWidth and barrageItemMinWidth or width
+	return width
+end
+
+function OnClose()
+	ResetBarrage()
+end
+
+function DoExit()
+	barrageItemDistance = nil
+	barrageItemMinWidth = nil
+	barrageColumnCount = nil
+	minSpeed, maxSpeed = nil
+	barrageData = nil
+	barrageOnObj = nil
+	barrageOffObj = nil
+	cachedBattleInfo = nil
+	viewData = nil
+	barrageOn  = nil
+end

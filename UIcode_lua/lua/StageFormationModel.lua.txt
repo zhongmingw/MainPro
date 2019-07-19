@@ -1,0 +1,336 @@
+local stageItem
+local onHookStageItem
+local stageFormationCount_CONST = 15
+local stageFormationType_CONST = 3
+
+local upHeroDicByUid = {}
+local upHeroDicByPos = {}
+local downHeroDic = {}
+local heroCount = 0
+local upHeroCount = 0
+local autoRewardHeroArr = {}
+local curCambat = 0
+
+
+function DoInit()
+    stageItem=appData:checkData("StageItem")
+    onHookStageItem=appData:checkData("OnHookStageItem")
+end
+
+function OnCommand_InitStageFormation(objs)
+    InitUpHeroDic()
+    InitDownHeroDic()
+    local dowmHeroArr = GetDownHeroArr()
+    local upHeroArr = InitUpHeroArr()
+    curCambat = GetFormationFight(stageFormationType_CONST)
+    self:SendNotification("InitStageFormation",upHeroArr,dowmHeroArr,curCambat)
+end
+
+function InitDownHeroDic()
+    local heroesData=appData:checkAllItems("HeroItem")
+    downHeroDic={}
+	if(heroesData~=nil)then
+		for  i = 0,heroesData.Length-1 do
+			local heroInfo=heroesData[i]
+			local heroData={}
+			heroData.uid=heroInfo.uid
+			heroData.heroId=heroInfo.heroId
+			heroData.level=heroInfo.level
+            heroData.grade=heroInfo.grade
+            heroData.distillationStar=heroInfo.distillationStar
+            heroData.distillationLevel=heroInfo.distillationLevel
+            heroData.breakLevel=heroInfo.breakLevel
+			downHeroDic[heroInfo.uid]=heroData
+		end
+	end
+end
+
+function GetDownHeroArr()
+	local downHeroArr={}
+    local tbl=ResTblContainer:GetTable(Hero.actorTbl)
+    for uid, heroData in pairs(downHeroDic) do 
+        heroData.IsSelected=upHeroDicByUid[uid]~=nil
+        local relationId= tbl:GetInt(heroData.heroId,Hero.relationId)
+        if next(upHeroDicByUid)~=nil then
+            for id,hero in pairs(upHeroDicByUid) do
+                local relationId_i=tbl:GetInt(hero.heroId,Hero.relationId)
+                heroData.isRepeat=uid~=id and heroData.heroId==hero.heroId or (relationId ~= 0 and relationId == relationId_i)
+                if heroData.isRepeat then
+                    break
+                end
+            end
+        end
+        table.insert(downHeroArr,heroData)
+    end
+    table.sort(downHeroArr,SortHeroByQuality)
+    return downHeroArr
+end
+
+function InitUpHeroDic()
+    upHeroDicByUid={}
+    upHeroDicByPos={}
+    local formation=appData:checkItem("Formation",tostring(stageFormationType_CONST))    
+    if formation ~= nil and formation.heroIds~=nil and next(formation.heroIds)~=nil then 
+        upHeroCount = #formation.heroIds
+        for k,heroInfo in pairs(formation.heroIds) do
+            local upHeroData = {}
+            upHeroData.uid=heroInfo.uid
+            upHeroData.pos=heroInfo.pos
+            upHeroData.heroId=heroInfo.heroId
+            upHeroDicByUid[heroInfo.uid]=upHeroData
+            upHeroDicByPos[heroInfo.pos]=upHeroData
+        end
+    else
+        upHeroCount = 0
+    end
+end
+
+function InitAutoRewardHeroTbl()
+    autoRewardHeroArr={}
+    local tbl=ResTblContainer:GetTable(AutoRewardHero.tblName)
+    local ids = ResTblContainer:GetIds(AutoRewardHero.tblName)
+    for i=0,ids.Length-1 do
+        local autoRewardHeroData = {}
+        autoRewardHeroData.id=tonumber(ids[i])
+        autoRewardHeroData.level=tbl:GetInt(autoRewardHeroData.id,AutoRewardHero.level)
+        autoRewardHeroData.heroCount=tbl:GetInt(autoRewardHeroData.id,AutoRewardHero.heroNum)
+        table.insert(autoRewardHeroArr,autoRewardHeroData)
+    end
+end
+
+function InitUpHeroArr()
+    if next(autoRewardHeroArr)==nil then
+        InitAutoRewardHeroTbl()
+    end
+    heroCount = GetCurAutoRewardHeroCount()
+    local upHeroArr={}
+    for i=1,stageFormationCount_CONST do
+        local upHeroData = {}
+        if upHeroDicByPos[i]~=nil then
+            local uid = upHeroDicByPos[i].uid
+            local heroData = downHeroDic[uid]
+            upHeroData.uid=heroData.uid
+			upHeroData.heroId=heroData.heroId
+			upHeroData.level=heroData.level
+			upHeroData.grade=heroData.grade
+        else
+            upHeroData.heroId = 0
+            upHeroData.isLocked = i>heroCount
+        end
+        table.insert(upHeroArr,upHeroData)
+    end
+    return upHeroArr
+end
+
+function GetCurAutoRewardHeroCount()
+    local playerInfo = appData:checkData("PlayerInfo")
+    local level = playerInfo.level
+    for i=1,#autoRewardHeroArr do
+        if level>=autoRewardHeroArr[#autoRewardHeroArr].level then
+            return autoRewardHeroArr[#autoRewardHeroArr].heroCount
+        end
+        if level<=autoRewardHeroArr[1].level then
+            return autoRewardHeroArr[1].heroCount
+        end 
+        if level>=autoRewardHeroArr[i].level and level<autoRewardHeroArr[i+1].level then
+            return autoRewardHeroArr[i].heroCount
+        end
+    end
+end
+
+function GetAutoRewardHeroLevel(num)
+    local playerInfo = appData:checkData("PlayerInfo")
+    local level = playerInfo.level
+    for i=1,#autoRewardHeroArr do
+        if num>=autoRewardHeroArr[#autoRewardHeroArr].heroCount then
+            return autoRewardHeroArr[#autoRewardHeroArr].level
+        end
+        if num<=autoRewardHeroArr[1].heroCount then
+            return autoRewardHeroArr[1].level
+        end 
+        if num>=autoRewardHeroArr[i].heroCount and num<autoRewardHeroArr[i+1].heroCount then
+            return autoRewardHeroArr[i].level
+        end
+    end
+end
+
+function GetChangedHeroArr(uid)
+    local heroData = downHeroDic[uid]
+    local changedHeroArr = {}
+    local tbl=ResTblContainer:GetTable(Hero.actorTbl)
+    local relationId=tbl:GetInt(heroData.heroId,Hero.relationId)
+    for id,hero in pairs(downHeroDic) do
+        local relationId_i=tbl:GetInt(hero.heroId,Hero.relationId)
+        if hero.heroId==heroData.heroId then
+            hero.IsSelected=upHeroDicByUid[id]~=nil
+            hero.isRepeat=upHeroDicByUid[uid]~=nil and hero.heroId==upHeroDicByUid[uid].heroId and uid ~= id 
+            table.insert(changedHeroArr,hero)
+        elseif relationId ~= 0 and relationId == relationId_i then
+            hero.isRepeat=upHeroDicByUid[uid]~=nil
+            table.insert(changedHeroArr,hero)
+        end
+    end
+    return changedHeroArr
+end
+
+function OnCommand_SelectHeroEffect(objs)
+    if(upHeroCount==heroCount)then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("heroFull"))
+        return
+    end
+    local uid = objs[0]
+    local pos = 0
+    local heroData = downHeroDic[uid]
+    if ShowSoulImprintedTip(heroData) then
+        return
+    end
+    if(heroData.isRepeat==true)then--重复英雄
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("heroRepeat"))
+        return
+    end
+
+    for i=1,stageFormationCount_CONST do
+        if upHeroDicByPos[i]==nil then
+            pos=i
+            break
+        end
+    end
+    self:SendNotification("SelectHeroEffect",uid,pos,objs[1])
+end
+
+function OnCommand_UpHero(objs)
+    local uid = objs[0]
+    local pos = objs[1]
+    local heroData = downHeroDic[uid]
+    --是否已经上阵满了
+    if(upHeroCount==heroCount)then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("heroFull"))
+        return
+    end
+
+    -- local pos = 0
+    -- for i=1,stageFormationCount_CONST do
+    --     if upHeroDicByPos[i]==nil then
+    local upHeroInfo = {}
+    upHeroInfo.uid=heroData.uid
+    --pos=i
+    upHeroInfo.pos=pos
+    upHeroInfo.heroId=heroData.heroId
+    upHeroDicByUid[upHeroInfo.uid]=upHeroInfo
+    upHeroDicByPos[upHeroInfo.pos]=upHeroInfo
+    upHeroCount=upHeroCount+1
+        --     break
+        -- end
+    --end
+    local upHeroData = {}
+    upHeroData.uid=heroData.uid
+    upHeroData.heroId=heroData.heroId
+    upHeroData.level=heroData.level
+    upHeroData.grade=heroData.grade
+    upHeroData.distillationStar=heroData.distillationStar
+    upHeroData.distillationLevel=heroData.distillationLevel
+    upHeroData.breakLevel=heroData.breakLevel
+    upHeroData.anim=true
+    local changedHeroArr = GetChangedHeroArr(uid)
+    local heroInfoTmp = appData:checkItem("HeroItem",tostring(uid))
+    local cambat = GetHeroFight(heroInfoTmp)
+    curCambat=curCambat+cambat
+    self:SendNotification("UpHeroChanged",upHeroData,pos)
+    self:SendNotification("DownHeroChanged",changedHeroArr)
+    self:SendNotification("CambatChanged",curCambat)
+end
+
+function OnCommand_DownHero(objs)
+    local uid = objs[0]
+    local pos = upHeroDicByUid[uid].pos
+    upHeroDicByUid[uid]=nil 
+    upHeroDicByPos[pos]=nil
+    upHeroCount=upHeroCount-1
+    local upHeroData = {}
+    upHeroData.heroId=0
+    local changedHeroArr = GetChangedHeroArr(uid)
+    local heroInfoTmp = appData:checkItem("HeroItem",tostring(uid))
+    local cambat = GetHeroFight(heroInfoTmp)
+    curCambat=curCambat-cambat
+    self:SendNotification("UpHeroChanged",upHeroData,pos)
+    self:SendNotification("DownHeroChanged",changedHeroArr)
+    self:SendNotification("CambatChanged",curCambat)
+end
+
+function OnCommand_UpHeroTip(objs)
+    local index = objs[0]
+    local num = index+1
+    if num<=heroCount then
+        return 
+    end
+    local level = GetAutoRewardHeroLevel(num)
+    CsBridge.hintUILayer:ShowHintBox(string.format(Language:getStr("StageFormation_Open"),level)) 
+end
+
+function OnCommand_ExchangeUpHeroData(objs)
+    local dragPos = objs[0]
+    local dropPos = objs[1]
+    local dragInfo = upHeroDicByPos[dragPos]
+    local dropInfo = upHeroDicByPos[dropPos]
+    
+    local dragData = {}
+    dragInfo.pos=dropPos
+    upHeroDicByPos[dragInfo.pos]=dragInfo
+    upHeroDicByUid[dragInfo.uid]=dragInfo
+    dragData.uid=dragInfo.uid
+    dragData.heroId=dragInfo.heroId
+    dragData.level=downHeroDic[dragInfo.uid].level
+    dragData.grade=downHeroDic[dragInfo.uid].grade
+   
+    local dropData = {}
+    if dropInfo~=nil then 
+        dropInfo.pos=dragPos
+        upHeroDicByPos[dropInfo.pos]=dropInfo
+        upHeroDicByUid[dropInfo.uid]=dropInfo
+        dropData.uid=dropInfo.uid
+        dropData.heroId=dropInfo.heroId
+        dropData.level=downHeroDic[dropInfo.uid].level
+        dropData.grade=downHeroDic[dropInfo.uid].grade
+    else
+        dropData.heroId=0
+        upHeroDicByPos[dragPos]=nil
+    end
+    self:SendNotification("ExchangeUpHeroData",dragPos,dragData,dropPos,dropData)
+end
+
+function OnCommand_StageFormationChanged(objs)
+    if upHeroCount<=0 then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("noUpHero"))
+        return 
+    end
+    local req = {}
+    req.id=stageFormationType_CONST
+    req.heroIds={}
+    for uid,upHereData in pairs(upHeroDicByUid) do
+        table.insert(req.heroIds, upHereData)
+    end
+    HttpRequest("updateFormation", "Formation", "UpdateFormationResp", req,
+        function (resp)
+            self:SendNotification("CloseStageFormationView")
+        end)
+end
+
+function OnCommand_CloseStageFormationView(objs)
+    self:SendNotification("CloseStageFormationView")
+end
+
+function DoOnExit()
+	self.Module = nil
+    stageItem = nil
+    onHookStageItem = nil
+    stageFormationCount_CONST = nil
+    stageFormationType_CONST = nil
+
+    upHeroDicByUid = nil
+    upHeroDicByPos = nil
+    downHeroDic = nil
+    heroCount = nil
+    upHeroCount = nil
+    autoRewardHeroArr = nil
+    curCambat = nil
+end

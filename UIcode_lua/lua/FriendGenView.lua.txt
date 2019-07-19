@@ -1,0 +1,106 @@
+local curIndex=1
+local inited=false
+local bossHide
+
+local appliedFlag
+local bossHelpFlag
+
+function DoInit()
+    self.Anim = 1
+    self.Shadow = 1
+end
+
+function IsSetAnchor()
+    return true
+end
+
+function OnMaskClick(sender)
+    DoClose()
+end
+
+function OncloseBtnClick(sender)
+    DoClose()
+end
+
+function DoClose()
+    self:ReturnBack()
+end
+
+function OnAnimationFinished()
+    bossHide = self:GetGameObjectAtPath("other/group/tog4/friendBossHideBtn") --self.transform:Find("other/group/tog4/friendBossHideBtn").gameObject
+    appliedFlag = self:GetGameObjectAtPath("other/group/tog3/NewFlag") --self.transform:Find("other/group/tog3/NewFlag").gameObject
+    bossHelpFlag = self:GetGameObjectAtPath("other/group/tog4/NewFlag") --self.transform:Find("other/group/tog4/NewFlag").gameObject
+    if not UIOpen(UI_OPEN_TYPE_LIMIT_FRIENDHELP,false) then
+        bossHide:SetSelfActive(true)
+    else
+        bossHide:SetSelfActive(false)
+    end
+    self:SendCommand("SysStrength")
+end
+
+function OnNotification_SysStrength()
+    if not inited then
+        inited=true
+        curIndex = 1
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            CsBridge.OpenView("FriendListView","FriendModel",false,false)
+	    end, "FriendListView", "FriendListItemSlot")
+	end
+end
+
+function OnfriendBossHideBtnClick(sender)
+	if not UIOpen(UI_OPEN_TYPE_LIMIT_FRIENDHELP,true) then
+		return
+	end
+end
+
+function OngroupClick(isOn, index)
+    if isOn then
+        if curIndex ~= index then
+            curIndex=index
+            if curIndex == 1 then
+                CsBridge.CacheAssetsByModule(self.Module,function()
+                    CsBridge.OpenView("FriendListView","FriendModel",false,false)
+	            end, "FriendListView", "FriendListItemSlot")                  
+            elseif curIndex == 2 then
+                CsBridge.CacheAssetsByModule(self.Module,function()
+                    CsBridge.OpenView("FriendApplyView","FriendModel",false,false)
+	            end, "FriendApplyView", "FriendApplyItemSlot")         
+            elseif curIndex == 3 then
+                CsBridge.CacheAssetsByModule(self.Module,function()
+                    CsBridge.OpenView("FriendAppliedView","FriendModel", false,false)
+	            end,"FriendAppliedView", "FriendAppliedItemSlot")   
+            elseif curIndex == 4 then
+                CsBridge.CacheAssetsByModule(self.Module,function()
+                    CsBridge.OpenView("FriendBossView","FriendModel", false,false)
+	            end,"FriendBossView")   
+            end
+        end
+    else
+        if curIndex == 1 then
+            self:HideView("FriendListView",false)               
+        elseif curIndex == 2 then
+            self:HideView("FriendApplyView",false)    
+        elseif curIndex == 3 then
+            self:HideView("FriendAppliedView",false)
+        elseif curIndex == 4 then
+            self:HideView("FriendBossView",false)
+        end      
+    end
+end
+
+function OnNotification_RefreshAppliedRefFlag(objs)
+    appliedFlag:SetSelfActive(objs[0])
+end
+
+function OnNotification_RefreshHelpBossRedFlag(objs)
+    bossHelpFlag:SetSelfActive(objs[0])
+end
+
+function DoExit()
+    curIndex = nil
+    inited = nil
+    bossHide = nil
+    appliedFlag = nil
+    bossHelpFlag = nil
+end

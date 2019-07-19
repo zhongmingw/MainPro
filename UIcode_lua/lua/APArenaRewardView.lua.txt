@@ -1,0 +1,73 @@
+local loadedAPArenaRewardItemSlot=require "APArenaRewardItemSlot"
+local loadedRewardItemSlot=require "RewardItemSlot"
+
+local rewardGroup
+
+function DoInit()
+	self.Shadow = 1
+end 
+
+function InitUI()
+	rewardGroup = self:GetComponentAtPath("Center/RewardGroup",CLS_TOGGLE_GROUP_ARCHLY)
+
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+	end 
+    self:SendCommand("InitAPArenaRewardData")
+end 
+
+function OnNotification_InitAPArenaRewardData(objs)
+	rewardGroup:SetAllTogglesOff()
+    rewardGroup:SetToggleOn(0)
+end
+
+function OnRewardGroupClick(isOn,index)
+    if not isOn then
+        return 
+	end
+	if index==0 then
+		CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			CsBridge.OpenView("APArenaDailyRewardView","ArenaModel",false,false)
+		end, "APArenaDailyRewardView","APArenaRewardItemSlot")
+	else
+		self:HideView("APArenaDailyRewardView",false)
+	end
+	if index==1 then
+		CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			CsBridge.OpenView("APArenaSeasonRewardView","ArenaModel",false,false)
+		end, "APArenaSeasonRewardView","APArenaRewardItemSlot")
+	else
+		self:HideView("APArenaSeasonRewardView",false)
+	end
+end
+
+function CloseView()
+	self:HideView("APArenaDailyRewardView",false)
+	self:HideView("APArenaSeasonRewardView",false)
+	self:HideView(self.gameObject.name)
+end
+
+function OnClose()
+
+end
+
+function OnCloseBtnClick(sender)
+	CloseView()
+end
+
+function OnMaskClick(sender)
+	CloseView()
+end
+
+function DoExit()
+	self.Module=nil
+	loadedAPArenaRewardItemSlot = nil
+	loadedRewardItemSlot = nil
+	rewardGroup = nil
+end

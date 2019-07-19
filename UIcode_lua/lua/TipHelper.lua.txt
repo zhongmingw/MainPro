@@ -1,0 +1,516 @@
+local QueueActionMgr = require "QueueActionMgr"
+local battleUtils = require "BattleUtils"
+
+FixedActivityType =
+{
+	Checkin = 1,
+	MonthlyGiftPac = 2,
+	WeeklyCard = 3,
+	MonthlyCard = 4,
+	FirstCharge = 5,
+	WeeklyGiftPac = 6,
+}
+ 
+
+local function ShowHeroTipByHero(self,heroData,showBaseAttr)
+	local hero = {
+		uid = heroData.uid,
+		heroId = heroData.heroId, 
+		level = heroData.level or 1,
+		grade = heroData.grade or 1,
+		distillationStar = heroData.distillationStar or 0,
+		distillationLevel = heroData.distillationLevel or 0,
+		breakLevel = heroData.breakLevel or 0,
+		userId = heroData.userId,
+		zone = heroData.zone,
+		showBaseAttr = showBaseAttr
+	}
+	CsBridge.CacheAssetsByModule(self.Module,function()
+        local view=CsBridge.OpenView("HeroSimpleInfoView","HeroSimpleInfoModel")
+		view:SendCommand("InitSimpleInfoData",hero)
+		local tipsTrans = view.transform.parent
+		tipsTrans:SetSiblingIndex(tipsTrans.parent.childCount - 1)
+	end, "HeroSimpleInfoView","SkillItemSlot","ItemSlot","SoulImprintItemSlot")
+end
+
+function ShowHeroTip(self,heroId,level,grade,distillationStar,distillationLevel,breakLevel)
+	local hero = {}
+	hero.uid = nil
+	hero.heroId = heroId
+	hero.level = level
+	hero.grade = grade
+	hero.distillationStar = distillationStar
+	hero.distillationLevel = distillationLevel
+	hero.breakLevel = breakLevel
+	ShowHeroTipByHero(self,hero,true)
+end
+
+function ShowOtherHeroTip(self,heroData,userId,zone)
+	local hero = {}
+	hero.uid = heroData.srcUid
+	hero.heroId = heroData.heroId
+	hero.level = heroData.level
+	hero.grade = heroData.grade
+	hero.distillationStar = heroData.distillationStar
+	hero.distillationLevel = heroData.distillationLevel
+	hero.breakLevel = heroData.breakLevel
+	hero.userId = userId
+	hero.zone = zone
+	ShowHeroTipByHero(self,hero,true)
+end
+
+function ShowHeroTipByHeroUid(self,heroUid)
+	if heroUid ~= 0 then
+		local pb = appData:checkItem("HeroItem",heroUid)
+		local hero = {}
+		hero.uid = heroUid
+		hero.heroId = pb.heroId
+		hero.level = pb.level
+		hero.grade = pb.grade
+		hero.distillationStar = pb.distillationStar
+		hero.distillationLevel = pb.distillationLevel
+		hero.breakLevel = breakLevel
+		ShowHeroTipByHero(self,hero,false)
+	end
+end
+
+function ShowTipWithCount(self,type,id,count,curHero)
+	local rewardTmp = {
+		typeId = type, 
+		id = id,
+		count = count,
+		curHero = curHero,
+	}
+	ShowCompleteTip(self,rewardTmp,0,nil)
+end
+
+function ShowTip(self,type,id)
+    ShowTipWithCount(self,type,id,1)
+end
+
+function ShowRewardTip(self,reward)
+    ShowTipWithCount(self,reward.typeId,reward.id,reward.count,reward.curHero)
+end
+
+function ShowRelicTip(self,relic)
+	local rewardTmp = {
+		typeId = relic.typeId,
+		id = relic.id,
+		level = relic.level,
+		owner = relic.owner,
+		count = 1,
+		curHero = relic.curHero
+	}
+	ShowCompleteTip(self,rewardTmp,0,nil)
+end 
+
+function ShowCompleteTip(self,reward,extraIdx,callback)
+	if reward.typeId == ItemTypeEnum.Hero then
+		ShowHeroTip(self,reward.id)
+		return
+	end
+	local indexes = itemBaseIndex+itemDespIndex+PropsIndex+itemSuitIndex+extraIdx
+	if reward.typeId == ItemTypeEnum.Relic then
+		indexes = indexes+itemActivateIndex
+	end
+	CsBridge.CacheAssetsByModule(self.Module,
+	function()
+		local view = CsBridge.OpenView("ItemTipView", "ItemTipModel")
+		view:SetParamDataList(reward,indexes)
+		if callback~= nil then
+			callback()
+		end
+		view:SendCommand("InitItemData")
+	end,"ItemTipView")
+end
+
+function ShowPreviewView(self,rewards,modelName)
+	CsBridge.CacheAssetsByModule(self.Module,
+	function()
+		local view = CsBridge.OpenView("PreviewView",modelName)
+
+		view:SetData(rewards)
+	end,"PreviewView","ItemSlot")
+end
+
+function ShowRewardReceivedTip(modelOrView, rewards, confirmCbk, toMergeRewards)
+	if toMergeRewards == nil then
+		toMergeRewards = true
+	end
+	CsBridge.CacheAssetsByModule(
+		modelOrView.Module,
+		function()
+			local hideOtherView = CsBridge.moduleManager.CurrentModule.ModuleName ~= CsBridge.moduleManager.MainModule			
+			local view = CsBridge.OpenView("RewardReceivedView","RewardReceivedModel", hideOtherView)
+			view:SetParamDataList(rewards, confirmCbk, toMergeRewards)
+		end, 
+		"RewardReceivedView",
+		"ItemSlot")
+end
+
+function PopRewardView(modelOrView, rewards, confirmCbk, toMergeRewards)
+	if toMergeRewards == nil then
+		toMergeRewards = true
+	end
+	CsBridge.CacheAssetsByModule(
+		modelOrView.Module,
+		function()
+			local hideOtherView = false		
+			local view = CsBridge.OpenView("RewardReceivedView","RewardReceivedModel", hideOtherView)
+			view:SetParamDataList(rewards, confirmCbk, toMergeRewards)
+		end, 
+		"RewardReceivedView",
+		"ItemSlot")
+end
+
+function ShowHeroShareTip(self, hero)
+	local heroStr = hero.heroId..","..
+	hero.level..","..
+	hero.grade..","..
+	(hero.distillationStar or 0)..","..
+	(hero.distillationLevel or 0)..","..
+	(hero.breakLevel or 0)
+	ShowShareTip(self,heroStr,ShareType.Hero)
+end 
+
+function ShowEquipShareTip(self, typeId, id)
+	ShowShareTip(self,typeId..","..id,ShareType.Equip)
+end 
+
+function ShowShareTip(self, data, shareType)
+	CsBridge.CacheAssetsByModule(self.Module,function()
+		local view = CsBridge.OpenView("ShareView","ShareModel")
+		view:SendCommand("InitShareData", data, shareType)
+    end,"ShareView")
+end 
+
+function ShowHelpTip(self, id)
+	CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("HelpView","HeroComposeModel")
+        view:SetData(id)
+	end, "HelpView")
+end
+
+local function isInGuide()
+    local root = CS.UnityEngine.GameObject.Find("GuideRoot")
+	if(root ~= nil) then
+	    local mask = root.transform:Find("GuideChat/mask")
+		print(mask)
+		if (mask ~= nil) then
+		    return mask.gameObject.activeInHierarchy
+		end
+	end
+	return false
+end
+
+---弹出条件礼包界面
+local function PopConditionPackageView(module, packageConfig, exit)
+	CsBridge.CacheAssetsByModule(module,function()
+		if (not isInGuide()) then
+			local view = CsBridge.OpenView("ConditionPackageView","ConditionPackageModel",false,true)
+			view:SetParamDataList(packageConfig,exit)
+		end
+	end,"ConditionPackageView","ConditionPackageEffectView","ItemSlot",tostring(packageConfig.icon))
+end
+
+function CheckAndShowConditionPackageView(self, ... )
+	local req = {
+		reqList = { ... }
+	}
+	HttpRequest("checkConditionPackage","CheckConditionPackageReq","CheckConditionPackageResp",req,function(resp)
+		if resp and resp.packageConfig and (not isInGuide()) then
+			PopConditionPackageView(self.Module, resp.packageConfig)
+		end
+	end)
+end
+
+function ShowUpRewardVedio(self, name)
+	self:ShowModule("UpRewardVedioModule",{name or "avidly_rewardvideo"}, false, nil, false)
+end
+
+function ShowFisrtChargeActivity(viewBase)
+	viewBase:ShowModule("ActivityModule", {FixedActivityType.FirstCharge}, false)
+end
+
+function ShowBattleModule(battleInfo, modelOrView, skipEndView)
+	if battleInfo and modelOrView then
+		CsBridge.loadUIMgr:CreateHintBox()
+		battleInfo.showBattleEndView = not skipEndView
+		local hideOther = true
+		modelOrView:ShowModule("BattleModule", {battleInfo}, hideOther)
+	end
+end
+
+function ShowBattleSwept(battleInfo, modelOrView, onFinished)
+	if battleInfo and modelOrView then
+		finishedCallback = onFinished and onFinished(battleInfo) or nil
+		battleUtils.OpenBattleEndView(battleInfo, modelOrView,finishedCallback)
+	end
+end
+
+---获取到appData里面的数据
+function GetPbHero(oldHero)
+	local uid = oldHero.uid
+	if uid == nil or uid == 0 then
+		uid = oldHero.srcUid
+	end
+	return appData:checkItem("HeroItem",tostring(uid))
+end
+
+---打开灵纹解封界面
+function ShowSoulDesImprintView(heroInfo ,modelOrView)
+	local pbHero = GetPbHero(heroInfo)
+	if pbHero == nil then
+		return false
+	end
+	if pbHero ~= nil and pbHero.isEmblem or pbHero.isSoulImprinted then
+		local des = Language:getStr("WillChoseDesSoulimprint")
+		CsBridge.messageManager:PopMsgBox(Language:getStr("hint"), des, Language:getStr("Global_76"), nil, Language:getStr("Global_8"), function()
+			CsBridge.CacheAssetsByModule(modelOrView.Module, function()
+				local view = CsBridge.OpenView("SoulDesImprintView", "SoulImprintModel", true, true)
+				local playerInfo = appData:checkData("PlayerInfo")
+				local soulImprintItemRace = CsBridge.prefHelper:checkInt("SoulImprintItemRace" .. playerInfo.userId)
+				view:SetParamDataList(soulImprintItemRace or 0)
+			end, "SoulDesImprintView", "SoulImprintItemSlot")
+		end)
+		return true
+	else
+		return false
+	end
+end
+
+---提示灵魂被刻印
+function ShowSoulImprintedTip(heroInfo)
+	local pbHero = GetPbHero(heroInfo)
+	if pbHero == nil then
+		return false
+	end
+	if pbHero ~= nil and pbHero.isEmblem or pbHero.isSoulImprinted then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("Soul_Imprint"), 2)
+		return true
+	else
+		return false
+	end
+end
+
+---绑定heroItem类似的英雄头像
+function HeroItemSlotBindValue(slot, data)
+	local slotTrans = slot.transform
+	local heroBase_TF = slotTrans:Find("HeroBase")
+	local newFlag = slotTrans:GetGameObjectAtPath("NewFlag")
+	local repeatGo = slotTrans:GetGameObjectAtPath("repeat")
+	local notOwnGo = slotTrans:GetGameObjectAtPath("notOwn")
+	local lockGo = slotTrans:GetGameObjectAtPath("LockGO")
+	local taskLockGO = slotTrans:GetGameObjectAtPath("TaskLockGO")
+	local posLockGo = slotTrans:Find("PosLockGO")
+	local soulImprintTrans = slotTrans:Find("soulImprint")
+	local soulImprintObj = nil
+	if soulImprintTrans then
+		soulImprintObj = slotTrans:GetGameObjectAtPath("soulImprint")
+	end
+	if(data.IsSelected ~= nil) then
+		slot.m_SelectSprite:SetSelfActive(data.IsSelected)
+	else
+		slot.m_SelectSprite:SetSelfActive(false)
+	end
+	if data.anim == true then
+		CsBridge.UnityHelper.SetlocalScale(heroBase_TF.gameObject,1,1,1)
+		local updateEffect = slotTrans:Find("UpdateSpine")
+		local updateObj = updateEffect.childCount ~= 0 and updateEffect:GetChild(0) or nil
+		if updateObj ~= nil then
+			CsBridge.SpineHelper.ClearSpineModel("",updateObj.gameObject)
+		end
+		CsBridge.audioManager:PlayUI("pickuphero")
+		updateEffect.gameObject:SetSelfActive(true)
+		CsBridge.CacheAssetsByGroup("IconUpdateSpine",function()
+			local obj = CsBridge.objectCache:CreateObject("IconUpdateSpine", true)
+			obj.transform:SetParent(updateEffect,false)
+			CsBridge.UnityHelper.SetlocalScale(obj,0.7,0.7,1)
+			obj:GetComponent("SkeletonGraphic"):PlayAnimation("a_1",false,function()
+				local name = obj.name
+				CS.UnityEngine.GameObject.Destroy(obj)
+				CsBridge.objectCache:ClearGroup(name, true)
+				updateEffect.gameObject:SetSelfActive(false)
+			end)
+			CsBridge.TweenUtils.ScaleInAndOut(heroBase_TF)
+		end,"IconUpdateSpine")
+	end
+	if(data.isRepeat==true)then
+		repeatGo:SetSelfActive(true)
+	else
+		repeatGo:SetSelfActive(false)
+	end
+	if data.isNotOwn==true then
+		notOwnGo:SetSelfActive(true)
+	else
+		notOwnGo:SetSelfActive(false)
+	end
+	if data.flag==true then
+		newFlag:SetSelfActive(true)
+	else
+		newFlag:SetSelfActive(false)
+	end
+	lockGo:SetSelfActive(false)
+	taskLockGO:SetSelfActive(false)
+	if data.showDuty then
+		lockGo:SetSelfActive(data.showDuty)
+	end
+	if posLockGo ~= nil then
+		posLockGo.gameObject:SetSelfActive(data.isLocked==true)
+	end
+	if soulImprintObj then
+		local pbHero = GetPbHero(data)
+		if data.isBookHero ~= true and pbHero and pbHero.isEmblem == true and (data.canShowHeroInfo == nil or data.canShowHeroInfo == false) then
+			soulImprintObj:SetSelfActive(true)
+			newFlag:SetSelfActive(false)
+			notOwnGo:SetSelfActive(false)
+			repeatGo:SetSelfActive(false)
+		else
+			soulImprintObj:SetSelfActive(false)
+		end
+	end
+end
+
+---显示物品信息
+function ShowItemTip(selfViewOrModel, consume)
+	local itemType = consume.typeId
+	if itemType == ItemTypeEnum.Hero then
+		ShowHeroTip(selfViewOrModel, consume.id, 1, 1)
+	else
+		ShowTip(selfViewOrModel, itemType, consume.id)
+	end
+end
+
+---弹窗队列操作的条件函数
+function QueueActionMgrCondition()
+	return not CsBridge.moduleManager.Showing
+end
+
+local function GetLevelUpExitData(canClose, exit)
+	local tempData = {}
+	tempData.canClose = canClose
+	tempData.exitCallback = exit
+	return tempData
+end
+
+---弹出实名认证界面
+function PopRealNameCheckView(module, exit)
+	local playerInfo = appData:checkData("PlayerInfo")
+	local level = playerInfo.level
+	local LESS_LEVEL = GetConstValue("RealNameCheckLevel")
+	if level >= LESS_LEVEL then
+		module:OpenModule("RealNameCheckModule", {exit})
+	else
+		exit()
+	end
+end
+
+---玩家升级之后服务器请求回调
+local function PlayerLevelUpHttpCallBack(module, resp, levelUpView)
+	local BroadLevelUpEvent = function(exit)
+		MsgCenter:Broadcast(Notify_PlayerLevelUp)
+		exit()
+	end
+	local ConditionPopCallBack = function(exit)
+		if resp.packageConfig then
+			PopConditionPackageView(module, resp.packageConfig, exit)
+		else
+			exit()
+		end
+	end
+
+	local RealNameView = function(exit)
+		if resp.isAlert then
+			PopRealNameCheckView(module,exit)
+		else
+			exit()
+		end
+	end
+
+	local OpenPlayerLevelUpView = function(exit)
+		levelUpView:SetData(GetLevelUpExitData(true, exit))
+	end
+
+	local QueueAction = QueueActionMgr:CreateQueueAction()
+	QueueAction
+	:Add(BroadLevelUpEvent)
+	:Condition(QueueActionMgrCondition)
+	:Add(ConditionPopCallBack)
+	:Add(RealNameView)
+	:Add(OpenPlayerLevelUpView)
+	:Start()
+end
+
+local function GetPlayerLevelPopData(module, levelUpView)
+	local req = {
+		reqList = { GetConditionReqData(ConditionPackageType.PlayerLevelUp) }
+	}
+	HttpRequest("checkLevelUp", "PlayerLevelUpPopDataReq", "PlayerLevelUpPopDataResp", req, function(resp)
+		PlayerLevelUpHttpCallBack(module, resp, levelUpView)
+	end)
+end
+
+---玩家升级
+function PlayerLevelUp(module, rewards)
+	CsBridge.CacheAssetsByModule(module, function()
+		local view = CsBridge.OpenView("PlayerLevelUpView", "PlayerLevelModel", false, true)
+		view:SetData(GetLevelUpExitData(false, nil))
+		view:SetParamDataList(appData:checkData("PlayerInfo").level, rewards)
+		GetPlayerLevelPopData(module, view)
+	end, "PlayerLevelUpView", "ItemSlot")
+end
+
+---收货spine动画lua中的函数需要的参数
+function GetSpineData(spineName, spineAnimName, loop, autoClear)
+	local spineData = {}
+	spineData.spineName = spineName
+	spineData.spineAnimName = spineAnimName
+	spineData.loop = loop ~= nil and loop or false
+	spineData.autoClear = autoClear == nil and true or autoClear
+	return spineData
+end
+
+---执行spine的回调函数
+local function StartSpineCallback(callback, spine)
+	if callback then
+		callback(spine)
+	end
+end
+
+---清理spine的GameObject
+function ClearSpineObj(spineObj)
+	if spineObj then
+		local name = spineObj.name
+		CS.UnityEngine.GameObject.Destroy(spineObj)
+		CsBridge.objectCache:ClearGroup(name, true)
+		spineObj = nil
+	end
+end
+
+---播放spine动画
+local function PlaySpineAnima(spineObj, spineData, callback)
+	local spine = spineObj:GetComponent(CLS_SKELETONGRAPHIC)
+	if spineData.spineAnimName then
+		spine:PlayAnimation(spineData.spineAnimName, spineData.loop, nil, function()
+			if not spineData.loop and spineData.autoClear then
+				ClearSpineObj(spineObj)
+			end
+			StartSpineCallback(callback, spine)
+		end)
+	else
+		StartSpineCallback(callback, spine)
+	end
+end
+
+---开始spine 的动画
+function StartSpineAnimation(self, spineData, parentTrans, callback)
+	CsBridge.CacheAssetsByModule(self.Module, function()
+		if parentTrans.childCount > 0 then
+			local spineObj = parentTrans:GetChild(0).gameObject
+			PlaySpineAnima(spineObj, spineData, callback)
+			return
+		end
+		local spineObj = CsBridge.objectCache:CreateObject(spineData.spineName, true, parentTrans)
+		PlaySpineAnima(spineObj, spineData, callback)
+	end, spineData.spineName)
+end

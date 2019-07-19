@@ -1,0 +1,320 @@
+--[[
+	file: GroupPurchaseActivityUtils.lua
+	author: zhangyue
+	description: GroupPurchaseActivity utilities
+]]
+
+local DoubleElevenBulk = {
+	tblName = "DoubleElevenBulk",
+	id = "id",
+	goods = "goods",
+	price = "price",
+	count = "count"
+}
+
+local DoubleElevenBulkDiscount = {
+	tblName = "DoubleElevenBulkDiscount",
+	count = "count",
+	discount = "discount"
+}
+
+local UpdateMyGPGoods, GetGPGoodsDiscountFromTbl
+local GetGPGoodsFromTbl, UpdateCurGPGoodsArr, UpdateCurGPGoods
+
+local function InitGPGoodsData(data, activityData)
+	if activityData.MaxGPCount == nil then
+		activityData.MaxGPCount = GetConstValue("DoubleElevenBulkCount")
+	end
+	if activityData.gpGoodsFromTbl == nil then
+		activityData.gpGoodsFromTbl = GetGPGoodsFromTbl()
+	end
+	if activityData.gpGoodsDiscountFromTbl == nil then
+		activityData.gpGoodsDiscountFromTbl = GetGPGoodsDiscountFromTbl(activityData)
+	end
+	if activityData.MinGPDiscount == nil then
+		activityData.MinGPDiscount = activityData.gpGoodsDiscountFromTbl[activityData.MaxGPCount]
+	end
+	if activityData.LocalUserId == nil then
+		activityData.LocalUserId = appData:checkData("PlayerInfo").userId
+	end
+
+	local items = {}
+	activityData.items = items
+	for k,itemData in pairs(data.goods) do
+		items[itemData.config.id] = itemData
+	end
+end
+
+local function GetShowDiscount(discount)
+	if discount == 100 then
+		return -1
+	end
+	local dis = discount/10
+	local d,f = math.modf(dis)
+	if f == 0 then
+		dis = d
+	end
+	return dis
+end
+
+local function OpenMyGroupPurchaseDetailView(activityData, model)
+	local req = {
+		acId = activityData.id
+	}
+	HttpRequest("getMyGroupBuyInfo","GetMyGroupBuyInfoReq","GetMyGroupBuyInfoResp",req,function(resp)
+		activityData.isMine = true
+		UpdateMyGPGoods(resp, activityData)
+		CsBridge.CacheAssetsByModule(model.Module,function()
+			CsBridge.OpenView("GroupPurchaseDetailView","ServerActivityModel",true,true)
+		end,"GroupPurchaseDetailView","GPItemSlot")
+	end)
+end
+
+local function OpenGroupPurchaseDetailView(data, currentActivityID, model)
+	if data.remain == 0 then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("HasMaxCount"),2)
+		return
+	end
+	local req = {
+		acId = currentActivityID,
+		goodId = data.id
+	}
+	HttpRequest("getGroupBuyInfo","GetGroupBuyInfoReq","GetGroupBuyInfoResp",req,function(resp)
+		activityData.isMine = false
+		UpdateCurGPGoods(resp, data, activityData)
+		CsBridge.CacheAssetsByModule(model.Module,function()
+			CsBridge.OpenView("GroupPurchaseDetailView","ServerActivityModel",true,true)
+		end,"GroupPurchaseDetailView","GPItemSlot")
+	end)
+end
+
+local function PopBuyConfirmMsg(remain,callback)
+	local desp = remain < 0 and 
+		Language:getStr("BuyConfirmUnLimitDesp") or 
+		string.format(Language:getStr("BuyConfirmLimitDesp"),remain)
+	CsBridge.messageManager:PopMsgBox(Language:getStr("local_confirm"),
+		desp,
+		Language:getStr("local_cancel"),
+		nil,
+		Language:getStr("local_confirm"),
+		function()
+			if callback then
+				callback()
+			end
+		end)
+end
+
+local function BuyGroupPurchase(data, activityData, model)
+	local gruopChargeData, groupPurchaseTbls = activityData.gruopChargeData, activityData.groupPurchaseTbls
+	if data.isLocal then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("GPNoBuyOwn"),2)
+		return
+	end
+	if data.isPeopleMax then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("GPNoBuyPeopleMax"),2)
+		return
+	end
+	if not data.avaliable then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("GPHasJoin"),2)
+		return
+	end
+	if data.remain == 0 then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("HasMaxCount"),2)
+		return
+	end
+	if not CheckItemEnough(data.price.id,data.price.typeId,data.price.count,true) then
+		return
+	end
+	PopBuyConfirmMsg(data.remain, function()
+		local req = {
+			acId = activityData.id,
+			goodId = data.goodsId,
+			id = data.id
+		}
+		HttpRequest("participateGroupBuy","ParticipateGroupBuyReq","GroupBuyStatusResp",req,function(resp)
+			local confirmCbk = function()
+				local req = {
+					acId = activityData.id,
+					goodId = data.goodsId
+				}
+				HttpRequest("getGroupBuyInfo","GetGroupBuyInfoReq","GetGroupBuyInfoResp",req,function(resp2)
+					gruopChargeData.curGPGoods.remain = gruopChargeData.curGPGoods.remain - 1
+					UpdateCurGPGoodsArr(resp2, gruopChargeData, groupPurchaseTbls)
+					model:SendNotification("UpdateGPGoods",gruopChargeData.curGPGoods)
+				end)
+			end
+			ShowRewardReceivedTip(model,{data.goods}, confirmCbk)
+		end)
+	end)
+end
+
+local function NewGroupPurchase(activityData,model)
+	local gruopChargeData, groupPurchaseTbls = activityData.gruopChargeData, activityData.groupPurchaseTbls
+	if gruopChargeData.curGPGoods.remain == 0 then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("HasMaxCount"),2)
+		return
+	end
+	if not CheckItemEnough(gruopChargeData.curGPGoods.price.id,gruopChargeData.curGPGoods.price.typeId,gruopChargeData.curGPGoods.price.count,true) then
+		return
+	end
+	PopBuyConfirmMsg(gruopChargeData.curGPGoods.remain, function()
+		local req = {
+			acId = activityData.id,
+			goodId = gruopChargeData.curGPGoods.goodsId
+		}
+		HttpRequest("createGroupBuy","CreateGroupBuyReq","GroupBuyStatusResp",req,function(resp)
+			local confirmCbk = function()
+				local req = {
+					acId = activityData.id,
+					goodId = gruopChargeData.curGPGoods.goodsId
+				}
+				HttpRequest("getGroupBuyInfo","GetGroupBuyInfoReq","GetGroupBuyInfoResp",req,function(resp2)
+					gruopChargeData.curGPGoods.remain = gruopChargeData.curGPGoods.remain - 1
+					UpdateCurGPGoodsArr(resp2,gruopChargeData)
+					model:SendNotification("UpdateGPGoods",gruopChargeData.curGPGoods)
+				end)
+			end
+			ShowRewardReceivedTip(model,{gruopChargeData.curGPGoods.goods}, confirmCbk)
+		end)
+	end)
+end
+
+UpdateMyGPGoods = function(resp, activityData)
+	local gruopChargeData, groupPurchaseTbls = activityData.gruopChargeData, activityData.groupPurchaseTbls
+	gruopChargeData.myGPGoods = {
+		gpGoodsArr = {}
+	}
+	if resp and resp.groupBuys then
+		for i,pb in ipairs(resp.groupBuys) do
+			local gpGoods = {
+				goodsId = pb.goodId,
+				goods = groupPurchaseTbls.gpGoodsFromTbl[pb.goodId].goods,
+				price = groupPurchaseTbls.gpGoodsFromTbl[pb.goodId].price,
+				player = pb.playerBaseInfo,
+				createdTime = pb.createdTime,
+				peopleCount = pb.count,
+				discount = groupPurchaseTbls.gpGoodsDiscountFromTbl[pb.count],
+				id = pb.id,
+				isMine = true
+			}
+			gpGoods.returnPrice = gpGoods.price.count - math.floor(gpGoods.price.count*gpGoods.discount/100)
+			gpGoods.discount = GetShowDiscount(gpGoods.discount)
+			table.insert(gruopChargeData.myGPGoods.gpGoodsArr,gpGoods)
+		end
+	end
+end
+
+UpdateCurGPGoods = function(resp, data, gruopChargeData, groupPurchaseTbls)
+	gruopChargeData.curGPGoods = {
+		goodsId = data.id,
+		price = data.price,
+		goods = data.goods,
+		remain = data.remain,
+		gpGoodsArr = {}
+	}
+	if resp and resp.groupBuyInfos then
+		for i,pb in ipairs(resp.groupBuyInfos) do
+			local gpGoods = {
+				goodsId = pb.groupBuy.goodId,
+				goods = groupPurchaseTbls.gpGoodsFromTbl[pb.groupBuy.goodId].goods,
+				price = groupPurchaseTbls.gpGoodsFromTbl[pb.groupBuy.goodId].price,
+				player = pb.groupBuy.playerBaseInfo,
+				createdTime = pb.groupBuy.createdTime,
+				peopleCount = pb.groupBuy.count,
+				discount = groupPurchaseTbls.gpGoodsDiscountFromTbl[pb.groupBuy.count],
+				id = pb.groupBuy.id,
+				isMine = gruopChargeData.isMine,
+				remain = data.remain,
+				avaliable = pb.avaliable
+			}
+			gpGoods.isPeopleMax = gpGoods.peopleCount == gruopChargeData.MaxGPCount
+			gpGoods.discount = GetShowDiscount(gpGoods.discount)
+			gpGoods.isLocal = gruopChargeData.LocalUserId == gpGoods.player.userId
+			table.insert(gruopChargeData.curGPGoods.gpGoodsArr,gpGoods)
+		end
+	end
+end
+
+UpdateCurGPGoodsArr = function(resp, gruopChargeData, groupPurchaseTbls)
+	gruopChargeData.curGPGoods.gpGoodsArr = {}
+	if resp and resp.groupBuyInfos then
+		for i,pb in ipairs(resp.groupBuyInfos) do
+			local gpGoods = {
+				goodsId = pb.groupBuy.goodId,
+				goods = groupPurchaseTbls.gpGoodsFromTbl[pb.groupBuy.goodId].goods,
+				price = groupPurchaseTbls.gpGoodsFromTbl[pb.groupBuy.goodId].price,
+				player = pb.groupBuy.playerBaseInfo,
+				createdTime = pb.groupBuy.createdTime,
+				peopleCount = pb.groupBuy.count,
+				discount = groupPurchaseTbls.gpGoodsDiscountFromTbl[pb.groupBuy.count],
+				id = pb.groupBuy.id,
+				isMine = gruopChargeData.isMine,
+				remain = gruopChargeData.curGPGoods.remain,
+				avaliable = pb.avaliable
+			}
+			gpGoods.isPeopleMax = gpGoods.peopleCount == gruopChargeData.MaxGPCount
+			gpGoods.discount = GetShowDiscount(gpGoods.discount)
+			gpGoods.isLocal = gruopChargeData.LocalUserId == gpGoods.player.userId
+			table.insert(gruopChargeData.curGPGoods.gpGoodsArr,gpGoods)
+		end
+	end
+end
+
+GetGPGoodsFromTbl = function()
+	local data = {}
+	local tbl = ResTblContainer:GetTable(DoubleElevenBulk.tblName)
+	local ids = tbl:GetCol(DoubleElevenBulk.id)
+	for i=0,ids.Length-1 do
+		local id = tonumber(ids[i])
+		local infos = tbl:GetRow(id,DoubleElevenBulk.goods,DoubleElevenBulk.price,DoubleElevenBulk.count)
+		local goods = GetRewardFromTbl(infos[0])[1]
+		local price = GetRewardFromTbl(infos[1])[1]
+		local count = tonumber(infos[2])
+		data[id] = {
+			goods = goods,
+			price = price,
+			count = count
+		}
+	end
+	return data
+end
+
+GetGPGoodsDiscountFromTbl = function(gruopChargeData)
+	local data = {}
+	local discount = 100
+	local tbl = ResTblContainer:GetTable(DoubleElevenBulkDiscount.tblName)
+	for i=1,gruopChargeData.MaxGPCount do
+		local dis = tbl:GetInt(i,DoubleElevenBulkDiscount.discount)
+		if dis ~= 0 then
+			discount = dis
+		end
+		data[i] = discount
+	end
+	return data
+end
+
+local function GetItemViewData(activityData)
+	local allItemData = {}
+	for id, item in pairs(activityData.items) do
+		local itemViewData = {}
+		itemViewData.id = item.config.id
+		itemViewData.remain = item.remain
+		local gpGoods = activityData.gpGoodsFromTbl[itemViewData.id]
+		itemViewData.goods = gpGoods.goods
+		itemViewData.price = gpGoods.price
+		itemViewData.minDiscount = GetShowDiscount(activityData.MinGPDiscount)
+		table.insert(allItemData, itemViewData)
+	end
+	return allItemData
+end
+
+return{
+	OpenMyGroupPurchaseDetailView = OpenMyGroupPurchaseDetailView,
+	OpenGroupPurchaseDetailView = OpenGroupPurchaseDetailView,
+	BuyGroupPurchase = BuyGroupPurchase,
+	NewGroupPurchase = NewGroupPurchase,
+	GetShowDiscount = GetShowDiscount,
+	InitGPGoodsData = InitGPGoodsData,
+	GetItemViewData = GetItemViewData,
+	PopBuyConfirmMsg = PopBuyConfirmMsg,
+}

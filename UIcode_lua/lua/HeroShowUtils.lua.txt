@@ -1,0 +1,89 @@
+local heroArr
+local curIndex
+local maxIndex 
+
+function LinkHeroShowSystem(systemId, view)
+    local heroArrPb = appData:checkAllItems("HeroItem")
+	heroArr = {}
+	for i=0,heroArrPb.Length-1 do
+		table.insert(heroArr,heroArrPb[i])
+	end
+	table.sort(heroArr, SortByLevel)
+	curIndex = 1
+	maxIndex = #heroArr
+	local leftHeroId, rightHeroId = GetLeftRightHeroId(curIndex)
+	LinkSystem(systemId,view,{heroArr[curIndex],SwithHero,curIndex,maxIndex,false,leftHeroId,rightHeroId})
+end
+
+function SortByLevel(a, b)
+	if a.grade ~= b.grade then
+		return a.grade > b.grade
+	end
+	if a.level ~= b.level then
+		return a.level > b.level
+	end
+	qualityA = ResTblContainer:GetPropToInt(a.heroId, HeroBase.quality, HeroBase.actorTbl)
+	qualityB = ResTblContainer:GetPropToInt(b.heroId, HeroBase.quality, HeroBase.actorTbl)	
+	if qualityA ~= qualityB then
+        return qualityA > qualityB
+	end
+	return a.heroId < b.heroId
+end 
+
+function SwithHero(DoSetTable,oldData,isRight)
+	-- local heroArrPb = appData:checkAllItems("HeroItem")
+	-- heroArr = {}
+	-- for i=0,heroArrPb.Length-1 do
+	-- 	table.insert(heroArr,heroArrPb[i])
+	-- end
+	-- table.sort(heroArr, SortByLevel)
+	local maxIndex = #heroArr
+	local curIndex = GetHeroIndex(oldData, heroArr)
+	local nextIndex=0
+	if(isRight)then
+		nextIndex=curIndex+1
+	else
+		nextIndex=curIndex-1
+	end
+	
+	local pb=heroArr[nextIndex]
+	local newData={}
+	local leftHeroId, rightHeroId = GetLeftRightHeroId(nextIndex, maxIndex, heroArr)
+
+	newData.pb=pb
+	newData.uid=pb.uid
+	newData.heroId=pb.heroId
+	newData.level=pb.level
+	newData.grade=pb.grade
+	local quality = ResTblContainer:GetPropToInt(pb.heroId,HeroBase.quality,HeroBase.actorTbl)
+	newData.quality=quality
+	
+	DoSetTable({newData,SwithHero,nextIndex,maxIndex,false,leftHeroId,rightHeroId})
+end 
+
+function GetHeroIndex(_data)
+	local curIndex = 0
+	for i, data in pairs(heroArr) do
+		if data.uid == _data.uid then
+			curIndex = i
+			break
+		end
+	end 
+	return curIndex
+end 
+
+function GetLeftRightHeroId(curIdx)
+	local left, right = -1, -1
+	if curIdx ~= 1 and curIdx ~= maxIndex then
+		left = curIdx - 1
+		right = curIdx + 1
+		return heroArr[left].heroId, heroArr[right].heroId
+	elseif curIdx ~= 1 then
+		left = curIdx - 1
+		return heroArr[left].heroId, right
+	elseif curIdx ~= maxIndex then 
+		right = curIdx + 1
+		return left, heroArr[right].heroId
+	end 
+	return left, right
+end

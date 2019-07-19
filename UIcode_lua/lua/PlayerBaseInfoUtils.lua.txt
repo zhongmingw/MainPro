@@ -1,0 +1,53 @@
+
+function BindPlayerBaseInfoValue(player_TF,playerBaseInfo)
+    local lv_Lab = player_TF:GetComponentAtPath("LevelTxt", CLS_TEXT) 
+    local vipLv_Lab = player_TF:GetComponentAtPath("VipLevelTxt", CLS_TEXT) 
+    local Icon_Sprite = player_TF:GetComponentAtPath("IconSprite", CLS_IMAGE) 
+    local frame_Sprite = player_TF:GetComponentAtPath("FrameSprite", CLS_IMAGE) 
+
+	lv_Lab.text = tostring(playerBaseInfo.level)
+	vipLv_Lab.text = tostring(playerBaseInfo.vip)
+    SetIconByHeadId(Icon_Sprite, playerBaseInfo.icon)
+    SetVipText(vipLv_Lab, playerBaseInfo.vip)
+    local icon_TF = Icon_Sprite.transform
+    if icon_TF.childCount~=0  then
+        for i=icon_TF.childCount-1,0,-1 do
+            local model = Icon_Sprite.transform:GetChild(i)
+            CsBridge.objectCache:Recycle(model.gameObject)
+        end
+    end
+    local box = playerBaseInfo.box
+    -- print(box)
+    if box ~=nil then
+        local boxId = box.id
+        local expireTime = box.expireTime
+        if CsBridge.timeManager.ServerTime >= expireTime and expireTime~=0 then
+            boxId = 1
+        end
+        local iconSpine = ResTblContainer:GetPropToStr(boxId, AvatarBox.iconSpine, AvatarBox.tblName)
+        if iconSpine~=nil and iconSpine~="" then
+            CsBridge.SpineHelper.CreatSpineModel(iconSpine,Icon_Sprite.transform,
+            function(skeleton)
+                CsBridge.UnityHelper.SetUILocalScale(skeleton.rectTransform,1.1)
+            end)
+        end
+        local icon = ResTblContainer:GetPropToStr(boxId, AvatarBox.icon, AvatarBox.tblName)
+        CsBridge.IconData.SetIconByName(frame_Sprite.gameObject,icon)
+	end
+end
+
+function GetVipTextColor(level)
+	local upColor, downColor = {255, 255, 255}, {255, 255, 255}
+	if level > 0 then
+        local configStr = ResTblContainer:GetPropToStr(level, VipTbl.color, VipTbl.tblName)
+        if configStr== nil then
+            return nil,nil
+        end
+		local colorStrArr = SplitString(configStr, ",")
+		local upColorIdx, downColorIdx = 0, 1
+		local upColorID, downColorID = tonumber(colorStrArr[upColorIdx]), tonumber(colorStrArr[downColorIdx])
+		upColor, downColor = colorTable[upColorID], colorTable[downColorID]
+	end
+
+	return upColor, downColor
+end

@@ -1,0 +1,26 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-03-14 15:32:56
+
+function DoInit()
+end
+
+--[[
+    @desc: 装备的合成和附魔有自己单独的Module
+    author:dyl
+    time:2018-03-14 15:34:09
+    --@objs: 
+    return
+]]
+function AssetNames(objs)
+    local arr = {"EquipmentView"}
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    self:OpenView("EquipmentView", "EquipmentModel")
+    if(onFinished ~= nil) then
+        onFinished()
+    end
+end

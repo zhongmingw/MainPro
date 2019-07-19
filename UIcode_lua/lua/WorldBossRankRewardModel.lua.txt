@@ -1,0 +1,265 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-03-18 10:50:09
+
+local WorldBossUtils = require "WorldBossUtils"
+
+local outerData
+
+local COUNT_HURT_RANK = 50
+
+local WorldBossRankRewardPageType = {
+    Reward = 1,
+    UnionHurt = 2,
+    PlayerHurt = 3
+}
+local curPage = WorldBossRankRewardPageType.Reward
+local curView
+
+local WorldBossRankReward = {
+    min = "min",
+    max = "max",
+    seasonRewardStr = "seasonRewardStr",
+    seasonOtherReward = "seasonOtherReward",
+    tblName = "WorldBossRankReward"
+}
+
+local WorldBossPersonalReward = {
+    tblName = "WorldBossPersonalReward",
+    rankMax = "rankMax",
+    rankMin = "rankMin",
+    rate = "rate"
+}
+
+function DoInit()
+end
+
+function InitProperties()
+end
+
+--------------------world boss rank reward view-------------------------------------
+local function OpenPage(viewName, ...)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        curView = CsBridge.OpenView(viewName, self.ModelName,false,true)
+    end,viewName, ...)
+end
+
+local function OpenPageType(type)
+    if curView then
+        self:HideView(curView.gameObject.name)
+    end
+    if type == WorldBossRankRewardPageType.Reward then
+        OpenPage("WorldBossRewardView","WorldBossRewardItemSlot","ItemSlot")
+    elseif type == WorldBossRankRewardPageType.UnionHurt then
+        OpenPage("WorldBossUnionHurtRankView","WorldBossUnionHurtRankItemSlot")
+    elseif type == WorldBossRankRewardPageType.PlayerHurt then
+        OpenPage("WorldBossPlayerHurtRankView","WorldBossPlayerHurtRankItemSlot")
+    end
+end
+
+function OnCommand_InitData(objs)
+    outerData = objs[0]
+end
+
+function OnCommand_InitWorldBossRankRewardData(objs)
+    self:SendNotification("RefresWorldBossRankRewardView",curPage)
+    OpenPageType(curPage)
+end
+
+function OnCommand_OpenWorldBossRankRewardPage(objs)
+    local type = objs[0]
+    if type == curPage then
+        return
+    end
+    curPage = type
+    OpenPageType(curPage)
+end
+
+-------------------------world boss reward view -------------------------------------
+local function GetWorldBossRewardData(onFinished)
+    local req = {
+        useless = 0
+    }
+    HttpRequest("getWorldBossUnionScoreRank","GetRankReq","GetUnionScoreRankResp",req,function(resp)
+        local data = {}
+        data.endTime = outerData.rewardTime or 0
+        data.killRewards = outerData.rewards
+        data.rewardItems = {}
+        data.selfRank = -1
+        local tbl = ResTblContainer:GetTable(WorldBossRankReward.tblName)
+        local mins = tbl:GetCol(WorldBossRankReward.min)
+        local lastId = mins.Length-1
+        for i=0,mins.Length-1 do
+            local min = tonumber(mins[i])
+            local infos = tbl:GetRow(min, WorldBossRankReward.max, WorldBossRankReward.seasonRewardStr, WorldBossRankReward.seasonOtherReward)
+            local max = tonumber(infos[0])
+            local rewards = GetRewardFromTbl(infos[1])
+            local otherRewards = GetRewardFromTbl(infos[2])
+            local rewardItem = {
+                rank = i == lastId and min.."+" or ((min == max) and min or (min.."-"..max)),
+                min = min,
+                max = max,
+                rewards = rewards,
+                otherRewards = otherRewards
+            }
+            table.insert(data.rewardItems, rewardItem)
+        end
+        if resp then
+            data.selfRank = resp.myRankItem and resp.myRankItem.rank or -1
+            for _,rewardItem in ipairs(data.rewardItems) do
+                if data.selfRank >= rewardItem.min and 
+                data.selfRank <= rewardItem.max then
+                    data.selfRewardItems = {}
+                    data.selfRewardItems.rewards = rewardItem.rewards
+                    data.selfRewardItems.otherRewards = rewardItem.otherRewards
+                    break
+                end
+            end
+        end
+        onFinished(data)
+    end,true,true)
+end
+
+function OnCommand_InitWorldBossRewardData(objs)
+    GetWorldBossRewardData(function(rewardData)
+        self:SendNotification("RefreshWorldBossRewardView",rewardData)
+    end)
+end
+
+function OnCommand_OpenWorldBossRewardDisView(objs)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        CsBridge.OpenView("WorldBossRewardDisView",self.ModelName,true,true)
+    end,"WorldBossRewardDisView","WorldBossRewardDisItemSlot")
+end
+
+-------------------------world boss union hurt rank view------------------------------------
+local function CheckNewUnionHurtRankData(onFinished)
+    local function onResp(resp)
+        onFinished(resp and resp.rankItems or {})
+    end
+    WorldBossUtils.RequestGetWorldBossUnionScoreRank(COUNT_HURT_RANK,onResp)
+end
+
+local function CheckNewPlayerHurtRankData(onFinished)
+    local function onResp(resp)
+        onFinished(resp and resp.rankItems or {})
+    end
+    WorldBossUtils.RequestGetWorldBossUnionMemberRank(COUNT_HURT_RANK,onResp)
+end
+
+local function GetBaseHurtRankData(isPlayer,svrData)
+    local id
+    local name
+    local zone
+    local icon
+    local combat
+    local base
+    if isPlayer then
+        id = svrData.baseInfo.userId
+        name = svrData.baseInfo.name
+        zone = svrData.baseInfo.zone
+        combat = svrData.combat
+        base = svrData.baseInfo
+    else
+        id = svrData.unionBaseInfo.id
+        name = svrData.unionBaseInfo.name
+        zone = svrData.zone
+        icon = ResTblContainer:GetPropToStr(svrData.unionBaseInfo.icon, GuildBanner.banner, GuildBanner.tblName)
+        combat = svrData.unionBaseInfo.combat
+        base = svrData.unionBaseInfo
+    end
+    return {
+        id = id,
+        name = name,
+        zone = zone,
+        icon = icon,
+        combat = combat,
+        base = base
+    }
+end
+
+local function GetNewHurtRankData(isPlayer, rankItems)
+    local allDatas = {}
+    local maxHurt = 1
+    for i,v in ipairs(rankItems) do
+        if v.rank == 1 then
+            maxHurt = v.score
+        end
+        local base = GetBaseHurtRankData(isPlayer,v)
+        local data = {
+            id = base.id,
+            name = FormatWorldPlayerName(base.name, base.zone),
+            icon = base.icon ,
+            combat = base.combat,
+            base = base.base,
+            hurt = v.score,
+            rank = v.rank,
+            isPlayer = isPlayer
+        }
+        table.insert(allDatas, data)
+    end
+    return allDatas
+end
+
+function OnCommand_InitWorldBossUnionHurtRankData(objs)
+    CheckNewUnionHurtRankData(function(rankItems)
+        local rankData = GetNewHurtRankData(false, rankItems)
+        self:SendNotification("RefreshWorldBossUnionHurtRankView",rankData)
+    end)
+end
+-------------------------world boss player hurt rank view------------------------------------
+function OnCommand_InitWorldBossPlayerHurtRankData(objs)
+    CheckNewPlayerHurtRankData(function(rankItems)
+        local rankData = GetNewHurtRankData(true, rankItems)
+        self:SendNotification("RefreshWorldBossPlayerHurtRankView",rankData)
+    end)
+end
+
+function OnCommand_OpenPlayerInfoView(objs)
+    local player = objs[0]
+    WorldBossUtils.ShowPlayerTip(self, player)
+end
+
+------------------------------dis------------------------------
+local function GetRewardDisData()
+    local data = {}
+    local tbl = ResTblContainer:GetTable(WorldBossPersonalReward.tblName)
+    local mins = tbl:GetCol(WorldBossPersonalReward.rankMin)
+    local lastId = mins.Length-1
+    for i=0,mins.Length-1 do
+        local min = tonumber(mins[i])
+        local infos = tbl:GetRow(min, WorldBossPersonalReward.rankMax, WorldBossPersonalReward.rate)
+        local max = tonumber(infos[0])
+        local rate = tonumber(infos[1])
+        local rewardItem = {
+            rank = i == lastId and min.."+" or ((min == max) and min or (min.."-"..max)),
+            min = min,
+            max = max,
+            dis = rate*100/Mill_PERCENT_RATE,
+        }
+        table.insert(data, rewardItem)
+    end
+    return data
+end
+
+function OnCommand_InitWorldBossRewardDisData(objs)
+    local rankData = GetRewardDisData()
+    self:SendNotification("RefreshWorldBossRewardDisView",rankData)
+end
+
+function OnCommand_ShowTips(objs)
+    local data = objs[0]
+    ShowTip(self,data.typeId,data.id)
+end
+
+function DoOnExit()
+    WorldBossRankRewardPageType = nil
+    curPage = nil
+    curView = nil
+
+    WorldBossRankReward = nil
+
+    WorldBossPersonalReward = nil
+    WorldBossUtils = nil
+end

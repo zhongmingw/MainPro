@@ -1,0 +1,269 @@
+
+local curComposeEquip
+local curComposeEquipArr = {}
+local allComposeEquipArr = {}
+
+local curComposeCount = 1
+local maxComposeCount = 0
+local consumeEquipOwnCount = 0
+local consumeEquipCount = 3
+
+local isCoinNotEnough
+
+local curEquipType = 1
+
+function DoInit()
+	MsgCenter:Subscribe(CsBridge.SysMsgDef.Notify_SingleDataChanged, OnSingleDataChanged)
+end
+
+function InitProperties()
+end
+
+function DoOnExit()
+	MsgCenter:Unsubscribe(CsBridge.SysMsgDef.Notify_SingleDataChanged, OnSingleDataChanged)
+	self.Module = nil
+	curComposeEquip = nil
+	curComposeEquipArr = nil
+	allComposeEquipArr = nil
+	curComposeCount = nil
+	maxComposeCount = nil
+	consumeEquipOwnCount = nil
+	consumeEquipCount = nil
+	isCoinNotEnough = nil
+	curEquipType  = nil
+end 
+
+function OnSingleDataChanged(obj)
+	if obj == "PlayerInfo" then
+		RefreshRedFlag()
+	end 
+end 
+
+function OnCommand_InitComposeData(objs) 
+	GetAllComposeEquipData()
+	self:SendNotification("InitScreen",curEquipType)
+	curEquipType = 1
+	Screen()
+	SelectEquip(curComposeEquipArr[1])--默认选中第一件装备
+	RefreshRedFlag()
+end
+
+function GetAllComposeEquipData()
+	allComposeEquipArr = {}
+	local equipIds = ResTblContainer:GetIds(Equipment.actorTbl)
+	local itemTbl=ResTblContainer:GetTable(ItemBase.actorTbl)
+	local equipTbl=ResTblContainer:GetTable(Equipment.actorTbl)
+	for i=0,equipIds.Length-1 do
+		local id = tonumber(equipIds[i])
+		local open = itemTbl:GetInt(id,ItemBase.open)
+		local composeCost = equipTbl:Get(id,Equipment.composeCost)
+		if open == 1 and composeCost ~= "" then
+			local equip = {
+				id = id,
+				typeId = 2,
+				equipType = equipTbl:GetInt(id,Equipment.type),
+				consumeEquip = {
+					id = equipTbl:Get(id,Equipment.upgradeMaterialId)
+				}				
+			}
+			local infos = SplitString(equipTbl:Get(id,Equipment.composeCost),",")
+			equip.consumeCoin = {
+				id = tonumber(infos[0]),
+				typeId = tonumber(infos[1]),
+				count = tonumber(infos[2])
+			}
+			table.insert(allComposeEquipArr, equip)
+		end 
+	end 
+end 
+
+function RefreshRedFlag()
+    if allComposeEquipArr == nil or curComposeEquipArr == nil then
+	    return
+	end
+	local redResult = CheckRedTipEquipmentCompose(allComposeEquipArr)
+	local redEquips = {}
+	for i,equip in ipairs(curComposeEquipArr) do
+		if redResult.redEquipArr[equip.id] ~= nil then
+			equip.redFlag = true
+		else 
+			equip.redFlag = false
+		end
+		table.insert(redEquips,equip)
+	end
+	self:SendNotification("RefreshRedFlag",redEquips,redResult.redEquipTypeArr)
+end 
+
+function OnCommand_Screen(objs)
+	local equipType = objs[0]
+	if curEquipType == equipType then
+		return
+	end 
+	local direct = equipType - curEquipType < 0
+	curEquipType = equipType
+	self:SendNotification("ScreenAnim",curEquipType,direct)
+	Screen()
+end 
+
+function Screen() 
+	if allComposeEquipArr == nil or #allComposeEquipArr == 0 then
+		return
+	end 
+	curComposeEquipArr = {}
+	for i,equip in ipairs(allComposeEquipArr) do
+		if curEquipType == equip.equipType then
+			table.insert(curComposeEquipArr, equip)
+		end 
+	end 
+	self:SendNotification("Screen",curComposeEquipArr)
+	RefreshRedFlag()
+end 
+
+function OnCommand_SelectEquip(objs)
+	SelectEquip(objs[0])
+end 
+
+function OnCommand_ComposeItemTip(objs)
+	if curComposeEquip ~= nil then
+		CsBridge.CacheAssetsByModule(self.Module,function()
+			local equip = {
+				id = curComposeEquip.id,
+				typeId = curComposeEquip.typeId,
+				count = 1
+			}
+			local view = CsBridge.OpenView("ItemTipView","ItemTipModel",false,true)
+			view:SetParamDataList(equip,itemBaseIndex+itemDespIndex+PropsIndex+itemSuitIndex)
+			view:SendCommand("InitItemData")
+		end, "ItemTipView")
+	end
+end 
+
+function OnCommand_ConsumeItemTip(objs)
+	if curComposeEquip ~= nil then
+		CsBridge.CacheAssetsByModule(self.Module,function()
+			local equip = {
+				id = curComposeEquip.consumeEquip.id,
+				typeId = 2,
+				count = 1
+			}
+			local view = CsBridge.OpenView("ItemTipView","ItemTipModel",false,true)
+			view:SetParamDataList(equip,itemBaseIndex+itemDespIndex+PropsIndex+itemSuitIndex)
+			view:SendCommand("InitItemData")
+		end, "ItemTipView")
+	end
+end 
+
+function OnCommand_ChangeNum(objs)
+	local num = tonumber(objs[0])
+	if num == curComposeCount then
+		return
+	end 
+    ChangeCurNum(num)
+end
+
+function OnCommand_ReduceNum(objs)
+    ChangeCurNum(curComposeCount-1)
+end
+
+function OnCommand_AddNum(objs)
+    ChangeCurNum(curComposeCount+1)
+end
+
+function ChangeCurNum(num)
+	if num == nil then
+		return 
+	end
+	if num == 0 then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("Has_Min"))
+	elseif maxComposeCount == 0 then
+		ShowNotEnoughHintBox()
+		curComposeCount = 1
+	elseif num > maxComposeCount then
+		ShowNotEnoughHintBox()
+	elseif num < 1 then
+        curComposeCount = 1 
+	else 
+        curComposeCount = num
+	end
+    self:SendNotification("RefreshConsume",curComposeCount,curComposeEquip.consumeCoin.count*curComposeCount,consumeEquipOwnCount,curComposeCount*consumeEquipCount,maxComposeCount==0)
+end
+
+function SelectEquip(equip)
+	if curComposeEquip == equip then
+		return
+	end
+	if curComposeEquip ~= nil then
+		CancelSelectEquip()
+	end 
+	curComposeEquip = equip
+	curComposeEquip.IsSelected=true
+	self:SendNotification("SelectEquip",curComposeEquip)
+	GetComposeEquipmentInfo(curComposeEquip)
+	self:SendNotification("RefreshComposeEquip",curComposeEquip,curComposeCount,consumeEquipOwnCount,curComposeCount*consumeEquipCount,maxComposeCount==0)
+end 
+
+function CancelSelectEquip()
+	curComposeEquip.IsSelected = false
+	self:SendNotification("CancelSelectEquip",curComposeEquip)
+	curComposeEquip = nil
+	consumeEquipOwnCount = 0
+	maxComposeCount = 0
+	curComposeCount = 1
+end 
+
+function GetComposeEquipmentInfo(composeEquip)
+	local pack = appData:checkItem("PackItem",composeEquip.consumeEquip.id)
+	local playerInfo = appData:checkData("PlayerInfo")
+	if pack ~= nil then
+		consumeEquipOwnCount = pack.count
+	else 
+		consumeEquipOwnCount = 0
+	end 
+	 local maxComposeCountByEquipCount = math.floor(consumeEquipOwnCount / consumeEquipCount)
+	 local maxComposeCountByCoin = math.floor(playerInfo.coin / composeEquip.consumeCoin.count)
+	 if maxComposeCountByEquipCount > maxComposeCountByCoin then
+		isCoinNotEnough = true
+		maxComposeCount = maxComposeCountByCoin
+	 else
+		isCoinNotEnough = false
+		maxComposeCount = maxComposeCountByEquipCount
+	 end 
+	 if maxComposeCount == 0 then
+		curComposeCount = 1
+	 else
+		curComposeCount = maxComposeCount
+	 end
+end 
+
+function OnCommand_Compose(objs)
+	if curComposeEquip == nil or maxComposeCount == 0 then
+		ShowNotEnoughHintBox()
+		return
+	end 
+	local req={
+		id=curComposeEquip.id,
+		count=curComposeCount,
+    }
+    HttpRequest("composeEquip", "ComposeEquipReq", "ComposeEquipResp", req, OnComposeResp)
+end
+function OnComposeResp(resp)
+	if resp ~= nil then
+		self:SendNotification("ComposeEnd",function()
+			local confirmCbk = function()
+				GetAllComposeEquipData()
+				RefreshRedFlag()
+				GetComposeEquipmentInfo(curComposeEquip)
+				self:SendNotification("RefreshComposeEquip",curComposeEquip,curComposeCount,consumeEquipOwnCount,curComposeCount*consumeEquipCount,maxComposeCount==0)
+			end
+			ShowRewardReceivedTip(self, resp.rewardItems, confirmCbk)
+		end)
+	end 
+end
+
+function ShowNotEnoughHintBox()
+	if isCoinNotEnough then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("1002"))
+	else 
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("EquipmentCompose_NotMat"))
+	end 
+end 

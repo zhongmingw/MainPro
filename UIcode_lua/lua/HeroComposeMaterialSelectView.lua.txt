@@ -1,0 +1,108 @@
+local centerObj
+local nothingObj
+local heroMatGrid
+
+local isInit = false
+
+function DoInit()
+    self.Shadow = 1
+    self.Anim = 8
+end
+
+function IsSetAnchor()
+    self.transform.parent:SetAsLastSibling()
+    return true
+end
+
+function InitUI() 
+    centerObj = self:GetGameObjectAtPath("Center")
+    nothingObj = self:GetGameObjectAtPath("Center/Nothing")
+    heroMatGrid = self:GetComponentAtPath("Center/heroSV/ScrollRect/Viewport/HeroMatGrid" ,CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitMaterialSelectData")
+end
+
+function Active()
+    self:SendCommand("InitMaterialSelectData")
+end
+
+function OnNotification_InitMaterialSelectView(objs)
+    local matArr = objs[0]
+    local noMat = objs[1]
+    centerObj:SetSelfActive(true)
+    heroMatGrid:RefreshItemSlots(matArr,self.gameObject,"HeroItemSlot")
+    nothingObj:SetSelfActive(noMat)
+    if not noMat then
+        for i,mat in ipairs(matArr) do
+            if mat.selected then
+                local itemData = heroMatGrid:GetItemDataByData(mat)
+                itemData.data.IsSelected = true
+                itemData.IsSelected = true
+            end
+        end
+    end
+end
+
+function OnNotification_RefreshSingleHero(objs)
+    heroMatGrid:RefreshSlot(objs[0],objs[1])
+end
+
+function OnHeroMatGridHeroItemSlotClick(obj)
+    local heroData = obj.m_data
+    if ShowSoulDesImprintView(heroData,self) then
+        return
+    end
+    if obj.m_data.IsSelected then
+        self:SendCommand("CancelSelectMaterial",obj.m_data)
+    else
+        self:SendCommand("SelectMaterial",obj.m_index)
+    end
+end
+
+function OnNotification_SelectMaterial(objs)
+    local index = objs[0]-1
+    local itemData = heroMatGrid:GetItemDataByIndex(index)
+    if itemData ~= nil then 
+        itemData.data.IsSelected = true
+        itemData.IsSelected = true 
+    end
+end
+
+function OnNotification_CancelSelectMaterial(objs)
+    local materialData = objs[0]
+    local itemData = heroMatGrid:GetItemDataByData(materialData)
+    if itemData ~= nil then
+        itemData.IsSelected = false
+        itemData.data.IsSelected = false
+    end
+end
+
+function OnConfirmBtnClick(sender)
+    self:SendCommand("ConfirmSelectMaterial")
+    self:HideView(self.gameObject.name)
+end
+
+function OnClose() 
+    centerObj:SetSelfActive(false)
+    nothingObj:SetSelfActive(false)
+    heroMatGrid:ClearItems()
+end
+
+function OnMaskClick(sender)
+    self:SendCommand("NoSelectMaterial")
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+    centerObj = nil
+    nothingObj = nil
+    heroMatGrid = nil
+
+    isInit = nil
+end

@@ -1,0 +1,69 @@
+
+MsgCenter = {}
+
+local msgDict = {}
+
+local function TbContainItem(tb, item, func)
+    if tb ~= nil and #tb ~= 0 then
+		for i,data in ipairs(tb) do
+			if func ~= nil and func(data) then
+				return true
+			else 
+				if data == item then
+					return true
+				end
+			end
+        end
+    end
+    return false
+end
+
+function MsgCenter:Clear()
+    msgDict={}
+end
+
+function MsgCenter:Subscribe(msg,action)
+    if msg ==nil then
+        return 
+    end
+    local s = msgDict[msg]
+    if s~=nil then
+        if not TbContainItem(s,action) then
+            table.insert(s,action)
+        end
+    else
+        s={}
+        table.insert(s,action)
+        msgDict[msg]=s 
+    end
+end 
+
+function MsgCenter:Unsubscribe(msg,action)
+    if msg ==nil then
+        return 
+    end
+    local s = {}
+    if msgDict[msg]~=nil then
+        s=msgDict[msg]
+        if TbContainItem(s,action) then
+            for i,item in ipairs(s) do
+                if action==item then
+                    table.remove(s,i)
+                    return 
+                end
+            end
+        end
+    end
+end 
+
+function MsgCenter:Broadcast(msg,info)
+    local s = {}
+    if msgDict[msg]~=nil then
+        s=msgDict[msg]
+        for i,action in ipairs(s) do
+            action(info)
+        end
+    end
+end
+
+return MsgCenter

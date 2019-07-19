@@ -1,0 +1,213 @@
+--[[
+	file: ServerActivityView.lua
+	author: hangang
+	description:Time limited activity container view
+]]
+
+require "ServerActivityItemSlot"
+
+local currentItemSlot
+local itemsGrid, leftImgObj, emptyTipsObj
+local titleTxt
+
+local viewData
+
+local openActivityId
+
+local targetViewData
+
+local TICKER_NAME = "ticker_ServerActivityView"
+
+function DoInit()
+	self.Shadow = 1
+	InitUI()
+end
+
+function IsSetAnchor()
+	return true
+end
+
+function InitUI()
+	local path = "ActivitySV/ScrollRect/Viewport/Grid"
+	itemsGrid = self:GetComponentAtPath(path ,CLS_UI_ITEM_GRID)
+	path = "BGS/leftImg"
+	leftImgObj = self:GetGameObjectAtPath(path)
+	path = "BGS/bgRawImg"
+	bg = self:GetGameObjectAtPath(path)
+	path = "Nothing"
+	emptyTipsObj = self:GetGameObjectAtPath(path)
+	titleTxt = self:GetComponentAtPath("other/TitleTxt",CLS_TEXT)
+	--SetEmpty(true)
+end
+
+function OnAnimationFinished()
+	self:SendCommand("GetBaseViewData")
+end
+
+function OnNotification_RefreshServerActivityType(objs)
+	local name = objs[0]
+	titleTxt.text = name
+end
+
+function SetParamDataList(objs)
+	if objs ~= nil then
+		targetViewData = objs[0]
+	end
+end
+
+function OnNotification_LeadersActivityRewardClaimed(objs)
+	ClearCurrentTips()
+end
+
+function OnNotification_SevenActivityRewardClaimed(objs)
+	ClearCurrentTips()
+end
+
+function ClearCurrentTips()
+	local slotTrans = currentItemSlot.transform
+	local tipsObj = slotTrans:GetGameObjectAtPath("Tips")
+	tipsObj:SetActive(false)
+end
+
+local function RefreshBaseView(callback)
+	local itemCount = #viewData
+	local index = 1
+
+	if targetViewData ~= nil then
+		for i = 1, #viewData do
+			if viewData[i].type == targetViewData then
+				index = i
+				break
+			end
+		end
+	end
+
+	if itemCount > 0 then
+		SetEmpty(false)
+		itemsGrid:RefreshItemSlots(viewData, self.gameObject, "ServerActivityItemSlot")
+		local allItems = itemsGrid:GetAllItems()
+		if allItems and allItems.Length > 0 then
+			if callback then
+				callback(allItems[index - 1])
+			end
+			local endTime = CsBridge.timeManager.ServerTime * 2
+			local interval = 1.0
+			Timer:AddTicker(TICKER_NAME,endTime,RefreshCountdown,nil,interval)
+		end
+	else
+		SetEmpty(true)
+		itemsGrid:ClearItems()
+		Timer:StopTicker(TICKER_NAME)
+	end
+end
+
+local function UpdateCurrentTypeItem(itemSlot)
+	currentItemSlot = itemSlot
+	currentItemSlot.IsSelected = true
+	local itemData = itemSlot.m_data
+	openActivityId = itemData.id
+end
+
+function OnNotification_RefreshBaseView(objs)
+	viewData = objs[0]
+	RefreshBaseView(function (itemSlot)
+		ShowActivityView(itemSlot)
+	end)
+end
+
+function SetEmpty(isEmpty)
+	leftImgObj:SetActive(not isEmpty)
+	emptyTipsObj:SetActive(isEmpty)
+end
+
+function ShowActivityView(itemSlot)
+	if currentItemSlot == itemSlot then
+		return
+	end
+
+	currentItemSlot = itemSlot
+	currentItemSlot.IsSelected = true
+
+	local itemData = itemSlot.m_data
+	local activityType = itemData.type
+	openActivityId = itemData.id
+	self:SendCommand("OpenActivityView", activityType)
+end
+
+function OnNotification_CacheActivityAssetsFinished(objs)
+	self:SendCommand("GetActivityViewData", openActivityId)
+end
+
+function RefreshCountdown()
+	if self == nil or self.Module == nil then
+		return
+	end
+	self:SendCommand("GetAllRestTime")
+end
+
+function OnNotification_RefreshCountdown(objs)
+	local viewData = objs[0]
+	DoRefreshCountdown(viewData)
+end
+
+function OnNotification_UpdateActivityTypeList(objs)
+	viewData = objs[0]
+	targetViewData = objs[1]
+	RefreshBaseView(function (itemSlot)
+		UpdateCurrentTypeItem(itemSlot)
+	end)
+end
+
+function DoRefreshCountdown(timeData)
+	local allItems = itemsGrid:GetAllItems()
+	for i = 0, allItems.Length - 1 do
+		local itemSlot = allItems[i]
+		local activityID = itemSlot.m_data.id
+		local restTime = timeData[activityID]
+		local countdownTxt = itemSlot.transform:Find("countdownTxt"):GetComponent(CLS_TEXT)
+		countdownTxt.text = restTime
+	end
+end
+
+function OnGridServerActivityItemSlotClick(itemSlot)
+	local allItems = itemsGrid:GetAllItems()
+	for i = 0, allItems.Length - 1 do
+		local item = allItems[i]
+		item.IsSelected = (item == itemSlot)
+	end
+	ShowActivityView(itemSlot)
+end
+
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close()
+	Timer:StopTicker(TICKER_NAME)
+	self:SendCommand("CloseActivityView")
+	self:ReturnBack()
+end
+
+function OnClose()
+	Timer:StopTicker(TICKER_NAME)
+end
+
+function DoExit()
+	self.Module=nil
+	Timer:StopTicker(TICKER_NAME)
+	currentItemSlot = nil
+	itemsGrid = nil
+	leftImgObj = nil
+	emptyTipsObj = nil
+	titleTxt = nil
+	viewData = nil
+
+	openActivityId = nil
+
+	targetViewData = nil
+	TICKER_NAME = nil
+end

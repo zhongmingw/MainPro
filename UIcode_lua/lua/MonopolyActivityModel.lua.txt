@@ -1,0 +1,235 @@
+local viewTab = {
+	[MonoPolyActivity.MonopolyBox] = "MonopolyBoxView",
+	[MonoPolyActivity.MonopolyAnswer] = "MonopolyAnswerView",
+	[MonoPolyActivity.MonopolyShop] = "MonopolyShopView",
+	[MonoPolyActivity.MonopolyFight] = "MonopolyFightView",
+	[MonoPolyActivity.MonopolyChallenge] = "MonopolyChallengeView",
+}
+local actCreatedTime
+local fightUrl
+local fightReq
+local qyId
+local viewData
+local activeIndex
+local monstersUpData = {}
+
+function OnCommand_OpenActivityView(objs)
+	qyId = objs[0]
+	viewData = objs[1]
+	activeIndex = 1
+	if qyId == MonoPolyActivity.MonopolyAnswer or qyId == MonoPolyActivity.MonopolyShop then
+		self:SendNotification("SetDownImgVisible",false)
+	else
+		self:SendNotification("SetDownImgVisible",true)
+	end
+
+	self:SendNotification("RefreshBaseView",viewData,activeIndex)
+
+	CsBridge.CacheAssetsByModule(self.Module,function()
+		local view = CsBridge.OpenView(viewTab[qyId],"MonopolyActivityModel",false,true)
+		view:SetParamDataList(viewData)
+	end, viewTab[qyId])
+end
+
+function OnCommand_ChangeViewData(objs)
+	viewData = objs[0]
+	self:SendNotification("SetActivityData",viewData[activeIndex])
+	self:SendNotification("RefreshBaseView",viewData,activeIndex)
+end
+
+function OnCommand_AnimationFinished(objs)
+	activeIndex = 1
+	self:SendNotification("SetActivityData",viewData[activeIndex])
+end
+
+
+function OnCommand_SetActivityData(objs)
+	activeIndex = objs[0]
+	self:SendNotification("SetActivityData",viewData[activeIndex])
+end
+
+function OnCommand_SubmitAnswer(objs)
+	local data = objs[0]
+	local req = {}
+	req.createdTime = data.createdTime
+	req.answer = data.answer
+	HttpRequest("zillionaireQuestion","ZillionaireQuestionReq","ZillionaireQuestionResp",req,function(resp)
+		if resp then
+			self:SendNotification("SetIsOver",data.answer,data.createdTime)
+			PopRewardView(self,resp.rewardItems)
+		end
+	end)
+end
+
+function OnCommand_GetAwards(objs)
+	local data = objs[0]
+	local req = {}
+	req.createdTime = data.createdTime
+	HttpRequest("zillionaireBox","ZillionaireBoxReq","ZillionaireBoxResp",req,function(resp)
+		if resp then
+			self:SendNotification("SetIsOver",true,data.createdTime)
+			PopRewardView(self,resp.rewardItems)
+		end
+	end)
+end
+
+function OnCommand_GoToChallenge(objs)
+	local data = objs[0]
+	actCreatedTime = data.createdTime
+	fightUrl = data.url
+	fightReq = data.req
+	local _type = FormationTypeEnum.FormationType_PVE
+	CsBridge.CacheAssetsByModule(self.Module,function()
+        local view=CsBridge.OpenView("FormationView","FormationModel")
+        view:SetParamDataList(_type,function(formationPos)
+            OnFormationReady(formationPos)
+        end,nil) 
+    end,"FormationView","HeroItemSlot")
+end
+
+function OnFormationReady(formationPos) 
+    local req = {
+        createdTime = actCreatedTime,
+        formationPos = formationPos
+    }
+    HttpBattle(fightUrl,fightReq,req,function(battleInfo)
+        if battleInfo then
+        	if battleInfo.result == 1 then--战斗胜利
+        		self:SendNotification("SetIsOver",true,actCreatedTime)
+        	end
+            ShowBattleModule(battleInfo, self)
+        end
+    end)
+end
+
+--半价商店购买
+function OnCommand_BuyShopGoods(objs)
+	local data = objs[0]
+	if data.curCount >= data.count then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("HasMaxCount"),2)
+		return
+	end
+	if not CheckItemEnough(data.cost.id,data.cost.typeId,data.cost.count,true) then
+		return
+	end
+	local req = {}
+	req.createdTime = data.createdTime
+	req.goodIndex = data.index
+	HttpRequest("zillionaireGood","ZillionaireGoodReq","ZillionaireGoodResp",req,function(resp)
+		if resp.rewardItem then
+			PopRewardView(self,{resp.rewardItem})
+			self:SendNotification("RefreshShopActivityView",data.index)
+		end
+	end)
+end
+
+--查看道具信息
+function OnCommand_OpenTipView(objs)
+	local data = objs[0]
+	local itemType = data.typeId
+	if itemType == ItemTypeEnum.Hero then
+		ShowHeroTip(self, data.id, 1, 1)
+	else
+		ShowTip(self, itemType, data.id)
+	end
+end
+
+function OnCommand_RefreshActCountdown()
+	local tbl = ResTblContainer:GetTable("ZillionaireFortuitous")
+	local existTime = tbl:Get(qyId,"time")
+
+	self:SendNotification("RefreshActCountdown",existTime)
+end
+
+function OnCommand_SetAnswerRewards()
+	local tbl = ResTblContainer:GetTable("Zillionaire")
+	local level = appData:checkData("PlayerInfo").level
+	local levelMixTbl = tbl.levelMix
+	local levelMaxTbl = tbl.levelMax
+	local index = 0
+	for i=0,levelMixTbl.Length - 1 do
+		if level >= tonumber(levelMixTbl[i]) and level <= tonumber(levelMaxTbl[i]) then
+			index = i
+			break
+		end
+	end
+	local rightAward = GetRewardFromTbl(tbl.rightAward[index])
+	local wrongAward = GetRewardFromTbl(tbl.wrongAward[index])
+	self:SendNotification("SetRewards",rightAward,wrongAward)
+end
+
+function OnCommand_GetQuestionInfo(objs)
+	local id = objs[0]
+	local tbl = ResTblContainer:GetTable("Question")
+	local question = tbl:Get(id,"question")
+	local answerStr = tbl:Get(id,"answers")
+	local right = tbl:Get(id,"right")
+	local info = string.split(answerStr, ";")
+	local answersInfo = {}
+	for i=0, info.Length-1 do
+		table.insert(answersInfo,info[i])
+	end
+	self:SendNotification("SetQuestionInfo",question,answersInfo,right)
+end
+
+function OnCommand_GetHeroInfo(objs)
+	local id = objs[0]
+	local tbl = ResTblContainer:GetTable("ZillionaireBattleArray")
+	local monsterId = tbl:Get(id,"bossId")
+	local heroId = ResTblContainer:GetPropToInt(monsterId,Monster.actorId,Monster.actorTbl)
+	local heroTbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+	local curHero = {}
+	curHero.model = heroTbl:Get(heroId,HeroBase.model)
+	curHero.title = heroTbl:Get(heroId,HeroBase.title)
+	curHero.group = ResTblContainer:GetPropToInt(heroId,HeroBase.group,HeroBase.actorTbl)
+	curHero.quality = ResTblContainer:GetPropToInt(heroId,HeroBase.quality,HeroBase.actorTbl)
+	self:SendNotification("SetHeroInfo",curHero)
+end
+
+function OnCommand_GetBattleInfo(objs)
+	local id = objs[0]
+	local tbl = ResTblContainer:GetTable("ZillionaireBattleArray")
+	local monsterStr = tbl:Get(id,"monster")
+	monstersUpData = {}
+	local monsterFormations = {}
+	local monsterInfos = SplitString(monsterStr,";")
+	local tbl = ResTblContainer:GetTable(Monster.actorTbl)
+	for i=0,monsterInfos.Length-1 do
+        local infos=SplitString(monsterInfos[i],",")
+        local monsterData = {}
+        monsterData.pos = tonumber(infos[0])
+    	local heroId = tbl:GetInt(tonumber(infos[1]),Monster.actorId)
+        monsterData.heroId = heroId
+        local monsterInfos = tbl:GetRow(infos[1],Monster.grade,Monster.level)
+        monsterData.grade = 1
+        monsterData.level = tonumber(monsterInfos[1])
+        table.insert(monsterFormations,monsterData)
+	end
+
+	for i=1,6 do
+		local monsterData={}
+		monsterData.heroId=0
+		monsterData.level=0
+		monsterData.grade=0
+		monsterData.pos=0
+		table.insert(monstersUpData,monsterData)
+	end
+	for i,val in ipairs(monsterFormations) do
+		monstersUpData[val.pos]=val
+	end
+	self:SendNotification("LoadEnemy",monstersUpData)
+end
+
+function OnCommand_CloseActivityView(obj)
+	self:SendNotification("CloseActivityView")
+end
+
+function DoOnExit()
+	actCreatedTime = nil
+	fightUrl = nil
+	fightReq = nil
+	qyId = nil
+	viewData = nil
+	activeIndex = nil
+	monstersUpData = nil
+end

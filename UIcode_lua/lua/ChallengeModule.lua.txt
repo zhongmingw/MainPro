@@ -1,0 +1,13 @@
+
+function AssetNames(objs)
+  local arr={"ChallengeView","ChallengeLevelItemSlot","ItemSlot"}
+  return arr
+end
+
+function OnEnter(objs,onFinished)
+	local view=self:OpenView("ChallengeView","ChallengeModel")
+	if(onFinished ~= nil)then
+	    onFinished()  
+	end
+
+end

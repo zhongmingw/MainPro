@@ -1,0 +1,52 @@
+import "stage.proto";
+package DaliyLotteryActivity;
+
+message GetDailyRandomPackageReq
+{
+    required int32 activityId = 1;
+}
+
+message GetDailyRandomPackageResp
+{
+    required bool isRandom = 1;
+    repeated DailyRandomPackage rewards = 2;
+    required int32 packageId = 3;
+}
+
+message DailyRandomPackage
+{
+    required int32 activityId = 1;
+    required int32 packageLevel = 2;
+    required string packagePicture = 3;
+    repeated stage.RewardItem packageReward = 4;
+    required int32  packagePrice = 5;
+    required int32 payId = 6;
+    required bool canBuy = 7;
+    required int32 vip = 8;
+    required int32 price = 9;
+    required int32 pid = 10;
+    required string currency = 11;
+    required string title = 12;
+    required string desp = 13;
+    required string currencySign = 14;
+}
+
+message RandomDailyPackageReq
+{
+    required int32 useless = 1;
+}
+
+message RandomDailyPackageResp
+{
+    required int32 packageId = 1;
+}
+
+message GmRefreshRandomPackageReq
+{
+    required int32 useless = 1;
+}
+
+message GmRefreshRandomPackageResp
+{
+    required int32 status = 1;
+}

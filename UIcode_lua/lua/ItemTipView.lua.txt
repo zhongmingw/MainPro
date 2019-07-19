@@ -1,0 +1,568 @@
+local yield_return = (require 'cs_coroutine').yield_return
+
+local content_TF
+local itemBaseInfo 
+local itemBtnsInfo 
+
+local name_Lab
+local summary_Lab
+local tag_Lab
+local itemBase_TF
+
+local propArr 
+local defPropArr
+local defPropSizeDelta
+local suitNameTxt
+local suitNumTxt 
+local suitPropArr 
+local activateTxt
+local activateCondTxt
+local activatePropArr
+local valOriginWidth
+local nameOriginPos
+
+local sellBtn
+local jumpBtn
+local composeBtn
+local useBtn
+local unWearBtnObj
+local exchangeBtnObj
+local wearBtnObj
+local levelUpBtn
+local upStarBtn
+local convertBtn
+
+local isPropInit
+local isDefPropInit
+local isSuitInit
+local isActivateInit
+local isBtnInit
+
+local reward 
+local infosIndex
+local itemTable
+-- local itemCount
+-- local DirtyFun
+local weared = false
+
+local function SetTag(txt, tag)
+	if tag then
+		txt.gameObject:SetSelfActive(true)
+		txt.text=ResTblContainer:GetPropToStr(tag,JewelTypeTbl.desp,JewelTypeTbl.tblName)
+	else 
+		txt.gameObject:SetSelfActive(false)
+	end 	
+end 
+
+function DoInit()
+	self.Shadow = 1
+	self.Anim = 8
+	local viewTrans = self.transform
+	content_TF=viewTrans:Find("Center")
+	itemBaseInfo=viewTrans:Find("Center/Base")
+	itemBtnsInfo=viewTrans:Find("Center/Btns")
+
+	name_Lab = itemBaseInfo:GetComponentAtPath("NameTxt" ,CLS_TEXT)
+	summary_Lab = itemBaseInfo:GetComponentAtPath("Type/SummaryTxt" ,CLS_TEXT)
+	tag_Lab= itemBaseInfo:GetComponentAtPath("Type/TagTxt" ,CLS_TEXT)
+	itemBase_TF=itemBaseInfo:Find("Item")
+end
+
+function IsSetAnchor()
+	self.transform.parent:SetAsLastSibling()
+    return true
+end
+
+function SetParamDataList(objs)
+	reward=objs[0]
+	infosIndex=objs[1]
+end
+
+function OnNotification_InitItemData(objs)
+	for i=0,content_TF.childCount-1 do
+       content_TF:GetChild(i).gameObject:SetSelfActive(false)
+	end
+
+    self:SendCommand("InitData",reward)
+    if Contain(infosIndex,itemBaseIndex) then
+		self:SendCommand("ItemBaseInfo")
+    end
+    if Contain(infosIndex,itemDespIndex) then
+		self:SendCommand("ItemDespInfo")
+    end
+    if Contain(infosIndex,PropsIndex) then
+		self:SendCommand("PropsInfo")
+    end
+    if Contain(infosIndex,itemSuitIndex) then
+		self:SendCommand("ItemSuitInfo")
+	end
+	if Contain(infosIndex,itemActivateIndex) then
+		self:SendCommand("ItemActivateInfo")
+	end 
+    if Contain(infosIndex,itemBtnsIndex) then
+		self:SendCommand("ItemBtnsInfo")    	
+	end
+	if Contain(infosIndex,itemPetEquipIndex) then
+		self:SendCommand("ItemPetEquipInfo")
+	end
+end
+
+function OnNotification_ItemBaseInfo(objs)
+	local itemBaseData = objs[0]
+	itemBaseInfo.gameObject:SetSelfActive(true)
+	if levelUpBtn ~= nil then
+		levelUpBtn:SetSelfActive(false)
+	end
+	if upStarBtn ~= nil then
+		upStarBtn:SetSelfActive(false)
+	end
+	local itemData = {}
+	itemData.typeId=itemBaseData.typeId
+	itemData.id=itemBaseData.id
+	itemData.count=1
+	if itemBaseData.typeId == 4 then
+		itemData.level = itemBaseData.level
+	end
+	BindItemBaseValue(itemBase_TF,itemData)
+	-- tag_Lab.gameObject:SetSelfActive(not(itemBaseData.sellable == 1) and itemBaseData.sellable~=nil )
+	name_Lab.text=tostring(itemBaseData.title)
+	SetSummary(summary_Lab, itemBaseData.summary)
+	SetTag(tag_Lab, itemBaseData.tag)
+end
+
+function SetSummary(summary_Lab, summary)
+	if summary == nil then
+		summary_Lab.gameObject:SetSelfActive(false)
+	else 
+		summary_Lab.gameObject:SetSelfActive(true)
+		summary_Lab.text=tostring(summary)
+	end 	
+end 
+
+function OnNotification_ItemDespInfo(objs)
+	local desp = objs[0]
+	if desp == "" or desp == nil then
+		return
+	end 
+	local desp_Lab = content_TF:GetComponentAtPath("DespTxt" ,CLS_TEXT)
+	local desp_rt = desp_Lab:GetComponent("RectTransform")
+	desp_Lab.gameObject:SetSelfActive(true)
+	desp_Lab.text=desp
+	CsBridge.UnityHelper.SetUISizeDelta(desp_rt,desp_rt.sizeDelta.x,desp_Lab.preferredHeight)
+end
+
+function OnNotification_PropsInfo(objs)
+	local propInfos = objs[0]
+
+	if not isPropInit then
+		propArr = {}
+		for i=1,4 do
+			local propTxt = content_TF:GetComponentAtPath("Prop"..i.."Txt" ,CLS_TEXT)
+			local nameTxt = propTxt.transform:GetComponentAtPath("NameTxt" ,CLS_TEXT)
+			table.insert(propArr, {propTxt = propTxt,nameTxt = nameTxt})
+		end
+		valOriginWidth = propArr[1].propTxt.preferredWidth
+		nameOriginPos = propArr[1].nameTxt.transform.localPosition
+		isPropInit = true
+	end
+
+	for i,prop in ipairs(propArr) do
+        CsBridge.UnityHelper.SetAnchoredPosition(prop.nameTxt.gameObject,nameOriginPos.x,prop.nameTxt.transform.localPosition.y)
+    end
+
+	for i,prop in ipairs(propInfos) do
+		propArr[i].propTxt.text = prop.val
+		propArr[i].nameTxt.text= prop.name
+		local offsetX = propArr[i].propTxt.preferredWidth-valOriginWidth
+        CsBridge.UnityHelper.SetAnchoredPosition(propArr[i].nameTxt.gameObject,propArr[i].nameTxt.transform.localPosition.x+offsetX,propArr[i].nameTxt.transform.localPosition.y)
+        propArr[i].propTxt.gameObject:SetSelfActive(true)
+	end
+end
+
+function OnNotification_JewelPropsInfo(objs)
+	local effects = objs[0]
+	local heroInfo = objs[1]
+
+	if not isDefPropInit then
+		defPropArr = {}
+		for i=1,6 do
+			local defPropTxt = content_TF:GetComponentAtPath("DefProp"..i.."Txt" ,CLS_TEXT)
+			table.insert(defPropArr, defPropTxt)
+		end
+		defPropSizeDelta = defPropArr[1].transform:CheckSizeDelta()
+		isDefPropInit = true
+	end
+
+	for i,effect in ipairs(effects) do
+		defPropArr[i].gameObject:SetSelfActive(true)
+		local desp = ""
+		if #effect.conds ~= 0 then
+			desp = effect.desp.."("..Language:getStr("CondActive")..JewelUtils.GetJewelCondDesp(effect.conds)..")"
+		else
+			desp = effect.desp
+		end
+		defPropArr[i].text = desp
+		local delta = {
+			x = defPropSizeDelta.x,
+			y = defPropArr[i]:GetPreferredValues().y
+		}
+		defPropArr[i].transform:ResetSizeDelta(delta)
+		local active = effect.active and JewelUtils.CheckJewelEffectCondsActive(heroInfo, effect.conds)
+		local color = active and color41 or color40
+		SetFontColor(defPropArr[i], color)
+	end
+end
+
+function OnNotification_ItemSuitInfo(objs)
+	local suitData = objs[0]
+
+	if not isSuitInit then
+
+		suitNameTxt = content_TF.transform:GetComponentAtPath("SuitTxt" ,CLS_TEXT)
+		suitNumTxt = suitNameTxt.transform:GetComponentAtPath("NumTxt" ,CLS_TEXT)
+	
+		suitPropArr = {}
+		for i=1,4 do
+			local propTxt = content_TF.transform:GetComponentAtPath("SuitProp"..i.."Txt" ,CLS_TEXT)
+			local nameTxt = propTxt.transform:GetComponentAtPath("NameTxt" ,CLS_TEXT)
+			table.insert(suitPropArr, {propTxt = propTxt,nameTxt = nameTxt})
+		end
+
+		isSuitInit = true
+	end 
+
+	for i,prop in ipairs(suitPropArr) do
+        CsBridge.UnityHelper.SetAnchoredPosition(prop.nameTxt.gameObject,nameOriginPos.x,prop.nameTxt.transform.localPosition.y)
+    end
+
+	suitNameTxt.text = suitData.suitName
+	local cur = math.min(suitData.suitNum.cur,suitData.suitNum.needCount[1].count)
+	suitNumTxt:SetText("("..cur.."/"..suitData.suitNum.needCount[1].count..")")
+	suitNameTxt.gameObject:SetSelfActive(true)
+	for i,prop in ipairs(suitData.suitProps) do
+		suitPropArr[i].propTxt.text = prop.val
+		suitPropArr[i].nameTxt.text = prop.name
+		local offsetX = suitPropArr[i].propTxt.preferredWidth-valOriginWidth
+		CsBridge.UnityHelper.SetAnchoredPosition(suitPropArr[i].nameTxt.gameObject,suitPropArr[i].nameTxt.transform.localPosition.x+offsetX,suitPropArr[i].nameTxt.transform.localPosition.y)
+		suitPropArr[i].propTxt.gameObject:SetSelfActive(true)
+		if i <= suitData.suitNum.triggerId then
+			SetFontColor(suitPropArr[i].propTxt,color1)
+			SetFontColor(suitPropArr[i].nameTxt,color1)
+		else 
+			SetFontColor(suitPropArr[i].propTxt,color19)
+			SetFontColor(suitPropArr[i].nameTxt,color19)
+		end 
+	end
+end
+
+function OnNotification_ItemActivateInfo(objs)
+	local activateData = objs[0]
+	local trigger = objs[1]
+	if not isActivateInit then
+		activateTxt = content_TF.transform:GetComponentAtPath("ActivateTxt" ,CLS_TEXT)
+		activateCondTxt = content_TF.transform:GetComponentAtPath("ActivateTxt/ActivateCondTxt" ,CLS_TEXT)
+		activatePropArr = {}
+		for i=1,1 do
+			local propTxt = content_TF.transform:GetComponentAtPath("ActivateProp" ,CLS_TEXT)
+			local nameTxt = propTxt.transform:GetComponentAtPath("NameTxt" ,CLS_TEXT)
+			table.insert(activatePropArr, {propTxt = propTxt, nameTxt = nameTxt})
+		end 
+	end 
+
+	for i,prop in ipairs(activatePropArr) do
+		CsBridge.UnityHelper.SetAnchoredPosition(prop.nameTxt.gameObject,nameOriginPos.x,prop.nameTxt.transform.localPosition.y)
+	end 
+
+	activateCondTxt:SetText(GetRelicActivateCondStr(activateData.cond))
+	activateCondTxt.transform.parent.gameObject:SetSelfActive(true)
+
+	for i,prop in ipairs(activateData.attrs) do
+		activatePropArr[i].propTxt.text = prop.val
+		activatePropArr[i].nameTxt.text = prop.name
+		local offsetX = activatePropArr[i].propTxt.preferredWidth-valOriginWidth
+		CsBridge.UnityHelper.SetAnchoredPosition(activatePropArr[i].nameTxt.gameObject,activatePropArr[i].nameTxt.transform.localPosition.x+offsetX,activatePropArr[i].nameTxt.transform.localPosition.y)
+		activatePropArr[i].propTxt.gameObject:SetSelfActive(true)
+		if trigger then
+			SetFontColor(activatePropArr[i].propTxt,color1)
+			SetFontColor(activatePropArr[i].nameTxt,color1)
+		else
+			SetFontColor(activatePropArr[i].propTxt,color19)
+			SetFontColor(activatePropArr[i].nameTxt,color19)
+		end 
+	end
+end 
+
+function OnNotification_ItemPetEquipInfo(objs)
+	local equip = objs[0]
+	if equip.attrs then
+		if not isPropInit then
+			propArr = {}
+			for i=1,4 do
+				local propTxt = content_TF:GetComponentAtPath("Prop"..i.."Txt" ,CLS_TEXT)
+				local nameTxt = propTxt.transform:GetComponentAtPath("NameTxt" ,CLS_TEXT)
+				table.insert(propArr, {propTxt = propTxt,nameTxt = nameTxt})
+			end
+			valOriginWidth = propArr[1].propTxt.preferredWidth
+			nameOriginPos = propArr[1].nameTxt.transform.localPosition
+			isPropInit = true
+		end
+		for i,prop in ipairs(propArr) do
+			CsBridge.UnityHelper.SetAnchoredPosition(prop.nameTxt.gameObject,nameOriginPos.x,prop.nameTxt.transform.localPosition.y)
+		end
+
+		for i,prop in ipairs(equip.attrs) do
+			propArr[i].propTxt.text = "+"..prop.showVal
+			propArr[i].nameTxt.text= prop.name
+			local offsetX = propArr[i].propTxt.preferredWidth-valOriginWidth
+			CsBridge.UnityHelper.SetAnchoredPosition(propArr[i].nameTxt.gameObject,propArr[i].nameTxt.transform.localPosition.x+offsetX,propArr[i].nameTxt.transform.localPosition.y)
+			propArr[i].propTxt.gameObject:SetSelfActive(true)
+		end
+	end
+
+	if equip.suit then
+		if not isSuitInit then
+			suitNameTxt = content_TF.transform:GetComponentAtPath("SuitTxt" ,CLS_TEXT)
+			suitNumTxt = suitNameTxt.transform:GetComponentAtPath("NumTxt" ,CLS_TEXT)
+			suitPropArr = {}
+			for i=1,4 do
+				local propTxt = content_TF.transform:GetComponentAtPath("SuitProp"..i.."Txt" ,CLS_TEXT)
+				local nameTxt = propTxt.transform:GetComponentAtPath("NameTxt" ,CLS_TEXT)
+				table.insert(suitPropArr, {propTxt = propTxt,nameTxt = nameTxt})
+			end
+			isSuitInit = true
+		end 
+	
+		for i,prop in ipairs(suitPropArr) do
+			CsBridge.UnityHelper.SetAnchoredPosition(prop.nameTxt.gameObject,nameOriginPos.x,prop.nameTxt.transform.localPosition.y)
+		end
+	
+		suitNameTxt.text = equip.suit.name
+		-- local cur = math.min(suitData.suitNum.cur,suitData.suitNum.needCount[1].count)
+		suitNumTxt:SetText("("..equip.suit.curNum.."/"..equip.suit.maxNum..")")
+		suitNameTxt.gameObject:SetSelfActive(true)
+		for i,attrInfo in ipairs(equip.suit.attrInfos) do
+			suitPropArr[i].propTxt.text = "+"..attrInfo.attrs[1].showVal
+			suitPropArr[i].nameTxt.text = attrInfo.attrs[1].name
+			local offsetX = suitPropArr[i].propTxt.preferredWidth-valOriginWidth
+			CsBridge.UnityHelper.SetAnchoredPosition(suitPropArr[i].nameTxt.gameObject,suitPropArr[i].nameTxt.transform.localPosition.x+offsetX,suitPropArr[i].nameTxt.transform.localPosition.y)
+			suitPropArr[i].propTxt.gameObject:SetSelfActive(true)
+			SetFontColorWithEnough(suitPropArr[i].propTxt,function()
+				return attrInfo.attrs[1].active
+			end,color1,color19)
+			SetFontColorWithEnough(suitPropArr[i].nameTxt,function()
+				return attrInfo.attrs[1].active
+			end,color1,color19)
+		end
+	end
+end
+
+function OnNotification_ItemBtnsInfo(objs)
+	local itemBaseData = objs[0]
+	local itemCount = objs[1]
+	--数量大于等于1，再开启btn
+	local btnNum = 0
+	if not isBtnInit then
+		sellBtn = itemBtnsInfo:Find("SellBtn").gameObject
+		jumpBtn = itemBtnsInfo:Find("JumpBtn").gameObject
+		composeBtn = itemBtnsInfo:Find("ComposeBtn").gameObject
+		useBtn = itemBtnsInfo:Find("UseBtn").gameObject
+		unWearBtnObj = itemBtnsInfo:Find("UnWearBtn").gameObject
+		exchangeBtnObj = itemBtnsInfo:Find("ExchangeBtn").gameObject
+		wearBtnObj = itemBtnsInfo:Find("WearBtn").gameObject
+		levelUpBtn = itemBaseInfo:Find("LevelUpBtn").gameObject
+		convertBtn = itemBtnsInfo:Find("ConvertBtn").gameObject
+		upStarBtn = itemBaseInfo:GetGameObjectAtPath("UpStarBtn")
+		isBtnInit = true
+	end 
+	
+	sellBtn:SetSelfActive(false)
+	jumpBtn:SetSelfActive(false)
+	composeBtn:SetSelfActive(false)
+	useBtn:SetSelfActive(false)
+	unWearBtnObj:SetSelfActive(false)
+	exchangeBtnObj:SetSelfActive(false)
+	wearBtnObj:SetSelfActive(false)
+	levelUpBtn:SetSelfActive(false)
+	convertBtn:SetSelfActive(false)
+	upStarBtn:SetSelfActive(false)
+	if itemBaseData.equipMode then
+		if itemBaseData.typeId == 0 then --符文
+			if not itemBaseData.hasMaxLevel then
+				levelUpBtn:SetSelfActive(true)
+			end
+			convertBtn:SetSelfActive(true)
+			btnNum = btnNum+1
+		else 
+			if itemBaseData.equipMode == 1 then --穿上
+				wearBtnObj:SetSelfActive(true)
+				btnNum = btnNum+1
+			elseif itemBaseData.equipMode == 2 then --exchange
+				if itemBaseData.typeId == 4 then --神器
+					if not itemBaseData.hasMaxLevel then
+						levelUpBtn:SetSelfActive(true)
+					end
+				end
+				unWearBtnObj:SetSelfActive(true)
+				exchangeBtnObj:SetSelfActive(true)
+				btnNum = btnNum+1
+			elseif itemBaseData.equipMode == 3 then
+				if itemBaseData.typeId == ItemTypeEnum.Jewel then --神器
+					upStarBtn:SetSelfActive(true)
+				end
+			end 
+		end
+	else
+		if itemBaseData.sellable == 1 then 
+			sellBtn:SetSelfActive(true)
+			btnNum = btnNum+1
+		end
+
+		if ResTblContainer:GetPropToInt(itemBaseData.id,ItemBase.systemId,ItemBase.actorTbl)~=0 then
+			jumpBtn:SetSelfActive(true)
+			btnNum = btnNum+1
+		end
+	
+		local itemType = ResTblContainer:GetPropToInt(itemBaseData.id, ItemBase.type, ItemBase.actorTbl)
+
+		if itemType == ItemType.Pieces then --英雄碎片
+			local val = ResTblContainer:GetPropToInt(itemBaseData.id,PiecesComposition.count,PiecesComposition.actorTbl)
+			if itemCount >= val then --至少能合成一个才显示按钮
+				composeBtn:SetSelfActive(true)
+				btnNum = btnNum+1
+			end
+		elseif itemType == ItemType.Box then --宝箱
+			if itemBaseData.systemId and itemBaseData.systemId > 0 then
+				jumpBtn:SetSelfActive(true)
+				btnNum = btnNum+1
+			else
+				useBtn:SetSelfActive(true)
+				btnNum = btnNum+1
+			end
+		elseif itemType == ItemType.SubscribeItem then --可使用的道具
+			useBtn:SetSelfActive(true)
+			btnNum = btnNum+1
+		end
+	end
+
+	if btnNum>=1 then
+		itemBtnsInfo.gameObject:SetSelfActive(true)
+	end
+end
+
+function OnUpStarBtnClick(sender)
+	self:SendCommand("EquipAction",4)
+end
+
+function OnUnWearBtnClick(sender)
+    self:SendCommand("EquipAction",3)
+end
+
+function OnExchangeBtnClick(sender)
+    self:SendCommand("EquipAction",2)
+end
+
+function OnWearBtnClick(sender)
+    self:SendCommand("EquipAction",1)
+end
+
+function OnLevelUpBtnClick(sender)
+	self:Deactive()
+	self:SendCommand("InitEquipLevelUp")
+end 
+
+function OnConvertBtnClick(sender)
+	self:Deactive()
+	MsgCenter:Broadcast(Notify_OpenRuneLevelUpConversionView,2)
+end
+
+function OnSellBtnClick(sender)
+	self:SendCommand("OperateItem", ItemIOperateEnum.Sell)
+	self:HideView(self.gameObject.name)
+end
+
+function OnUseBtnClick(sender)
+	self:SendCommand("OperateItem", ItemIOperateEnum.Use)
+	self:HideView(self.gameObject.name)
+end
+
+function OnComposeBtnClick(sender)
+	self:SendCommand("OperateItem", ItemIOperateEnum.Compose)
+	self:HideView(self.gameObject.name)
+end
+
+function OnJumpBtnClick(sender)
+	local systemId = ResTblContainer:GetPropToInt(reward.id,ItemBase.systemId,ItemBase.actorTbl)
+	if systemId == 0 then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("Coming_Soon_Common"))
+		return
+	end
+	LinkSystem(systemId, self)
+	self:SendCommand("Jump")
+end 
+
+function OnNotification_CloseTipView(Objs)
+	Close()
+	weared = true
+end 
+
+function OnMaskClick(sender)
+	self:SendCommand("CloseTipView")
+	Close()
+end 
+
+function Close()
+	self:HideView(self.gameObject.name)
+end 
+
+function ResetWear()
+    weared = true
+end	
+
+function FinishWear()
+    return weared
+end
+
+function DoExit()
+	content_TF = nil
+	itemBaseInfo  = nil
+	itemBtnsInfo  = nil
+
+	name_Lab = nil
+	summary_Lab = nil
+	tag_Lab = nil
+	itemBase_TF = nil
+
+	propArr  = nil
+	defPropArr = nil
+	defPropSizeDelta = nil
+	suitNameTxt = nil
+	suitNumTxt  = nil
+	suitPropArr  = nil
+	activateTxt = nil
+	activateCondTxt = nil
+	activatePropArr = nil
+	valOriginWidth = nil
+	nameOriginPos = nil
+
+	sellBtn = nil
+	jumpBtn = nil
+	composeBtn = nil
+	useBtn = nil
+	unWearBtnObj = nil
+	exchangeBtnObj = nil
+	wearBtnObj = nil
+	levelUpBtn = nil
+	upStarBtn = nil
+	convertBtn = nil
+
+	isPropInit = nil
+	isDefPropInit = nil
+	isSuitInit = nil
+	isActivateInit = nil
+	isBtnInit = nil
+
+	reward  = nil
+	infosIndex = nil
+	itemTable = nil
+	weared  = nil
+end

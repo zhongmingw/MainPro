@@ -1,0 +1,26 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-03-18 10:49:23
+
+function DoInit()
+end
+
+function ResourceIds(objs)
+    local arr={}
+    return arr
+end
+
+function AssetNames(objs)
+    local arr = {"WorldBossRankRewardView"}
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    local data = objs[0]
+    local view = self:OpenView("WorldBossRankRewardView", "WorldBossRankRewardModel")
+    view:SetParamDataList(data)
+    if(onFinished ~= nil) then
+        onFinished()
+    end
+end

@@ -1,0 +1,172 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-07-27 15:25:18
+local isInit = false
+
+local iconObj 
+local iconSpine
+local iconBgObj
+local iconNameObj
+
+local attrs 
+local tipObj 
+
+local resetIconObjPos
+local resetIconNameObjScale
+local resetAttrPos
+
+local waitAnim = false
+
+function DoInit()
+    self.Anim = 0
+    self.Shadow = 2
+end
+
+function IsSetAnchor()
+	return true
+end
+
+function InitUI()
+    iconObj = self:GetGameObjectAtPath("Center/Icon") 
+    iconBgObj = self:GetGameObjectAtPath("Center/Icon/BgImg") 
+    iconNameObj = self:GetComponentAtPath("Center/Icon/NameImg" ,CLS_IMAGE)  
+    
+    attrs = {}
+    local heroAttrs = self.transform:Find("Center/Attrs")
+    for i=0,heroAttrs.childCount-1 do
+        local attr = heroAttrs:GetChild(i)
+        table.insert(attrs, {
+            attrObj = attr,
+            nameTxt = attr:GetComponentAtPath("NameTxt" ,CLS_TEXT),
+            oldValTxt = attr:GetComponentAtPath("OldNumTxt" ,CLS_TEXT), 
+            newValTxt = attr:GetComponentAtPath("NewNumTxt" ,CLS_TEXT) 
+        })
+    end
+    tipObj = self:GetGameObjectAtPath("Center/TipTxt") 
+
+    resetIconObjPos = iconObj.transform:CheckLocalPosition()
+    resetIconNameObjScale = iconNameObj.transform:CheckLocalScale()
+    resetAttrPos = attrs[1].attrObj:CheckLocalPosition()
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitHeroElementFusionLevelUpData")
+end
+
+function OnClose()
+    ResetView()
+end
+
+function OnNotification_RefreshHeroElementFusionLevelUpView(objs)
+    waitAnim = true
+    local curHero = objs[0]
+    InitData(curHero)
+    --if curHero.elementFusion.levelAnim then
+    local name = "ElementFusionSpine"
+    CsBridge.CacheAssetsByGroup(name,function()
+        local obj = CsBridge.objectCache:CreateObject(name, true)
+        obj.transform:SetParent(iconObj.transform,false)
+        obj:GetComponent("SkeletonGraphic"):PlayFirstAnim(false,function(evt)
+            if evt == "changepic" then
+                iconBgObj:SetSelfActive(true)
+            end
+        end,
+        function()
+            local name = obj.name
+            CS.UnityEngine.GameObject.Destroy(obj)
+            CsBridge.objectCache:ClearGroup(name, true)
+            ShowAnim()
+        end)
+    end,name)
+    --else
+        --ShowAnim()
+    --end
+end
+
+function InitData(curHero)
+    CsBridge.IconData.SetIconByName(iconBgObj.gameObject,curHero.elementFusion.bg)
+    CsBridge.IconData.SetIconByName(iconNameObj.gameObject,curHero.elementFusion.icon)
+    for i,attr in ipairs(attrs) do
+        attr.nameTxt.text = curHero.elementFusion.attrs[i].name
+        attr.oldValTxt.text = curHero.oldElementFusion.attrs[i].tbVal 
+        attr.newValTxt.text = curHero.elementFusion.attrs[i].tbVal
+    end
+end
+
+function ShowAnim()
+    iconBgObj:SetSelfActive(true)
+    local t1 = CsBridge.TweenUtils.DOImageAlphaValue(iconNameObj,1,0.1)
+    local t2 = CsBridge.TweenUtils.ScaleTo(iconNameObj.transform,1,1,0.3)
+    t2:OnCompleteAction(function()
+        local t3 = CsBridge.TweenUtils.MoveTo(iconObj.transform,0,249.5,0.5,function()
+            ShowAttrAnim(attrs[1].attrObj)
+            ShowAttrAnim(attrs[2].attrObj,0.1)
+            ShowAttrAnim(attrs[3].attrObj,0.15)
+            ShowAttrAnim(attrs[4].attrObj,0.2,function()
+                tipObj:SetSelfActive(true)
+                waitAnim = false
+            end)
+        end)
+        t3:DoPlay()
+    end)
+    t1:DoPlay()
+    t2:DoPlay()
+end
+
+function ShowAttrAnim(attrObj,delay,onFinished)
+    local t1 = CsBridge.TweenUtils.ObjectFadeTo(attrObj.gameObject,1,0.1)
+    local t2 = CsBridge.TweenUtils.MoveTo(attrObj,0,0,0.5)
+    if delay then
+        t1:DoDelay(delay)
+        t2:DoDelay(delay)
+    end
+    if onFinished then
+        t2:OnCompleteAction(onFinished)
+    end
+    t1:DoPlay()
+    t2:DoPlay()
+end
+
+function ResetView()
+    iconBgObj:SetSelfActive(false)
+    tipObj:SetSelfActive(false)
+
+    iconObj.transform:ResetLocalPosition(resetIconObjPos)
+    iconNameObj.transform:ResetLocalScale(resetIconNameObjScale)
+    iconNameObj.gameObject:SetImageAlpha(0)
+    for i,attr in ipairs(attrs) do
+        attr.attrObj:ResetLocalPosition(resetAttrPos)
+        attr.attrObj.gameObject:SetAlpha(0)
+    end
+end
+
+function OnMaskClick(sender)
+    if waitAnim then
+        return
+    end
+    self:HideView(self.gameObject.name)
+    self:SendCommand("CheckCampLevelUp")
+end
+
+function DoExit()
+    isInit = nil
+
+    iconObj  = nil
+    iconSpine = nil
+    iconBgObj = nil
+    iconNameObj = nil
+
+    attrs  = nil
+    tipObj  = nil
+
+    resetIconObjPos = nil
+    resetIconNameObjScale = nil
+    resetAttrPos = nil
+
+    waitAnim  = nil
+end

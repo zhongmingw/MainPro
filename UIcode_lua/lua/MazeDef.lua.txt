@@ -1,0 +1,139 @@
+
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-04-19 17:25:47
+]]
+
+local GridState = {
+    Off = 1,
+    On = 2,
+    Block = 3,
+}
+
+local GridType = {
+    Entry = 1,
+    Exit = 1003,
+    Normal = 0,
+    Monster = 1002,
+    Box = 2,
+    Event = 1001,
+}
+
+local GridBaseStateIconNames = {
+    [GridState.Off] = "new_com_bkcjst",
+    [GridState.Block] = "new_com_tbch1",
+}
+
+local GridBaseTypeIconNames = {
+    [GridType.Entry] = "new_com_dmxq",
+    [GridType.Exit] = "new_com_dmdk",
+    [GridType.Normal] = "new_com_cjst",
+}
+
+local MazeModuleName = "MazeModule"
+
+local MazeEvent = {
+    tblName = "MazeEvent",
+    id = "id",
+    eventType = "eventType",
+    icon = "icon",
+    triggerDescription = "triggerDescription",
+    eventTriggerParameter = "eventTriggerParameter",
+    endingDescription = "endingDescription"
+}
+
+local MazeItem = {
+    tblName = "MazeItem",
+    itemId = "itemId",
+    itemName = "itemName",
+    itemIcon = "itemIcon",
+    itemDescription = "itemDescription",
+    type = "type",
+    useItemTips = "useItemTips"
+}
+
+local EventParamType = {
+    Select = 1,
+    MazeItem = 2,
+    NormalItem = 3,
+    ChangeHp = 4,
+    GetBuff = 5,
+}
+
+local EventType = {
+    Select = 1,
+    Item = 2,
+    Trap = 3,
+}
+
+local MazeTreasure = {
+    tblName = "MazeTreasure",
+    id = "id",
+    type = "type",
+    icon = "icon",
+}
+
+local MazeBattleState = {
+    tblName = "MazeBattleState",
+    stateId = "stateId",
+    stateIcon = "stateIcon",
+    stateType = "stateType",
+    stateDescription = "stateDescription"
+}
+
+local MazeBuffType = {
+    Up = 1,
+    Down = 2
+}
+
+local MazeBuffTypeIcon = {
+    [MazeBuffType.Up] = "new_com_buffjt1",
+    [MazeBuffType.Down] = "new_com_buffjt2",
+}
+
+local BoxType = {
+    Unlock = 1,
+    Lock = 2
+}
+
+local PlayerDir = {
+    None = 0,
+    Left = 1,
+    Right = 2,
+    Up = 3,
+    Down = 4
+}
+
+local PlayerState = {
+    Idle = 1,
+    Walk = 2,
+    Hurt = 3,
+}
+
+local MazeState = {
+    Alive = 0,
+    Complete = 1,
+    Die = 2
+}
+
+return {
+    GridState = GridState,
+    GridType = GridType,
+    GridBaseStateIconNames = GridBaseStateIconNames,
+    GridBaseTypeIconNames = GridBaseTypeIconNames,
+    MazeModuleName = MazeModuleName,
+    MazeEvent = MazeEvent,
+    EventParamType = EventParamType,
+    MazeItem = MazeItem,
+    EventType = EventType,
+    MazeTreasure = MazeTreasure,
+    BoxType = BoxType,
+    PlayerDir = PlayerDir,
+    PlayerState = PlayerState,
+    MazeBuffType = MazeBuffType,
+    MazeBuffTypeIcon = MazeBuffTypeIcon,
+    MazeBattleState = MazeBattleState,
+    MazeState = MazeState,
+}

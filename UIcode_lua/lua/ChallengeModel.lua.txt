@@ -1,0 +1,175 @@
+local ChallengeUtils = require "ChallengeUtils"
+
+local challengeDataArr = {}
+
+local curType = 0
+local normalMaxCount = 0
+local challengeAddCountItemId
+
+local OpenType = ChallengeUtils.OpenType
+local curOpenType
+
+function DoInit()
+    curOpenType = GetConstValue("ChallengeSwitch") or OpenType.Level
+end
+
+function OnCommand_InitChallengeData(objs)
+    InitChallenge()
+end
+
+function LoadChallengeView()
+    InitChallengeData()
+    self:SendNotification("InitChallengeData")
+end
+
+function InitChallengeData()
+    challengeDataArr = {}
+    local challengeItems=appData:checkAllItems("ChallengeItem")
+    local playerInfo = appData:checkData("PlayerInfo")
+    local openTbl=ResTblContainer:GetTable(UIOpenBase.actorTbl)
+    for i=0,challengeItems.Length-1 do
+        local challengeData = {}
+        challengeData.challengeItem=challengeItems[i]
+        local infos={}
+        local id=challengeData.challengeItem.type
+        if id==1 then
+            infos = openTbl:GetRow("9",UIOpenBase.normalMaxCount,UIOpenBase.addCountItemId)
+        elseif id==2 then
+            infos = openTbl:GetRow("10",UIOpenBase.normalMaxCount,UIOpenBase.addCountItemId)
+        elseif id==3 then
+            infos = openTbl:GetRow("11",UIOpenBase.normalMaxCount,UIOpenBase.addCountItemId)
+        end
+        challengeData.normalMaxCount=tonumber(infos[0])
+        challengeData.challengeAddCountItemId=tonumber(infos[1])
+        challengeData.levels={}
+        challengeData.combat=challengeData.challengeItem.combat or 0
+        challengeDataArr[id] = challengeData
+    end
+
+    local levelData = ChallengeUtils.GetLevelDataByOpenType(challengeDataArr,curOpenType)
+    for _,data in ipairs(levelData) do
+        table.insert(challengeDataArr[data.type].levels,data)
+    end
+end
+
+function OnCommand_ReloadChallengeView(objs)
+    InitChallengeData()
+    local challengeData=challengeDataArr[curType]
+    self:SendNotification("ChallengeTypeChanged",challengeData.levels)
+    self:SendNotification("KeyRemainsChange",challengeData.challengeItem.remains,challengeData.normalMaxCount)
+end
+
+function InitChallenge()
+    local req = {}
+    req.id=1
+    HttpRequest("initPBItem", "InitPBItemReq", "InitPBItemResp", req,
+        function (resp)
+            if resp~=nil then
+                LoadChallengeView()
+            end
+        end)
+end
+
+function OnCommand_ChallengeTypeChanged(objs)
+    local index = objs[0]
+    curType=index
+    local challengeData=challengeDataArr[curType]
+    self:SendNotification("ChallengeTypeChanged",challengeData.levels)
+    self:SendNotification("KeyRemainsChange",challengeData.challengeItem.remains,challengeData.normalMaxCount)
+end
+
+function OnCommand_OpenFormationView(objs)
+    local levelData = objs[0]
+    local remains = challengeDataArr[curType].challengeItem.remains
+	if levelData.canCond and levelData.canDiff then
+		if remains>0 then
+            CsBridge.CacheAssetsByModule(self.Module,function()
+				local view=CsBridge.OpenView("FormationView","FormationModel",true,true)
+                view:SetParamDataList(1,
+                function (formationPos)
+                    local req={}
+                    req.type=levelData.type
+                    req.difficulty=levelData.difficulty
+                    req.formationPos=formationPos
+                    HttpBattle("challenge", "ChallengeReq", req,OnChallengeBattleResp, true, true)
+                end,nil,0,false)
+			end, "FormationView","HeroItemSlot")
+	    else
+	    	CsBridge.hintUILayer:ShowHintBox(Language:getStr("1042"))
+	    end
+	elseif levelData.canCond then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("Challenge_Need_Pass_Pre"))
+    else 
+        local desp = ChallengeUtils.GetDespByOpenType(curOpenType)
+		CsBridge.hintUILayer:ShowHintBox(string.format(desp,levelData.requiredCond))
+    end 
+end
+
+function OnChallengeBattleResp(battleInfo)
+	ShowBattleModule(battleInfo, self)
+end
+
+
+function OnCommand_OpenExchangeItemView(objs)
+    local vipLv = appData:checkData("PlayerInfo").vip
+    local cost = 0
+    local type = 0
+    local vipBoughtNum = challengeDataArr[curType].challengeItem.vipBoughtNum
+    local vipCanBought = ResTblContainer:GetPropToInt(vipLv,VipTbl.challengeCountAdd,VipTbl.tblName)
+    if curType==1 then
+        cost = GetConstValue("goldChallengePrice")
+        type = UI_OPEN_TYPE_GOLD
+    elseif curType==2 then
+        cost = GetConstValue("soulChallengePrice")
+        type = UI_OPEN_TYPE_SOUL
+    else
+        cost = GetConstValue("pieceChallengePrice")
+        type = UI_OPEN_TYPE_CHIP
+    end
+    if vipBoughtNum<vipCanBought then
+        CsBridge.messageManager:PopMsgBox("",string.format(Language:getStr("Challenge_Count_Check"), cost),Language:getStr("local_cancel"),nil,Language:getStr("local_confirm"),
+        function ()
+            local req = {}
+            req.type = type
+            req.count = 1
+            HttpRequest("buyExtraChance", "BuyExtraChanceReq", "BuyExtraChanceResp", req,
+                function (resp)
+                    if  resp.result==1 then
+                        return
+                    end
+                    local challengeItem=appData:checkItem("ChallengeItem",tostring(curType))
+                    local challengeData=challengeDataArr[curType]
+                    challengeData.challengeItem=challengeItem
+                    self:SendNotification("KeyRemainsChange",challengeItem.remains,challengeData.normalMaxCount)
+                end)
+        end)
+    else
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("Buy_Count_Max"))
+    end
+end
+
+function OnCommand_LoadChallengeView(obj)
+    LoadChallengeView()
+end
+
+function OnCommand_ShowHelpView(objs)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("HelpView","ChallengeModel",false,true)
+        if curType==1 then
+            view:SetData(6)
+        elseif curType==2 then
+            view:SetData(7)
+        else
+            view:SetData(8)
+        end
+	end, "HelpView")
+end
+
+function DoOnExit()
+    challengeDataArr = nil
+    curType = nil
+    normalMaxCount = nil
+    challengeAddCountItemId = nil
+    OpenType = nil
+    curOpenType = nil
+end

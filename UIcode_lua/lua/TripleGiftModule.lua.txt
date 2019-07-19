@@ -1,0 +1,21 @@
+--[[
+	file: TripleGiftModule.lua
+	author: hangang
+	description:Triple gift activity context
+]]
+
+function AssetNames(objs)
+	local arr={
+		"TripleGiftView",
+        "ItemSlot",
+	}
+	return arr
+end
+
+function OnEnter(objs,onFinished)
+	self:OpenView("TripleGiftView","TripleGiftModel",true,true)
+
+	if onFinished then
+		onFinished()
+	end
+end

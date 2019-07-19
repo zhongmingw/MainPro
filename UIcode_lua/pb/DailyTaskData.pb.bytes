@@ -1,0 +1,65 @@
+
+¨	
+DailyTaskData.protoDailyTaskDatastage.proto"Ÿ
+DailyTaskInfo,
+
+dailyTasks (2.DailyTaskData.DailyTask
+lastRenewTime (
+totalFinishedCount (
+extraRewardTaken (
+
+seasonCard (
+seasonEndTime ( 
+totalSeasonFinishedCount (
+normalRewardRecord (
+specialRewardRecord	 (
+level
+ ("6
+	DailyTask
+
+id (
+count (
+status ("!
+RefreshDailyTaskReq
+
+id ("&
+RefreshDailyTaskResp
+result ("$
+TakeDailyTaskRewardReq
+
+id ("A
+TakeDailyTaskRewardResp&
+rewardItems (2.stage.RewardItem""
+GMFinishDailyTaskReq
+
+id ("'
+GMFinishDailyTaskResp
+result ("$
+GMResetAllDailyTaskReq
+
+id (")
+GMResetAllDailyTaskResp
+result (""
+CheckSubscriptionReq
+
+id ("}
+CheckSubscriptionResp
+endTime (
+firstSub (
+seasonCardEndTime (
+	canReward (
+consumeType (":
+TakePassportRewardReq
+progress (
+special ("@
+TakePassportRewardResp&
+rewardItems (2.stage.RewardItem"&
+GetSubscriptionRewardReq
+
+id ("C
+GetSubscriptionRewardResp&
+rewardItems (2.stage.RewardItem"
+ChatTaskReq
+type ("
+ChatTaskResp
+status (

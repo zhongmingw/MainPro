@@ -1,0 +1,118 @@
+--[[
+	file: GeneralActivityView.lua
+	author: hangang
+	description:View for minitents activity,tavern activity etc.
+]]
+
+require "GeneralActivityItemSlot"
+
+local titleImgObj, titleTxt, countdownTxt, descTxt
+local itemsGrid
+local titleArtTxt
+
+local viewData
+
+function DoInit()
+	self.Shadow = CS.Client.Library.ShadowType.None
+	InitUI()
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	local path = "Title/titleImg"
+	titleImgObj = self:GetGameObjectAtPath(path)
+
+	path = "Title/countdownTxt"
+	countdownTxt = self:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Title/titleTxt"
+	titleTxt = self:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Description/descTxt"
+	descTxt = self:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "ItemSV/ScrollRect/Viewport/Grid"
+	itemsGrid = self:GetComponentAtPath(path ,CLS_UI_ITEM_GRID)
+
+	titleArtTxt = self:GetComponentAtPath("Title/TitleArtImg",CLS_LOCALIZE)
+end
+
+function OnNotification_RefreshActivityView(objs)
+	if self.gameObject.activeInHierarchy then
+		viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function RefreshView(data)
+	titleTxt.text = ""
+	-- titleArtTxt.text = ""
+	if data.title and data.title~="" then
+		titleTxt.text = data.title
+	else
+		SetServerActivityArtFontByImage(titleArtTxt,data.image)
+	end
+	countdownTxt.text = data.restTime
+	descTxt.text = data.desc
+	CsBridge.IconData.SetRawImageByName(titleImgObj, data.image)
+	itemsGrid:RefreshItemSlots(data.itemList, self.gameObject, "GeneralActivityItemSlot")
+end
+
+function OnNotification_RefreshCountdown(objs)
+	local data = objs[0]
+	RefreshCountdown(data)
+end
+
+function RefreshCountdown(countdownData)
+	if not viewData then--not ready
+		return
+	end
+
+	local currentActivityID = viewData.id
+	for activityID, restTime in pairs(countdownData) do
+		if activityID == currentActivityID then
+			countdownTxt.text = restTime
+			return
+		end
+	end
+end
+
+function OnGridItemSlot1Click(obj)
+	local itemIndex = 1
+	OnGridItemClick(obj, itemIndex)
+end
+
+function OnGridItemSlot2Click(obj)
+	local itemIndex = 2
+	OnGridItemClick(obj, itemIndex)
+end
+
+function OnGridItemSlot3Click(obj)
+	local itemIndex = 3
+	OnGridItemClick(obj, itemIndex)
+end
+
+function OnGridItemSlot4Click(obj)
+	local itemIndex = 4
+	OnGridItemClick(obj, itemIndex)
+end
+
+function OnGridItemClick(obj, itemIndex)
+	local slotData = obj.m_data
+	local itemData = slotData.rewards[itemIndex]
+    self:SendCommand("OpenTipView", itemData)
+end
+
+function OnNotification_CloseActivityView(obj)
+	self:HideView("GeneralActivityView")
+end
+
+function DoExit()
+	titleImgObj = nil
+	titleTxt = nil 
+	countdownTxt = nil 
+	descTxt = nil
+ 	itemsGrid = nil
+ 	titleArtTxt = nil
+ 	viewData = nil
+end

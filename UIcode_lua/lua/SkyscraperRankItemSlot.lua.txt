@@ -1,0 +1,35 @@
+
+function OnSkyscraperRankItemSlotBindValue(slot,data)
+
+	local name_Lab
+	local rank_Lab
+	local count_Lab
+	local rank_Sprite
+	local countHead_Lab
+
+	local slotTrans = slot.transform
+	name_Lab=slot:GetComponentAtPath("NameTxt" ,CLS_TEXT)
+	rank_Lab=slot:GetComponentAtPath("RankTxt" ,CLS_TEXT)
+	count_Lab=slot:GetComponentAtPath("CountTxt" ,CLS_TEXT)
+	countHead_Lab = slot:GetComponentAtPath("name02Txt" ,CLS_TEXT)
+
+	rank_Sprite=slot:GetComponentAtPath("RankSprite" ,CLS_IMAGE)
+
+	local palyer_TF=slotTrans:Find("PlayerBase")
+	BindPlayerBaseInfoValue(palyer_TF,data.playerBaseInfo)
+	if data.playerBaseInfo.haveGroup then
+		name_Lab.text= FormatWorldPlayerName(data.playerBaseInfo.name, data.playerBaseInfo.zone)
+	else
+		name_Lab.text=data.playerBaseInfo.name
+	end
+	rank_Lab.text=tostring(data.rank)
+	count_Lab.text=tostring(data.score)
+	countHead_Lab.text = data.scoreHead or countHead_Lab.text
+
+	rank_Sprite.gameObject:SetActive(true)
+	if data.rank<=3 and data.rank>0 then
+		CsBridge.IconData.SetIconByName(rank_Sprite.gameObject,"new_com_paiming"..data.rank)
+	else
+		rank_Sprite.gameObject:SetActive(false)
+	end
+end

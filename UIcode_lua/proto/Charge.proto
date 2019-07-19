@@ -1,0 +1,59 @@
+import "stage.proto";
+package Charge;
+
+message ChargeReq
+{
+    required int32 activityId = 1;
+    required int32 payId = 2;
+}
+
+message ChargeResp
+{
+    required string orderId = 1;
+    required int32 type = 2;
+    required int32 consumeType = 3; //消耗类型
+}
+
+message ShipReq
+{
+    required string orderId = 1;
+}
+
+message ShipResp
+{
+    repeated ShipResult results = 1;
+}
+
+message ShipResult 
+{
+    required int32 result = 1; //对应 OrderExecResult，3为成功
+    required string orderId = 2; //cpOrderId
+    required string orderSN = 3; //orderId
+}
+
+message GetCycleCardRewardReq
+{
+    required int32 payId = 1;
+}
+
+message GetCycleCardRewardResp
+{
+    repeated stage.RewardItem rewardItems = 1;
+}
+
+message NormalChargeItem
+{
+    required int32 id=1;
+    required string pid=2; 
+    required int32 chargedTimes=3;
+}
+
+message CycleCardItem
+{
+    required int32 id=1; 
+    required string pid=2; 
+    required int32 type=3; 
+    required int64 time=4; 
+    required int64 endTime=5; 
+    required int64 lastTakeRewardTime=6; 
+}

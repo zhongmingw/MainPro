@@ -1,0 +1,55 @@
+--[[
+	file: UnionListView.lua
+	author: hangang
+	description: View for recommended union list
+]]
+
+require "UnionItemSlot"
+
+local itemsGrid
+local viewData
+local emptyTipsObj
+
+function DoInit()
+	self.Shadow = 0
+	InitUI()
+end 
+
+function InitUI()
+	local path = "Center/unionSV/ScrollRect/Viewport/Grid"
+	itemsGrid = self:GetComponentAtPath(path ,CLS_UI_ITEM_GRID)
+	path = "Center/Nothing"
+	emptyTipsObj = self:GetGameObjectAtPath(path)
+end
+
+function OnNotification_RefreshRecommendUnions(objs)
+	if self.gameObject.activeInHierarchy then
+		viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function RefreshView(data)
+	itemsGrid:RefreshItemSlots(data, self.gameObject, "UnionItemSlot")
+	emptyTipsObj:SetActive(#data == 0)
+end
+
+function OnRefreshBtnClick(sender)
+	self:SendCommand("GetUnionList")
+end
+
+function OnGridApplyBtnClick(itemSlot)
+	local itemData = itemSlot.m_data
+	local unionID = itemData.id
+	self:SendCommand("ApplyUnion", unionID)
+end
+
+function OnNotification_CloseUnionApplyView(obj)
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	itemsGrid = nil
+	viewData = nil
+	emptyTipsObj = nil
+end

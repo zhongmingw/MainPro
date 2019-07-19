@@ -1,0 +1,22 @@
+
+local view
+
+function ShowHeroSimpleInfo(self,curHero)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        view=CsBridge.OpenView("HeroSimpleInfoView","HeroSimpleInfoModel",false,true)
+		view:SendCommand("InitSimpleInfoData",curHero)
+	end, "HeroSimpleInfoView","SkillItemSlot","ItemSlot","SoulImprintItemSlot")
+end
+
+function RefreshHeroSimpleInfo(curHero)
+    if view ~= nil then
+        view:SendCommand("UpdateSimpleInfoData",curHero)
+    end
+end
+
+function HideHeroSimpleInfo()
+    if view ~= nil then
+        view:HideView(view.gameObject.name)
+        view = nil
+    end
+end

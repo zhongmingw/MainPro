@@ -1,0 +1,32 @@
+---绑定数据
+function OnTreasureChallengeItemSlotBindValue(slot, data)
+    local slotTrans = slot.transform
+    ---@type UnityEngine.GameObject 背景
+    local bgRagImageObj = slotTrans:GetGameObjectAtPath("BgBtn")
+    ---@type UnityEngine.TextMesh 标题
+    local titleTxt = slotTrans:GetComponentAtPath("BgBtn/titleTxt", CLS_TEXT)
+    ---@type UnityEngine.TextMesh
+    local tipParentTxt = slotTrans:GetComponentAtPath("BgBtn/Tip", CLS_TEXT)
+    ---@type UnityEngine.TextMesh
+    local tipTxt = slotTrans:GetComponentAtPath("BgBtn/Tip/TipBg/tipTxt", CLS_TEXT)
+    ---@type UnityEngine.GameObject
+    local rightchain_OneObj = slotTrans:GetGameObjectAtPath("Rightchain_One")
+    ---@type UnityEngine.GameObject
+    local leftchain_OneObj = slotTrans:GetGameObjectAtPath("Leftchain_One")
+    ---@type UnityEngine.GameObject
+    local rightchain_OtherObj = slotTrans:GetGameObjectAtPath("Rightchain_Other")
+    ---@type UnityEngine.GameObject
+    local leftchain_OtherObj = slotTrans:GetGameObjectAtPath("Leftchain_Other")
+    ---@type UnityEngine.GameObject
+    local redFlag = slotTrans:GetGameObjectAtPath("BgBtn/RedFlag")
+
+    CsBridge.IconData.SetRawImageByName(bgRagImageObj, data.background)
+    titleTxt.text = data.name
+    tipParentTxt.text = data.tipsParent
+    tipTxt.text = data.tips
+    rightchain_OneObj:SetActive(data.isFirst)
+    leftchain_OneObj:SetActive(data.isFirst)
+    rightchain_OtherObj:SetActive(not data.isFirst)
+    leftchain_OtherObj:SetActive(not data.isFirst)
+    redFlag:SetActive(data.showRedFlag)
+end

@@ -1,0 +1,29 @@
+
+function OnChapterItemSlotBindValue(slot,data)
+	if data.state==-1 then
+		slot.gameObject:SetSelfActive(false)
+		return
+	end
+	slot.gameObject:SetSelfActive(true)
+	local chapter_Sprite = slot.transform:Find("ChapterSprite"):GetComponent("UnityEngine.UI.RawImage")
+	local title_Sprite = slot.transform:Find("TitleSprite"):GetComponent("UnityEngine.UI.Image")
+	local name_Lab = slot.transform:Find("NameTxt"):GetComponent(CLS_TEXT)
+	local battleFlag_GO = slot.transform:Find("BattleFlagGO").gameObject
+	local lockFlag_GO = slot.transform:Find("LockFlagGO").gameObject
+	local countFlag_GO = slot.transform:Find("CountFlagGO").gameObject
+	local newFlagGO = slot.transform:Find("NewFlagGO").gameObject
+	
+	CsBridge.UnityHelper.SetUIDefaultRectTransform(lockFlag_GO.transform)
+	lockFlag_GO:SetImageAlpha(1)
+	name_Lab.text=data.name
+	CsBridge.IconData.SetRawImageByName(chapter_Sprite.gameObject,data.icon)
+	lockFlag_GO.gameObject:SetSelfActive(data.state~=0)
+
+	if data.state==0 then 
+		CsBridge.IconData.ChangeRawImageMaterial(chapter_Sprite.gameObject,"")
+		CsBridge.IconData.ChangeImageMaterial(title_Sprite.gameObject,"")
+	else
+		CsBridge.IconData.ChangeRawImageMaterial(chapter_Sprite.gameObject,"SpriteGray")
+		CsBridge.IconData.ChangeImageMaterial(title_Sprite.gameObject,"SpriteGray")
+	end
+end

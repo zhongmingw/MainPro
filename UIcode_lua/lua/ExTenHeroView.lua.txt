@@ -1,0 +1,423 @@
+require('HeroBaseUtils')
+
+local msgCenter = require('MsgCenter')
+
+---@type UnityEngine.Transform 自己
+local transform
+
+---@type Client.Library.ButtonArchly 上方的英雄按钮
+local heroTopBtn
+---@type Client.Library.ButtonArchly 右边的英雄按钮
+local heroRightBtn
+---@type Client.Library.ButtonArchly 左边的英雄按钮
+local heroLeftBtn
+
+---@type UnityEngine.TextMesh 绿魂消耗数量显示
+local costAccountTxt
+---@type UnityEngine.UI.Image 消耗资源你的图片
+local costImg
+
+---@type UnityEngine.TextMesh 右边英雄需要数量显示
+local heroRightAccountTxt
+---@type UnityEngine.TextMesh 左边需要英雄数量显示
+local heroLeftAccountTxt
+---@type Client.Library.ButtonArchly 置换按钮
+local replacementBtn
+---@type UnityEngine.TextMesh 规则
+local ruleDesTxt
+
+---@type UnityEngine.UI.Image 上方按钮的加号
+local heroTopAddImg
+---@type UnityEngine.UI.Image 右边按钮的加号
+local heroRightAddImg
+---@type UnityEngine.UI.Image 左边按钮的加号
+local heroLeftAddImg
+
+---@type UnityEngine.GameObject 上方按钮的加号
+local heroTopAddImgObj
+---@type UnityEngine.GameObject 右边按钮的加号
+local heroRightAddImgObj
+---@type UnityEngine.GameObject 左边按钮的加号
+local heroLeftAddImgObj
+
+---@type UnityEngine.UI.Image 上方按钮接受射线的图片
+local heroTopHeroBtnTargetImg
+---@type UnityEngine.UI.Image 右边按钮接受射线的图片
+local heroRightHeroBtnTargetImg
+---@type UnityEngine.UI.Image 左边按钮接受射线的图片
+local heroLeftHeroBtnTargetImg
+
+---@type UnityEngine.GameObject 上方英雄显示
+local heroTopBaseObj
+---@type UnityEngine.GameObject 右边英雄显示
+local heroRightBaseObj
+---@type UnityEngine.GameObject 左边英雄显示
+local heroLeftBaseObj
+
+---@type Client.Library.ItemSlot 上方英雄显示ItemSlot
+local heroTopItemSlot
+---@type Client.Library.ItemSlot 右边英雄显示ItemSlot
+local heroRightItemSlot
+---@type Client.Library.ItemSlot 左边英雄显示ItemSlot
+local heroLeftItemSlot
+
+---@type UnityEngine.GameObject 上方英雄等级GameObject
+local heroTopLvObj
+---@type UnityEngine.GameObject 左边英雄等级GameObject
+local heroLeftLvObj
+---@type UnityEngine.GameObject 右边英雄等级GameObject
+local heroRightLvObj
+---@type UnityEngine.GameObject 右边英雄遮罩
+local rightOwnerTagObj
+
+---左边已选择英雄数量
+local curLeftHeroAccount = 0
+---右边一选择英雄数量
+local curRightHeroAccount = 0
+---右边最大英雄数量
+local maxRightHeroAccount
+---左边最大英雄数量
+local maxLeftRightHeroAccount = 1
+---@type number 需要的绿魂个数
+local costConsume
+---上方加号动画
+local topFade
+---右边加号动画
+local rightFade
+---左边加号动画
+local leftFade
+---@type number 动画时间
+local animaDur = 2
+
+function DoInit()
+    self.Anim = 0
+
+    transform = self.transform
+    heroTopBtn = self:GetComponentAtPath("Heros/hero/HeroTopBtn", CLS_BUTTON_ARCHLY)
+    heroRightBtn = self:GetComponentAtPath("Heros/hero/HeroRightBtn", CLS_BUTTON_ARCHLY)
+    heroLeftBtn = self:GetComponentAtPath("Heros/hero/HeroLeftBtn", CLS_BUTTON_ARCHLY)
+    rightOwnerTagObj = self:GetGameObjectAtPath("Heros/hero/HeroRightBtn/notOwn")
+
+    local HeroTopBtnObj = heroTopBtn.gameObject
+    local HeroRightBtnObj = heroRightBtn.gameObject
+    local HeroLeftBtnObj = heroLeftBtn.gameObject
+
+    local HeroTopBtnTrans = heroTopBtn.transform
+    local HeroRightBtnTrans = heroRightBtn.transform
+    local HeroLeftBtnTrans = heroLeftBtn.transform
+
+    heroTopItemSlot = CsBridge.UnityHelper.GetOrAddComponent(HeroTopBtnObj, CLS_ITEM_SLOT)
+    heroRightItemSlot = CsBridge.UnityHelper.GetOrAddComponent(HeroRightBtnObj, CLS_ITEM_SLOT)
+    heroLeftItemSlot = CsBridge.UnityHelper.GetOrAddComponent(HeroLeftBtnObj, CLS_ITEM_SLOT)
+
+    replacementBtn = self:GetComponentAtPath("Button/ReplacementBtn", CLS_BUTTON_ARCHLY)
+    costAccountTxt = self:GetComponentAtPath("Heros/costAccount", CLS_TEXT)
+    costImg = self:GetComponentAtPath("Heros/iconImg", CLS_IMAGE)
+    heroRightAccountTxt = self:GetComponentAtPath("Heros/hero/heroRightAccount", CLS_TEXT)
+    heroLeftAccountTxt = self:GetComponentAtPath("Heros/hero/heroLeftAccount", CLS_TEXT)
+    ruleDesTxt = self:GetComponentAtPath("Heros/rule/des", CLS_TEXT)
+    heroTopAddImg = self:GetComponentAtPath("Heros/hero/HeroTopBtn/heroTopAdd", CLS_IMAGE)
+    heroRightAddImg = self:GetComponentAtPath("Heros/hero/HeroRightBtn/heroRightAdd", CLS_IMAGE)
+    heroLeftAddImg = self:GetComponentAtPath("Heros/hero/HeroLeftBtn/heroLeftAdd", CLS_IMAGE)
+
+    heroTopAddImgObj = heroTopAddImg.gameObject
+    heroRightAddImgObj = heroRightAddImg.gameObject
+    heroLeftAddImgObj = heroLeftAddImg.gameObject
+
+    heroTopBaseObj = HeroTopBtnTrans:GetGameObjectAtPath("HeroBase")
+    heroRightBaseObj = HeroRightBtnTrans:GetGameObjectAtPath("HeroBase")
+    heroLeftBaseObj = HeroLeftBtnTrans:GetGameObjectAtPath("HeroBase")
+    heroTopLvObj = HeroTopBtnTrans:GetGameObjectAtPath("HeroBase/LvTxt")
+    heroLeftLvObj = HeroLeftBtnTrans:GetGameObjectAtPath("HeroBase/LvTxt")
+    heroRightLvObj = HeroRightBtnTrans:GetGameObjectAtPath("HeroBase/LvTxt")
+    heroTopHeroBtnTargetImg = heroTopBtn.targetGraphic.gameObject:GetComponent(CLS_IMAGE)
+    heroRightHeroBtnTargetImg = heroRightBtn.targetGraphic.gameObject:GetComponent(CLS_IMAGE)
+    heroLeftHeroBtnTargetImg = heroLeftBtn.targetGraphic.gameObject:GetComponent(CLS_IMAGE)
+end
+
+function InitUI()
+    ruleDesTxt.text = CsBridge.UnityHelper.SpaceChange(CsBridge.UnityHelper.ReplaceString(ResTblContainer:GetPropToStr(53, Instruction.content, Instruction.tblName)))
+    KillAllTweener()
+
+    BindHeroBaseValue(heroTopBaseObj, nil)
+    BindHeroBaseValue(heroRightBaseObj, nil)
+    BindHeroBaseValue(heroLeftBaseObj, nil)
+
+    heroTopLvObj:SetActive(false)
+    heroLeftLvObj:SetActive(false)
+    heroRightLvObj:SetActive(false)
+
+    curLeftHeroAccount = 0
+    curRightHeroAccount = 0
+    rightOwnerTagObj:SetActive(false)
+    self:SendCommand("InitViewData")
+end
+
+function OnAnimationFinished()
+    InitUI()
+end
+
+---初始化界面
+function OnNotification_InitViewData(objs)
+    maxRightHeroAccount = objs[0]
+    costConsume = objs[1]
+    heroLeftAccountTxt.text = tostring(curLeftHeroAccount) .. "/" .. maxLeftRightHeroAccount
+    heroRightAccountTxt.text = tostring(curRightHeroAccount) .. "/" .. maxRightHeroAccount
+    SetCostAccountText()
+    SetAccountTextColor()
+    SetAddTagInDefault()
+end
+
+---清理界面
+function OnNotification_ClearView()
+    curLeftHeroAccount = 0
+    curRightHeroAccount = 0
+    InitUI()
+end
+
+---设置可以置换
+function OnNotification_SetExchangeBtnState(objs)
+    local can = objs[0]
+    replacementBtn.Gray = not can
+end
+
+function BeoforeReturnBack()
+    self.gameObject:SetSelfActive(false)
+end
+
+---设置颜色
+function SetAccountTextColor()
+    if curLeftHeroAccount < maxLeftRightHeroAccount then
+        SetFontColor(heroLeftAccountTxt, color30)
+    else
+        SetFontColor(heroLeftAccountTxt, color1)
+    end
+    if curRightHeroAccount < maxRightHeroAccount then
+        SetFontColor(heroRightAccountTxt, color30)
+    else
+        SetFontColor(heroRightAccountTxt, color1)
+    end
+end
+
+---最上方英雄按钮点击事件
+function OnHeroTopBtnClick()
+    self:SendCommand("OpenTenStarListBook")
+end
+
+---右边英雄按钮点击事件
+function OnHeroRightBtnClick()
+    self:SendCommand("OpenMaterialSelect")
+end
+
+---左边英雄按钮点击事件
+function OnHeroLeftBtnClick()
+    self:SendCommand("OpenMineHero")
+end
+
+---置换按钮点击事件
+function OnReplacementBtnClick()
+    self:SendCommand("SureExchangeHero")
+end
+
+---当选择了需要置换的十星英雄
+function OnNotification_ChoseHeroBookListOneDataEx(objs)
+    if objs ~= nil then
+        local curTopHeroData = objs[0]
+        curTopHeroData.anim = true
+        OnHeroItemSlotBindValue(heroTopItemSlot, curTopHeroData)
+        heroTopLvObj:SetActive(false)
+        SetAddTagInTopChose()
+        self:SendCommand("InitTargetRelationHero")
+    end
+end
+
+---选取了十星英雄之后，显示出十星英雄的本体英雄
+function OnNotification_InitTargetRelationHero(objs)
+    if objs ~= nil then
+        objs[0].isNotOwn = true
+        local curTopHeroRelationHeroData = objs[0]
+        OnHeroItemSlotBindValue(heroRightItemSlot, curTopHeroRelationHeroData)
+    end
+end
+
+---当选了右边的英雄
+function OnNotification_ChoseRightMaterial(objs)
+    if objs ~= nil then
+        if #objs[0] > 0 then
+            curRightHeroAccount = #objs[0]
+            local curRightHeroData = objs[0]
+            curRightHeroData[1].anim = true
+            curRightHeroData[1].IsSelected = false
+            OnHeroItemSlotBindValue(heroRightItemSlot, curRightHeroData[1])
+            SetAddTagInChoseRight()
+        else
+            curRightHeroAccount = 0
+            self:SendCommand("InitTargetRelationHero")
+            SetAddTagInChoseRight()
+        end
+
+        heroRightAccountTxt.text = tostring(curRightHeroAccount) .. "/" .. maxRightHeroAccount
+        heroRightLvObj:SetActive(false)
+    end
+    SetAccountTextColor()
+end
+
+---当选择了左边的英雄
+function OnNotification_ChoseMyOneHeroEx(objs)
+    if objs ~= nil then
+        curLeftHeroAccount = maxLeftRightHeroAccount
+        local curLeftHeroData = objs[0]
+        curLeftHeroData.anim = true
+        heroLeftAccountTxt.text = tostring(curLeftHeroAccount) .. "/" .. maxLeftRightHeroAccount
+        OnHeroItemSlotBindValue(heroLeftItemSlot, curLeftHeroData)
+        SetAddTagInChoseLeft()
+        heroLeftLvObj:SetActive(false)
+    end
+    SetAccountTextColor()
+end
+
+---设置消耗显示
+function SetCostAccountText()
+    SetFontColorWithEnough(costAccountTxt, function()
+        return costConsume.mineCount >= costConsume.count
+    end, color2)
+    ShowOneConsume(costImg, costAccountTxt, costConsume)
+end
+
+---设置加号按钮为默认状态
+function SetAddTagInDefault()
+    heroTopAddImgObj:SetActive(true)
+    heroRightAddImgObj:SetActive(false)
+    heroLeftAddImgObj:SetActive(false)
+    if topFade ~= nil then
+        topFade:DoKill()
+    end
+    topFade = CsBridge.TweenUtils.DoImageFadeInAndOut(heroTopAddImg, animaDur)
+    topFade:DoPlay()
+    SetImgReceiveRay(true, false, false)
+end
+
+---设置加号按钮为选择了目标状态
+function SetAddTagInTopChose()
+    heroTopAddImgObj:SetActive(false)
+    heroRightAddImgObj:SetActive(true)
+    heroLeftAddImgObj:SetActive(true)
+    if topFade ~= nil then
+        topFade:DoKill()
+    end
+    if leftFade ~= nil then
+        leftFade:DoKill()
+    end
+    if rightFade ~= nil then
+        rightFade:DoKill()
+    end
+    leftFade = CsBridge.TweenUtils.DoImageFadeInAndOut(heroLeftAddImg, animaDur)
+    leftFade:DoPlay()
+    rightFade = CsBridge.TweenUtils.DoImageFadeInAndOut(heroRightAddImg, animaDur)
+    rightFade:DoPlay()
+    SetImgReceiveRay(true, true, true)
+end
+
+---设置加号按钮为选择了右边状态
+function SetAddTagInChoseRight()
+    heroTopAddImgObj:SetActive(false)
+    heroRightAddImgObj:SetActive(curRightHeroAccount < maxRightHeroAccount)
+    SetImgReceiveRay(curRightHeroAccount == 0 and heroRightAddImgObj.activeSelf, true, true)
+end
+
+---设置及加号按钮为选择了左边状态
+function SetAddTagInChoseLeft()
+    heroTopAddImgObj:SetActive(false)
+    heroLeftAddImgObj:SetActive(false)
+    if leftFade ~= nil then
+        leftFade:DoKill()
+    end
+    SetImgReceiveRay(false, true, true)
+end
+
+---设置图片是否接受射线
+function SetImgReceiveRay(top, right, left)
+    heroTopHeroBtnTargetImg.raycastTarget = top
+    heroRightHeroBtnTargetImg.raycastTarget = right
+    heroLeftHeroBtnTargetImg.raycastTarget = left
+end
+
+function Clear()
+    if not replacementBtn.Gray then
+        replacementBtn.Gray = true
+    end
+    ruleDesTxt.text = ""
+    heroLeftAccountTxt.text = ""
+    heroRightAccountTxt.text = ""
+    costAccountTxt.text = ""
+    KillAllTweener()
+end
+
+function KillAllTweener()
+    if topFade ~= nil then
+        topFade:DoKill(false)
+    end
+    if leftFade ~= nil then
+        leftFade:DoKill(false)
+    end
+    if rightFade ~= nil then
+        rightFade:DoKill(false)
+    end
+end
+
+function DoExit()
+
+    msgCenter = nil
+
+    transform = nil
+
+    heroTopBtn = nil
+    heroRightBtn = nil
+    heroLeftBtn = nil
+
+    costAccountTxt = nil
+    heroRightAccountTxt = nil
+    heroLeftAccountTxt = nil
+    replacementBtn = nil
+    ruleDesTxt = nil
+
+    heroTopAddImg = nil
+    heroRightAddImg = nil
+    heroLeftAddImg = nil
+
+    heroTopAddImgObj = nil
+    heroRightAddImgObj = nil
+    heroLeftAddImgObj = nil
+
+    heroTopHeroBtnTargetImg = nil
+    heroRightHeroBtnTargetImg = nil
+    heroLeftHeroBtnTargetImg = nil
+
+    heroTopBaseObj = nil
+    heroRightBaseObj = nil
+    heroLeftBaseObj = nil
+
+    heroTopItemSlot = nil
+    heroRightItemSlot = nil
+    heroLeftItemSlot = nil
+
+    heroTopLvObj = nil
+    heroLeftLvObj = nil
+    heroRightLvObj = nil
+    rightOwnerTagObj = nil
+
+    curLeftHeroAccount = nil
+    curRightHeroAccount = nil
+    maxRightHeroAccount = nil
+    maxLeftRightHeroAccount = nil
+    costConsume = nil
+    topFade = nil
+    rightFade = nil
+    leftFade = nil
+    animaDur = nil
+    costImg = nil
+end
+
+function OnClose()
+    Clear()
+end

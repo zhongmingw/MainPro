@@ -1,0 +1,163 @@
+local selfName_Lab
+local enemyName_Lab
+local selfScore_Lab
+local enemyScore_Lab
+
+local selfHead_TF
+local enemyHead_TF
+
+local closeBtn
+local sureBtn
+local skipBtn
+
+local winSpine
+local failSpine
+local titleTxt
+local battleInfo = {}
+
+local getReward = false
+
+function DoInit()
+	self.Shadow = 2
+	selfName_Lab=self:GetComponentAtPath("Center/PlayerGO/NameTxt",CLS_TEXT)
+	enemyName_Lab=self:GetComponentAtPath("Center/EnemyGO/NameTxt",CLS_TEXT)
+	selfScore_Lab=self:GetComponentAtPath("Center/PlayerGO/ScoreTxt",CLS_TEXT)
+	enemyScore_Lab=self:GetComponentAtPath("Center/EnemyGO/ScoreTxt",CLS_TEXT)
+    titleTxt=self:GetComponentAtPath("SpineGO/titleTxt",CLS_TEXT)
+
+	selfHead_TF=self:GetComponentAtPath("Center/PlayerGO/PlayerBase",CLS_RECTTRANSFORM)
+	enemyHead_TF=self:GetComponentAtPath("Center/EnemyGO/PlayerBase",CLS_RECTTRANSFORM)
+
+	closeBtn = self:GetGameObjectAtPath("Center/CloseBtn")
+	sureBtn = self:GetGameObjectAtPath("Center/SureBtn")
+	skipBtn = self:GetGameObjectAtPath("Center/SkipBtn")
+
+	winSpine = self:GetComponentAtPath("SpineGO/WinSpine",CLS_SKELETONGRAPHIC)
+	failSpine = self:GetComponentAtPath("SpineGO/FailSpine",CLS_SKELETONGRAPHIC)
+end
+
+function SetData(data)
+	battleInfo=data
+	local isEnd = battleInfo.isTheLast
+	closeBtn:SetActive(isEnd)
+	sureBtn:SetActive(not isEnd)
+	skipBtn:SetActive(not isEnd)
+	local battleEndInfo = battleInfo.battleEndInfo
+	local playerInfo = battleEndInfo.selfPlayerBaseInfo
+	local enemyInfo = battleEndInfo.targetPlayerBaseInfo
+	BindPlayerBaseInfoValue(selfHead_TF,playerInfo)
+	BindPlayerBaseInfoValue(enemyHead_TF,enemyInfo)
+	selfName_Lab.text=playerInfo.name
+    enemyName_Lab.text=enemyInfo.name
+
+	local result = battleEndInfo.apArenaResult
+	selfScore_Lab.gameObject:SetSelfActive(isEnd)
+	enemyScore_Lab.gameObject:SetSelfActive(isEnd)
+    if battleEndInfo.result == 1 then
+    	titleTxt.text = Language:getStr("Global_20")
+    	SetWinSpine()
+		if result.redScore ~= nil then
+			if result.redScore == 0 then
+				selfScore_Lab.text = tostring(result.blackScore) .. "<color=#42ff00>(+".. result.blackScore..")" .."</color>"
+				enemyScore_Lab.text = "(-)"
+			else
+				local redScore = result.redScore < result.blackScore and result.redScore or result.blackScore
+				local blackScore = result.redScore < result.blackScore and result.blackScore or result.redScore
+				local deltaScore = blackScore - redScore
+				if result.redScore < result.blackScore then
+					deltaScore = 0
+				end
+				selfScore_Lab.text = tostring(redScore) .. "<color=#42ff00>(+".. deltaScore..")" .."</color>"
+				enemyScore_Lab.text = tostring(blackScore) .. "<color=#ff0000>(-".. deltaScore..")" .."</color>"				
+			end
+		end
+    else
+    	titleTxt.text = Language:getStr("Global_12")
+    	SetFailSpine()
+		if result.redScore ~= nil then
+			selfScore_Lab.text = tostring(result.redScore) .. "<color=#42ff00>(+".. result.deltaScore..")" .."</color>"
+			enemyScore_Lab.text = tostring(result.blackScore) .. "<color=#ff0000>(-".. result.deltaScore..")" .."</color>"
+		end
+    end
+
+end
+
+function SetWinSpine()
+	winSpine.gameObject:SetActive(true)
+	failSpine.gameObject:SetActive(false)
+	winSpine:PlayAnimation("apear",false,nil,
+	function ()
+		winSpine:PlayAnimation("stand",true,nil,nil)
+	end)
+	CsBridge.audioManager:PlayUI(ResTblContainer:GetPropToStr(1,sound.name,sound.tblName))
+end
+
+function SetFailSpine()
+	winSpine.gameObject:SetActive(false)
+	failSpine.gameObject:SetActive(true)
+	failSpine:PlayAnimation("apear",false,nil,
+	function ()
+		failSpine:PlayAnimation("stand",true,nil,nil)
+	end)
+	CsBridge.audioManager:PlayUI(ResTblContainer:GetPropToStr(1,sound.name,sound.tblName))
+end
+
+function OnAnimationFinished()
+	if battleInfo.battleEndInfo==nil then
+		return 
+	end
+	if battleInfo.battleEndInfo.dropItems~=nil then
+		dropGrid:RefreshItemSlots(MergeRewards(battleInfo.battleEndInfo.dropItems),self.gameObject,"ItemSlot")
+	end
+	if battleInfo.battleEndInfo.randomReward~=nil and battleInfo.isRecord~=true then
+		CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			local view = CsBridge.OpenView("RandomRewardView", "WinModel",false,true)
+			view:SetData(battleInfo.battleEndInfo.randomReward)
+		end,"RandomRewardView")
+	end
+end
+
+function OnDetailBtnClick(sender)
+	self:SendCommand("DetailBtnClicked")
+end
+
+local function Close(onClose)
+	self:HideView(self.gameObject.name)
+	if onClose then
+		onClose()
+	end
+end
+
+function OnCloseBtnClick(sender)
+	Close(battleInfo.onClose)
+end
+
+function OnSureBtnClick(sender)
+	Close(battleInfo.onClose)
+end
+
+function OnSkipBtnClick(sender)
+	self:SendCommand("SkipBtnClicked")
+end
+
+function OnNotification_RefreshWinViewOnSkiped(objs)
+	local endBattle = objs[0]
+	SetData(endBattle)
+end
+
+function OnMaskClick()
+	Close(battleInfo.onClose)
+end
+
+function DoExit()
+	selfName_Lab = nil
+	enemyName_Lab = nil
+	selfScore_Lab = nil
+	enemyScore_Lab = nil
+	selfHead_TF = nil
+	enemyHead_TF = nil
+	winSpine = nil
+	battleInfo = nil
+	getReward = nil
+end

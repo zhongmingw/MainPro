@@ -1,0 +1,44 @@
+require "CommonBtnItemSlot"
+
+---@type Client.Library.UIItemGrid
+local btnGrid
+---@type Client.Library.ViewBase
+local selfViewBase
+
+function DoInit()
+    selfViewBase = self
+    selfViewBase.Shadow = 1
+    btnGrid = selfViewBase:GetComponentAtPath("AllParent/BtnGrid", CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+
+end
+
+---设置参数
+function SetParamDataList(objs)
+    local curWorldPos = objs[0]
+    local btnArr = objs[1]
+    selfViewBase.gameObject:SetGlobalPosition(curWorldPos.positionX, curWorldPos.positionY)
+    btnGrid:RefreshItemSlots(btnArr, selfViewBase.gameObject, "CommonBtnItemSlot")
+end
+
+---按钮点击
+function OnBtnGridCommonBtnItemSlotClick(obj)
+    local data = obj.m_data
+    selfViewBase:SendCommand("CommonBtnItemClick", data)
+end
+
+function OnMaskClick()
+    selfViewBase:HideView(selfViewBase.gameObject.name)
+end
+
+function OnClose()
+    btnGrid:ClearItems()
+end
+
+function DoExit()
+    selfViewBase = nil
+    btnGrid = nil
+end
+

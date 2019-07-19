@@ -1,0 +1,69 @@
+local luaHeroShowUtils = require "HeroShowUtils"
+
+local failSpine, hpTxt
+local score
+local battleInfo={}
+
+function DoInit()
+	self.Shadow = 2
+	failSpine = self:GetComponentAtPath("SpineGO/spine" ,CLS_SKELETONGRAPHIC)
+	failSpine.gameObject:SetActive(false)
+	hpTxt = self:GetComponentAtPath("Center/contentTxt" ,CLS_TEXT)
+	score = self:GetComponentAtPath("Center/scoreTxt" ,CLS_TEXT)
+end
+
+function SetData(data)
+	battleInfo=data
+end
+
+function OnOpen()
+	failSpine.gameObject:SetActive(true)
+
+	failSpine:PlayAnimation("apear",false,nil,
+	function ()
+		failSpine:PlayAnimation("stand",true,nil,nil)
+	end)
+	CsBridge.audioManager:PlayUI(ResTblContainer:GetPropToStr(2,sound.name,sound.tblName))
+end
+
+function OnAnimationFinished()
+	if battleInfo.battleEndInfo==nil then
+		return 
+	end
+	hpTxt.text = tostring(battleInfo.battleEndInfo.hurt)
+	score.text = "+"..tostring(battleInfo.battleEndInfo.score)
+
+	if battleInfo.battleEndInfo.randomReward~=nil and battleInfo.isRecord~=true then
+		CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			local view = CsBridge.OpenView("RandomRewardView", "WinModel",false,true)
+			view:SetData(battleInfo.battleEndInfo.randomReward)
+		end,"RandomRewardView")
+	end
+end
+
+function OnDetailBtnClick(sender)
+	ShowBattleRecordView({battleInfo},self)
+end
+
+local function Close(onClose)
+	self:HideView(self.gameObject.name)
+	if onClose then
+		onClose()
+	end
+end
+
+function OnConfirmBtnClick(sender)
+	Close(battleInfo.onClose)
+end
+
+function OnMaskClick()
+	Close(battleInfo.onClose)
+end
+
+function DoExit()
+	failSpine = nil
+	hpTxt = nil
+	score = nil
+	battleInfo = nil
+end

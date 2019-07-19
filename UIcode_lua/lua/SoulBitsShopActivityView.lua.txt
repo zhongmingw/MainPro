@@ -1,0 +1,116 @@
+require('ShopItemSlot')
+
+---@type Client.Library.UIItemGrid
+local itemUIGrid
+
+---@type UnityEngine.UI.Image
+local topbgImg
+
+---@type UnityEngine.GameObject
+local resBannerRight
+---@type UnityEngine.UI.Image
+local resBannerRightIconImg
+---@type UnityEngine.TextMesh
+local resBannerRightNumTxt
+
+---@type UnityEngine.GameObject
+local resBannerLeft
+---@type UnityEngine.UI.Image
+local resBannerLeftIconImg
+---@type UnityEngine.TextMesh
+local resBannerLeftNumTxt
+
+---@type UnityEngine.GameObject
+local tips
+
+---@type table 显示界面需要的数据
+local viewData
+
+function DoInit()
+    self.Anim = 0
+    itemUIGrid = self:GetComponentAtPath("RightPanel/itemSV/ScrollRect/Viewport/ShopGridShorter", CLS_UI_ITEM_GRID)
+    topbgImg = self:GetComponentAtPath("RightPanel/top/topbgImg", CLS_IMAGE)
+    resBannerRight = self:GetGameObjectAtPath("RightPanel/top/ResBanner")
+    resBannerRightIconImg = self:GetComponentAtPath("RightPanel/top/ResBanner/iconImg", CLS_IMAGE)
+    resBannerRightNumTxt = self:GetComponentAtPath("RightPanel/top/ResBanner/numTxt", CLS_TEXT)
+    resBannerLeft = self:GetGameObjectAtPath("RightPanel/top/ResBanner2")
+    resBannerLeftIconImg = self:GetComponentAtPath("RightPanel/top/ResBanner2/iconImg", CLS_IMAGE)
+    resBannerLeftNumTxt = self:GetComponentAtPath("RightPanel/top/ResBanner2/numTxt", CLS_TEXT)
+    tips = self:GetGameObjectAtPath("RightPanel/top/Tips")
+end
+
+function OnAnimationFinished()
+
+end
+
+---显示最上面的自己的资源
+local function ShowShopResPanel(consumes)
+    resBannerRight.gameObject:SetActive(false)
+    resBannerLeft.gameObject:SetActive(false)
+    if #consumes == 1 then
+        ShowOneConsume(resBannerRightIconImg, resBannerRightNumTxt, consumes[1])
+        resBannerRight.gameObject:SetActive(true)
+    elseif #consumes == 2 then
+        ShowOneConsume(resBannerRightIconImg, resBannerRightNumTxt, consumes[1])
+        resBannerRight.gameObject:SetActive(true)
+        ShowOneConsume(resBannerLeftIconImg, resBannerLeftNumTxt, consumes[2])
+        resBannerLeft.gameObject:SetActive(true)
+    end
+end
+
+---刷新界面
+function OnNotification_RefreshActivityView(objs)
+    if objs ~= nil then
+        viewData = objs[0]
+    end
+    if viewData ~= nil then
+        if viewData.consumes ~= nil and #viewData.consumes > 0 then
+            ShowShopResPanel(viewData.consumes)
+        end
+        itemUIGrid:RefreshItemSlots(viewData.itemList, self.gameObject, "ShopItemSlot")
+    end
+end
+
+---右侧资源点击
+function OnResBannerClick(sender)
+    if viewData and viewData.consumes and #viewData.consumes >= 1 then
+        ShowTip(self, viewData.consumes[1].typeId, viewData.consumes[1].id)
+    end
+end
+
+---左侧资源点击
+function OnResBanner2Click(sender)
+    if viewData and viewData.consumes and #viewData.consumes >= 2 then
+        ShowTip(self, viewData.consumes[2].typeId, viewData.consumes[2].id)
+    end
+end
+
+---物品点击
+function OnShopGridShorterItemClick(obj)
+    local data = obj.m_data.reward
+    self:SendCommand("OpenTipView", data)
+end
+
+---购买点击
+function OnShopGridShorterBuyBtnClick(obj)
+    local currentItemData = obj.m_data
+    self:SendCommand("BuyShopItemWithDealView", currentItemData)
+end
+
+---关闭界面
+function OnNotification_CloseActivityView(obj)
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+    itemUIGrid = nil
+    topbgImg = nil
+    resBannerRight = nil
+    resBannerRightIconImg = nil
+    resBannerRightNumTxt = nil
+    resBannerLeft = nil
+    resBannerLeftIconImg = nil
+    resBannerLeftNumTxt = nil
+    tips = nil
+    viewData = nil
+end

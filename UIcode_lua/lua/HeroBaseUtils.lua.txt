@@ -1,0 +1,601 @@
+require "BitUtils"
+
+function BindHeroBaseValue(heroBaseTF,heroData)
+    local qualityImg=heroBaseTF.transform:Find("qualityImg"):GetComponent("UnityEngine.UI.Image")
+	local icon_Sprite=heroBaseTF.transform:Find("IconSprite"):GetComponent("UnityEngine.UI.Image")
+	local race_Sprite=heroBaseTF.transform:Find("RaceSprite"):GetComponent("UnityEngine.UI.Image")
+    local race_di=heroBaseTF.transform:Find("iocn02Img")
+    local job_di=heroBaseTF.transform:Find("JobObj")
+    local job_Sprite=heroBaseTF.transform:Find("JobObj/JobSprite")
+	local lv_Lab=heroBaseTF.transform:Find("LvTxt"):GetComponent(CLS_TEXT)
+    local starRoot=heroBaseTF.transform:Find("StarRoot")
+    local soulImprintItem = heroBaseTF.transform:Find("SoulImprintItem")
+    local equipedSoulImprintItem = heroBaseTF.transform:Find("EquipedSoulImprintItem")
+    local heroBaseData = heroData and table.copy(heroData) or nil
+    if heroBaseData and (heroBaseData.heroId == nil or heroBaseData.distillationLevel == nil or heroBaseData.distillationStar == nil or heroBaseData.breakLevel == nil) then
+        GetHeroDataByHeroUid(heroBaseData)
+    end
+    if(heroBaseData == nil or heroBaseData.uid == 0 or heroBaseData.heroId == 0)then
+        SetDefaultQuality(qualityImg.gameObject)
+        icon_Sprite.gameObject:SetSelfActive(false)
+        race_Sprite.gameObject:SetSelfActive(false)
+        lv_Lab.gameObject:SetSelfActive(false)
+        race_di.gameObject:SetSelfActive(false)
+        if soulImprintItem then
+            soulImprintItem.gameObject:SetSelfActive(false)
+        end
+        if equipedSoulImprintItem then
+            equipedSoulImprintItem.gameObject:SetSelfActive(false)
+        end
+        if job_di ~= nil then
+            job_di.gameObject:SetSelfActive(false)
+        end
+        starRoot.gameObject:SetSelfActive(false)
+    else
+        --GetHeroDataByHeroUid(heroBaseData)
+        icon_Sprite.gameObject:SetSelfActive(true)
+        race_Sprite.gameObject:SetSelfActive(true)
+        race_di.gameObject:SetSelfActive(true)
+        starRoot.gameObject:SetSelfActive(true)
+        SetIconByHeroId(icon_Sprite.gameObject,heroBaseData.heroId)
+        ShowHeroQuality(heroBaseData.heroId,starRoot,qualityImg,heroBaseData.distillationStar)
+        SetRaceIconByHeroId(race_Sprite.gameObject,heroBaseData.heroId)
+        if job_di ~= nil then
+            job_di.gameObject:SetSelfActive(false)
+        end
+        if heroBaseData.showJob then
+            job_di.gameObject:SetSelfActive(true)
+            SetJobIconByHeroId(job_Sprite.gameObject,heroBaseData.heroId)
+        end
+        lv_Lab.gameObject:SetSelfActive(false)
+        if heroBaseData.grade and heroBaseData.grade > 0 and heroBaseData.level and heroBaseData.level > 0 then
+            lv_Lab.gameObject:SetSelfActive(true)
+            lv_Lab.text= tostring(GetHeroAllLevel(heroBaseData.grade,heroBaseData.level,heroBaseData.distillationLevel,heroBaseData.breakLevel))
+        end
+        local pbHero = GetPbHero(heroData)
+        if soulImprintItem then
+            if heroData.isBookHero ~= true and pbHero and pbHero.isEmblem then
+                soulImprintItem.gameObject:SetSelfActive(true)
+            else
+                soulImprintItem.gameObject:SetSelfActive(false)
+            end
+        end
+        if equipedSoulImprintItem then
+            if heroData.isBookHero ~= true and pbHero and pbHero.haveEmblemUid and pbHero.haveEmblemUid > 0 then
+                equipedSoulImprintItem.gameObject:SetSelfActive(true)
+            else
+                equipedSoulImprintItem.gameObject:SetSelfActive(false)
+            end
+        end
+    end
+end
+
+function GetHeroDataByHeroUid(data)
+    if (data.uid or data.srcUid) and (data.uid ~= 0 or data.srcUid ~= 0) and (data.distillationStar == nil or data.distillationLevel == nil) and data.breakLevel == nil and data.fakeUid == nil then
+        local pb = appData:checkItem("HeroItem",data.uid or data.srcUid)
+        if pb ~= nil then
+            data.distillationStar = pb.distillationStar
+            data.distillationLevel = pb.distillationLevel
+            data.breakLevel = pb.breakLevel
+            data.level = pb.level
+            data.grade = pb.grade
+            data.heroId = pb.heroId
+        else
+            data.level = 0
+            data.grade = 0
+            data.heroId = 0
+            data.distillationStar = 0
+            data.distillationLevel = 0
+            data.breakLevel = 0
+        end
+    end
+end
+
+function HeroInFormation(heroData) 
+    local formationInfos= appData:checkAllItems("Formation")
+    if formationInfos==nil then
+        return
+    end
+    for i=0,formationInfos.Length-1 do
+        for n,val in ipairs(formationInfos[i].heroIds) do
+            if heroData.uid==val.uid then
+                return true
+            end
+        end
+    end
+   return false
+end
+
+---下阵采矿阵容
+function DownMiningFormationHero(heroData, callback)
+    local result = false
+    if heroData and CheckHeroInDuty(heroData,HeroDuty.Mining) then
+        local des = string.format(Language:getStr("HeroRemoveFormation"), Language:getStr(GetNameByHeroDuty(HeroDuty.Mining)))
+        CsBridge.messageManager:PopMsgBox(Language:getStr("local_confirm"),
+                des,
+                Language:getStr("local_cancel"),nil,
+                Language:getStr("local_confirm"),function()
+                    local req = {}
+                    req.heroUidList = {}
+                    req.heroUidList[1] = heroData.uid
+                    HttpRequest("removeHeroFromMineDef","RemoveHeroFromMineDefReq","RemoveHeroFromMineDefResp",req,
+                            function(resp)
+                                if resp and callback then
+                                    callback()
+                                end
+                            end)
+                end)
+        result = true
+    end
+    return result
+end
+
+---英雄下阵
+function DownHeroFromFormation(self ,heroData, heroIndex)
+    local function callBack()
+        UpdateHeroDuty(heroData)
+        self:SendNotification("RefreshSingleHero", heroData, heroIndex)
+    end
+    if DownMiningFormationHero(heroData, callBack) then
+        return true
+    end
+    if heroData.showDuty then
+        if HeroInFormationTip(heroData, HeroDuty.AUTO_TASK) then
+            return true
+        end
+        CheckHeroShowDutyTip(heroData, callBack, GetHeroAllDuty())
+        return true
+    end
+    return false
+end
+
+function HeroInFormationTip(heroData, duty)
+    local result = CheckHeroInLockStateName(heroData, duty)
+    if result ~= nil then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr(result))
+        return true
+    end
+    return false
+end
+
+function CheckHeroShowDutyTip(heroData,callback,...)
+    --lock 不处理
+    if HeroInFormationTip(heroData,HeroDuty.LOCK) then
+        return true
+    end
+    local newCurHeroData = appData:checkItem("HeroItem", heroData.uid)
+    if newCurHeroData and ShowSoulImprintedTip(newCurHeroData) then
+        return true
+    end
+    local dutyArr = {}
+    if #{...} == 0 then
+        dutyArr = CheckHeroDutyWithFormationArr(heroData,GetNoDelHeroLockDuty())
+    else
+        dutyArr = CheckHeroDutyWithFormationArr(heroData, ...)
+    end
+    if #dutyArr > 0 then
+        local formationType = -1
+        for i,duty in ipairs(dutyArr) do
+            local type = HeroDutyToFormation[duty]
+            if type ~= nil then
+                if IsNoEmptyFormation(type) then
+                    local heroIds = appData:checkItem("Formation",tostring(type)).heroIds
+                    if heroIds and #heroIds == 1 then
+                        formationType = type
+                        break
+                    end
+                    if heroIds and type == FormationTypeEnum.FormationType_Temple then--英灵殿最低上阵人数为5人
+                        if #heroIds <= 5 then
+                            formationType = type
+                            break
+                        end
+                    end
+                end
+                formationType = 0
+            end
+        end
+        if formationType > 0 then
+            if formationType == FormationTypeEnum.FormationType_Temple then
+                CsBridge.hintUILayer:ShowHintBox(Language:getStr("SoulPalace_FormationTips"))
+            else
+                CsBridge.hintUILayer:ShowHintBox(string.format(Language:getStr("NoActionInLastFormation"),Language:getStr(GetNameByFormation(formationType))))
+            end
+            return true
+        end
+        if formationType == 0 then
+            local des = #dutyArr > 1 and
+                    Language:getStr("HeroRemoveMultiFormation") or
+                    string.format(Language:getStr("HeroRemoveFormation"),Language:getStr(GetNameByHeroDuty(dutyArr[1])))
+            CsBridge.messageManager:PopMsgBox(Language:getStr("local_confirm"),
+                    des,
+                    Language:getStr("local_cancel"),nil,
+                    Language:getStr("local_confirm"),function()
+                        HttpRequest("removeHeroFormation","RemoveHeroFormationReq","RemoveHeroFormationResp",{heroUid = heroData.uid},
+                                function(resp)
+                                    if resp and callback then
+                                        callback()
+                                    end
+                                end)
+                    end)
+            return true
+        end
+    end
+    return false
+end
+
+---英雄处于何种锁定状态
+function CheckHeroInLockStateName(heroData, ... )
+    local dutys = { ... }
+    for i,duty in ipairs(dutys) do
+        if CheckHeroInDuty(heroData,duty) then
+            return GetNameByHeroDuty(duty)
+        end
+    end
+    return nil
+end
+
+function UpdateHeroDuty(hero)
+    local pb = appData:checkItem("HeroItem",tostring(hero.uid))
+    hero.showDuty = CheckHeroInDuty(pb,GetNoDelHeroLockDuty())
+    hero.duty = pb.duty
+end
+
+function IsNoEmptyFormation(formationType)
+    local arr = {GetNoEmptyFormation()}
+    for i,v in ipairs(arr) do
+        if v == formationType then
+            return true
+        end
+    end
+    return false
+end
+
+function CheckHeroInDuty(heroData, ... )
+    local dutys = { ... }
+    local heroDuty = CheckHeroDuty(heroData)
+    local ret = false
+    for i,duty in ipairs(dutys) do
+        ret = ret or Contain(heroDuty,duty)
+    end
+    return ret 
+end 
+
+function CheckHeroDuty(heroData)
+    if heroData.duty then
+        return heroData.duty
+    end
+    local heroItem=appData:checkItem("HeroItem",tostring(heroData.uid))
+    if heroItem == nil then
+        return 0
+    end
+    return heroItem.duty
+end
+
+function CheckHeroDutyWithFormationArr(heroData, ... )
+    local dutys = { ... }
+    local heroDuty = CheckHeroDuty(heroData)
+    local arr = {}
+    for i,duty in ipairs(dutys) do
+        if Contain(heroDuty, duty) and HeroDutyToFormation[duty] then
+            table.insert(arr, duty)
+        end
+    end
+    return arr
+end
+
+function GetNameByFormation(formationType)
+    if formationType == FormationTypeEnum.FormationType_PVE then
+        return "Fomation_PVE"
+    elseif formationType == FormationTypeEnum.FormationType_PVP then
+        return "Fomation_PVP"
+    elseif formationType == FormationTypeEnum.FormationType_OnHook then
+        return "Fomation_OnHook"
+    elseif formationType == FormationTypeEnum.FormationType_Vahalla then
+        return "Fomation_Vahall"
+    elseif formationType == FormationTypeEnum.FormationType_Cross_One then
+        return "Fomation_Cross"
+    elseif formationType == FormationTypeEnum.FormationType_Cross_Two then
+        return "Fomation_Cross"
+    elseif formationType == FormationTypeEnum.FormationType_Cross_Three then
+        return "Fomation_Cross"
+    elseif formationType == FormationTypeEnum.FormationType_GloryRoad_1 then
+        return "Fomation_GloryRoad_1"
+    elseif formationType == FormationTypeEnum.FormationType_GloryRoad_2 then
+        return "Fomation_GloryRoad_2"
+    elseif formationType == FormationTypeEnum.FormationType_Union then
+        return "Formation_Union"
+    elseif formationType == FormationTypeEnum.FormationType_BraveArena_1 then
+        return "LeagueFormation"
+    elseif formationType == FormationTypeEnum.FormationType_BraveArena_2 then
+        return "LeagueFormation"
+    elseif formationType == FormationTypeEnum.FormationType_BraveArena_3 then
+        return "LeagueFormation"
+    elseif formationType == FormationTypeEnum.FormationType_Mining then
+        return "Formation_Mining"
+    elseif  formationType == FormationTypeEnum.FormationType_Temple then
+        return "Formation_Temple"
+    elseif formationType == FormationTypeEnum.FormationType_WorldBoss then
+        return "Formation_WorldBoss"
+    end
+    return ""
+end
+
+function GetNameByHeroDuty(duty)
+    if duty == HeroDuty.PVE then
+        return "HeroInPVE"
+    elseif duty == HeroDuty.PVP then
+        return "HeroInPVP"
+    elseif duty == HeroDuty.HOOK then
+        return "HeroInHook"
+    elseif duty == HeroDuty.AUTO_TASK then
+        return "HeroInAutoTask"
+    elseif duty == HeroDuty.LOCK then
+        return "HeroInLock"
+    elseif duty == HeroDuty.EXPEDITIOIN then
+        return "HeroInExpedition"
+    elseif duty == HeroDuty.CROSS_1 then
+        return "HeroInCrossFormation"
+    elseif duty == HeroDuty.CROSS_2 then
+        return "HeroInCrossFormation"
+    elseif duty == HeroDuty.CROSS_3 then
+        return "HeroInCrossFormation"
+    elseif duty == HeroDuty.GloryRoad_1 then
+        return "HeroInGloryRoad_1"
+    elseif duty == HeroDuty.GloryRoad_2 then
+        return "HeroInGloryRoad_2"
+    elseif duty == HeroDuty.League_1 then
+        return "HeroInLeague_1"
+    elseif duty == HeroDuty.League_2 then
+        return "HeroInLeague_2"
+    elseif duty == HeroDuty.League_3 then
+        return "HeroInLeague_3"
+    elseif duty == HeroDuty.UnionBattle then
+        return "HeroInUnionFormation"
+    elseif duty == HeroDuty.Mining then
+        return "HeroInMing"
+    elseif duty == HeroDuty.SOUL_TEMPLE then
+        return "HeroInTemple"
+    elseif duty == HeroDuty.WorldBoss then
+        return "HeroInWorldBoss"
+    end
+end
+
+function GetNoDelHeroLockDuty()
+    return HeroDuty.PVE,
+        HeroDuty.PVP,
+        HeroDuty.HOOK,
+        HeroDuty.LOCK,
+        HeroDuty.EXPEDITIOIN,
+        HeroDuty.CROSS_1,
+        HeroDuty.CROSS_2,
+        HeroDuty.CROSS_3,
+        HeroDuty.Mining,
+        HeroDuty.SOUL_TEMPLE,
+        HeroDuty.WorldBoss,
+        HeroDuty.AUTO_TASK,
+        HeroDuty.UnionBattle
+end
+
+function GetHeroAllDuty()
+    return HeroDuty.PVE,
+    HeroDuty.PVP,
+    HeroDuty.HOOK,
+    HeroDuty.AUTO_TASK,
+    HeroDuty.LOCK,
+    HeroDuty.EXPEDITIOIN,
+    HeroDuty.CROSS_1,
+    HeroDuty.CROSS_2,
+    HeroDuty.CROSS_3,
+    HeroDuty.GloryRoad_1,
+    HeroDuty.GloryRoad_2,
+    HeroDuty.League_1,
+    HeroDuty.UnionBattle,
+    HeroDuty.League_2,
+    HeroDuty.League_3,
+    HeroDuty.Mining,
+    HeroDuty.SOUL_TEMPLE,
+    HeroDuty.WorldBoss
+end
+
+function GetNoEmptyFormation()
+    return FormationTypeEnum.FormationType_PVE,
+        FormationTypeEnum.FormationType_PVP,
+        FormationTypeEnum.FormationType_Cross_One,
+        FormationTypeEnum.FormationType_Cross_Two,
+        FormationTypeEnum.FormationType_Cross_Three,
+        FormationTypeEnum.FormationType_OnHook,
+        FormationTypeEnum.FormationType_Union,
+        FormationTypeEnum.FormationType_BraveArena,
+        FormationTypeEnum.FormationType_Temple,
+        FormationTypeEnum.FormationType_WorldBoss
+end
+
+function CheckHeroDutyInPve(dutys)
+    if dutys ~= 0 and Contain(dutys, HeroDuty.PVE) then
+        return 1
+    else
+        return 0
+    end
+end
+
+function ShowHeroQuality(heroId,starRoot,qualityImg,distillationStar)
+    distillationStar = distillationStar or 0
+    local quality = ResTblContainer:GetPropToInt(heroId,HeroBase.quality,HeroBase.actorTbl)
+    if quality== nil or quality<=0 then
+        starRoot.gameObject:SetSelfActive(false)
+        return
+    end
+    starRoot.gameObject:SetSelfActive(true)
+    if qualityImg ~= nil then
+        SetQuality(qualityImg.gameObject,quality)
+        local qualityParentTrans = qualityImg.transform.parent
+        if qualityParentTrans then
+            local SHOW_STAR = 11
+            local frameSpine = qualityParentTrans:Find("HeroFrameSpine")
+            if frameSpine and quality + distillationStar >= SHOW_STAR then
+                frameSpine.gameObject:SetSelfActive(true)
+                local firstSpine = frameSpine:GetComponent(CLS_SKELETONGRAPHIC)
+                firstSpine:PlayAnimation("loop", true, nil, nil)
+            elseif frameSpine then
+                frameSpine.gameObject:SetSelfActive(false)
+            elseif frameSpine == nil and quality + distillationStar >= SHOW_STAR then
+                CsBridge.CacheAssetsByGroup("HeroFrameSpine",function()
+                    local frameSpine = CsBridge.objectCache:CreateObject("HeroFrameSpine", true, qualityParentTrans)
+                    local firstSpine = frameSpine:GetComponent(CLS_SKELETONGRAPHIC)
+                    firstSpine:PlayAnimation("loop", true, nil, nil)
+                end,"HeroFrameSpine")
+            end
+        end
+    end
+    SetHeroStar(quality, starRoot, distillationStar)
+end
+
+function SetHeroStar(quality, starRoot, distillationStar)
+    if distillationStar ~= nil then
+       quality = quality +  distillationStar
+    end
+    SetStar(starRoot, quality)
+end
+
+function GetHeroQualityByHeroId(heroId)
+    for i,hero in pairs(global_heroBaseArr) do
+        if hero.id == heroId then
+            return hero.quality
+        end
+    end
+    return nil
+end
+
+---通过quality获取当前quality最小的distillationStar数
+function GetHeroMinDistillationStar(quality)
+    local sub = quality - DISTILL_QUALITY
+    sub = sub <=0 and 0 or sub
+    return sub * 3
+end
+
+---通过quality获取当前quality最大的distillationStar数
+function GetHeroMaxDistillationStar(quality)
+    local sub = quality - DISTILL_QUALITY
+    sub = sub <=0 and 0 or sub
+    return (sub + 1) * 3
+end
+
+---是否可以到达10星
+function CanToTenStar(heroData)
+    local passiveStr = heroData.passiveStr
+    local result = string.split(passiveStr, ",")
+    if result.Length >= 4 and heroData.quality == DISTILL_QUALITY + 1 then
+        return true
+    else
+        return false
+    end
+end
+
+---获取英雄的关联英雄id数组
+function GetHeroRelationHeroIdArr(heroId)
+    local heroTbl = ResTblContainer:GetTable(Hero.actorTbl)
+    local relationId = heroTbl:GetInt(heroId, Hero.relationId)
+    local heroIds = GetIds(Hero.actorTbl)
+    local heroIdsArr = {}
+    for i = 0, heroIds.Length - 1 do
+        local tempHeroId = tonumber(heroIds[i])
+        local tempRelationId = heroTbl:GetInt(tempHeroId, Hero.relationId)
+        if tempRelationId == relationId then
+            table.insert(heroIdsArr, tempHeroId)
+        end
+    end
+    return heroIdsArr
+end
+
+---是否拥有过关联的十星英雄
+function HadRelationTenHero(heroId)
+    local quality = ResTblContainer:GetPropToInt(heroId, HeroBase.quality, HeroBase.actorTbl)
+    if quality >= BREAK_QUALITY then
+        local heroBaseTbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+        local heroIdsArr = GetHeroRelationHeroIdArr(heroId)
+        for i = 1, #heroIdsArr do
+            local targetId = heroIdsArr[i]
+            local quality = heroBaseTbl:GetInt(targetId, HeroBase.quality)
+            local tempHero = {
+                heroId = tonumber(targetId),
+                quality = tonumber(quality),
+                passiveStr = ResTblContainer:GetPropToStr(targetId, HeroBase.passiveStr, HeroBase.actorTbl)
+            }
+            if CanToTenStar(tempHero) then
+                local notOwn = CheckHeroNotOwn(tempHero.heroId)
+                return not notOwn
+            end
+        end
+        return false
+    end
+    return true
+end
+
+---获取英雄突破表数据
+function GetHeroBreakDataFromTbl()
+    local data = {}
+    local tbl = ResTblContainer:GetTable(HeroBreakLevel.tblName)
+    local ids = tbl:GetCol(HeroBreakLevel.id)
+    local lastGrade = 0
+    local maxLevel = 0
+    for i=0, ids.Length-1 do
+        local id = ids[i]
+        local infos = tbl:GetRow(id,HeroBreakLevel.grade,HeroBreakLevel.level,HeroBreakLevel.soulCoin,HeroBreakLevel.coin)
+        local grade = tonumber(infos[0])
+        if data[grade] == nil then
+            data[grade] = {}
+        end
+        if grade ~= lastGrade then
+            maxLevel = data[lastGrade] == nil and 0 or table.count(data[lastGrade])
+        end
+        data[grade][tonumber(infos[1]) + maxLevel] = {
+            soulCoin = tonumber(infos[2]),
+            coin = tonumber(infos[3])
+        }
+        lastGrade = grade
+    end
+    return data
+end
+
+function GetBreakHeroIdArr(quality, heroId)
+    local heroIdsArr = {}
+    local tempHeroId = heroId
+    for i = 1, quality - DISTILL_QUALITY do
+        if ResTblContainer:TblHasId(tempHeroId, HeroBreak.tblName) then
+            table.insert(heroIdsArr, tempHeroId)
+            tempHeroId = tonumber(SplitString(ResTblContainer:GetPropToStr(heroId,HeroBreak.main,HeroBreak.tblName), ",")[0])
+        end
+    end
+    return heroIdsArr
+end
+
+---数组中是否存在
+function IsHadItem(arr, item)
+    local have = false
+    for i = 1, #arr do
+        if arr[i] == item then
+            have = true
+        end
+    end
+    return have
+end
+
+local function GetMainHeroIdFromTbl(heroId)
+    local str = ResTblContainer:GetPropToStr(heroId, HeroBreak.main, HeroBreak.tblName)
+    local mainHeroId = tonumber(SplitString(str, ",")[0])
+    return mainHeroId
+end
+
+---获取突破英雄的主材料英雄数组
+function GetBreakMainHeroIdArr(breakHeroId)
+    local heroIdArr = {}
+    local tempHeroId = breakHeroId
+    table.insert(heroIdArr, tempHeroId)
+    while ResTblContainer:TblHasId(tempHeroId, HeroBreak.tblName) do
+        tempHeroId = GetMainHeroIdFromTbl(tempHeroId)
+        if not IsHadItem(heroIdArr, tempHeroId) then
+            table.insert(heroIdArr, tempHeroId)
+        end
+    end
+    return heroIdArr
+end

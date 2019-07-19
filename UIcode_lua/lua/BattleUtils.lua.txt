@@ -1,0 +1,953 @@
+--[[
+	file: BattleUtils.lua
+	author: hangang
+	description: Battle helper functions
+
+	version 1.0:File created
+]]
+
+local HeroTypeEnum =
+{
+    Hero = 0,
+    Monster = 1,
+}
+
+local SkipEnabledEnum = 
+{
+    enabled = 1,
+    disabled = 0,
+}
+
+local Camp =
+{
+    Left = 0,
+    Right = 1,
+}
+
+--Spine动画事件常量
+local SpineEvents = 
+{
+	Sound = "e_gjsy",
+	Attack = "e_gj",
+	FxReady = "e_zp",
+}
+
+--Spine骨骼常量,用于挂载特效到英雄模型上
+local SpineBone = 
+{
+	hurtPos = "scale",
+	bloodPos = "p_o",
+	dotPos = "p_h",
+	shadowPos = "p_s",
+	attackPos = "p_l"
+}
+
+--英雄模型的Spine动画名称定义
+local SpineAnimState = 
+{
+	idleAnim = "stand",
+	runForwardAnim = "walk",
+	dieAnim = "stun",
+	stunAnim = "stun",
+	jumpBackAnim = "walk",
+	hurtAnim = "hurt",
+	attackAnim = "attack_1",
+	skillAnim = "attack_2"
+}
+
+local HeroStateEffectType =
+{
+    DefHP = 1,
+    Dot = 2,
+    Effect = 3,
+    Ctrl = 4,
+    Special = 5,
+}
+
+local StateSpecialEffectType =
+{
+    --变形
+    Transform = 2,
+    --更换阵营
+    ChangeCamp = 3,
+    --交换位置
+    SwapPos = 17,
+    --离场
+    Invisible = 18,
+}
+
+local CtrlAnimationType =
+{
+    --not under control
+    None = -1,
+    Unknown = 0,
+    --ClearSpineAnimationTracks
+    Static = 1,
+    Stun = 2,
+}
+
+local MonsterType = 
+{
+    Minion = 1,
+    Boss = 2,
+}
+
+--技能攻击特效类型
+local AttackEffectType =
+{
+	Direct = 1,        --直接作用于受击者，直接播放攻击效果
+    Missile = 2,       --飞行器                  
+    Ray = 3,           --激光                     
+    Indirect = 4,      --间接作用于受击者，通过攻击特效的e_zp事件触发攻击效果
+	Unique = 5,        --唯一的攻击效果   
+	Parabola = 6,      --抛物线
+}
+
+local HurtType = 
+{
+    --无伤害
+    None = 0,
+    --普通伤害减血
+    BeHit = 1,
+    --治疗加血
+    BeCured = 2,
+    --暴击减血
+    Critical = 3,
+    --阵营克制
+    ByCamp = 4,
+    --免疫控制
+    ImmuneCtrl = 5,
+    --免疫dot
+    ImmuneDot = 6,
+    --抗性抵抗控制
+    ResistCtrl = 7,
+    --抗性抵抗dot
+    ResistDot = 8,
+    --治疗暴击
+    BeCriticalCured = 9,
+}
+
+local BattleResult =
+{
+    Lose = 0,
+    Win = 1,
+    OverTime = 2,
+}
+
+local ROLE_COUNT = 6
+
+--View触发的事件
+--各层级的状态机处理这些事件，进行状态跳转
+local ViewEvents = 
+{
+	SceneInited = "SceneInited",
+	EnterAnimationFinished = "EnterAnimationFinished",
+
+	ActorStateUpdated = "ActorStateUpdated",
+	ActorBaseDataUpdated = "ActorBaseDataUpdated",
+	ActorMoveFinished = "ActorMoveFinished",
+	ActorAnimationFinished = "ActorAnimationFinished",
+
+	Skip = "SkipBtnClicked",
+	Fastforward = "FastforwardBtnClicked",
+	ViewCleared = "ViewCleared",
+	PauseOnRound = "PauseOnRound",
+    ShowLeftAura = "LeftAuraBtnClicked",
+    ShowRightAura = "RightAuraBtnClicked",
+    ShowTip = "TipBtnClicked",
+    ShowBuffTip = "ButtBtnClicked",
+
+    RoundWaitingFinished = "RoundWaitingFinished",
+    ActionWaitingFinished = "ActionWaitingFinished",
+
+	MoveInited = "MoveInited",	--move initialized,heroes' sibling indics set,mask initialized...
+	ChargeFinished = "ChargeFinished", 	--attacker has tweened to the target hero
+	AttackHitEvent = "AttackHitEvent",	--attack animation's SpineEvents.Attack triggered,hit logic start here
+	AttackFinished = "AttackFinished", 	--attack animation finished
+	HeroRepositioned = "HeroRepositioned",	--attacker has tweened back to it's idle pos
+
+	AttackFxHitEvent = "AttackFxHitEvent",	--attack effect's SpineEvents.Attack triggered,hurt logic start here
+	AttackFxFinished = "AttackFxFinished",	--attack effect animation finished
+	AttackFxSoundEvent = "AttackFxSoundEvent",	--attack effect's SpineEvents.Sound triggered
+
+	HitAnimationFinished = "HitAnimationFinished",	--hit animation finished
+	HitFxSoundEvent = "HitFxHitEvent",	--hit effect's SpineEvents.Sound triggered
+	HitFxFinished = "HitFxFinished",	--hit effect animation finished
+
+    KilledFxSoundEvent = "KilledFxSoundEvent",	--killed effect's SpineEvents.Sound triggered
+    KilledFxHitEvent = "KilledFxHitEvent",      --killed effect's SpineEvents.FxReady triggered
+	KilledFxFinished = "KilledFxFinished",		--killed effect animation finished
+
+    RevivedFxSoundEvent = "RevivedFxSoundEvent",--revived effect's SpineEvents.Sound triggered
+    RevivedFxFinished = "RevivedFxFinished",	--revived effect animation finished
+    
+    HurtCopyFxFinished = "HurtCopyFxFinished",  --hurt copy effect animaton finished
+}
+
+local GetPropToStr = function(id, columnName, tblName)
+    return ResTblContainer:GetPropToStr(id, columnName, tblName)
+end
+
+local GetTable = function(tblName)
+    return ResTblContainer:GetTable(tblName)
+end
+
+local GetPropToInt = function(id, columnName, tblName)
+    return ResTblContainer:GetPropToInt(id, columnName, tblName)
+end
+
+local GetGameBaseInfo = function(key)
+    return ResTblContainer:GetGameBaseInfo(key)
+end
+
+local function GetHeroActorId(hero)
+    local templateId = hero.templateid
+    local isMonster = hero.isMonster == HeroTypeEnum.Monster
+    local columnName = isMonster and Monster.actorId or Hero.soldierId
+    local tblName = isMonster and Monster.actorTbl or Hero.actorTbl
+
+    return GetPropToInt(templateId, columnName, tblName)
+end
+
+local function GetHeroAttackAssets(skillId, assets, subskillMap)
+    if IsNilOrEmpty(skillId) then
+        return
+    end
+    
+    local subIdStr = GetPropToStr(skillId, SkillBase.subIdStr, SkillBase.actorTbl)
+    local subIds = SplitString(subIdStr, ",")
+    local skillTbl=GetTable(Subskill.tblName)
+    local weaponTbl=GetTable(WeaponSfx.tblName)
+    local subskillId
+    for i=0,subIds.Length-1 do
+        subskillId = tonumber(subIds[i])
+        local subInfos = skillTbl:GetRow(subskillId,Subskill.attackSfx,Subskill.hurtSfx)
+        local subskillData = {}
+
+        local attackSfx = subInfos[0]
+        if not IsNilOrEmpty(attackSfx) then
+            local attackSfxId = tonumber(attackSfx)
+            local res_attackSfx = weaponTbl:Get(attackSfxId, WeaponSfx.sfxName)
+            local sound = weaponTbl:Get(attackSfxId, WeaponSfx.sound)
+            local attackBoneName = weaponTbl:Get(attackSfxId, WeaponSfx.pos)
+            table.insert(assets,res_attackSfx)
+            table.insert(assets,sound)
+            subskillData.attackSfx={
+                name=res_attackSfx,
+                boneName=attackBoneName,
+                soundName=sound
+            }
+        end
+
+        local hurtSfx = subInfos[1]
+        if not IsNilOrEmpty(hurtSfx) then
+            local hurtSfxId = tonumber(hurtSfx)
+            local res_hurtSfx = weaponTbl:Get(hurtSfxId, WeaponSfx.sfxName)
+            local sound = weaponTbl:Get(hurtSfxId, WeaponSfx.sound)
+            local hurtBoneName = weaponTbl:Get(hurtSfxId, WeaponSfx.pos)
+            table.insert(assets,res_hurtSfx)
+            table.insert(assets,sound)
+            subskillData.hurtSfx={
+                name=res_hurtSfx,
+                boneName=hurtBoneName,
+                soundName=sound
+            }
+        end
+
+        subskillMap[subskillId]=subskillData
+    end
+end
+
+local function GetComAssets(key)
+    local dieSfxId = tonumber(GetGameBaseInfo(key))
+    local dieSfx = GetPropToStr(dieSfxId, WeaponSfx.sfxName, WeaponSfx.tblName)
+	local res_boneName = GetPropToStr(dieSfxId, WeaponSfx.pos, WeaponSfx.tblName)
+	local sound = GetPropToStr(dieSfxId, WeaponSfx.sound, WeaponSfx.tblName)
+    return {
+        name = dieSfx,
+        boneName = res_boneName,
+        soundName = sound,
+    }	
+end
+
+local function GetHeroAssetsData(actorId)
+    local assetsData={}
+    local assets = {}
+	assetsData.assets=assets
+    local infos = ResTblContainer:GetRowFromTbl(HeroBase.actorTbl, actorId,
+        HeroBase.model,
+        HeroBase.skillId,
+        HeroBase.attackId,
+        HeroBase.spareSkill)
+    local modelName = infos[0]
+    if not IsNilOrEmpty(modelName) then
+		assetsData.modelName = modelName
+	    table.insert(assets, modelName)
+	end
+
+    --技能资源
+	local subskillMap={}
+    assetsData.subskillMap = subskillMap
+    local skillIdList = {}
+    table.insert(skillIdList, infos[1])
+    table.insert(skillIdList, infos[2])
+    local spareSkillIds = infos[3]
+    if not IsNilOrEmpty(spareSkillIds) then
+        local ids = string.split(spareSkillIds, ",")
+	    for i=0, ids.Length - 1 do
+	        table.insert(skillIdList, ids[i])
+	    end
+    end
+    for k, skillId in pairs(skillIdList) do
+	    GetHeroAttackAssets(skillId, assets, subskillMap)
+    end
+    
+    --角色材质球
+    local materialName = string.gsub(infos[0],"p","Material")
+    if not IsNilOrEmpty(materialName) then
+		assetsData.materialName = materialName
+		table.insert(assets,materialName)
+	end
+
+    return assetsData
+end
+
+local function GetSingleHeroData(hero)
+    local actorId = GetHeroActorId(hero)
+    if actorId == 0 then
+    	return nil
+    end
+	local heroData = {}
+    heroData.assetsData = GetHeroAssetsData(actorId)
+
+	local heroInfo={}
+	heroInfo.uid=hero.uid
+	heroInfo.actorId=actorId
+	heroInfo.templateid=hero.templateid
+	heroInfo.camp=hero.camp
+	heroInfo.grade=hero.grade
+	heroInfo.level=hero.level
+	heroInfo.isMonster=hero.isMonster == HeroTypeEnum.Monster
+	heroInfo.sfxFactor=GetPropToStr(actorId, HeroBase.sfxFactor, HeroBase.actorTbl)
+    heroData.heroInfo = heroInfo
+
+    local dynamicData = {}
+	dynamicData.pos=hero.pos
+	dynamicData.maxHp=hero.maxHp
+	dynamicData.maxAnger=hero.maxAnger
+	dynamicData.curHp=hero.startHp
+	dynamicData.curAnger=hero.startAnger
+	dynamicData.statesMap={}
+	dynamicData.ctrlSequence = {}
+    dynamicData.ctrlList = {}
+    dynamicData.curAnimAndMat = {
+        playType = CtrlAnimationType.None,
+        materialName = heroData.assetsData.materialName,
+    }  --cuttent CtrlAnimationType and skeleton material name
+    dynamicData.dotList = {}
+    dynamicData.specialEffects = {}
+    heroData.dynamicData = dynamicData
+    
+    heroData.uid = hero.uid
+    heroData.IsUnderControl = function()
+        return #dynamicData.ctrlSequence > 0
+    end    
+
+	return heroData
+end
+
+local function GetSceneData(sceneId)
+	local sceneData = {}
+	sceneData.sceneId = sceneId
+	sceneData.battleBGName = GetPropToStr(sceneId,BattleBg.battleBG,BattleBg.tblName)
+    
+	local tbl=ResTblContainer:GetTable(OtherRes.tblName)
+    local resColumnName = OtherRes.res
+    local key = 6
+	sceneData.dieSfxName = tbl:Get(key, resColumnName)
+    key = 8
+	sceneData.hurtMaterialName = tbl:Get(key, resColumnName)
+    key = 9
+	sceneData.FrozenMaterialName = tbl:Get(key, resColumnName)
+    key = 10
+	sceneData.stoneMaterialName = tbl:Get(key, resColumnName)
+    key = 11
+	sceneData.startSfxName = tbl:Get(key, resColumnName)
+    key = 12
+	sceneData.startSfxSoundName = tbl:Get(key, resColumnName)
+    key = 14
+	sceneData.reliveSfxName = tbl:Get(key, resColumnName)
+
+	sceneData.uniquePos = {}
+	sceneData.uniquePos.x = -300
+	sceneData.uniquePos.y = 0
+	sceneData.exilePos = {}
+	sceneData.exilePos.x=2000
+	sceneData.exilePos.y=0
+
+    sceneData.dieSfxData = GetComAssets("comDeathSfxId")
+    sceneData.reviveSfxData = GetComAssets("comReviveSfxId")
+    sceneData.copyHurtSfxData = GetComAssets("comCopyHurtSfxId")
+    return sceneData
+end
+
+local function GetSceneAssets(sceneId, sources)
+    local battleBGName = GetPropToStr(sceneId,BattleBg.battleBG,BattleBg.tblName)
+	table.insert(sources, battleBGName)
+    local ids = ResTblContainer:GetIds(OtherRes.tblName)
+	for i=0,ids.Length-1 do
+        local res = tbl:Get(tonumber(ids[i]), OtherRes.res)
+		table.insert(sources,res)
+	end
+end
+
+local function GetAssetsName(sceneId, heroesDataMap, battleType)
+	local sources = {}    
+	local battleBGName = GetPropToStr(sceneId,BattleBg.battleBG,BattleBg.tblName)
+	table.insert(sources, battleBGName)
+    local tbl=ResTblContainer:GetTable(OtherRes.tblName)
+    local ids = ResTblContainer:GetIds(OtherRes.tblName)
+	for i=0,ids.Length-1 do
+        local res = tbl:Get(tonumber(ids[i]), OtherRes.res)
+		table.insert(sources,res)
+	end
+
+	for i,heroData in ipairs(heroesDataMap) do
+		for k,asset in ipairs(heroData.assetsData.assets) do
+			table.insert(sources,asset)
+		end
+	end
+
+    if battleType == BattleType.League then
+        table.insert(sources, "BattleRatingView")
+        table.insert(sources, "BattleReviewItemSlot")
+    end
+
+	return sources
+end
+
+local function GetBattleCanBeSkiped(sceneId)
+    local config = GetPropToInt(sceneId,BattleBg.quickPass,BattleBg.tblName)
+    return config == SkipEnabledEnum.enabled
+end
+
+local function GetAnchoredPos(posId)
+    local tbl=ResTblContainer:GetTable(PosBase.tblName)
+	local pos = posId
+    local x = tbl:GetInt(pos, PosBase.x)
+    local y = tbl:GetInt(pos, PosBase.y)
+
+    return x, y
+end
+
+local function GetHeroViewData(heroData)
+    local heroInfo = heroData.heroInfo
+    local viewData = {}
+    viewData.uid = heroInfo.uid
+    viewData.actorId = heroInfo.actorId
+    viewData.modelName = heroData.assetsData.modelName
+    viewData.defaultAnim = SpineAnimState.idleAnim
+
+    local tbl=ResTblContainer:GetTable(PosBase.tblName)
+	local pos = heroData.dynamicData.pos
+    viewData.posId = pos
+    local x = tbl:GetInt(pos, PosBase.x)
+    local y = tbl:GetInt(pos, PosBase.y)
+    local camp = heroInfo.camp
+    viewData.camp = camp
+    viewData.shouldReverseModel = camp == Camp.Left
+    viewData.hideOnCreate = viewData.shouldReverseModel
+    viewData.scale = tonumber(GetGameBaseInfo("commonScale"))
+    viewData.anchoredX, viewData.anchoredY = GetAnchoredPos(pos)
+    if camp == Camp.Right then
+        if heroInfo.isMonster then
+            local monsterType = GetPropToInt(
+                heroInfo.templateid, Monster.type, Monster.actorTbl)
+            if monsterType == MonsterType.Boss then
+                viewData.anchoredX, viewData.anchoredY = GetAnchoredPos(pos + ROLE_COUNT)
+                viewData.scale = tonumber(GetGameBaseInfo("commonBossScale"))
+            end
+        end
+
+        viewData.anchoredX = -viewData.anchoredX
+    end
+
+    local sfxFactor = heroInfo.sfxFactor
+    viewData.boneScale = IsNilOrEmpty(sfxFactor) and 0 or sfxFactor / 100
+    viewData.hpSpriteName = camp == Camp.Left 
+        and "new_com_strip02" or "new_com_strip04"
+
+    return viewData
+end
+
+local function GetHerosBaseViewData(heroesDataMap)
+    local viewData = {}
+    for k, heroData in ipairs(heroesDataMap) do
+        table.insert(viewData, GetHeroViewData(heroData))
+    end
+    return viewData
+end
+
+local function CreateState(stateType, data, name)
+    local state = {}
+    state.paused = true
+	state.type = stateType
+	state.data = data
+    state.name = name or "StateMatchine_State"
+    state.Enter = function(finishedCbk)
+        state.paused = false
+		state.onFinished = finishedCbk
+		if state.OnEnter then
+			state.OnEnter()
+		end
+	end
+	state.Pause = function()
+        state.paused = true
+        if state.OnPause then
+            state.OnPause()
+        end
+	end
+	state.Resume = function()
+        state.paused = false
+        if state.OnResume then
+            state.OnResume()
+        end
+	end
+	state.Exit = function()
+        if state.paused then return end
+        state.paused = true
+		state.data = nil
+        if state.OnExit then
+            state.OnExit()
+        end
+		if state.onFinished then
+			state.onFinished(state)
+		end
+	end
+    state.Stop = function()
+        if state.OnStop then
+            state.OnStop()
+        end
+    end
+	state.HandleEvents = function(eventName, eventData)
+		if not state.paused and state.OnEvents then
+            state.OnEvents(eventName, eventData)
+        end
+	end
+	return state
+end
+
+local function CreateStateMachine(data, onCreateStates, name)
+    local stateMachine = {}
+    stateMachine.name = name or "SimpleStateMatchine"
+    stateMachine.paused = true
+	stateMachine.data = data
+	stateMachine.states = onCreateStates(data)
+	stateMachine.EnterState = function(state)
+        stateMachine.currentState = state
+        state.Enter(stateMachine.OnStateFinished)
+	end
+    stateMachine.GetNextState = function(state)
+        if stateMachine.OnGetNextState then
+            return stateMachine.OnGetNextState(state)
+        else
+            local stateType = state.type
+            local newState, nextState
+            for i = 1, #stateMachine.states do
+                newState = stateMachine.states[i]
+                if newState.type > stateType then
+                    nextState = newState
+                    break
+                end
+            end
+            return nextState
+        end
+    end
+	stateMachine.OnStateFinished = function(state)
+        if stateMachine.paused then return end
+		local nextState = stateMachine.GetNextState(state)
+		if nextState then
+            stateMachine.EnterState(nextState)
+		else
+			stateMachine.Exit()
+		end
+	end
+	stateMachine.Enter = function(finishedCbk)
+        stateMachine.paused = false
+		stateMachine.onFinished = finishedCbk
+
+        if stateMachine.OnEnter then
+            stateMachine.OnEnter()
+        end
+
+        local states = stateMachine.states
+        if states and #states > 0 then
+            local state1 = states[1]
+		    stateMachine.EnterState(state1)
+        else
+            stateMachine.Exit()
+        end
+	end
+	stateMachine.HandleEvents = function(eventName, eventData)
+        if stateMachine.paused then
+            return
+        end
+
+        local eventConsumed = false
+        if stateMachine.OnEvents then
+            eventConsumed = stateMachine.OnEvents(eventName, eventData)
+        end
+		if not eventConsumed and stateMachine.currentState then
+			stateMachine.currentState.HandleEvents(eventName, eventData)
+		end
+	end
+	stateMachine.Pause = function()
+        stateMachine.paused = true
+		if stateMachine.currentState then
+			stateMachine.currentState.Pause()
+		end
+	end
+	stateMachine.Resume = function()
+        stateMachine.paused = false
+		if stateMachine.currentState then
+			stateMachine.currentState.Resume()
+		end
+	end
+	stateMachine.Exit = function()
+        stateMachine.paused = true
+		stateMachine.data = nil
+		stateMachine.states = nil
+
+        if stateMachine.OnExit then
+            stateMachine.OnExit()
+        end
+
+		if stateMachine.onFinished then
+			stateMachine.onFinished(stateMachine)
+		end
+	end
+    stateMachine.GetName = function()
+        return stateMachine.name .. (stateMachine.id or "")
+    end
+	return stateMachine
+end
+
+local function CaculateOr(input, enum)
+    return (input%(enum*2)) / enum >= 1
+end
+
+local function GetHeroHeadViewData(heroInfo, heroDynamicData)
+    local viewData = {}
+    viewData.uid = heroInfo.uid
+    viewData.hpRatio = heroDynamicData.curHp / heroDynamicData.maxHp
+
+    local curAnger, maxAnger = heroDynamicData.curAnger, heroDynamicData.maxAnger
+    viewData.angerRatio = curAnger / maxAnger
+    viewData.angerFullfilled = curAnger >= maxAnger
+
+    return viewData
+end
+
+local function GetAllHeroHeadViewData(heroesDataMap)
+    local viewData = {}
+    for k, heroData in pairs(heroesDataMap) do
+        table.insert(viewData, GetHeroHeadViewData(heroData.heroInfo, heroData.dynamicData))
+    end
+    return viewData
+end
+
+local DelayTimer = function(delay, onLooping, onChecking)
+	CsBridge.timeManager:Timer(delay, onLooping, onChecking)
+end
+
+local ContainItem = function(targetTbl, uniqueKey, value)
+    local exist = false
+    for k, item in pairs(targetTbl) do
+        if item[uniqueKey] == value then
+            exist = true
+            break
+        end
+    end
+    return exist
+end
+
+local InsertUniqueItem = function(targetTbl, newItem, uniqueKey)
+    if not ContainItem(targetTbl, uniqueKey, newItem[uniqueKey]) then
+        table.insert(targetTbl, newItem)
+    end
+end
+
+local function FindLaterState(states, startIdx, uid, stateUpdateType)
+	local target
+	local stateCount = #states
+	for n = startIdx, stateCount do
+		local laterState = states[n]
+		if laterState.uid == uid 
+			and laterState.statusType == stateUpdateType
+		then
+			target = laterState
+			break
+		end
+	end
+	return target
+end
+
+local HurtTipColors = {
+	battleColor1 = {214,23,23},
+	battleColor2 = {241,54,29},
+	battleColor3 = {239,156,25},
+	battleColor4 = {244,208,40},
+	battleColor5 = {232,232,232},
+	battleColor6 = {255,255,255},
+	battleColor7 = {22,208,75},
+	battleColor8 = {29,241,84},
+	battleColor9 = {16,129,208},
+	battleColor10 = {75,250,248},
+	battleColor11 = {0,255,210},
+	battleColor12 = {187,255,246},
+}
+
+local HurtTipOutlineColors = {
+	[HurtType.BeHit] = {21,21,21},
+	[HurtType.BeCured] = {9,60,13},
+	[HurtType.Critical] = {77,6,6},
+	[HurtType.ByCamp] = {111,65,0},
+    [HurtType.BeCriticalCured] = {17,40,0},
+    tipColor = {21,21,21},
+}
+
+local HurtTipOffsets = {
+	[HurtType.BeHit] = 100,
+	[HurtType.BeCured] = 150,
+	[HurtType.Critical] = 150,
+	[HurtType.ByCamp] = 100,
+    [HurtType.BeCriticalCured] = 150,
+    tipOffset = 150,
+}
+
+local HurtTipLocalizeKeys = {
+	[HurtType.ImmuneCtrl] = "ImmuneCtrl_",
+	[HurtType.ImmuneDot] = "ImmuneDot_",
+	[HurtType.ResistCtrl] = "ResistCtrl_",
+	[HurtType.ResistDot] = "ResistDot_",
+}
+
+local HurtTipGradientStarts = {
+    [HurtType.BeHit] = HurtTipColors.battleColor5,
+    [HurtType.BeCured] = HurtTipColors.battleColor7,
+    [HurtType.Critical] = HurtTipColors.battleColor1,
+    [HurtType.ByCamp] = HurtTipColors.battleColor3,
+    [HurtType.ImmuneCtrl] = HurtTipColors.battleColor3,
+    [HurtType.ImmuneDot] = HurtTipColors.battleColor3,
+    [HurtType.ResistCtrl] = HurtTipColors.battleColor9,
+    [HurtType.ResistDot] = HurtTipColors.battleColor9,
+    [HurtType.BeCriticalCured] = HurtTipColors.battleColor11,
+}
+
+local HurtTipGradientEnds = {
+    [HurtType.BeHit] = HurtTipColors.battleColor6,
+    [HurtType.BeCured] = HurtTipColors.battleColor8,
+    [HurtType.Critical] = HurtTipColors.battleColor2,
+    [HurtType.ByCamp] = HurtTipColors.battleColor4,
+    [HurtType.ImmuneCtrl] = HurtTipColors.battleColor4,
+    [HurtType.ImmuneDot] = HurtTipColors.battleColor4,
+    [HurtType.ResistCtrl] = HurtTipColors.battleColor10,
+    [HurtType.ResistDot] = HurtTipColors.battleColor10,
+    [HurtType.BeCriticalCured] = HurtTipColors.battleColor12,
+}
+
+local function FormatHurtViewData(hurt)
+	local hurtType = hurt.hurtType
+	local hurtValue = tostring(hurt.hurtNum)
+    local outlineColor = 
+        HurtTipOutlineColors[hurtType] or HurtTipOutlineColors.tipColor
+    
+    local text = ""
+    local tipLocalizeKey = HurtTipLocalizeKeys[hurtType]
+    if tipLocalizeKey then
+        tipLocalizeKey = tipLocalizeKey .. hurtValue
+        text = Language:getStr(tipLocalizeKey)
+    elseif hurtType == HurtType.BeCured
+        or hurtType == HurtType.BeCriticalCured
+    then
+        text = "+" .. hurtValue
+    else
+        text = "-" .. hurtValue
+    end
+
+	local viewData = {}
+	viewData.gradientStart = HurtTipGradientStarts[hurtType]
+	viewData.gradientEnd = HurtTipGradientEnds[hurtType]
+	viewData.text = text
+	viewData.popVerticalOffset = HurtTipOffsets[hurtType] or HurtTipOffsets.tipOffset
+	viewData.outlineColor = outlineColor
+	viewData.hurtType = hurtType
+    viewData.uid = hurt.actorId
+    viewData.actorId = hurt.actorId
+
+	return viewData
+end
+
+local function FormatDefHpViewData(defHpValue, curHp, maxHp)
+    local defRate = 0.1 
+    local bloodSliderValue  = curHp/maxHp
+    local defSliderValue
+    if defHpValue ~= 0 then
+		if curHp == maxHp then
+			if defHpValue <= maxHp*defRate then
+				bloodSliderValue = curHp / (maxHp+defHpValue)
+			else
+				bloodSliderValue = 1 - defRate
+			end
+			defSliderValue = 1
+		elseif defHpValue <= maxHp - curHp then
+			defSliderValue = (curHp+defHpValue) / maxHp
+		else
+			defSliderValue = 1
+		end
+	else
+		defSliderValue = 0
+		bloodSliderValue = curHp/maxHp
+	end
+
+    return bloodSliderValue, defSliderValue
+end
+
+local function OpenAuraView(auraId, viewOrModel)
+    local auraArr={}
+	for i, data in pairs(global_auraArr) do  
+		local newData={}
+		newData.id=data.id
+		newData.title=data.title
+		newData.icon=data.icon
+		newData.des=data.desp
+		newData.condition=data.cond
+		newData.isOn=data.id==auraId
+		newData.pos=i
+		newData.condDesp=data.condDesp
+		table.insert(auraArr,newData)
+	end
+	CsBridge.CacheAssetsByModule(
+        viewOrModel.Module,
+        function()
+            local view = CsBridge.OpenView("aureoleView","FormationModel")
+            view:SetParamDataList(auraArr, nil)
+        end, 
+        "aureoleView",
+        "aureoleItemSlot")
+end
+
+local function LogAllRoundData(battleInfo)
+    for k, roundData in pairs(battleInfo.rounds) do    
+        local attackData = roundData.startRoundEffected
+        if attackData then
+            print("RoundStartData_" .. roundData.roundid, 
+                table.dump(attackData, nil, 4))
+        end
+
+        for j, actionData in pairs(roundData.actionInfos) do
+            local attackData = actionData.attackActionEffects
+            if attackData then
+                print("ActionData_Round" .. roundData.roundid, 
+                    table.dump(attackData, nil, 4))
+            end
+            attackData = actionData.startActionEffects
+            if attackData then
+                print("ActionStartData_Round" .. roundData.roundid, 
+                    table.dump(attackData, nil, 4))
+            end
+            attackData = actionData.endActionEffects
+            if attackData then
+                print("ActionEndData_Round" .. roundData.roundid, 
+                    table.dump(attackData, nil, 4))
+            end
+        end
+    
+        local attackData = roundData.endRoundEffected
+        if attackData then
+            print("RoundEndData_" .. roundData.roundid, 
+                table.dump(attackData, nil, 4))
+        end
+    end
+end
+
+local BattleWinViewList =
+{
+    default = "WinView",
+    [BattleType.Arena] = "APArenaWinView",
+    [BattleType.Guildwar] = "UnionBattleWinView",
+    [BattleType.FriendBoss] = "FriendBossWinView",
+    [BattleType.CrossArena] = "CrossArenaWinView",
+    [BattleType.League] = "CrossArenaWinView",
+    [BattleType.SoulPalace] = "SoulArenaWinView",
+}
+
+local BattleLoseViewList =
+{
+    default = "FailView",
+    [BattleType.Arena] = "APArenaFailView",
+    [BattleType.Guildwar] = "UnionBattleFailView",
+    [BattleType.Destruction] = "DestructionFailView",
+    [BattleType.GuildDungeon] = "UnionBossFailView",
+    [BattleType.FriendBoss] = "FriendBossFailView",
+    [BattleType.CrossArena] = "CrossArenaFailView",
+    [BattleType.League] = "CrossArenaFailView",
+    [BattleType.SoulPalace] = "SoulArenaWinView",
+}
+
+local function OpenBattleEndView(battleInfo, model, onViewClosed) 
+	local battleEndInfo = battleInfo.battleEndInfo
+    local result = battleEndInfo.result
+    local viewList = result == BattleResult.Win 
+        and BattleWinViewList or BattleLoseViewList
+    local battleType = battleEndInfo.type
+    local viewName = viewList[battleType]
+    viewName = IsNilOrEmpty(viewName) and viewList.default or viewName
+    
+    CsBridge.CacheAssetsByModule(
+        model.Module,
+        function()
+            local view=CsBridge.OpenView(viewName, model.ModelName)
+            local data = battleInfo
+            data.onClose = onViewClosed
+            view:SetData(data)
+        end,
+        viewName,
+        "ItemSlot"
+    )
+end
+
+------APIs---------------------------------------------------------------------
+return {
+    Camp = Camp,
+    HeroTypeEnum = HeroTypeEnum,
+    SpineBone = SpineBone,
+    SpineAnimState = SpineAnimState,
+    HeroStateEffectType = HeroStateEffectType,
+    CtrlAnimationType = CtrlAnimationType,
+    SpineEvents = SpineEvents,
+    ViewEvents = ViewEvents,
+    StateSpecialEffectType = StateSpecialEffectType,
+    HurtType = HurtType,
+    AttackEffectType = AttackEffectType,
+
+	GetSingleHeroData = GetSingleHeroData,
+    GetAssetsName = GetAssetsName,
+    GetSceneData = GetSceneData,
+    GetBattleCanBeSkiped = GetBattleCanBeSkiped,
+    GetHerosBaseViewData = GetHerosBaseViewData,
+    CreateState = CreateState,
+    CreateStateMachine = CreateStateMachine,
+    CaculateOr = CaculateOr,
+    GetAllHeroHeadViewData = GetAllHeroHeadViewData,
+    GetHeroHeadViewData = GetHeroHeadViewData,
+    DelayTimer = DelayTimer,
+    ContainItem = ContainItem,
+    InsertUniqueItem = InsertUniqueItem,
+    FindLaterState = FindLaterState,
+    FormatHurtViewData = FormatHurtViewData,
+    FormatDefHpViewData = FormatDefHpViewData,
+    OpenAuraView = OpenAuraView,
+    LogAllRoundData = LogAllRoundData,
+    OpenBattleEndView = OpenBattleEndView,
+}

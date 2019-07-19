@@ -1,0 +1,283 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-05-31 21:11:19
+
+require "SkillItemSlot"
+
+local ribbonObj 
+local starArr
+
+local heroObj 
+local flootSpineRoot
+local floorSpine
+local modelRoot 
+local heroModel 
+local nameTxt 
+local raceObj 
+local raceImg
+local starRoot
+
+local tipTxt
+
+local GetObj
+local openEffect
+local heroGetSpine 
+
+local waitAnim = false
+
+local isInit = false
+
+function DoInit()	
+    self.Shadow = 1
+    CsBridge.audioManager:PlayUI("ssrhero")
+end
+
+function IsSetAnchor()
+    self.transform.parent:SetAsLastSibling()
+    return true
+end
+
+function InitUI() 
+	local viewTrans = self.transform
+    ribbonObj = self:GetGameObjectAtPath("Center/Ribbon")
+    starArr = {}
+    local stars = viewTrans:Find("Center/StarRoot")
+    for i=0,stars.childCount-1 do
+        table.insert(starArr,stars:GetChild(i).gameObject)
+    end
+
+    heroObj = self:GetGameObjectAtPath("Center/Hero")
+    flootSpineRoot = viewTrans:Find("Center/Hero/FloorSpine")
+    modelRoot = viewTrans:Find("Center/Hero/ModelRoot")
+    nameTxt = self:GetComponentAtPath("Center/Hero/NameTxt" ,CLS_TEXT)
+    raceObj = self:GetGameObjectAtPath("Center/Hero/NameTxt/Race")
+    raceImg = raceObj.transform:GetGameObjectAtPath("RaceImg")
+    starRoot = viewTrans:Find("Center/Hero/StarRoot")
+    tipTxt = self:GetGameObjectAtPath("Center/TipTxt")
+
+    local effectObj = viewTrans:Find("Effect")
+    openEffect = effectObj:GetComponentAtPath("Open" ,CLS_IMAGE)
+    GetObj = effectObj:Find("Get")
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitHeroGetData")
+end
+
+function OnClose()
+    ClearModel()
+    openEffect.gameObject:SetImageAlpha(1)
+    ribbonObj:SetAlpha(0)
+    for i,star in ipairs(starArr) do
+        star:SetAlpha(0)
+    end
+
+    heroObj:SetAlpha(0)
+    tipTxt:SetSelfActive(false)
+end
+
+function ClearModel()
+    if heroModel ~= nil then
+        CS.UnityEngine.GameObject.Destroy(heroModel)
+        heroModel = nil
+    end
+    if floorSpine ~= nil then
+        CS.UnityEngine.GameObject.Destroy(floorSpine)
+        floorSpine = nil
+    end
+    if heroGetSpine ~= nil then
+        CS.UnityEngine.GameObject.Destroy(heroGetSpine)
+        heroGetSpine = nil
+    end
+    CsBridge.objectCache:ClearGroup(self.gameObject.name,true)
+end
+
+function OnNotification_RefreshHeroGetView(objs)
+    local hero = objs[0]
+    --ClearModel()
+    RefreshHeroInfo(hero)
+    CreateOpenEffect(hero)
+end
+
+function CreateOpenEffect(hero)
+    waitAnim = true
+    openEffect.gameObject:SetSelfActive(true)
+    local spineName = hero.isBreak and "GetBreakHeroSpine" or "CommonLight"
+    local animName = hero.isBreak and "get_10_star_up" or "born"
+    CsBridge.CacheAssetsByGroup(spineName,function()
+        local model = CsBridge.objectCache:CreateObject(spineName,true)
+        model.transform:SetParent(openEffect.transform,false)
+        CsBridge.UnityHelper.SetAnchoredPosition(model.gameObject,0,0)
+        model:GetComponent(CLS_SKELETONGRAPHIC):PlayAnimation(animName,false,function()
+            DestroyModel(model)
+            local t = CsBridge.TweenUtils.DOImageAlphaValue(openEffect,0,0.3,function()
+                openEffect.gameObject:SetSelfActive(false)
+                ShowHeroEffect(hero)
+            end)
+            t:DoPlay()
+        end)
+    end,spineName)
+end
+
+function ShowHeroEffect(hero)
+    ribbonObj:PlayViewAnimation(function()
+        showStarEffect(hero.quality+hero.distillationStar,function()
+            heroObj:PlayViewAnimation(function()
+                CreateHeroGetSpine(hero)
+            end)
+        end)
+    end)
+end
+
+---设置星星的图片
+local function SetStarIcon(starObj, iconName)
+    CsBridge.IconData.SetIconByName(starObj, iconName)
+end
+
+function showStarEffect(star, onFinished)
+    local iconIndex, showStarCount = GetStarIconData(star)
+    local iconNameArr = {
+        "ui_com_star10", --黄色大星星
+        "ui_com_star11", --蓝色大星星
+        "ui_com_star12", --紫色大星星
+        "ui_com_star16", --红色大星星
+    }
+    local iconName = iconNameArr[iconIndex]
+    local indexArr = {}
+    if showStarCount == BASE_STAR then
+        for i = 1, 5 do
+            table.insert(indexArr, i)
+        end
+    elseif showStarCount == 1 then
+        table.insert(indexArr, 6)
+    elseif showStarCount == 2 then
+        table.insert(indexArr, 7)
+        table.insert(indexArr, 8)
+    elseif showStarCount == 3 then
+        table.insert(indexArr, 6)
+        table.insert(indexArr, 9)
+        table.insert(indexArr, 10)
+    elseif showStarCount == 4 then
+        table.insert(indexArr, 7)
+        table.insert(indexArr, 8)
+        table.insert(indexArr, 11)
+        table.insert(indexArr, 12)
+    end
+    local starIndex = indexArr[1]
+    if #indexArr == 1 then
+        starArr[starIndex]:PlayViewAnimationWithDelay(function()
+            onFinished()
+        end,0.05)
+        SetStarIcon(starArr[starIndex], iconName)
+        return
+    end
+    for i = 1, #indexArr do
+        starIndex = indexArr[i]
+        if i == 1 then
+            starArr[starIndex]:PlayViewAnimation()
+        elseif i == #indexArr then
+            starArr[starIndex]:PlayViewAnimationWithDelay(function()
+                onFinished()
+            end,0.05)
+        else
+            starArr[starIndex]:PlayViewAnimationWithDelay(nil,0.05)
+        end
+        SetStarIcon(starArr[starIndex], iconName)
+    end
+end
+
+function RefreshHeroInfo(hero) 
+    nameTxt:SetText(hero.name)
+    nameTxt:SetTextWithSizeChange(hero.name)
+    SetIconByRaceId(raceImg,hero.group)
+    SetHeroStar(hero.quality,starRoot,hero.distillationStar)
+    CreateModel(hero.model,modelRoot)
+    CreateFloorSpine(GetPlatformAnim(hero.group),flootSpineRoot)
+end
+
+function ShowSkill(skill)
+	skillGrid:RefreshItemSlots(skill,self.gameObject,"SkillItemSlot")
+end
+
+function OnSkillGridItemClick(obj)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+		local view = CsBridge.OpenView("SkillTipView","SkillTipModel",false,true)
+		view:SendCommand("InitData",obj.m_data)
+	end, "SkillTipView")
+end
+
+function CreateHeroGetSpine(hero)
+    local spineName = hero.isBreak and "GetBreakHeroDownSpine" or "HeroGetSpine"
+    local animName = hero.isBreak and "loop" or "born"
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local model = CsBridge.objectCache:CreateObject(spineName,true)
+        model.transform:SetParent(GetObj,false)
+        CsBridge.UnityHelper.SetAnchoredPosition(model.gameObject,0,0)
+        model:GetComponent(CLS_SKELETONGRAPHIC):PlayAnimation(animName,true)
+        heroGetSpine = model
+        tipTxt:SetSelfActive(true)
+        waitAnim = false
+    end,spineName)
+end
+
+function CreateModel(name, root)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local model = CsBridge.objectCache:CreateObject(name, true)
+        model.transform:SetParent(root, false)
+        CsBridge.UnityHelper.SetAnchoredPosition(model.gameObject,0,0)
+		CsBridge.UnityHelper.SetlocalScale(model.gameObject,-1,1,1)
+        local skeleton = model.transform:GetChild(0):GetComponent("Spine.Unity.SkeletonGraphic")
+        skeleton:PlayAnimation("stand", true)
+		heroModel = model
+	end, name)
+end
+
+function CreateFloorSpine(anim,root)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local model = CsBridge.objectCache:CreateObject("HeroFloorSpine", true)
+        model.transform:SetParent(root, false)
+        CsBridge.UnityHelper.SetAnchoredPosition(model.gameObject,0,0)
+        CsBridge.UnityHelper.SetlocalScale(model.gameObject,-0.38,0.38,1)
+        local skeleton = model:GetComponent("Spine.Unity.SkeletonGraphic")
+        skeleton:PlayAnimation(anim, true)
+        floorSpine = model
+    end, "HeroFloorSpine")
+end
+
+function OnCloseBtnClick(sender)
+    if waitAnim then
+        return
+    end
+    self:SendCommand("CloseView")
+end
+
+function DoExit()
+    
+    ribbonObj = nil
+    starArr = nil
+
+    heroObj  = nil
+    flootSpineRoot = nil
+    floorSpine = nil
+    modelRoot  = nil
+    heroModel  = nil
+    nameTxt  = nil
+    raceObj  = nil
+    raceImg = nil
+    starRoot = nil
+
+    tipTxt = nil
+
+    GetObj = nil
+    openEffect = nil
+    heroGetSpine  = nil
+
+    waitAnim  = nil
+
+    isInit  = nil
+end

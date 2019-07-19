@@ -1,0 +1,13 @@
+
+function OnStagePlayerBaseItemSlotBindValue(slot,data)
+	local slotTrans = slot.transform
+	local name_Lab = slot:GetComponentAtPath("NameTxt" ,CLS_TEXT)
+    local self_Sprite = slot:GetComponentAtPath("SelfSprite" ,CLS_IMAGE)
+    local icon_Sprite = slot:GetComponentAtPath("IconSprite" ,CLS_IMAGE)
+    local palyer_TF=slotTrans:Find("PlayerBase")
+
+    name_Lab.text=data.playerBaseInfo.nick~=nil and data.playerBaseInfo.nick or data.playerBaseInfo.name
+    self_Sprite.gameObject:SetSelfActive(data.isSelf)
+    icon_Sprite.gameObject:SetSelfActive(data.isLast)
+    BindPlayerBaseInfoValue(palyer_TF,data.playerBaseInfo)
+end

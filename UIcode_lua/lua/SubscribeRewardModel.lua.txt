@@ -1,0 +1,156 @@
+local subscribeRewardUtils = require "SubscribeRewardUtils"
+local dailyTaskUtils = require "DailyTaskUtils"
+---@type boolean 是否是打开界面自动移动的
+local isCommandAutoMove = false
+
+---@type number item的高度
+local ITEM_HEIGHT = 102
+---@type number item的间隔
+local ITEM_SPACING = 30
+---@type number scrollView的高度的一半
+local HALF_CONTENT_HEIGHT = 292
+---@type number 小于多少个不移动
+local NOT_MOVE_INDEX = 3
+
+---@type table
+local viewData = nil
+
+function DoInit()
+
+end
+
+---计算需要自动移动的距离
+local function AutoMoveHeight(toIndex, account)
+    if toIndex == nil or toIndex < NOT_MOVE_INDEX or account < NOT_MOVE_INDEX then
+        return 0 + HALF_CONTENT_HEIGHT
+    end
+    local offset = 0
+    if account - NOT_MOVE_INDEX < toIndex then
+        toIndex = account - NOT_MOVE_INDEX + 1
+        offset = 8
+    end
+    local moveHeight = toIndex * (ITEM_HEIGHT + ITEM_SPACING) + offset
+    return moveHeight
+end
+
+---初始化进度条和自动移动
+local function InitSliderAndMove()
+    local autoMoveHeight = AutoMoveHeight(viewData.perfectIndex, #viewData.allItemArr)
+    viewData.autoMoveHeight = autoMoveHeight
+    viewData.tween = viewData.perfectIndex >= NOT_MOVE_INDEX
+    if isCommandAutoMove == false then
+        viewData.tween = false
+    end
+end
+
+---重新刷新界面
+local function RefreshViewData()
+    dailyTaskUtils.ClearServerData()
+    InitRewardViewData()
+end
+
+---初始化界面数据
+local function InitViewData()
+    viewData = {}
+    dailyTaskUtils.InitBuySubscribeBtnState(viewData)
+    dailyTaskUtils.StartSubscribeTicker(self, viewData, RefreshViewData)
+
+    local pbData = subscribeRewardUtils.GetAllItemArr(viewData.showBuyBtn and not viewData.seasonCard)
+    viewData.allItemArr = pbData.itemArr
+    viewData.perfectIndex = pbData.perfectIndex
+    viewData.haveReward = pbData.haveReward
+    InitSliderAndMove()
+    viewData.receiveGray = not pbData.haveReward
+    self:SendNotification("InitRewardViewData", viewData)
+    isCommandAutoMove = false
+end
+
+---从服务器获取奖励
+local function GetRewardFormServer(progress, special)
+    subscribeRewardUtils.GetSubscribeReward(progress, special, function(resp)
+        ShowRewardReceivedTip(self, resp.rewardItems, InitRewardViewData, true)
+    end)
+end
+
+---显示提示信息
+local function ShowHintTip(localStr)
+    CsBridge.hintUILayer:ShowHintBox(Language:getStr(localStr), 2)
+end
+
+---初始化界面
+function InitRewardViewData()
+    dailyTaskUtils.GetDailyTaskServerData(function()
+        InitViewData()
+    end)
+end
+
+---获取界面数据
+function OnCommand_InitRewardViewData()
+    isCommandAutoMove = true
+    InitRewardViewData()
+end
+
+---显示提示界面
+function OnCommand_ShowItemTip(objs)
+    local data = objs[0]
+    ShowItemTip(self, data)
+end
+
+---显示介绍
+function OnCommand_ShowDailyTaskRule()
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("HelpView", "DailyTaskDetailsModel")
+        view:SetData(INSTRUCTION_SUBSCRIBE)
+    end, "HelpView")
+end
+
+---收取一个日常任务的奖励
+function OnCommand_GetDailyTaskReward(objs)
+    local data = objs[0]
+    if data and data.leftData then
+        GetRewardFormServer(data.tblProgress, false)
+    end
+end
+
+---收取一个通行证的奖励
+function OnCommand_GetSubscribeReward(objs)
+    local data = objs[0]
+    if data and data.rightData then
+        GetRewardFormServer(data.tblProgress, true)
+    end
+end
+
+---获取所有奖励
+function OnCommand_GetAllReward()
+    if not viewData.haveReward then
+        ShowHintTip("NoRewardForGet")
+        return
+    end
+    GetRewardFormServer(0, true)
+end
+
+---已购买点击
+function OnCommand_AlreadyBuyBtnClick()
+    ShowHintTip("SubscribeNotOver")
+end
+
+---购买订阅
+function OnCommand_BuySubscribe()
+    dailyTaskUtils.BuySubscribe(self, function()
+        RefreshViewData()
+    end)
+end
+
+function DoOnExit()
+    dailyTaskUtils.ClearServerData()
+    dailyTaskUtils.StopSubscribeTicker()
+    subscribeRewardUtils = nil
+    dailyTaskUtils = nil
+    isCommandAutoMove = nil
+    ITEM_HEIGHT = nil
+    ITEM_SPACING = nil
+    HALF_CONTENT_HEIGHT = nil
+    NOT_MOVE_INDEX = nil
+    viewData = nil
+end
+

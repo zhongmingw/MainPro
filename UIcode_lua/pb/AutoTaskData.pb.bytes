@@ -1,0 +1,54 @@
+
+‡
+AutoTaskData.protoAutoTaskDatastage.proto"q
+AutoTaskInfo-
+	autoTasks (2.AutoTaskData.AutoTaskItem
+lastFreeRefreshTime (
+lastRenewTime ("õ
+AutoTaskItem
+
+id (
+endTime (
+heroUids (
+locked (
+taskName (	
+taskQuality (
+heroQuality (
+needHeroNum (
+camps	 (
+jobs
+ (&
+rewardItems (2.stage.RewardItem
+taskTime ("/
+StartAutoTaskReq
+
+id (
+uidList ("#
+StartAutoTaskResp
+result ("
+CancelAutoTaskReq
+
+id ("$
+CancelAutoTaskResp
+result (""
+RefreshAutoTaskReq
+type ("%
+RefreshAutoTaskResp
+result ("
+HasteAutoTaskReq
+
+id ("#
+HasteAutoTaskResp
+result ("
+FinishAutoTaskReq
+
+id ("L
+FinishAutoTaskResp
+result (&
+rewardItems (2.stage.RewardItem"+
+LockAutoTaskReq
+
+id (
+lock (""
+LockAutoTaskResp
+result (

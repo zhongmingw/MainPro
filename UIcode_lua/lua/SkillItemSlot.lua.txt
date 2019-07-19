@@ -1,0 +1,55 @@
+local co
+local yield_return = (require 'cs_coroutine').yield_return
+
+function OnSkillItemSlotBindValue(slot,data)
+local img_icon
+local go_mark
+local txt_lv
+
+	img_icon=slot:GetComponentAtPath("Item/iconImg",CLS_IMAGE)
+	go_mark=slot:GetGameObjectAtPath("Item/mark")
+	go_mark:SetSelfActive(false)
+	txt_lv=go_mark.transform:GetComponentAtPath("skillMark",CLS_TEXT)
+	
+	local iconName=""
+	if(data.isPassive==false)then
+		iconName=ResTblContainer:GetPropToStr(data.id,SkillBase.icon,SkillBase.actorTbl)
+		CsBridge.IconData.ChangeImageMaterial(img_icon.gameObject,"")
+	else--被动技能
+		iconName=ResTblContainer:GetPropToStr(data.id,PassiveSkill.icon,PassiveSkill.actorTbl)
+		local openGrade=ResTblContainer:GetPropToInt(data.id,PassiveSkill.openGrade,PassiveSkill.actorTbl)
+		if(data.grade>=openGrade)then
+			CsBridge.IconData.ChangeImageMaterial(img_icon.gameObject,"")
+		else
+			CsBridge.IconData.ChangeImageMaterial(img_icon.gameObject,"SpriteGray",data.noCache or false)
+		end
+
+		local addMark=ResTblContainer:GetPropToInt(data.id,PassiveSkill.addMark,PassiveSkill.actorTbl)
+		local lvStr=""
+		
+		if(addMark~=0)then
+			go_mark:SetSelfActive(true)
+			if(addMark==1)then
+				lvStr="I"
+			elseif(addMark==2)then
+				lvStr="II"
+			elseif(addMark==3)then
+				lvStr="III"
+			elseif(addMark==4)then
+				lvStr="IV"
+			elseif(addMark==5)then
+				lvStr="V"
+			elseif(addMark==6)then
+				lvStr="VI"
+			elseif(addMark==7)then
+				lvStr="VII"
+			elseif(addMark==8)then
+				lvStr="VIII"
+			elseif(addMark==9)then
+				lvStr="IX"
+			end
+			txt_lv.text= tostring(lvStr)
+		end
+	end
+	CsBridge.IconData.SetIconByName(img_icon.gameObject,iconName,data.noCache or false, true)
+end

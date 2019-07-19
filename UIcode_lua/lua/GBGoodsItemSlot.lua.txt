@@ -1,0 +1,51 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2018-11-17 12:18:57
+]]
+
+local function SetArrow(slot,root,firstPos,delta,num)
+    local obj = CsBridge.objectCache:CreateObject("DownArrow", true)
+    local objTrans = obj.transform
+    local pos = objTrans:CheckLocalPosition()
+    pos.x = firstPos.x+delta*num-5
+    pos.y = firstPos.y
+    objTrans:ResetLocalPosition(pos)
+    objTrans:SetParent(root,false)
+    local numTxt = objTrans:GetComponentAtPath("NumTxt",CLS_TEXT)
+    numTxt.text = num
+end
+
+function OnGBGoodsItemSlotBindValue(slot,data)
+    local curDiscountTxt = slot:GetComponentAtPath("curDiscount",CLS_TEXT)
+    local priceIconImg = slot:GetGameObjectAtPath("PriceIconImg")
+    local priceNumTxt = slot:GetComponentAtPath("PriceNumTxt",CLS_TEXT)
+    local rewardGrid = slot:GetComponentAtPath("RewardGrid",CLS_UI_ITEM_GRID)
+    local buyCountTxt = slot:GetComponentAtPath("BuyCount",CLS_TEXT)
+    local slider = slot:GetComponentAtPath("Slider",CLS_SLIDER)
+    local sliderNumTxt = slot:GetComponentAtPath("Slider/NumTxt",CLS_TEXT)
+    local arrowRoot = slot:GetComponentAtPath("Slider/Arrows",CLS_RECTTRANSFORM)
+    local firstPos = slot:GetComponentAtPath("Slider/Arrows/FirstArrow",CLS_RECTTRANSFORM):CheckLocalPosition()
+    local lastPos = slot:GetComponentAtPath("Slider/Arrows/LastArrow",CLS_RECTTRANSFORM):CheckLocalPosition()
+    local lastArrowObj = slot:GetGameObjectAtPath("Slider/Arrows/LastArrow")
+    local lastNumTxt = slot:GetComponentAtPath("Slider/Arrows/LastArrow/NumTxt",CLS_TEXT)
+    local buyBtn = slot:GetComponentAtPath("BuyBtn",CLS_BUTTON_ARCHLY)
+    local remainTxt = slot:GetComponentAtPath("BuyBtn/RemainTxt",CLS_TEXT)
+
+    curDiscountTxt.text = string.format(Language:getStr("GB_CurDiscount"),data.curDiscount)
+    ShowOneConsume(priceIconImg,priceNumTxt,data.price)
+    buyCountTxt.text = string.format(Language:getStr("GB_BuyCount"),data.curCount)
+    local progress = data.curCount/data.maxCount
+    slider.value = progress > 1 and 1 or progress
+    sliderNumTxt.text = data.curCount.."/"..data.maxCount
+    local delta = (lastPos.x - firstPos.x)/data.maxCount
+    for i=1,#data.countArr-1 do
+        SetArrow(slot,arrowRoot,firstPos,delta,data.countArr[i])
+    end
+    lastArrowObj:SetSelfActive(true)
+    lastNumTxt.text = data.maxCount
+    remainTxt.text = data.buyCount.."/"..data.maxBuyCount
+    buyBtn.Gray = data.remain == 0
+    rewardGrid:RefreshItemSlots(data.goods,slot.m_grid.viewBase.gameObject,"ItemSlot")
+end

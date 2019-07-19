@@ -1,0 +1,20 @@
+
+function OnHeroItemSlotBindValue(slot,data)
+	local slotTrans = slot.transform
+	slot.m_SelectSprite=slotTrans:GetGameObjectAtPath("CheckSprite")
+	local composeMaterialFlag = slotTrans:Find("ComposeMaterialFlag")
+	local heroBase_TF = slotTrans:Find("HeroBase")
+	local lockGo = slotTrans:GetGameObjectAtPath("LockGO")
+
+	HeroItemSlotBindValue(slot,data)
+	BindHeroBaseValue(heroBase_TF,data)
+
+	heroBase_TF.gameObject:SetSelfAndChildrenGray(data.dead)
+	if data.ban then
+		lockGo:SetSelfActive(data.ban)
+	end
+
+	if composeMaterialFlag ~= nil then
+		composeMaterialFlag.gameObject:SetSelfActive(data.isComposeMaterial)
+	end
+end

@@ -1,0 +1,684 @@
+require "ChatHelper"
+local utils = require "FriendUtils"
+
+local auraConfig
+local achievementConfigs
+local formationData
+local uid, zone
+local formationType
+local playerInfo, playerCard
+local cachedAuraData
+local showingSelf = true
+local myUnionData
+local cachedFormationData
+
+function DoInit()
+	LoadAchievementConfig()
+	LoadAuraConfig()
+end
+
+function OnCommand_GetPlayerInfoViewData(obj)
+	local isLocal = obj[0]
+	showingSelf = isLocal
+	formationType = obj[3]
+	if obj.Length > 4 then
+		cachedFormationData = obj[4]
+	end
+
+	if isLocal then
+		if not UIOpen(UI_OPEN_TYPE_GUILD, false) then
+			RefreshView()
+		else
+			CheckUnionData()
+		end
+	else
+		uid, zone = obj[1], obj[2]
+		RequestPlayerInfo(uid, zone, formationType)
+	end
+end
+
+function CheckUnionData()
+	local req = {}
+	req.useless = 0
+	local returnedCbk = function(resp)
+		OnGetUnionInfoFinished(resp, onFinished)
+	end
+	HttpRequest("checkMyUnion", "CheckMyUnionReq", "CheckMyUnionResp", req, returnedCbk)
+end
+
+function OnGetUnionInfoFinished(resp)
+	local joined = false	
+	local authority_member = 2
+	if resp~= nil and resp.unionUserRecord ~= nil then
+		local data = resp.unionUserRecord
+		joined = data.authority >= authority_member
+	end
+
+	local view
+	if joined then
+		GetMyUnionData()
+	else
+		myUnionData = nil
+		RefreshView()
+	end
+end
+
+function GetMyUnionData()
+	local req = {}
+	req.useless = 0
+	HttpRequest("myUnion", "MyUnionReq", "MyUnionResp", req, OnGetUnionInfoResp)
+end
+
+function OnGetUnionInfoResp(resp)
+	myUnionData = resp	
+	RefreshView()
+end
+
+function RefreshView()
+	self:SendNotification("RefreshPlayerInfoView", GetLocalPlayerViewData())
+end
+
+function OnCommand_OpenTipView(objs)
+	local data = objs[0]
+	local itemType = data.typeId
+	if itemType == ItemTypeEnum.Hero then
+		ShowHeroTip(self, data.id, 1, 1)
+	else
+		ShowTip(self, itemType, data.id)
+	end
+end
+
+function OnCommand_OpenHeroTipView(objs)
+	local posID = objs[0]
+	local islocal = objs[1]
+	local heroData = formationData[posID]
+	if heroData and heroData.heroId > 0 then
+		local userId = uid
+		local zoneId = zone
+		if islocal then
+			local playerInfo = appData:checkData("PlayerInfo")
+			userId = playerInfo.userId
+			zoneId = playerInfo.zone
+		end
+		ShowOtherHeroTip(self, heroData,userId,zoneId)
+	end
+end
+
+function OnCommand_OpenFormationView(obj)
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			local view = CsBridge.OpenView("FormationView","FormationModel",true,true)
+			local formationType = FormationTypeEnum.FormationType_PVP
+			local battleCbk = OnFormationViewConfirmed
+			local formView = 1
+			local canSkip = false
+			view:SetParamDataList(formationType,nil, battleCbk, formView, canSkip)
+		end, 
+		"FormationView",
+		"HeroItemSlot")
+end
+
+function OnFormationViewConfirmed(heroIds)
+	local req = {}
+    req.id = FormationTypeEnum.FormationType_PVP
+    req.heroIds = heroIds
+    HttpRequest("updateFormation", "Formation", "UpdateFormationResp", req, OnSaveFormationResp)
+end
+
+function OnSaveFormationResp(resp)
+	RefreshView()
+end
+
+function OnCommand_OpenRenameView(obj)
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			self:Deactive("PlayerInfoView")
+			local view=CsBridge.OpenView("RenameView","RenameModel",false,true)
+			view:SetParamDataList(OnPopupClose)
+		end, 
+		"RenameView")
+end
+
+function OnCommand_OpenUnionView(obj)
+	local unionID = obj[0]
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			self:Deactive("PlayerInfoView")
+			local view=CsBridge.OpenView("UnionTipView","UnionModel", false, true)
+			view:SetParamDataList(unionID, OnPopupClose)
+		end, 
+		"UnionTipView")
+end
+
+function OnCommand_BlockPlayer(obj)
+	MaskFriend(zone, uid,playerInfo.nick,function()
+	    self:SendNotification("BlockPlayer")
+	end)
+end
+
+function OnCommand_Mail(obj)
+	if not CheckPlayerCanSendPrivateMail() then
+        return
+    end
+	local nickName = playerInfo.nick
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			self:Deactive("PlayerInfoView")
+			local view=CsBridge.OpenView("SendMailView","SendMailModel",false,true)
+			view:SetParamDataList(nickName, uid, zone, OnPopupClose)
+		end, 
+		"SendMailView")
+end
+
+function OnPopupClose()
+	self:Active("PlayerInfoView")
+	if showingSelf then
+		RefreshView()
+	end
+end
+
+function OnCommand_ShowAuraTips(obj)
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			self:Deactive("PlayerInfoView")
+			local view = CsBridge.OpenView("aureoleView","FormationModel", true, true)
+			view:SetParamDataList(auraConfig, cachedAuraData, OnAuraTipsClosed)
+		end, 
+		"aureoleView",
+		"aureoleItemSlot")
+end
+
+function OnCommand_OpenHeadIconView(obj)
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			local view=CsBridge.OpenView("HeadIconView","HeadIconModel",true,true)
+			view:SetParamDataList(OnPopupClose)
+		end, 
+		"HeadIconView",
+		"HeadIconItemSlot","HeadBoxItemSlot")
+end
+
+function OnAuraTipsClosed()
+	self:Active("PlayerInfoView")
+end
+
+function OnCommand_MakeFriend(obj)
+    local req={}
+    req.userIds={}
+    table.insert(req.userIds, FormatUserID(uid, zone))
+    HttpRequest("applyFriends", "ApplyFriendsReq", "ApplyFriendsResp", req, OnApplyFriendResp)
+end
+
+function OnApplyFriendResp(resp)
+	CsBridge.hintUILayer:ShowHintBox(Language:getStr("ApplyFriendSuccess"))
+end
+
+function OnCommand_DeleteFriend(objs)
+	local title = Language:getStr("hint")
+	local text = string.gsub(Language:getStr("DeleteFriend"), "%%s", playerInfo.nick)
+	local cancelText, confirmText = Language:getStr("local_cancel"), Language:getStr("local_confirm")
+	local cancelCbk = nil
+	local targetUserId = zone.. "_" .. uid
+	local confirmCbk = function()
+		utils.RemoveFriend(OnDeleteFriendResp, targetUserId)
+	end
+    CsBridge.messageManager:showAlertView(title, text, cancelText, cancelCbk, confirmText, confirmCbk)
+end
+
+function OnDeleteFriendResp(resp)
+	RequestPlayerInfo(uid, zone, formationType)
+end
+
+function OnCommand_ClaimReward(obj)
+	local achievementID = obj[0]
+	local achievementType = ResTblContainer:GetPropToInt(achievementID, Achievement.type, Achievement.tblName)
+	local req = {
+		type = achievementType,
+		id = achievementID,
+	}
+	HttpRequest("achievementReward", "AchievementRewardReq", "AchievementRewardResp", req, OnClaimRewardResp)
+end
+
+function OnClaimRewardResp(resp)
+	if resp and resp.rewardItems then
+		local rewards ={}
+		local items = resp.rewardItems
+		for k, item in pairs(items) do		
+			local reward = {
+				id = item.id,
+				typeId = item.typeId,
+				count = item.count
+			}
+			table.insert(rewards, reward)
+		end
+		ShowAchievementRewards(rewards)
+		
+		local isLocal = true
+		local svrData = appData:checkAllItems("PlayerAchievement")
+		local viewData = GetAchievementsViewData(svrData, isLocal)
+		self:SendNotification("RefreshAchievementsView", viewData)
+	end
+end
+
+function ShowAchievementRewards(rewards)
+	for k, reward in pairs(rewards) do
+		CsBridge.hintUILayer:ShowRewardBox(reward.typeId,reward.id,reward.count)
+	end
+end	
+
+function GetAchievementsViewData(svrData, isLocal)
+	local achievements = {}
+	for k, config in pairs(achievementConfigs) do
+		achievements[k] = config
+	end
+
+	if svrData then
+	    local tbl=ResTblContainer:GetTable(Achievement.tblName)
+		if isLocal then
+			for i = 0, svrData.Length - 1 do
+				local achievementData = svrData[i]
+				local id = achievementData.id
+				if tbl:HasKey(id) then
+					local newData = FormatAchievement(achievementData, isLocal)
+					for k, item in pairs(achievements) do
+						if item.type == newData.type then
+							achievements[k] = newData
+						end
+					end
+				end
+			end
+		else
+			for k, achievementData in pairs(svrData) do
+				local id = achievementData.id
+				if tbl:HasKey(id) then
+					local newData = FormatAchievement(achievementData, isLocal)
+					for idx, item in pairs(achievements) do
+						if item.type == newData.type then
+							achievements[idx] = newData
+						end
+					end
+				end
+			end
+		end
+	end
+
+	table.sort(achievements, 
+		function(a, b)
+			if a.rewardFlag == b.rewardFlag then
+				return a.type < b.type
+			else
+				return a.rewardFlag
+			end
+		end
+	)
+	return achievements
+end
+
+function FormatAchievement(achievementData, isLocal)
+	local tblName = Achievement.tblName
+	local id = achievementData.id
+	local count = achievementData.count
+
+	local achievement = {}
+	achievement.id = id
+	achievement.count = count
+	local tbl=ResTblContainer:GetTable(tblName)
+	achievement.title = tbl:Get(id, Achievement.name)
+	achievement.desc = tbl:Get(id, Achievement.desp)
+	local rewardStr = tbl:Get(id, Achievement.reward)
+	if rewardStr and rewardStr ~= "" then
+		achievement.rewards = GetAchievementReward(rewardStr)
+	else 
+		achievement.rewards = {}
+	end
+	achievement.type = achievementData.type
+
+	local rewardFlag = 1
+	achievement.rewardFlag = isLocal and (achievementData.status == rewardFlag)
+	if not achievement.rewardFlag then
+		local goal = tbl:GetInt(id, Achievement.count)
+		local currentCount = achievementData.count
+		achievement.progress = (currentCount / (goal + 0.0))
+		achievement.progressDesc = currentCount .. "/" .. goal
+	else
+		achievement.progress = 0.0
+		achievement.progressDesc = ""
+	end
+
+	return achievement
+end
+
+function GetAchievementReward(configStr)
+	local rewardStrings = SplitString(configStr,";")
+	local rewards = {}
+	local IDX_TYPE, IDX_ID, IDX_COUNT = 0, 1, 2
+	for i = 0, rewardStrings.Length - 1 do
+		local rewardStr = rewardStrings[i]
+		local valueStrings = SplitString(rewardStr,",")
+		local reward = {
+			typeId = tonumber(valueStrings[IDX_TYPE]),
+			id = tonumber(valueStrings[IDX_ID]),
+			count = tonumber(valueStrings[IDX_COUNT]),
+		}
+		table.insert(rewards, reward)
+	end
+
+	return rewards
+end
+
+function RequestPlayerInfo(uid, zone, formationTypeID)
+	local req = {
+		userId = uid,
+		zone = tostring(zone),
+		formationType = formationTypeID
+	}
+
+	HttpRequest("getPlayerCard", "GetPlayerCardRequest", "GetPlayerCardResp", req, OnRequestPlayerInfoResp)
+end
+
+function OnRequestPlayerInfoResp(resp)
+	local viewData = GetOtherPlayerViewData(resp)
+	self:SendNotification("RefreshPlayerInfoView", viewData)
+end
+
+function GetOtherPlayerViewData(svrData)
+	local viewData = {}
+	playerCard = svrData
+	playerInfo = svrData.playerInfo
+	LoadBaseViewData(viewData, playerInfo)
+	viewData.playerInfo = playerInfo
+	viewData.isFriend = svrData.isFriend
+	viewData.sameZone = svrData.sameZone
+	viewData.sameGroup = svrData.sameGroup
+	
+	viewData.unionID = svrData.unionId
+	viewData.union = svrData.union == "" and Language:getStr("emptyItem") or svrData.union
+	viewData.unionIcon = ResTblContainer:GetPropToStr(svrData.unionIcon, GuildBanner.banner, GuildBanner.tblName)
+	viewData.showUnion = svrData.unionId ~= 0 and svrData.unionId ~= nil
+
+	viewData.formation = GetFormation_OtherPlayer(cachedFormationData and cachedFormationData or svrData.formation)
+	viewData.aura = GetAura(viewData.formation)
+	local isLocal = false
+	viewData.achievements = GetAchievementsViewData(svrData.achievements, isLocal)
+
+	local playerInfo = appData:checkData("PlayerInfo")
+	
+	return viewData
+end
+
+function GetLocalPlayerViewData()
+	local viewData = {}
+	local playerInfo = appData:checkData("PlayerInfo")
+	LoadBaseViewData(viewData, playerInfo)
+	viewData.playerInfo = playerInfo
+	viewData.formation = GetFormation()
+	viewData.aura = GetAura(viewData.formation)
+	viewData.isFriend = false	
+	
+	local unionID = 0
+	local unionIcon = ""
+	local unionName = Language:getStr("emptyItem")
+	if myUnionData then
+		local union = myUnionData.union
+		unionID = union.id
+		unionIcon = ResTblContainer:GetPropToStr(union.icon, GuildBanner.banner, GuildBanner.tblName)
+		unionName = union.name
+	end
+	viewData.unionID = unionID
+	viewData.union = unionName
+	viewData.unionIcon = unionIcon
+	viewData.showUnion = unionID ~= 0
+
+	local svrData = appData:checkAllItems("PlayerAchievement")
+	local isLocal = true
+	viewData.achievements = GetAchievementsViewData(svrData, isLocal)
+
+	return viewData	
+end
+
+function LoadBaseViewData(viewData, playerInfo)
+	local progress, expDesc = GetExpInfo(playerInfo.level, playerInfo.playerExp)
+	viewData.levelUpProgress = progress
+	viewData.expDesc = expDesc
+
+	local upColor, downColor = GetVipTextColor(playerInfo.vip)
+	viewData.vipUpColor = upColor
+	viewData.vipDownColor = downColor
+end
+
+function GetExpInfo(level, currentExp)
+	local exp = ResTblContainer:GetPropToInt(level + 1, Level.exp, Level.tblName)
+	if exp <= 0 then
+		exp = ResTblContainer:GetPropToStr(level, Level.exp, Level.tblName)
+	end
+	local progress = currentExp / (exp + 0.0)
+	local desc = currentExp .. "/" .. exp
+	return progress, desc
+end
+
+function GetFormation_OtherPlayer(svrData)
+	local formatedList = {}
+	if svrData then
+		for k, posDataAdv in pairs(svrData) do
+			local formatedData = {}
+			local posData = posDataAdv.formationPos
+			formatedData.pos = posData.pos
+			formatedData.srcUid = posData.uid
+			formatedData.heroId = posData.heroId
+			formatedData.level = posDataAdv.heroLevel
+			formatedData.grade = posDataAdv.heroGrade
+			formatedData.distillationStar = posDataAdv.distillationStar
+			formatedData.distillationLevel = posDataAdv.distillationLevel
+			formatedData.breakLevel = posDataAdv.breakLevel
+
+			formatedList[posData.pos] = formatedData
+		end
+	end
+
+	
+	formationData = {}
+	local maxHeroCount = 6
+	for posID = 1, maxHeroCount do
+		local data = formatedList[posID]	
+		if(not data)then
+			data = {}
+			data.pos = posID
+			data.srcUid = 0
+			data.heroId = 0
+		end
+		
+		formationData[posID] = data
+	end
+
+	return formationData
+end
+
+function GetFormation()
+	if cachedFormationData then
+		return GetFormation_OtherPlayer(cachedFormationData)
+	end
+
+	local formationID = tostring(formationType)
+	local formationHeros = appData:checkItem("Formation", formationID)
+
+	if formationType == FormationTypeEnum.FormationType_BraveArena
+		and formationHeros == nil 
+	then
+		formationID = tostring(FormationTypeEnum.FormationType_PVP)
+		formationHeros = appData:checkItem("Formation", formationID)
+	end
+
+	local svrData = {}
+	if formationHeros then
+		for k, heroData in pairs(formationHeros.heroIds) do  
+			if heroData then
+				svrData[heroData.pos] = heroData
+			end
+		end
+	end
+	local heroList = {}
+	local heroItems = appData:checkAllItems("HeroItem")
+	if(heroItems)then
+	    local tbl=ResTblContainer:GetTable(HeroBase.actorTbl)
+		for  i = 0, heroItems.Length - 1 do
+			local heroItem = heroItems[i]
+			local newData = {}
+			newData.uid = heroItem.uid
+			newData.heroId = heroItem.heroId
+			newData.level = heroItem.level
+			newData.grade = heroItem.grade
+			newData.quality = tbl:GetInt(heroItem.heroId,HeroBase.quality)
+			newData.distillationLevel = heroItem.distillationLevel
+			newData.distillationStar = heroItem.distillationStar
+			newData.breakLevel = heroItem.breakLevel
+			heroList[heroItem.uid] = newData
+		end
+	end
+
+	formationData = {}
+	local maxHeroCount = 6
+	for posID = 1, maxHeroCount do
+		local data = svrData[posID]		
+		local newData = {}
+		if(not data)then
+			newData.pos = posID
+			newData.srcUid = 0
+			newData.heroId = 0
+		else
+			local heroData = heroList[data.uid]
+			newData.pos = data.pos
+			newData.srcUid = data.uid
+			if heroData then
+				newData.heroId = heroData.heroId
+				newData.level = heroData.level
+				newData.grade = heroData.grade
+				newData.distillationLevel = heroData.distillationLevel
+				newData.distillationStar = heroData.distillationStar
+				newData.breakLevel = heroData.breakLevel
+			end
+		end
+		
+		formationData[posID] = newData
+	end
+
+	return formationData
+end
+
+function GetAura(formationData)
+	local validAura = nil
+	for i, data in pairs(auraConfig) do
+	    data.isOn=false
+	end
+	for i, data in pairs(auraConfig) do
+		local result = SplitString(data.condition,";")
+		local isAllOK=true
+		for  i = 0,result.Length-1 do
+			local str=SplitString(result[i],",")
+			local raceId=tonumber(str[0])
+			local num=tonumber(str[1])
+			local isEnough = DoCheckAuraNum(formationData, raceId, num)
+			if(not isEnough)then
+				isAllOK=false
+				break
+			end
+		end
+		data.isOn=isAllOK
+		if(isAllOK==true) then
+		    validAura=data
+			break
+		end;
+	end
+
+	cachedAuraData = validAura
+	return validAura
+end
+
+function DoCheckAuraNum(formationData, raceId, num)
+	local isEnough=false
+	local col=0
+	local tbl=ResTblContainer:GetTable(HeroBase.actorTbl)
+	for i,data in pairs(formationData) do
+		if(data.heroId~=0) then
+			local race= tbl:GetInt(data.heroId,HeroBase.group)
+			if(raceId==race) then
+				col=col+1
+			end
+		end
+	end
+	if(col>=num)then
+		isEnough=true
+	end
+	return isEnough
+end
+
+function LoadAchievementConfig()
+	achievementConfigs = {}
+	local tblName = Achievement.tblName
+	local itemIds = GetIds(tblName)
+	local rowData
+	local type = 0
+	local tbl=ResTblContainer:GetTable(tblName)
+    for  i = 0, itemIds.Length - 1 do
+        local id = tonumber(itemIds[i])
+		local newType = tbl:GetInt(id, Achievement.type)
+		if newType > type then
+			type = newType
+			rowData = {}
+			rowData.id = id
+			rowData.type = type
+			rowData.title = tbl:Get(id, Achievement.name)
+			rowData.desc = tbl:Get(id, Achievement.desp)
+			rowData.count = tbl:GetInt(id, Achievement.count)
+			rowData.rewards = GetAchievementReward(tbl:Get(id, Achievement.reward))
+			rowData.progress = 0.0
+			rowData.progressDesc = "0/" .. rowData.count
+			rowData.rewardFlag = false
+			
+			table.insert(achievementConfigs, rowData)
+		end
+    end
+end
+
+function LoadAuraConfig()
+	auraConfig={}
+	for i, data in pairs(global_auraArr) do  
+		local newData={}
+		newData.id=data.id
+		newData.title=data.title
+		newData.icon=data.icon
+		newData.des=data.desp
+		newData.condition=data.cond
+		newData.isOn=false
+		newData.pos=i
+		newData.condDesp=data.condDesp
+		table.insert(auraConfig,newData)
+    end
+end
+
+function OnCommand_OpenVipView(objs)
+	local vipViewIdx = 1
+	local data = {vipViewIdx}
+	self:ShowModule("PayModule",data,true, nil, false)
+end
+
+function DoOnExit()
+	auraConfig = nil
+	achievementConfigs = nil
+	formationData = nil
+	uid = nil
+	zone = nil
+	formationType = nil
+	playerInfo = nil
+	playerCard = nil
+	cachedAuraData = nil
+	showingSelf  = nil
+	myUnionData = nil
+	cachedFormationData = nil
+	utils = nil
+end

@@ -1,0 +1,167 @@
+local soulImprintItemSlot = require('SoulImprintItemSlot')
+local soulItemTipsAttrItemSlot = require('SoulItemTipsAttrItemSlot')
+local yield_return = (require 'cs_coroutine').yield_return
+
+---@type UnityEngine.GameObject 旧的纹章
+local oldSoulImprintItemTipViewObj
+---@type UnityEngine.GameObject 新的纹章
+local newSoulImprintItemTipViewObj
+---@type UnityEngine.RectTransform
+local oldSoulImprintItemTipViewRT
+---@type UnityEngine.RectTransform
+local newSoulImprintItemTipViewRT
+
+---@type table 旧的纹章组件集合
+local oldSoulImprintItemTipViewObjArr = {}
+---@type table 新的纹章组件集合
+local newSoulImprintItemTipViewObjArr = {}
+
+---旧的纹章数据
+local oldItemData
+---新的纹章数据
+local newItemData
+
+local function GetTipsViewObj(arr, firstExt)
+    arr.nameTxt = self:GetComponentAtPath(firstExt .. "/Base/NameTxt", CLS_TEXT)
+    arr.summaryTxt = self:GetComponentAtPath(firstExt .. "/Base/Type/SummaryTxt", CLS_TEXT)
+    arr.soulImprintItemSlotObj = self:GetGameObjectAtPath(firstExt .. "/Base/SoulImprintItemSlot")
+    arr.despTxt = self:GetGameObjectAtPath(firstExt .. "/DespTxt", CLS_TEXT)
+    arr.soulImprintItemSlotCp = CsBridge.UnityHelper.GetOrAddComponent(arr.soulImprintItemSlotObj, CLS_ITEM_SLOT)
+    arr.attrGrid = self:GetComponentAtPath(firstExt .. "/AttrGrid", CLS_UI_ITEM_GRID)
+    arr.btnsObj = self:GetGameObjectAtPath(firstExt .. "/Btns")
+    arr.unWearBtnObj = self:GetGameObjectAtPath(firstExt .. "/Btns/UnWearBtn")
+    arr.exchangeBtnObj = self:GetGameObjectAtPath(firstExt .. "/Btns/ExchangeBtn")
+    arr.wearBtnObj = self:GetGameObjectAtPath(firstExt .. "/Btns/WearBtn")
+end
+
+function DoInit()
+    self.Shadow = 1
+    self.Anim = 8
+    oldSoulImprintItemTipViewObj = self:GetGameObjectAtPath("OldSoulImprintItemTipView")
+    newSoulImprintItemTipViewObj = self:GetGameObjectAtPath("NewSoulImprintItemTipView")
+    GetTipsViewObj(oldSoulImprintItemTipViewObjArr, "OldSoulImprintItemTipView")
+    GetTipsViewObj(newSoulImprintItemTipViewObjArr, "NewSoulImprintItemTipView")
+    oldSoulImprintItemTipViewRT = self:GetComponentAtPath("OldSoulImprintItemTipView", CLS_RECTTRANSFORM)
+    newSoulImprintItemTipViewRT = self:GetComponentAtPath("NewSoulImprintItemTipView", CLS_RECTTRANSFORM)
+end
+
+---初始化按钮的状态
+local function InitBtnsState(objArr, showBtn)
+    objArr.btnsObj:SetActive(showBtn.btnParentState)
+    objArr.unWearBtnObj:SetActive(showBtn.unWearBtnState)
+    objArr.exchangeBtnObj:SetActive(showBtn.exchangeBtnState)
+    objArr.wearBtnObj:SetActive(showBtn.wearBtnState)
+end
+
+---显示属性
+local function ShowProps(objArr, props)
+    if props and #props > 0 then
+        objArr.attrGrid.gameObject:SetActive(true)
+        objArr.attrGrid:RefreshItemSlots(props, self.gameObject, "SoulItemTipsAttrItemSlot")
+    else
+        objArr.attrGrid.gameObject:SetActive(false)
+    end
+end
+
+---显示描述信息
+local function ShowDesp(objArr, despValue)
+    local despObj = objArr.despTxt.gameObject
+    if despValue == "" or despValue == nil then
+        despObj:SetSelfActive(false)
+        return
+    end
+    local desp_rt = objArr.despTxt:GetComponent("RectTransform")
+    despObj:SetSelfActive(true)
+    objArr.despTxt.text = despValue
+    CsBridge.UnityHelper.SetUISizeDelta(desp_rt, desp_rt.sizeDelta.x, desp_rt.preferredHeight)
+end
+
+---初始化界面
+local function InitSoulImprintItemInfo(objArr, viewData)
+    if viewData then
+        local itemInfo = viewData.itemInfo
+        local base = viewData.base
+        local props = viewData.props
+        local showBtn = viewData.showBtn
+        objArr.nameTxt.text = base.nameTxt
+        objArr.summaryTxt.text = base.typeTxt
+        ShowDesp(objArr, base.despTxt)
+        OnSoulImprintItemSlotBindValue(objArr.soulImprintItemSlotCp, itemInfo)
+        ShowProps(objArr, props)
+        InitBtnsState(objArr, showBtn)
+    end
+end
+
+function SetParamDataList(objs)
+    if objs then
+        oldItemData = objs[0]
+        newItemData = objs[1]
+        if oldItemData then
+            oldSoulImprintItemTipViewObj:SetActive(true)
+            InitSoulImprintItemInfo(oldSoulImprintItemTipViewObjArr, oldItemData)
+        else
+            oldSoulImprintItemTipViewObj:SetActive(false)
+        end
+        if newItemData then
+            newSoulImprintItemTipViewObj:SetActive(true)
+            InitSoulImprintItemInfo(newSoulImprintItemTipViewObjArr, newItemData)
+        else
+            newSoulImprintItemTipViewObj:SetActive(false)
+        end
+        local co = coroutine.create(function()
+            for i = 1, 5 do
+                yield_return(1)
+            end
+            if newItemData and oldItemData then
+                local oldHeight = oldSoulImprintItemTipViewRT.sizeDelta.y
+                local newHeight = newSoulImprintItemTipViewRT.sizeDelta.y
+                local center = (newHeight - oldHeight) / 2
+                CsBridge.UnityHelper.SetAnchoredPosition(oldSoulImprintItemTipViewObj, 0, oldHeight / 2 + 5 + center)
+                CsBridge.UnityHelper.SetAnchoredPosition(newSoulImprintItemTipViewObj, 0, -(newHeight / 2 + 5) + center)
+            end
+        end
+        )
+        assert(coroutine.resume(co))
+    else
+        self:HideView(self.gameObject.name)
+    end
+end
+
+function OnAnimationFinished()
+
+end
+
+---镶嵌纹章点击
+function OnWearBtnClick()
+    self:SendCommand("WearForExchangeNewSoulImprintItem", newItemData)
+    self:HideView(self.gameObject.name)
+end
+
+---卸载按钮点击
+function OnUnWearBtnClick()
+    self:SendCommand("UnWearForExchangeNewSoulImprintItem", newItemData)
+    self:HideView(self.gameObject.name)
+end
+
+---置换点击
+function OnExchangeBtnClick()
+    self:SendCommand("ExchangeForExchangeNewSoulImprintItem", newItemData)
+    self:HideView(self.gameObject.name)
+end
+
+function OnMaskClick()
+    self:SendCommand("SoulImprintItemCompareViewClosedByMask")
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+    oldSoulImprintItemTipViewObj = nil
+    newSoulImprintItemTipViewObj = nil
+    oldSoulImprintItemTipViewObjArr = nil
+    newSoulImprintItemTipViewObjArr = nil
+    oldSoulImprintItemTipViewRT = nil
+    newSoulImprintItemTipViewRT = nil
+    oldItemData = nil
+    newItemData = nil
+    yield_return = nil
+end

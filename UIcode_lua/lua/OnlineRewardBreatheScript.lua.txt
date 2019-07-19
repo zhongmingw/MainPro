@@ -1,0 +1,24 @@
+local cachedScaleX
+local SCALE_FACTOR, DURATION = 0.08, 0.6
+
+function DoInit()
+    cachedScaleX = self.transform:CheckLocalScale().x
+end
+
+function DoEnable()
+    MsgCenter:Subscribe(Notify_SetBreatheScaleFactor,OnSetBreatheScaleFactor)
+end
+
+function DoDisable()
+    self.transform:DoKill()
+    MsgCenter:Unsubscribe(Notify_SetBreatheScaleFactor,OnSetBreatheScaleFactor)
+end
+
+function OnSetBreatheScaleFactor(enabled)
+    self.transform:DoKill()	
+	self.gameObject:SetScale(cachedScaleX, cachedScaleX)
+
+	if enabled then
+		self.transform:PlayBreatheFx(SCALE_FACTOR, DURATION)
+	end
+end

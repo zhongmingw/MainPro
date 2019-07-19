@@ -1,0 +1,36 @@
+local tittleTxt
+local contentTxt
+
+
+function DoInit()
+    self.Shadow = 1
+    self.Anim = 8
+    tittleTxt = self:GetComponentAtPath("Center/TitleTxt" ,CLS_TEXT)
+    contentTxt = self:GetComponentAtPath("Center/HelpSV/HelpScrollRect/Viewport/ContentTxt" ,CLS_TEXT)
+end
+
+function IsSetAnchor()
+	self.transform.parent:SetAsLastSibling()
+    return true
+end
+
+function SetData(obj)
+    if type(obj) == "number" then
+        contentTxt.text = CsBridge.UnityHelper.SpaceChange(CsBridge.UnityHelper.ReplaceString(ResTblContainer:GetPropToStr(obj,Instruction.content,Instruction.tblName)))
+    end 
+end 
+
+function SetParamDataList(objs)
+    if type(objs[0]) == "string" then
+        tittleTxt.text = objs[0]
+    end
+end
+
+function OnMakClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+    tittleTxt = nil
+    contentTxt = nil
+end

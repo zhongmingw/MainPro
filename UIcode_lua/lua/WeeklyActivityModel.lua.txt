@@ -1,0 +1,347 @@
+--[[
+	file: WeeklyActivityModel.lua
+	author: hangang
+	description: Union battle view controller
+]]
+
+local DAY_COUNT = 7
+local TaskStatusEnum = 
+{
+	processing = 0,
+	finished = 1,
+}
+
+local TaskAwardedEnum = 
+{
+	notClaimed = 0,
+	claimed = 1,
+}
+
+local TaskUnlockEnum =
+{
+	locked = 0,
+	unlocked = 1,
+}
+
+local TaskShowProgressEnum = 
+{
+	disabled = 0,
+	enabled = 1,
+}
+
+local cachedTaskData
+
+local CheckAnyTaskFinished
+local CheckAnyLevelFinished
+
+local TICKER_NAME = "ticker_WeeklyActivityModel"
+
+------Http requet---------------------------------------------------------------------
+function FetchWeeklyTaskData(finishedCallback)
+    local req = {}
+	req.useless = 0
+	local url, requestCls, responseCls = "getSevenTarget", "SevenTargetReq", "SevenTargetResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function ClaimReward(finishedCallback, taskID)
+	local req = {}
+	req.id = taskID
+	local url, requestCls, responseCls = "getSevenTargetReward", "SevenTargetRewardReq", "SevenTargetRewardResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+------Updating ---------------------------------------------------------------------
+function Updating()
+	local now = CsBridge.timeManager.ServerTime
+	local endTime = now * 2
+	local onCountdownFinished = nil
+	if endTime > CsBridge.timeManager.ServerTime then
+		local interval = 0.5
+		Timer:AddTicker(TICKER_NAME,endTime,RefreshCountdown,onCountdownFinished,interval)
+	end
+end
+
+function RefreshCountdown()
+	local endCD, awardCD = GetCDTexts(cachedTaskData)
+	self:SendNotification("RefreshCD", endCD, awardCD)
+end
+
+function GetCountdownEndTime()
+	local endTime = cachedStatusData.seasonFinished
+		and cachedStatusData.nextSeasonTime
+		or cachedStatusData.seasonEndTime
+	local delay = 10000
+	endTime = endTime + delay
+
+	return endTime
+end
+
+function GetViewObj()
+	return CS.UnityEngine.GameObject.Find("UIRoot")
+end
+
+------View events handler-----------------------------------------------------------------
+function OnCommand_GetBaseViewData(objs)
+    FetchWeeklyTaskData(RefreshBaseView)
+end
+
+function OnCommand_DayBtnClicked(objs)
+	CsBridge.hintUILayer:ShowHintBox(Language:getStr("Coming_Soon_Common"))
+end
+
+function OnCommand_ClaimReward(objs)
+	local taskID = objs[0]
+	local finishedCallback = function(resp)
+		local confirmCbk = function()
+			CsBridge.MoneyBanner.SetBannerVisible(false)
+			local showDayTips = false
+			local showTaskTips = false
+			local curDay
+			for k, task in pairs(cachedTaskData.taskList) do
+				if task.ID == taskID then
+					task.rewardClaimed = true
+					showDayTips = CheckAnyTaskFinished(cachedTaskData, task.dayID)
+					showTaskTips = CheckAnyLevelFinished(cachedTaskData, task.dayID, task.type)
+					curDay = task.dayID
+					break
+				end
+			end
+			local dayClaimedData = {
+				day = curDay,
+			}
+			local curDayData = cachedTaskData.daysData[curDay]
+			curDayData.allClaimed = CheckAllClaimed(cachedTaskData.taskList,curDay)
+			dayClaimedData.showClaimedMark = curDayData.allClaimed
+			self:SendNotification("RewardClaimed", showDayTips, showTaskTips, dayClaimedData)
+		end
+		CsBridge.MoneyBanner.SetBannerVisible(true)
+		ShowRewardReceivedTip(self, resp.rewardItems, confirmCbk)
+	end
+	ClaimReward(finishedCallback, taskID)
+end
+
+function OnCommand_OpenTipView(objs)
+	local data = objs[0]
+	local itemType = data.typeId
+	if itemType == ItemTypeEnum.Hero then
+		ShowHeroTip(self, data.id, 1, 1)
+	else
+		ShowTip(self, itemType, data.id)
+	end
+end
+
+function OnCommand_GetTaskList(objs)
+	local dayIdx, taskType = objs[0], objs[1]
+	local viewData = GetTaskViewData(dayIdx, taskType)
+	self:SendNotification("RefreshTaskList", viewData)
+end
+
+function OnCommand_ViewClosing(objs)
+	Timer:StopTicker(TICKER_NAME)
+end
+
+------Helpers-----------------------------------------------------------------------------
+function RefreshBaseView(resp)
+	CacheTaskData(resp)
+	local viewData = GetBaseViewData(cachedTaskData)
+	self:SendNotification("RefreshView", viewData)
+	Updating()
+end
+
+function CacheTaskData(svrData)
+	cachedTaskData = {}
+	cachedTaskData.taskEndTime = svrData.taskEndTime
+	cachedTaskData.awardTime = svrData.awardTime
+
+	local maxDayIdx = 7
+	cachedTaskData.currentDay = svrData.dayCount > maxDayIdx and maxDayIdx or svrData.dayCount
+
+	local svrTaskList = svrData.taskList
+	table.sort(svrTaskList, function(a, b)
+		if a.date == b.date then
+			if a.type == b.type then
+				return a.level < b.level
+			else
+				return a.type < b.type
+			end
+		else
+			return a.date < b.date
+		end
+	end)
+
+	local taskList = {}
+	for k, taskData in pairs(svrTaskList) do
+		local task = {}
+		task.ID = taskData.id
+		task.description = taskData.description
+		task.type = taskData.type
+		task.dayID = taskData.date
+		task.level = taskData.level
+		task.progress = taskData.progress
+		task.goal = taskData.goal
+		task.finished = taskData.status == TaskStatusEnum.finished
+		task.rewardClaimed = taskData.rewardClaimed == TaskAwardedEnum.claimed
+		task.rewards = taskData.rewards
+		task.typeTag = taskData.typeTag
+		task.unlocked = taskData.unlocked == TaskUnlockEnum.unlocked
+		task.showProgress = taskData.showProgress
+		table.insert(taskList, task)
+	end
+	cachedTaskData.taskList = taskList
+
+	local daysData = {}
+	for dayID = 1, DAY_COUNT do
+		local itemViewData = {}
+		itemViewData.allClaimed = CheckAllClaimed(taskList, dayID)
+		itemViewData.unlocked = dayID <= cachedTaskData.currentDay
+		itemViewData.icon = svrData.icons[dayID]
+		daysData[dayID] = itemViewData
+	end
+	cachedTaskData.daysData = daysData
+end
+
+function CheckAllClaimed(taskList, dayID)
+	for k, task in pairs(taskList) do
+		if task.dayID == dayID and not task.rewardClaimed then
+			return false
+		end
+	end
+	return true
+end
+
+function GetBaseViewData(data)
+	local viewData = {}
+
+	local endCD, awardCD = GetCDTexts(data)
+	viewData.endCD = endCD
+	viewData.awardCD = awardCD
+	viewData.daysData = GetDaysViewData(data)
+	viewData.currentDayIdx = data.currentDay
+	return viewData
+end
+
+function GetCDTexts(data)
+	local endCD, awardCD
+	local endRemain = CheckTimeRemain(data.taskEndTime, false)
+	endCD = endRemain == "" and Language:getStr("End") or endRemain
+	awardCD = CheckTimeRemain(data.awardTime, false)
+	return endCD, awardCD
+end
+
+CheckAnyTaskFinished = function(data, dayID)
+	for k, task in pairs(data.taskList) do
+		if task.dayID == dayID 
+			and task.finished
+			and not task.rewardClaimed
+		then
+			return true
+		end
+	end
+
+	return false
+end
+
+CheckAnyLevelFinished = function(data, dayID, taskType)
+	for k, task in pairs(data.taskList) do
+		if task.dayID == dayID 
+			and task.type == taskType
+			and task.finished
+			and not task.rewardClaimed
+		then
+			return true
+		end
+	end
+
+	return false
+end
+
+function GetDaysViewData(data)
+	local daysViewData = {}
+
+	local currentDay = data.currentDay
+	for dayID = 1, DAY_COUNT do
+		local itemViewData = {}
+		local itemData = data.daysData[dayID]
+		itemViewData.showLockedMark = not itemData.unlocked
+		itemViewData.showFinishedMark = itemData.allClaimed
+		itemViewData.showDayBtn = false
+		itemViewData.taskTypeList = GetTaskTypeList(data, dayID)
+		itemViewData.idx = dayID
+		itemViewData.showTips = CheckAnyTaskFinished(data, dayID)
+		itemViewData.icon = itemData.icon
+		itemViewData.dayTxt = string.format(Language:getStr("ShowDays"),dayID)
+		daysViewData[dayID] = itemViewData
+	end
+
+	return daysViewData
+end
+
+function GetTaskTypeList(data, dayID)
+	local type = -1
+	local typeList = {}
+	for k, task in pairs(data.taskList) do
+		if task.type ~= type and task.dayID == dayID then
+			type = task.type
+			local itemData = {}
+			itemData.type = type
+			itemData.name = task.typeTag
+			itemData.showTips = CheckAnyLevelFinished(data, dayID, type)
+			table.insert(typeList, itemData)
+		end
+	end
+
+	return typeList
+end
+
+function GetTaskViewData(dayID, taskType)
+	local viewData = {}
+	local taskList = cachedTaskData.taskList	
+	for i = 1, #taskList do
+		local task = taskList[i]
+		if task.dayID == dayID and task.type == taskType then
+			local itemViewData = GetTaskItemViewData(task)
+			table.insert(viewData, itemViewData)
+		end
+	end
+	table.sort(viewData, function(a,b)
+		return a.orderID < b.orderID
+	end)
+	return viewData
+end
+
+function GetTaskItemViewData(task)
+	local itemViewData = {}
+	itemViewData.goal = task.description
+	itemViewData.progress = FormatTaskGoal(task)
+	itemViewData.showClaimBtn = task.finished and not task.rewardClaimed
+	itemViewData.showMask = task.rewardClaimed
+	itemViewData.rewards = task.rewards
+	itemViewData.taskID = task.ID
+	itemViewData.orderID = task.level
+	return itemViewData
+end
+
+function FormatTaskGoal(task)
+	local processText = task.showProgress == TaskShowProgressEnum.enabled
+		and "<color=#42FF00FF>" .. task.progress .. "</color>/" .. task.goal	
+		or ""
+	return processText
+end
+
+function DoOnExit()
+	Timer:StopTicker(TICKER_NAME)
+	DAY_COUNT = nil
+	TaskStatusEnum = nil
+
+	TaskAwardedEnum = nil
+
+	TaskUnlockEnum = nil
+
+	TaskShowProgressEnum = nil
+
+	cachedTaskData = nil
+
+	CheckAnyTaskFinished = nil
+	CheckAnyLevelFinished = nil
+end

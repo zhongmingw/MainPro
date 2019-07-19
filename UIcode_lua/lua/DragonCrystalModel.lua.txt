@@ -1,0 +1,473 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-04-08 13:58:10
+
+local curType = 1
+
+--summon
+local summonArr
+local originCrystalNum = 0
+local crystalDustNum = 0
+
+--conversion
+local curHero
+local curHeroArr
+local allHeroArr
+local newHero 
+local curRace = 0
+
+local waitConfirmConversion = false
+
+function DoInit()
+end
+
+function InitProperties()
+end
+
+function RefreshSummonRedFlag() 
+    local result = CheckElemetnSummon()
+    self:SendNotification("RefreshSummonRedFlag",result.redFlag)
+end
+
+function OnCommand_InitData(objs)
+    self:SendNotification("OpenTypeView",curType)
+    self:SendNotification("RefreshView",curType)
+    UpdateTopData()
+    RefreshSummonRedFlag()
+end
+
+--外部调用
+function OnCommand_OpenTypeView(objs)
+    curType = objs[0]
+end
+
+function OnCommand_SwitchType(objs)
+    local type = objs[0]
+    if curType == type then
+        return
+    end
+    curType = type
+    self:SendNotification("OpenTypeView",curType)
+    self:SendNotification("RefreshView",curType)
+end
+
+function OnCommand_CloseView(objs)
+    self:SendNotification("CloseSubView")
+    objs[0]()
+end 
+
+function UpdateTopData()
+    local oc = appData:checkItem("PackItem",1018)
+    local cd = appData:checkItem("PackItem",1019)
+    local ocCount = 0
+    local cdCount = 0
+    local ocReduce = false
+    local cdReduce = false
+    if oc ~= nil then
+        ocCount = oc.count
+    end
+    if cd ~= nil then
+        cdCount = cd.count
+    end
+    if originCrystalNum > ocCount then
+        ocReduce = true
+    end
+    if crystalDustNum > cdCount then
+        cdReduce = true
+    end
+    originCrystalNum = ocCount
+    crystalDustNum = cdCount
+    self:SendNotification("RefreshTopView",ocReduce,originCrystalNum,cdReduce,crystalDustNum)
+end
+
+--summon
+function OnCommand_InitSummonData(objs)
+    if summonArr == nil then
+        summonArr = {}
+        for i=1,4 do
+            local summon = {
+                raceId = i
+            }
+            table.insert(summonArr, summon)
+        end
+        table.insert(summonArr,{raceId = 7})
+    end
+    self:SendNotification("RefreshSummonView",summonArr)
+end
+
+local heroIds = {}
+
+function OnCommand_Summon(objs)
+    local summon = objs[0]
+    local count = objs[1]
+    if not CheckHeroBagEnough(count,true) then
+        return
+    end
+    if not CheckItemNum(count,1018) then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("OriginCrystal_Not_Enougth"))
+        return
+    end
+
+    local req = {
+        groupId = summon.raceId,
+        count = count
+    }
+    local httpCbk = function(resp)
+        if resp.rewards ~= nil then
+            for i,v in ipairs(resp.rewards) do
+                if v.typeId == ItemTypeEnum.Hero then
+                    table.insert(heroIds, v.id)
+                end
+            end
+            CsBridge.audioManager:PlayUI("yilong")
+            local rewardViewConfirmCbk = function()
+                if again then
+                    return
+                end
+                if #heroIds ~= 0 then
+                    CheckAndShowConditionPackageView(self,GetConditionReqData(ConditionPackageType.Crystal),GetConditionReqData(ConditionPackageType.CrystalHero,table.arrtostring(heroIds)))
+                else
+                    CheckAndShowConditionPackageView(self,GetConditionReqData(ConditionPackageType.Crystal))
+                end
+                heroIds = {}
+            end
+            local againAction = function()
+                again = CheckHeroBagEnough(count,false) and CheckItemNum(count,1018)
+                OnCommand_Summon(objs)
+            end
+            local mergeReward = false
+            local effectCbk = function()
+                CsBridge.CacheAssetsByModule(self.Module,function()
+                    local hideOtherView = true
+                    local view = CsBridge.OpenView("RewardReceivedView","DragonCrystalModel", hideOtherView)
+                    local again = false
+                    view:SetParamDataList(resp.rewards,rewardViewConfirmCbk,mergeReward,againAction,count)
+                    UpdateTopData()
+                    RefreshSummonRedFlag() 
+                end, "RewardReceivedView","ItemSlot")
+            end
+            self:SendNotification("ShowSummonEffect", effectCbk)
+        end
+    end
+    HttpRequest("summonByCrystal","SummonByCrystalReq","SummonByCrystalResp",req,httpCbk)
+end
+
+function CheckItemNum(count,id)
+    local originCrystal = appData:checkItem("PackItem", id)
+    return originCrystal ~= nil and originCrystal.count >= count
+end
+
+
+--conversion
+function OnCommand_InitConversionData(objs)
+    InitHeroData()
+    CheckHeroConversionRecord()
+end
+function InitHeroData()
+    GetHeroesData()
+    curHeroArr = allHeroArr
+    self:SendNotification("InitScreen",curRace)
+    curRace = 0
+    self:SendNotification("RefreshConversionView",curHeroArr)
+end
+
+function CheckHeroConversionRecord()
+    local heroRecord = appData:checkData("HeroConversionRecord")
+    if heroRecord ~= nil then
+        RevertHeroConversionRecord(heroRecord)
+    end
+end
+
+function RevertHeroConversionRecord(heroRecord)
+    local index = GetCurHeroIndexInArr(heroRecord.heroUid)
+    if index ~= 0 then
+        waitConfirmConversion = true
+        curHero = curHeroArr[index]
+        GetNewHero(heroRecord.heroNewId)
+        self:SendNotification("SelectHero",index-1)
+        self:SendNotification("RefreshOldHero",curHero)  
+        self:SendNotification("WaitConfirmConversion")
+        self:SendNotification("RefreshNewHero",newHero)
+    end
+end
+
+function GetCurHeroIndexInArr(uid)
+    local index = 0
+    for i,hero in ipairs(curHeroArr) do
+        if uid == hero.uid then
+            index = i
+            return index
+        end
+    end
+    return index
+end
+
+function GetHeroesData()
+    allHeroArr = {}
+    local pbs = appData:checkAllItems("HeroItem")
+    if pbs ~= nil then
+        local heroTbl=ResTblContainer:GetTable(Hero.actorTbl)
+        local heroBaseTbl=ResTblContainer:GetTable(HeroBase.actorTbl)
+        local qulityTbl=ResTblContainer:GetTable(HeroQuality.actorTbl)
+        for i = 0,pbs.Length-1 do
+            local changePermit = heroTbl:GetInt(pbs[i].heroId,Hero.changePermit)
+            if changePermit ~= 0 then
+                local hero = {
+                    uid = pbs[i].uid,
+                    heroId = pbs[i].heroId,
+                    grade = pbs[i].grade,
+                    level = pbs[i].level,
+                    showDuty = CheckHeroInDuty(pbs[i],GetNoDelHeroLockDuty()),
+                    duty = pbs[i].duty,
+                    ban = changePermit == -1,
+                    dutyInPve = CheckHeroDutyInPve(pbs[i].duty),
+                    distillationStar = pbs[i].distillationStar,
+                    distillationLevel = pbs[i].distillationLevel,
+                    breakLevel = pbs[i].breakLevel,
+                }
+                local quality = heroBaseTbl:GetInt(hero.heroId, HeroBase.quality)
+                hero.crystalConsumption = qulityTbl:Get(quality, HeroQuality.crystalConsumption)
+                table.insert(allHeroArr,hero)    
+            end
+        end
+        table.sort(allHeroArr, SortHeroByDefault)
+    end
+end
+
+function SortHeroByDefault(a,b)
+    if a.dutyInPve ~= b.dutyInPve then
+        return a.dutyInPve > b.dutyInPve
+    end
+    local qualityA = ResTblContainer:GetPropToInt(a.heroId, HeroBase.quality, HeroBase.actorTbl)
+    local qualityB = ResTblContainer:GetPropToInt(b.heroId, HeroBase.quality, HeroBase.actorTbl)
+    if a.distillationStar ~= nil then
+		qualityA = qualityA + a.distillationStar
+    end
+    if b.distillationStar ~= nil then
+        qualityB = qualityB + b.distillationStar
+    end
+    if qualityA ~= qualityB then
+        return qualityA > qualityB
+    end
+    if a.grade ~= b.grade then
+        return a.grade > b. grade
+    end
+    if a.level ~= b.level then
+        return a.level > b.level
+    end
+    return a.heroId < b.heroId
+end
+
+
+function OnCommand_SelectHeroEffect(objs)
+    if waitConfirmConversion then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("Wait_HeroConversion_Confirm"))
+        return
+    end
+    local heroData = objs[0].m_data
+    local heroIndex = objs[0].m_index
+    if heroData.ban then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("HeroConversion_Ban"))
+        return
+    end
+    if DownHeroFromFormation(self, heroData, heroIndex) then
+        return
+    end
+    self:SendNotification("SelectHeroEffect",objs[0])
+end
+
+function OnCommand_SelectHero(objs)
+    if waitConfirmConversion then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("Wait_HeroConversion_Confirm"))
+        return
+    end
+    SelectHero(objs[0])
+end
+
+function OnCommand_ShowNewHeroMessage(objs) 
+    ShowHeroTip(self,newHero.heroId,newHero.level,newHero.grade,newHero.distillationStar,newHero.distillationlevel,newHero.breakLevel)
+end
+
+function OnCommand_CancelSelectHero(objs)
+    if waitConfirmConversion then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("Wait_HeroConversion_Confirm"))
+        return
+    end
+    CancelSelectHero(objs[0])
+end
+
+function OnCommand_HeroConversion(objs)
+    if curHero == nil then
+        return
+    end
+    local quality = ResTblContainer:GetPropToInt(curHero.heroId, HeroBase.quality, HeroBase.actorTbl)
+    local crystalConsumption = ResTblContainer:GetPropToInt(quality, HeroQuality.crystalConsumption, HeroQuality.actorTbl)
+    if not CheckItemNum(crystalConsumption,1019) then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("CrystalDust_Not_Enougth"))
+        return
+    end
+    local req = {
+        heroUid = curHero.uid
+    }
+    HttpRequest("heroConversion","HeroConversionReq","HeroConversionResp",req,OnHeroConversion)
+end
+
+function OnHeroConversion(resp)
+    if resp ~= nil then
+        GetNewHero(resp.heroNewId)
+        waitConfirmConversion = true
+        self:SendNotification("WaitConfirmConversion")
+        self:SendNotification("RefreshNewHero",newHero)
+        UpdateTopData()
+    end
+end
+
+function OnCommand_SaveConversion(objs)
+    if curHero == nil or newHero == nil then
+        return
+    end
+    local req = {
+        heroUid = curHero.uid,
+        heroNewId = newHero.heroId
+    }
+    HttpRequest("heroConversionSave","HeroConversionSaveReq","HeroConversionSaveResp",req,OnSaveConversion)
+end
+
+function OnSaveConversion(resp)
+    if resp.status == 0 then   
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("HeroConversion_Success"))     
+        local rewards = {
+            {
+                id = newHero.heroId,
+                typeId = 3,
+                count = 1
+            }
+        }
+        local confirmCbk = function()
+            self:SendNotification("EndConfirmConversion")
+            GetHeroesData()
+            curHeroArr = allHeroArr
+            self:SendNotification("SaveConversion",curHeroArr)
+            ScreenHero()
+            CancelSelectHero(curHero)
+            waitConfirmConversion = false
+            newHero = nil
+        end
+        ShowRewardReceivedTip(self, rewards, confirmCbk)
+    end
+end
+
+function OnCommand_CancelConversion(objs)
+    if newHero == nil or curHero == nil then
+        return
+    end
+    local req = {
+        heroUid = curHero.uid,
+        heroNewId = newHero.heroId
+    }
+    HttpRequest("heroConversionCancel","HeroConversionCancelReq","HeroConversionCancelResp",req,OnHeroConversionCancel)
+end 
+
+function OnHeroConversionCancel(resp)
+    if resp.status == 0 then
+        self:SendNotification("CancelConversion")
+        waitConfirmConversion = false
+        newHero = nil
+        self:SendNotification("RefreshNewHero",nil)
+        self:SendNotification("RefreshPreHero",curHero)
+    end
+end
+
+function SelectHero(index)
+    if curHero ~= nil then
+        CancelSelectHero(curHero)
+    end
+    curHero = curHeroArr[index+1]
+    self:SendNotification("SelectHero",index)
+    self:SendNotification("RefreshOldHero",curHero)   
+    self:SendNotification("RefreshPreHero",curHero) 
+end
+
+function CancelSelectHero(heroData)
+    self:SendNotification("CancelSelectHero",heroData)
+    curHero = nil
+    self:SendNotification("RefreshOldHero",nil)   
+    if waitConfirmConversion then
+        self:SendNotification("RefreshNewHero",nil)
+    else
+        self:SendNotification("RefreshPreHero",nil)
+    end
+end
+
+function OnCommand_Close(objs)
+    if newHero ~= nil then
+        return
+    end
+    curHero = nil
+    newHero = nil
+    curRace = 0
+    curHeroArr = {}
+    allHeroArr = {}
+    waitConfirmConversion = false
+end
+
+function OnCommand_ScreenHero(objs)
+    --修改：
+    local race = objs[0]
+    if curRace == race then
+        return
+    end
+    local direct = race - curRace < 0
+    curRace = race
+    self:SendNotification("ScreenAnim",curRace,direct)
+    ScreenHero()
+end
+
+function OnCommand_RefreshHero(objs)
+    GetHeroesData()
+    ScreenHero()
+end
+
+function ScreenHero()
+    --修改
+    if allHeroArr == nil or #allHeroArr == 0 then
+        return
+    end
+    curHeroArr = {}
+    -- local tbl=ResTblContainer:get(HeroBase.actorTbl)
+    for i,hero in ipairs(allHeroArr) do
+        local raceInfo = ResTblContainer:GetPropToInt(hero.heroId, HeroBase.group, HeroBase.actorTbl)
+        if curRace == 0 then
+            table.insert(curHeroArr, hero)
+        elseif curRace == raceInfo then
+            table.insert(curHeroArr, hero)
+        end
+    end
+    self:SendNotification("ScreenHero", curHeroArr)
+end
+
+function OnCommand_RefreshTopView(objs)
+    self:SendNotification("RefreshTopView")
+end
+
+function GetNewHero(newHeroId)
+    newHero = {
+        heroId = newHeroId,
+        level = curHero.level,
+        grade = curHero.grade
+    }
+end 
+
+function DoOnExit()
+    curType = nil
+    summonArr = nil
+    originCrystalNum = nil
+    crystalDustNum = nil
+    curHero = nil
+    curHeroArr = nil
+    allHeroArr = nil
+    newHero  = nil
+    curRace = nil
+    waitConfirmConversion = nil
+end

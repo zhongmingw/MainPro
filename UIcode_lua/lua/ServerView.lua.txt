@@ -1,0 +1,6 @@
+function OnConfirmBtnClick(sender)
+	self.BindingContext:ReceiveCommand("EnterGame")
+end
+function OnCancelBtnClick(sender)
+	self:HideView(self.gameObject.name)
+end

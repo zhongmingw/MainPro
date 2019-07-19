@@ -1,0 +1,38 @@
+
+Â
+Charge.protoChargestage.proto".
+	ChargeReq
+
+activityId (
+payId ("@
+
+ChargeResp
+orderId (	
+type (
+consumeType ("
+ShipReq
+orderId (	"/
+ShipResp#
+results (2.Charge.ShipResult">
+
+ShipResult
+result (
+orderId (	
+orderSN (	"&
+GetCycleCardRewardReq
+payId ("@
+GetCycleCardRewardResp&
+rewardItems (2.stage.RewardItem"A
+NormalChargeItem
+
+id (
+pid (	
+chargedTimes ("q
+CycleCardItem
+
+id (
+pid (	
+type (
+time (
+endTime (
+lastTakeRewardTime (

@@ -1,0 +1,199 @@
+local loadedSkyscraperItemSlot=require "SkyscraperItemSlot"
+
+local num_Lab
+local time_Lab
+
+local skyscraperGrid
+
+local skyTowerItem
+local curId
+local levels
+local index
+local curFreeKeyRemains
+local curItemKeyRemains
+local curTotalKeyRemains
+local skyScraperKeyLimit
+local lastRenewTime
+local RENEW_INTERVAL_CONST
+local boxSpine
+
+local TICKER_UPDATEKEYREMAINS = "ticker_UpdateKeyRemains_SkyscraperView"
+local TICKER_ONFINISHED = "ticker_OnFinished_SkyscraperView"
+
+local function UpdateKeyRemains()
+	time_Lab.gameObject:SetActive(true)
+	curFreeKeyRemains=skyTowerItem.remains
+	curItemKeyRemains=skyTowerItem.itemKeyRemains
+	lastRenewTime=skyTowerItem.lastRenewTime
+	local count = 0
+	while(lastRenewTime+RENEW_INTERVAL_CONST<CsBridge.timeManager.ServerTime)
+	do
+		lastRenewTime = lastRenewTime+RENEW_INTERVAL_CONST
+		count=count+1
+	end
+	curFreeKeyRemains=skyTowerItem.remains+count
+	if	curFreeKeyRemains>=skyScraperKeyLimit then
+		curFreeKeyRemains=skyScraperKeyLimit
+		time_Lab.gameObject:SetActive(false)
+	else
+		Timer:AddTicker(TICKER_UPDATEKEYREMAINS,lastRenewTime+RENEW_INTERVAL_CONST,OnUpdate,OnFinished)
+	end
+	curTotalKeyRemains=curFreeKeyRemains+curItemKeyRemains
+	num_Lab.text=tostring(curTotalKeyRemains)
+
+end
+
+function IsSetAnchor()
+	return true
+end
+
+
+function DoInit()
+	MsgCenter:Subscribe(Notify_OnBattleEnd,ReloadFormBattle)
+	self.Shadow = 1
+	num_Lab=self:GetComponentAtPath("Center/NumTxt" ,CLS_TEXT)
+	time_Lab=self:GetComponentAtPath("Center/TimeTxt" ,CLS_TEXT)
+
+	skyscraperGrid = self:GetComponentAtPath("Center/ScrollRect/Viewport/SkyscraperGrid" ,"UIItemGrid")
+	RENEW_INTERVAL_CONST=GetConstValue("skyScraperKeyRenewDuration")*1000
+	boxSpine = self:GetComponentAtPath("Center/SkyscraperBoxSpine",CLS_SKELETONGRAPHIC)
+end
+
+function ReloadFormBattle(data)
+	self:SendCommand("InitSkyScraperView")
+end
+
+function Active()
+	self:SendCommand("InitSkyScraperView")
+end
+
+function OnNotification_UpdateView(objs)
+	local viewData = objs[0]
+	curId=viewData.curId
+	levels=viewData.levels
+	index=viewData.index
+	if index == 0 then
+		index= 1
+	end 
+	if viewData.showSpine then
+		boxSpine.gameObject:SetSelfActive(true)
+		boxSpine:PlayAnimation(viewData.spineAnimName,true)
+	else
+		boxSpine.gameObject:SetSelfActive(false)
+	end
+	skyscraperGrid:RefreshItemSlots(levels,self.gameObject,"SkyscraperItemSlot",false,index-1)
+	skyTowerItem = viewData.skyTowerItem
+	skyScraperKeyLimit = viewData.skyScraperKeyLimit
+	UpdateKeyRemains(skyTowerItem,skyScraperKeyLimit)
+end
+
+
+function OnOpen()
+
+end
+
+function OnAnimationFinished()
+	self:SendCommand("InitSkyScraperView")
+end
+
+function OnNotification_UpdateKeyRemains(objs)
+	skyTowerItem= objs[0]
+	skyScraperKeyLimit=objs[1]
+	UpdateKeyRemains(skyTowerItem,skyScraperKeyLimit)
+end
+
+function OnUpdate(targetTime)
+	if self == nil or self.Module == nil then
+		return
+	end
+	local timeStr = CheckTimeRemain(targetTime,false)
+	time_Lab.text=timeStr;
+end
+
+function OnFinished()
+	curFreeKeyRemains=curFreeKeyRemains+1
+	if	curFreeKeyRemains>=skyScraperKeyLimit then
+		curFreeKeyRemains=skyScraperKeyLimit
+
+		time_Lab.gameObject:SetActive(false)
+	else
+		Timer:AddTicker(TICKER_ONFINISHED,lastRenewTime+RENEW_INTERVAL_CONST+RENEW_INTERVAL_CONST,OnUpdate,OnFinished)
+	end
+	curTotalKeyRemains=curFreeKeyRemains+curItemKeyRemains
+	num_Lab.text=tostring(curTotalKeyRemains)
+end
+
+
+function OnSkyscraperGridFightBtnClick(obj)
+	if curTotalKeyRemains<=0 then
+		CatchException(1051)
+		return
+	end
+	local data=obj.m_data
+	if	data.id~=curId then
+		return
+	end
+	self:SendCommand("Details")
+end
+
+function OnSkyscraperGridBoxSpineGOClick(obj)
+	local data=obj.m_data
+	self:SendCommand("ShowReward",data.id)
+end
+
+function CatchException(ExceptionIndex)
+	CsBridge.hintUILayer:ShowHintBox(Language:getStr(tostring(ExceptionIndex)))
+end
+
+function OnRankBtnClick(sender)
+	self:SendCommand("SkyscraperRank")
+end
+
+function OnAddBtnClick(sender)
+	self:SendCommand("OpenExchangeItemView")
+end
+
+function OnRuleBtnClick(sender)
+	CsBridge.CacheAssetsByModule(self.Module,function()
+		local view = CsBridge.OpenView("HelpView","SkyscraperModule")
+		view:SetData(10)
+    end,"HelpView")
+end
+
+function OnSkyscraperBoxSpineClick(sender)
+	self:SendCommand("OpenExtraReward")
+end
+
+function OnCloseBtnClick(sender)
+	self:ReturnBack()
+end
+
+function OnClose()
+	Timer:StopTicker(TICKER_UPDATEKEYREMAINS)
+	Timer:StopTicker(TICKER_ONFINISHED)
+end
+
+function DoExit()
+	MsgCenter:Unsubscribe(Notify_OnBattleEnd,ReloadFormBattle)
+	self.Module=nil
+	Timer:StopTicker(TICKER_UPDATEKEYREMAINS)
+	Timer:StopTicker(TICKER_ONFINISHED)
+	num_Lab = nil
+	time_Lab = nil
+
+	skyscraperGrid = nil
+
+	skyTowerItem = nil
+	curId = nil
+	levels = nil
+	index = nil
+	curFreeKeyRemains = nil
+	curItemKeyRemains = nil
+	curTotalKeyRemains = nil
+	skyScraperKeyLimit = nil
+	lastRenewTime = nil
+	RENEW_INTERVAL_CONST = nil
+	TICKER_UPDATEKEYREMAINS = nil
+	TICKER_ONFINISHED = nil
+	boxSpine = nil
+end

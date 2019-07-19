@@ -1,0 +1,84 @@
+
+‰
+login.protologin""
+GetLoginBroadcastReq
+
+id ("<
+GetLoginBroadcastResp#
+info (2.login.LoginBroadcast"S
+LoginBroadcast
+	startTime (	
+endTime (	
+content (	
+type (")
+AnonLoginReq
+uid (	
+zone (	"¼
+GlobalAnonLoginResp
+isAnonLogin (
+userName (	
+pwd (	
+playerId (	
+zone (	
+url (	
+chName (	 
+zones (2.login.ZoneStatus
+
+firstLogin	 ("p
+GlobalLoginResp
+playerId (	
+zone (	
+url (	
+chName (	 
+zones (2.login.ZoneStatus"k
+AnonLoginResp&
+resp (2.login.UserLoginResponse
+userName (	
+pwd (	
+isAnonLogin ("S
+UserLoginResponse 
+zones (2.login.ZoneStatus
+playerId (	
+
+ip (	"L
+
+ZoneStatus
+nameId (	
+chName (	
+status (
+zoneId ("?
+UserLoginRequest
+userName (	
+pwd (	
+zone (	"0
+RegisterRequest
+userName (	
+pwd (	"(
+BindUserReq
+user (	
+pwd (	"
+BindUserResp
+status (" 
+LoginZoneRequest
+zone (	"8
+LoginZoneResponse
+isNeedNickName (
+url (	"&
+SetNicknameRequest
+nickname (	"-
+SetNicknameResponse
+isNicknameUsed ("+
+CheckPwdReq
+account (	
+pwd (	"
+CheckPwdResp
+result ("#
+GetBindAccountReq
+userId (	"2
+GetBindAccountResp
+account (	
+pwd (	"
+	JpPwdResp
+pwd (	" 
+JpCheckPwdResp
+status (

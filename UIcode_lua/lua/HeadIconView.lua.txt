@@ -1,0 +1,182 @@
+require "HeadIconItemSlot"
+require "HeadBoxItemSlot"
+
+local player_TF
+local headTogGroup
+local iconPanel_GO
+local boxPanel_GO
+local frame_GO
+local iconGrid
+local boxGrid
+local frameName_Lab
+local getType_Lab
+local onHideCbk
+local lastIconData
+local curIconData
+local lastBoxData
+local curBoxData
+
+function SetParamDataList(obj)
+	onHideCbk = obj[0]
+end
+
+function DoInit()
+	self.Shadow = 1
+	InitUI()
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	player_TF = selfTrans:Find("Center/Player/PlayerBase")
+	headTogGroup = self:GetComponentAtPath("Center/HeadTogGroup" ,CLS_TOGGLE_GROUP_ARCHLY)
+	iconPanel_GO = self:GetGameObjectAtPath("Center/IconPanel")
+	boxPanel_GO = self:GetGameObjectAtPath("Center/BoxPanel")
+	frame_GO = self:GetGameObjectAtPath("Center/FrameGO")
+	iconGrid = self:GetComponentAtPath("Center/IconPanel/ScrollRect/Viewport/HeadIconGrid" ,CLS_UI_ITEM_GRID)
+	boxGrid = self:GetComponentAtPath("Center/BoxPanel/ScrollRect/Viewport/HeadBoxGrid" ,CLS_UI_ITEM_GRID)
+	frameName_Lab = self:GetComponentAtPath("Center/FrameGO/FrameNameTxt" ,CLS_TEXT)
+	getType_Lab = self:GetComponentAtPath("Center/FrameGO/GetTypeTxt" ,CLS_TEXT)
+
+end
+
+function OnAnimationFinished()
+	self:SendCommand("InitData")
+	headTogGroup:SetAllTogglesOff()
+	headTogGroup:SetToggleOn(1)
+end 
+
+function OnHeadTogGroupClick(isOn,index)
+	if index == 1 then
+		iconPanel_GO:SetSelfActive(isOn)
+		if isOn then
+			self:SendCommand("RefreshIconData")
+		end
+	elseif index == 2 then
+		boxPanel_GO:SetSelfActive(isOn)
+		frame_GO:SetSelfActive(isOn)
+		if isOn then
+			self:SendCommand("RefreshBoxData")
+			self:SendCommand("RefreshBoxDesp")
+		end
+	end
+end
+
+function OnNotification_SetPlayerBase(objs)
+	local icon = objs[0]
+	local box = objs[1]
+	local playerInfo = appData:checkData("PlayerInfo")
+	local boxItem = appData:checkItem("BoxItem",box)
+	local playerData = {}
+	playerData.nick = playerInfo.nick
+	playerData.level = playerInfo.level
+	playerData.vip = playerInfo.vip
+	playerData.icon = icon
+	playerData.box = boxItem
+	BindPlayerBaseInfoValue(player_TF,playerData)
+end
+
+function OnNotification_RefreshIconPanel(objs)
+	local iconList = objs[0]
+	iconGrid:RefreshItemSlots(iconList, self.gameObject, "HeadIconItemSlot")
+	if iconList~=nil and #iconList~=0 then
+		for id,data in ipairs(iconList) do
+			if  data.selected then
+				curIconData = data
+				break
+			end
+		end
+	end
+end
+
+function OnNotification_RefreshBoxPanel(objs)
+	local boxList = objs[0]
+	boxGrid:RefreshItemSlots(boxList, self.gameObject, "HeadBoxItemSlot")
+	if boxList~=nil and #boxList~=0 then
+		for id,data in ipairs(boxList) do
+			if  data.selected then
+				curBoxData = data
+				return 
+			end
+		end
+		curBoxData = boxList[1]
+		curBoxData.selected = true
+		-- print(table.dump(curBoxData))
+	end
+end
+
+function OnNotification_RefreshBoxDesp(objs)
+	local boxId = objs[0]
+	frameName_Lab.text = ResTblContainer:GetPropToStr(boxId, AvatarBox.name, AvatarBox.tblName)
+	getType_Lab.text = ResTblContainer:GetPropToStr(boxId, AvatarBox.product, AvatarBox.tblName)
+end
+
+function OnNotification_SetIconFinished(obj)
+	if onHideCbk then
+		onHideCbk()
+	end
+	self:HideView("HeadIconView")
+end
+
+function OnConfirmBtnClick(sender)
+	
+	self:SendCommand("SetIconAndBox")
+end
+
+function OnHeadIconGridHeadIconItemSlotClick(obj)
+	local data = obj.m_data
+	if data.selected then
+		return 
+	end
+	lastIconData = curIconData
+	lastIconData.selected = false
+	iconGrid:SingleRefreshSlot(lastIconData)
+	curIconData = data
+	curIconData.selected = true
+	iconGrid:SingleRefreshSlot(curIconData)
+	self:SendCommand("SelectIcon",data)
+end
+
+function OnHeadBoxGridHeadBoxItemSlotClick(obj)
+	local data = obj.m_data
+	if data.selected then
+		return 
+	end
+	if CsBridge.timeManager.ServerTime >= data.expireTime and data.expireTime~=0 then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("HeadBoxOverdue"))
+		return 
+	end
+
+	lastBoxData = curBoxData
+	lastBoxData.selected = false
+	boxGrid:SingleRefreshSlot(lastBoxData)
+	curBoxData = data
+	curBoxData.selected = true
+	boxGrid:SingleRefreshSlot(curBoxData)
+	self:SendCommand("SelectBox",data)
+	self:SendCommand("RefreshBoxDesp")
+end
+
+function OnMaskClick(sender)
+	self:HideView("HeadIconView")
+end
+
+function OnCloseBtnClick(sender)
+	self:HideView("HeadIconView")
+end 
+
+function DoExit()
+	player_TF = nil
+	headTogGroup = nil
+	iconPanel_GO = nil
+	boxPanel_GO = nil
+	frame_GO = nil
+	iconGrid = nil
+	boxGrid = nil
+	frameName_Lab = nil
+	getType_Lab = nil
+	onHideCbk = nil
+	lastIconData = nil
+	curIconData = nil
+	lastBoxData = nil
+	curBoxData = nil
+end

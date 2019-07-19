@@ -1,0 +1,202 @@
+require "BoxItemSlot"
+require "ExpeditionItemSlot"
+
+local title_Lab
+local endTimer_Lab
+local level_Slider
+local boxGrid
+local viewport
+local content
+local expeditionGrid
+local isInit = false
+
+local TICKER_INITVIEW_TOP = "ticker_InitView_Top_ExpeditionView"
+local TICKER_INITVIEW_BOTTOM = "ticker_InitView_Bottom_ExpeditionView"
+
+function DoInit()
+	self.Shadow = 1
+	MsgCenter:Subscribe(Notify_OnBattleEnd,ReloadFormBattle)
+	if not isInit then
+		InitUI()
+		isInit = true
+	end
+end
+
+function IsSetAnchor()
+	return true
+end
+
+function InitUI()
+	title_Lab = self:GetComponentAtPath("Center/TitleTxt" ,CLS_TEXT)
+	title_Lab.text = ResTblContainer:GetPropToStr(UI_OPEN_TYPE_EXPEDITIOIN,UIOpenBase.name,UIOpenBase.actorTbl)
+	endTimer_Lab = self:GetComponentAtPath("Center/EndTimerTxt" ,CLS_TEXT)
+	level_Slider = self:GetComponentAtPath("Center/LevelSlider" ,CLS_SLIDER)
+	boxGrid = self:GetComponentAtPath("Center/BoxGrid" ,CLS_UI_ITEM_GRID)
+	local scroll = self:GetComponentAtPath("Center/ScrollRect" ,"UnityEngine.UI.ScrollRect")
+	viewport=scroll.viewport
+	content=scroll.content
+	expeditionGrid = self:GetComponentAtPath("Center/ScrollRect/Viewport/ExpeditionGrid" ,CLS_UI_ITEM_GRID)
+end
+
+function OnOpen()
+
+end
+
+function OnAnimationFinished()
+	self:SendCommand("InitData")
+end
+
+function ReloadFormBattle(data)
+	if data.battleEndInfo.result==1 then
+		self:SendCommand("RefreshView")
+	else
+		self:SendCommand("InitData")
+	end
+end
+
+function OnNotification_InitView(objs)
+	local expeditionData  = objs[0]
+	boxGrid:RefreshItemSlots(expeditionData.boxes,self.gameObject,"BoxItemSlot")
+	expeditionGrid:RefreshItemSlots(expeditionData.levels,self.gameObject,"ExpeditionItemSlot")
+	Timer:AddTicker(TICKER_INITVIEW_TOP,CsBridge.timeManager.ServerTime+0.1*1000,nil,		function()
+		if self == nil or self.Module == nil then
+			return
+		end
+		ScrollToCenter(expeditionData.passedStage,
+				function()
+
+				end)
+	end,nil)
+	level_Slider.value=expeditionData.passedStage/expeditionData.maxStage
+	Timer:AddTicker(TICKER_INITVIEW_BOTTOM,GetReloadTimestamp(GetConstValue("commonReloadTime")*3600000),function (targetTime)
+		if self == nil or self.Module == nil then
+			return
+		end
+		endTimer_Lab.text=CheckTimeRemain(targetTime)
+	end,function ()
+		self:SendCommand("InitData")
+	end,nil)
+end
+
+function OnNotification_RefreshView(objs)
+	local expeditionData  = objs[0]
+	CsBridge.timeManager:Timer(0.1,
+		function()
+			if self == nil or self.Module == nil then
+				return
+			end
+			ScrollToCenter(expeditionData.passedStage,
+				function()
+					local curSlot = expeditionGrid.transform:GetChild(14-expeditionData.passedStage)
+					local passed_TF = curSlot.transform:Find("PassedGO")
+					local passedSprite_GO = passed_TF:Find("PassedSprite").gameObject
+					passed_TF.gameObject:SetSelfActive(true)
+					CsBridge.UnityHelper.SetlocalScale(passedSprite_GO.gameObject,5,5,5)
+					passedSprite_GO:DoEaseScale(CsBridge.Ease.OutElastic,10,0.2,1,false,
+						function()
+							self:SendCommand("InitData")
+						end)
+
+				end)
+		end)
+end
+
+function ScrollToCenter(index,onFinished)
+	local childIndex = (14-index)>0 and (14-index) or 0
+	local slot = content:GetChild(childIndex)
+	local slot_y = (slot.rect.size.y/2 + 20)-(slot.anchoredPosition.y + content.rect.size.y)
+	local max_y = 0
+	local min_y = viewport.rect.size.y-content.rect.size.y
+	if slot_y>max_y then
+		slot_y = max_y
+	end
+	if slot_y<min_y then
+		slot_y = min_y
+	end
+	CsBridge.TweenUtils.MoveToByAnchored(content,content.anchoredPosition.x,slot_y,0.3,onFinished)
+
+end
+
+function OnExpeditionGridFightBtnClick(obj)
+	local data=obj.m_data
+	if data.state~=1 then
+		return 
+	end
+	self:SendCommand("ExpeditionBattle")
+
+end
+
+function OnExpeditionGridPlayerBaseClick(obj)
+	local data = obj.m_data
+	if data.robot then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("ArenaTargetCannotSee"))
+	end
+end
+
+function OnBoxGridBoxItemSlotClick(obj)
+	local data = obj.m_data
+	local grid = obj.m_grid
+	local slots = grid:GetAllItems()
+	if data.state==1 then
+		local resfreshed = false
+		for i=0,slots.Length-1 do
+			local slotData = slots[i].m_data
+			if slotData.state==1 then
+				local spine = slots[i].transform:Find("BoxSpine"):GetComponent(CLS_SKELETONGRAPHIC)
+				spine:PlayAnimation("clickon",false,nil,
+				function()
+					if not resfreshed then
+						resfreshed = true
+						self:SendCommand("GetExtraReward")
+					end
+				end)
+			end
+		end
+	else
+		local rewardItems = GetRewardFromTbl(data.rewardStr)
+		ShowPreviewView(self,rewardItems,"ExpeditonModel")
+	end
+
+end
+
+function OnItemGridItemSlotClick(obj)
+	local data = obj.m_data
+	ShowRewardTip(self,data)
+end
+
+function OnShopBtnClick(sender)
+	LinkSystem(UI_OPEN_TYPE_SHOP,self, {4})
+end
+
+function OnRuleBtnClick(sender)
+	CsBridge.CacheAssetsByModule(self.Module,function()
+		local view = CsBridge.OpenView("HelpView","AutoTaskModel",false,true)
+		view:SetData(34)
+	end, "HelpView")
+end
+
+function OnCloseBtnClick(sender)
+	self:ReturnBack()
+end
+
+function OnClose()
+	Timer:StopTicker(TICKER_INITVIEW_TOP)
+	Timer:StopTicker(TICKER_INITVIEW_BOTTOM)
+end
+
+function DoExit()
+	MsgCenter:Unsubscribe(Notify_OnBattleEnd,ReloadFormBattle)
+	Timer:StopTicker(TICKER_INITVIEW_TOP)
+	Timer:StopTicker(TICKER_INITVIEW_BOTTOM)
+	self.Module=nil
+	title_Lab = nil
+	endTimer_Lab = nil
+	level_Slider = nil
+	boxGrid = nil
+	viewport = nil
+	content = nil
+	expeditionGrid = nil
+	isInit = nil
+	TICKER_INITVIEW_TOP = nil
+	TICKER_INITVIEW_BOTTOM = nil
+end

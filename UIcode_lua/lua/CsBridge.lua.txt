@@ -1,0 +1,191 @@
+--[[
+	file: CsBridge.lua
+	author: zhudahai
+	description: A C# libraries and singletons bridge for lua;
+
+    version 1.0:File created by zhudahai
+	version 1.1:Add assets cache functions:CacheAssetsByView,CacheAssetsByGroup, by hangang
+	version 1.2:Replace CacheAssetsByView with CacheAssetsByModule, by hangang
+]]
+
+CsBridge = {}
+
+---@param newViewName string 新界面的名字
+---@param newModelName string 新界面所在model的名字
+---@param hideOtherView boolean 是否关闭其他界面 不传默认不关闭其他界面
+---@param enableAnimation boolean 是否开启打开界面的动画 不传默认开启打开界面动画
+---@return Client.Library.ViewBase 新的界面
+CsBridge.OpenView = function(newViewName, newModelName, hideOtherView, enableAnimation)
+    if CsBridge.moduleManager == nil then
+        CsBridge.moduleManager = CS.Client.Library.ModuleManager.instance
+    end
+
+    local currentModuleTrans = CsBridge.moduleManager.CurrentModule.transform
+    local lastPosViewName = currentModuleTrans:GetChild(currentModuleTrans.childCount - 1).name
+    local hideOtherViewBool = false
+    if hideOtherView then
+        hideOtherViewBool = true
+    end
+    local enableAnimationBool = false
+    if enableAnimation == nil or enableAnimation then
+        enableAnimationBool = true
+    end
+    local newView = CsBridge.moduleManager.CurrentModule:OpenView(newViewName, newModelName, enableAnimationBool, hideOtherViewBool, lastPosViewName)
+    return newView
+end
+
+---@description 缓存一系列的资源，不要直接调用此方法
+---@param groupName string 资源的分组，如果传入的不是所在Module.ModuleName,请务必在不再使用资源时，调用CsBridge.objectCache:ClearGroup
+---@param onFinished function 缓存完成后执行的回调函数
+---@param ... 要缓存的资源列表
+CsBridge.CacheAssetsByGroup = function(groupName, onFinished, ...)
+    local isPermanent = false
+    local onCaching = nil
+    CsBridge.objectCache:CacheAssets(isPermanent, groupName, onCaching, onFinished, ...)
+end
+
+---@description 缓存一系列的资源，使用view.Module.ModuleName作为资源分组名
+---@param module userdata 调用此方法的C#ModuleBase对象
+---@param onFinished function 缓存完成后执行的回调函数
+---@param ... 要缓存的资源列表
+CsBridge.CacheAssetsByModule = function(module, onFinished, ...)
+    local groupName = module.ModuleName
+    CsBridge.CacheAssetsByGroup(groupName, onFinished, ...)
+end
+
+---@param des string 显示提示信息2
+CsBridge.ShowHintBoxTwo = function(des)
+    CsBridge.hintUILayer:ShowHintBox(des, 2)
+end
+
+CsBridge.GetInputFromView = function(view, path, caretWidth)
+    local inputField = view:GetComponentAtPath(path ,CLS_INPUT)
+    if not inputField then return nil end
+    
+    local CARET_WIDTH_DEFAULT = 4
+    caretWidth = caretWidth or CARET_WIDTH_DEFAULT
+    inputField.caretWidth = caretWidth
+
+    return inputField
+end
+
+---初始化函数，变量首字母小写为单列类的实例对象，变量名首字母大写为静态类
+CsBridge.Init = function()
+    CsBridge.audioManager = CS.Client.Library.AudioManager.instance
+    CsBridge.appData = CS.Client.Library.AppData.instance
+    CsBridge.allocatorQueue = CS.Client.Library.AllocatorQueue.instance
+    CsBridge.chatManager = CS.Client.Library.ChatManager.instance
+    CsBridge.comUIBGMgr = CS.Client.Library.ComUIBGMgr.instance
+    CsBridge.configUtil = CS.Client.Library.ConfigUtil.instance
+    CsBridge.guideManager = CS.Client.Library.GuideManager.instance
+    CsBridge.hintUILayer = CS.Client.Library.HintUILayer.instance
+    CsBridge.httpBehaviour = CS.Client.Library.HttpBehaviour.instance
+    CsBridge.initBehaviour = CS.Client.Library.InitBehaviour.instance
+    CsBridge.loading = CS.Client.Library.Loading.instance
+    CsBridge.loadUIMgr = CS.Client.Library.LoadUIMgr.instance
+    CsBridge.luaHelper = CS.Client.Library.LuaHelper.instance
+    CsBridge.localizationHelper = CS.Client.Library.LocalizationHelper.instance
+    CsBridge.moduleManager = CS.Client.Library.ModuleManager.instance
+    CsBridge.messageManager = CS.Client.Library.MessageManager.instance
+    CsBridge.msgCenter = CS.Client.Library.MsgCenter.instance
+    CsBridge.moneyBanner = CS.Client.Library.MoneyBanner.instance
+    CsBridge.marquee = CS.Client.Library.Marquee.instance
+    CsBridge.objectCache = CS.Client.Library.ObjectCache.instance
+    CsBridge.protoManager = CS.Client.Library.ProtoManager.instance
+    CsBridge.prefHelper = CS.Client.Library.PrefHelper.instance
+    CsBridge.resManager = CS.Client.Library.ResManager.instance
+    CsBridge.resourceUpdateManager = CS.Client.Library.ResManager.instance
+    CsBridge.rootManager = CS.Client.Library.RootManager.instance
+    CsBridge.resTableContainer = CS.Client.Library.ResTableContainer.instance
+    CsBridge.resourceManager = CS.Client.Library.ResourceManager.instance
+    CsBridge.rSADecoder = CS.Client.Library.RSADecoder.instance
+    CsBridge.sDKHelper = CS.Client.Library.SDKHelper.instance
+    CsBridge.shadowManager = CS.Client.Library.ShadowManager.instance
+    CsBridge.timeManager = CS.Client.Library.TimeManager.instance
+    CsBridge.textureRender = CS.Client.Library.TextureRender.instance
+
+    CsBridge.ArchlyWebViewer = CS.ArchlyWebViewer
+    CsBridge.BattleUtils = CS.Client.Library.BattleUtils
+    CsBridge.ColorForLua = CS.Client.Library.ColorForLua
+    CsBridge.Ease = CS.DG.Tweening.Ease
+    CsBridge.GameObject = CS.UnityEngine.GameObject
+    CsBridge.IconData = CS.Client.Library.IconData
+    CsBridge.JsonUtil = CS.Client.Library.JsonUtil
+    CsBridge.MsgCenter = CS.Client.Library.MsgCenter
+    CsBridge.MD5 = CS.JeffWilcox.Utilities.Silverlight.MD5
+    CsBridge.MoneyBanner = CS.Client.Library.MoneyBanner
+    CsBridge.OpType = CS.Client.Library.OpType
+    CsBridge.SysMsgDef = CS.Client.Library.SysMsgDef
+    CsBridge.SdkMsgDef = CS.Client.Library.SdkMsgDef
+    CsBridge.SpineHelper = CS.Client.Library.SpineHelper
+    CsBridge.ShadowType = CS.Client.Library.ShadowType
+    CsBridge.TweenUtils = CS.Client.Library.TweenUtils
+    CsBridge.TimeSpan = CS.System.TimeSpan
+    CsBridge.Time = CS.UnityEngine.Time
+    CsBridge.TextAlignmentOptions = CS.TMPro.TextAlignmentOptions
+    CsBridge.UnityHelper = CS.Client.Library.UnityHelper
+    CsBridge.Vector3ForLua = CS.Client.Library.Vector3ForLua
+    CsBridge.Vector2ForLua = CS.Client.Library.Vector2ForLua
+    CsBridge.ViewAnimantion = CS.Client.Library.ViewAnimantion
+    CsBridge.SDKHelperClass = CS.Client.Library.SDKHelper
+end
+
+CsBridge.Clear = function()
+    CsBridge.audioManager = nil
+    CsBridge.appData = nil
+    CsBridge.allocatorQueue = nil
+    CsBridge.chatManager = nil
+    CsBridge.comUIBGMgr = nil
+    CsBridge.configUtil = nil
+    CsBridge.guideManager = nil
+    CsBridge.hintUILayer = nil
+    CsBridge.httpBehaviour = nil
+    CsBridge.initBehaviour = nil
+    CsBridge.loading = nil
+    CsBridge.loadUIMgr = nil
+    CsBridge.luaHelper = nil
+    CsBridge.localizationHelper = nil
+    CsBridge.moduleManager = nil
+    CsBridge.messageManager = nil
+    CsBridge.msgCenter = nil
+    CsBridge.moneyBanner = nil
+    CsBridge.marquee = nil
+    CsBridge.objectCache = nil
+    CsBridge.protoManager = nil
+    CsBridge.prefHelper = nil
+    CsBridge.resManager = nil
+    CsBridge.resourceUpdateManager = nil
+    CsBridge.rootManager = nil
+    CsBridge.resTableContainer = nil
+    CsBridge.resourceManager = nil
+    CsBridge.rSADecoder = nil
+    CsBridge.sDKHelper = nil
+    CsBridge.shadowManager = nil
+    CsBridge.timeManager = nil
+    CsBridge.textureRender = nil
+
+    CsBridge.ArchlyWebViewer = nil
+    CsBridge.BattleUtils = nil
+    CsBridge.ColorForLua = nil
+    CsBridge.Ease = nil
+    CsBridge.GameObject = nil
+    CsBridge.IconData = nil
+    CsBridge.JsonUtil = nil
+    CsBridge.MsgCenter = nil
+    CsBridge.MD5 = nil
+    CsBridge.MoneyBanner = nil
+    CsBridge.OpType = nil
+    CsBridge.SysMsgDef = nil
+    CsBridge.SdkMsgDef = nil
+    CsBridge.SpineHelper = nil
+    CsBridge.ShadowType = nil
+    CsBridge.TweenUtils = nil
+    CsBridge.TimeSpan = nil
+    CsBridge.Time = nil
+    CsBridge.TextAlignmentOptions = nil
+    CsBridge.UnityHelper = nil
+    CsBridge.Vector3ForLua = nil
+    CsBridge.Vector2ForLua = nil
+    CsBridge.ViewAnimantion = nil
+    CsBridge.SDKHelperClass = nil
+end

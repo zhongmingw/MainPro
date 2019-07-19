@@ -1,0 +1,247 @@
+local fight_Lab
+local level_Lab 
+
+local enemiesGrid
+local rewardGrid
+local aura
+
+local monstersUpData={}
+local details
+local auraArr
+local curAura
+local callBack
+
+
+function DoInit()
+	self.Shadow = 1
+	fight_Lab=self:GetComponentAtPath("Center/FightTxt" ,CLS_TEXT)
+	level_Lab=self:GetComponentAtPath("Center/LevelTxt" ,CLS_TEXT)
+
+	enemiesGrid=self:GetComponentAtPath("Center/EnemiesGrid" ,"UIItemGrid")
+	rewardGrid=self:GetComponentAtPath("Center/RewardGrid" ,"UIItemGrid")
+	aura=self:GetComponentAtPath("Center/aureole/icon01Img" ,"UnityEngine.UI.Image")
+	InitAuraArr()
+end
+
+function OnOpen()
+
+end
+
+function SetData(data)
+	callBack=data
+end
+
+function OnNotification_Details(objs)
+	details = objs[0]
+    LoadView()
+end
+
+function LoadView()
+	fight_Lab.text=CsBridge.UnityHelper.ChangeFightNum(details.fight)
+	level_Lab.text=Language:getStr("Level")..details.id
+	LoadEnemy()
+	LoadRewardShow()
+	CalcAura()
+	ShowAura()
+end
+
+function LoadEnemy()
+	monstersUpData = {}
+	local monsterFormations = {}
+	local monsterInfos = SplitString(details.monsterStr,";")
+	local tbl=ResTblContainer:GetTable(Monster.actorTbl)
+	for i=0,monsterInfos.Length-1 do
+        local infos=SplitString(monsterInfos[i],",")
+        local monsterData = {}
+        monsterData.pos=tonumber(infos[0])
+    	local heroId = tbl:GetInt(tonumber(infos[1]),Monster.actorId)
+        monsterData.heroId=heroId
+        local monsterInfos=tbl:GetRow(infos[1],Monster.grade,Monster.level)
+        monsterData.grade=1
+        monsterData.level=tonumber(monsterInfos[1])
+        table.insert(monsterFormations,monsterData)
+	end
+
+	for i=1,6 do
+		local monsterData={}
+		monsterData.heroId=0
+		monsterData.level=0
+		monsterData.grade=0
+		monsterData.pos=0
+		table.insert(monstersUpData,monsterData)
+	end
+	for i,val in ipairs(monsterFormations) do
+		monstersUpData[val.pos]=val
+	end
+
+	enemiesGrid:RefreshItemSlots(monstersUpData,self.gameObject,"HeroItemSlot")
+end
+
+
+
+function LoadRewardShow()
+	local rewardItems = GetRewardFromTbl(details.passRewardStr)
+	rewardGrid:RefreshItemSlots(rewardItems,self.gameObject,"ItemSlot")
+end
+
+function OnFightBtnClick(sender)
+	local view=CsBridge.OpenView("FormationView","FormationModel",true,true)
+	view:SetParamDataList(1,BattleCallBack,nil)
+end
+
+function OnRewardGridItemBtnClick(obj)
+	local reward = obj.m_data
+	local view = CsBridge.OpenView("ItemTipView","ItemTipModel",false,true)
+	local rewardTmp = {}
+	rewardTmp.id=reward.id
+	rewardTmp.typeId=reward.typeId
+	rewardTmp.count=1
+	view:SetParamDataList(rewardTmp,itemBaseIndex+itemDespIndex+PropsIndex+itemSuitIndex)
+	view:SendCommand("InitItemData")
+end
+
+function BattleCallBack(formationPos)
+	self:SendCommand("SkyscraperBattle",formationPos)
+end
+
+function OnNotification_SkyscraperBattle(objs)
+	CloseView()
+end
+
+function OnRecordBtnClick(sender)
+	self:SendCommand("Record")
+end
+
+function OnCloseBtnClick(sender)
+	CloseView()
+end
+
+function OnMaskClick(sender)
+	CloseView()
+end
+
+function CloseView()
+	if 	callBack~=nil then
+		callBack()
+	end
+	self:HideView(self.gameObject.name)
+end
+
+function InitAuraArr()
+    auraArr={}
+	for i, data in pairs(global_auraArr) do  
+		local newData={}
+		newData.id=data.id
+		newData.title=data.title
+		newData.icon=data.icon
+		newData.des=data.desp
+		newData.condition=data.cond
+		newData.isOn=false
+		newData.pos=i
+		newData.condDesp=data.condDesp
+		table.insert(auraArr,newData)
+    end
+end
+
+function CalcAura()
+    curAura = nil
+    --光环
+	for i,data in pairs(auraArr) do
+		local result=SplitString(data.condition,";")
+		local isAllOK=true
+		for  i = 0,result.Length-1 do
+			local str=SplitString(result[i],",")
+			local raceId=tonumber(str[0])
+			local num=tonumber(str[1])
+			local isEnough=DoCheckAuraNum(raceId,num)
+			if(isEnough==false)then
+				isAllOK=false
+				break
+			end
+		end
+		data.isOn=isAllOK
+		if(isAllOK==true) then
+		    curAura=data
+			break
+		end
+	end
+end
+
+function DoCheckAuraNum(raceId,num)
+	local isEnough=false
+	local col=0
+	local tbl=ResTblContainer:GetTable(HeroBase.actorTbl)
+	for i,data in pairs(monstersUpData) do
+		if(data.heroId~=0) then
+			local race= tbl:GetInt(data.heroId,HeroBase.group)
+			if(raceId==race) then
+				col=col+1
+			end
+		end
+	end
+	if(col>=num)then
+		isEnough=true
+	end
+	return isEnough
+end
+
+function ShowAura()
+    if(curAura == nil) then
+        CsBridge.IconData.SetIconByName(aura.gameObject,"new_com_guanghuan11")
+    else
+        CsBridge.IconData.SetIconByName(aura.gameObject,curAura.icon)
+    end
+end
+
+function OnaureoleClick(sender)
+	CsBridge.CacheAssetsByModule(self.Module,
+    function()
+		local view = CsBridge.OpenView("aureoleView","FormationModel",true,true)
+		view:SetParamDataList(auraArr, curAura, function()
+		    self:Active(self.gameObject.name)
+		end)
+	end, "aureoleView","aureoleItemSlot")
+end
+
+function OnRewardGridItemSlotClick(obj) 
+	local item = obj.m_data
+	if item.typeId == 3 then
+		return
+	end
+	CsBridge.CacheAssetsByModule(self.Module,
+	function()
+		local item = obj.m_data
+		local view = CsBridge.OpenView("ItemTipView", "ItemTipModel",false,true)
+		local rewardTmp={}
+		rewardTmp.id=item.id
+		rewardTmp.typeId=item.typeId
+		rewardTmp.count=1
+		if item.typeId == 0 then
+			rewardTmp.attrs = item.attrs
+		end 
+		if item.typeId == 4 then
+			rewardTmp.level = item.level
+		end 
+		view:SetParamDataList(rewardTmp,itemBaseIndex+itemDespIndex+PropsIndex+itemSuitIndex)
+		view:SendCommand("InitItemData")
+	end,"ItemTipView")
+end 
+
+function OnClose()
+
+end
+
+function DoExit()
+	fight_Lab = nil
+	level_Lab = nil
+
+	enemiesGrid = nil
+	rewardGrid = nil
+	aura = nil
+
+	monstersUpData = nil
+	details = nil
+	auraArr = nil
+	curAura = nil
+	callBack = nil
+end

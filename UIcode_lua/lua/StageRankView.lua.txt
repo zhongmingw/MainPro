@@ -1,0 +1,87 @@
+local loadedAPArenaRankItemSlot=require "APArenaRankItemSlot"
+
+local name_Lab
+local rank_Lab
+local lv_Lab
+local score_Lab
+
+local icon_Sprite
+local rank_Sprite
+
+local stageRankGrid
+
+local none_GO
+
+
+function DoInit()
+	self.Shadow = 1
+end
+
+function InitUI()
+	name_Lab=self:GetComponentAtPath("Center/NameTxt" ,CLS_TEXT)
+	rank_Lab=self:GetComponentAtPath("Center/RankTxt" ,CLS_TEXT)
+	lv_Lab=self:GetComponentAtPath("Center/LvTxt" ,CLS_TEXT)
+	score_Lab=self:GetComponentAtPath("Center/ScoreTxt" ,CLS_TEXT)
+
+	icon_Sprite=self:GetComponentAtPath("Center/IconSprite" ,"UnityEngine.UI.Image")
+	rank_Sprite=self:GetComponentAtPath("Center/RankSprite" ,"UnityEngine.UI.Image")
+
+    stageRankGrid = self:GetComponentAtPath("Center/ScrollRect/Viewport/StageRankGrid" ,"UIItemGrid")
+    
+    none_GO = self:GetGameObjectAtPath("Center/None")
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+	end 
+	self:SendCommand("InitStageRankData")
+end 
+
+function OnNotification_UpdateStageRankView(objs)
+	local resp = objs[0]
+    local selfRankInfo=resp.selfRankInfo
+    local rankInfos = resp.rankInfos
+    name_Lab.text=selfRankInfo.playerBaseInfo.name
+	if selfRankInfo.rank==-1 then
+		rank_Lab.text="-"
+	else
+		rank_Lab.text=tostring(selfRankInfo.rank)
+	end
+	score_Lab.text=tostring(selfRankInfo.score)
+    lv_Lab.text=tostring(selfRankInfo.playerBaseInfo.level)
+	selfCombat_Lab.text=tostring(selfRankInfo.combat)
+
+	SetIconByHeadId(icon_Sprite.gameObject,selfRankInfo.playerBaseInfo.icon)
+	rank_Sprite.gameObject:SetActive(true)
+	if selfRankInfo.rank<=3 and selfRankInfo.rank>0 then
+		CsBridge.IconData.SetIconByName(rank_Sprite.gameObject,"new_com_paiming"..selfRankInfo.rank)
+	else
+		rank_Sprite.gameObject:SetActive(false)
+	end
+    none_GO:SetSelfActive(rankInfos==nil)
+	stageRankGrid:RefreshItemSlots(rankInfos,self.gameObject,"StageRankItemSlot")
+end
+
+function OnCloseBtnClick(sender)
+	self:HideView(self.gameObject.name)
+end
+
+function OnClose()
+	-- body
+end
+
+function DoExit()
+	name_Lab = nil
+	rank_Lab = nil
+	lv_Lab = nil
+	score_Lab = nil
+
+	icon_Sprite = nil
+	rank_Sprite = nil
+
+	stageRankGrid = nil
+
+	none_GO = nil
+end

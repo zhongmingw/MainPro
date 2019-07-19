@@ -1,0 +1,147 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-03-27 18:20:09
+local utils = require "HeroBagUtils"
+local commonHeroBagUtils = require "CommonHeroBagUtils"
+
+local curHero
+local heroResetDataFromTbl
+local resetPreviewData
+
+local function GetHeroResetData(hero)
+    if heroResetDataFromTbl == nil then
+        heroResetDataFromTbl = utils.GetHeroResetDataFromTbl()
+    end
+
+    return heroResetDataFromTbl[hero.grade]
+end
+
+local function GetResetConsumeStr()
+    local consumeStr = curHero.resetData.consumption..GetNameByResId(ResourceEnum.Gem)
+    local item = curHero.resetData.item
+    if item then
+        consumeStr = consumeStr..Language:getStr("And")..item.count..GetItemNameByItemId(item.id)
+    end
+    return consumeStr
+end
+
+local function DoResetHero()
+    if ShowSoulDesImprintView(curHero,self) then
+        return
+    end
+    local onFinished = function(resp)
+        self:SendNotification("ShowHeroResetEffect",function()
+            local confirmCbk = function()
+                self:HideView("HeroResetView", nil, false)
+                MsgCenter:Broadcast(Notify_HeroReset)
+            end
+            PopRewardView(self,resp.rewardItems, confirmCbk)
+        end)
+    end
+    utils.RequestResetHero(curHero.uid,true,onFinished)
+end
+
+local function GetHeroRestViewData(hero)
+    local data = {
+        resetData = hero.resetData
+    }
+    data.oldHero = {
+        level = GetHeroAllLevel(hero.grade, hero.level, hero.distillationLevel,hero.breakLevel),
+        name = hero.name,
+        race = hero.race,
+        distillationStar = hero.distillationStar,
+        distillationLevel = hero.distillationLevel,
+        quality = hero.quality,
+        model = hero.model
+    }
+    local newHeroId = utils.GetResetHeroId(hero)
+    local name = ResTblContainer:GetPropToStr(newHeroId,HeroBase.title,HeroBase.actorTbl)
+    local model = ResTblContainer:GetPropToStr(newHeroId,HeroBase.model,HeroBase.actorTbl)
+    local quality = ResTblContainer:GetPropToInt(newHeroId,HeroBase.quality,HeroBase.actorTbl)
+    data.newHero = {
+        level = 1,
+        name = name,
+        race = hero.race,
+        quality = quality,
+        model = model
+    }
+
+    return data
+end
+
+function DoInit()
+end
+
+function InitProperties()
+end
+
+function DoOnExit()
+    utils = nil
+
+    curHero = nil
+    heroResetDataFromTbl = nil
+    resetPreviewData = nil
+end
+
+function OnCommand_InitData(objs)
+    curHero = objs[0]
+end
+
+function OnCommand_InitHeroResetData(objs)
+    curHero.resetData = GetHeroResetData(curHero)    
+    self:SendNotification("RefreshHeroResetView", GetHeroRestViewData(curHero))
+end
+
+function OnCommand_ResetHero(objs)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        CsBridge.OpenView("HeroResetDetailsView","HeroResetModel", true)
+    end,"HeroResetDetailsView","ItemSlot")
+end
+
+function OnCommand_InitPreviewData(objs)
+    local onFinished = function(resp)
+        resetPreviewData = resp.rewardItems
+        self:SendNotification("RefreshPreviewView",resetPreviewData)
+    end
+    utils.RequestResetHero(curHero.uid,false,onFinished)
+end
+
+function OnCommand_ResetHeroConfirm(objs)
+    if ShowSoulDesImprintView(curHero,self) then
+        return
+    end
+    if CheckHeroShowDutyTip(curHero,
+        function()
+            UpdateHeroDuty(curHero)
+        end) then
+        return
+    end
+    local addHeroCount = 0
+    for i,v in ipairs(resetPreviewData) do
+        if v.typeId == ItemTypeEnum.Hero then
+            addHeroCount = addHeroCount+1
+        end
+    end
+    utils.ShowMsgBox(
+        string.format(Language:getStr("ResetHeroDesp"),GetResetConsumeStr()),
+        function()
+            if not CheckResEnough(ResourceEnum.Gem,curHero.resetData.consumption,true) then
+                return
+            end
+            local item = curHero.resetData.item
+            local itemEnough = item == nil and true or CheckPackItemEnough(item.id,item.count,true)
+            if not itemEnough then
+                return
+            end
+            if not CheckHeroBagEnough(addHeroCount, true) then
+                return
+            end
+            DoResetHero()
+        end)
+end
+
+function OnCommand_OnClose(objs)
+    curHero = nil
+    resetPreviewData = nil
+end

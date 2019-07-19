@@ -1,0 +1,54 @@
+local isInit = false
+local selectedIndex = nil
+local togGroup
+
+
+function DoInit( ... )
+	-- body
+	self.Shadow = 1
+end
+
+function InitUI( ... )
+	-- body
+	togGroup = self.transform:Find("TogGroup")
+
+end
+
+function OnAnimationFinished( ... )
+	-- body
+	if not isInit then
+		InitUI()
+		isInit = true
+	end
+	for i=1,togGroup.childCount-1 do
+		local tog = togGroup:GetChild(i):GetComponent("ToggleArchly")
+		tog.isOn = false
+	end
+end
+
+function OnTogGroupClick(isOn,index)
+	if not isOn then
+		return
+	end
+	selectedIndex = index
+end 
+
+function OnBuyBtnClick(sender)
+	if selectedIndex then
+		self:SendCommand("ThrowPoint",selectedIndex)
+		Close()
+	end
+end
+
+function OnCloseBtnClick(sender)
+    Close()
+end
+
+function Close()
+	selectedIndex = nil
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+    self.Module = nil
+end

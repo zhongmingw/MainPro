@@ -1,0 +1,7 @@
+
+function OnHeroSummonShopRowItemSlotBindValue(slot,data)
+
+	local heroSummonShopGrid = slot.transform:Find("HeroSummonShopGrid"):GetComponent("UIItemGrid")
+
+	heroSummonShopGrid:RefreshItemSlots(data,slot.m_grid.viewBase.gameObject,"HeroSummonShopItemSlot")
+end

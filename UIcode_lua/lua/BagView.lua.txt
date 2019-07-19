@@ -1,0 +1,110 @@
+local curQuality=0
+
+local itemResult = {}
+
+local nothingFlag
+
+local boxFlag 
+local piecesFlag
+
+local typeTogArr 
+
+local curView
+
+local isInit = false
+
+function DoInit()
+	self.Shadow = 1
+end 
+
+function InitUI()
+
+	nothingFlag = self:GetGameObjectAtPath("Center/Nothing")
+	boxFlag = self:GetGameObjectAtPath("Top/TypeTogGroup/ItemTog/NewFlag")
+	piecesFlag = self:GetGameObjectAtPath("Top/TypeTogGroup/PiecesTog/NewFlag")
+	typeTogArr = {}
+	local typeTog = self.transform:Find("Top/TypeTogGroup")
+	for i=0, typeTog.childCount-1 do
+		local type = typeTog:GetChild(i):GetComponent("ToggleArchly")
+		table.insert(typeTogArr, type)
+	end
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+	end 
+	self:SendCommand("InitBagData")
+end 
+
+function IsSetAnchor()
+	return true
+end 
+
+function OnNotification_OpenTypeView(objs)
+	typeTogArr[objs[0]].isOn = true
+end 
+
+function OnNotification_RefreshView(objs)
+	local curType = objs[0]
+	local nothing = objs[1]
+	nothingFlag:SetActive(nothing)
+	if curView ~= nil then
+		curView:HideView(curView.gameObject.name)
+	end 
+	if curType == 1 and not nothing then
+		CsBridge.CacheAssetsByModule(self.Module,function()
+			curView = CsBridge.OpenView("BagEquipView","BagModel",false,true)
+		end, "BagEquipView","ItemSlot")
+    elseif curType == 2 then
+		CsBridge.CacheAssetsByModule(self.Module,function()
+			curView = CsBridge.OpenView("BagItemView","BagModel",false,true)
+		end, "BagItemView","ItemSlot")
+    elseif curType == 3 then
+		CsBridge.CacheAssetsByModule(self.Module,function()
+			curView = CsBridge.OpenView("BagPiecesView","BagModel",false,true)
+		end, "BagPiecesView","BagPiecesItemSlot")
+	elseif curType == 4 then
+		CsBridge.CacheAssetsByModule(self.Module,function()
+			curView = CsBridge.OpenView("BagRelicView","BagModel",false,true)
+		end, "BagRelicView","ItemSlot")
+	end
+end 
+
+function OnNotification_RefreshBagRedFlag(objs)
+	boxFlag:SetSelfActive(objs[0])
+	piecesFlag:SetSelfActive(objs[1])
+end 
+
+function OnTypeTogGroupClick(isOn, index)
+	if not isOn then
+		return
+	end
+	self:SendCommand("SwitchType",index+1)
+end 
+
+function OnMaskClick(sender)
+	Close()
+end 
+
+function OnCloseBtnClick(sender)
+	Close()
+end 
+
+function Close() 
+	self:SendCommand("CloseBagView",function()
+		self:ReturnBack()
+	end)
+end
+
+function DoExit()
+		curQuality = nil
+		itemResult = nil
+		nothingFlag = nil
+		boxFlag  = nil
+		piecesFlag = nil
+		typeTogArr  = nil
+		curView = nil
+		isInit = nil
+end

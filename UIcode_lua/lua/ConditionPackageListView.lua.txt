@@ -1,0 +1,62 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-11-26 11:04:15
+require "ConditionPackageItemSlot"
+
+local isInit = false
+local grid
+
+function DoInit()	
+    self.Shadow = 1
+    self.Anim = 8
+    MsgCenter:Subscribe(Notify_ConditionPackageBuy, OnConditionPackageBuy)
+end
+
+function OnConditionPackageBuy()
+    self:SendCommand("UpdateConditionPackageArr")
+end
+
+function InitUI()
+    grid = self:GetComponentAtPath("Center/awardSV/ScrollRect/Viewport/Grid",CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitConditionPackageListData")
+end
+
+function Active()
+    self:SendCommand("UpdateConditionPackageArr")
+end
+
+function OnClose()
+    grid:ClearItems()
+end
+
+function OnNotification_RefreshConditionPackageListView(objs)
+    local arr = objs[0]
+    grid:RefreshItemSlots(arr,self.gameObject,"ConditionPackageItemSlot")
+end
+
+function OnGridConditionPackageItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("SelectConditionPackage",data)
+end
+
+function OnCloseBtnClick(sender)
+    self:ReturnBack()
+end
+
+function OnMaskClick(sender)
+    self:ReturnBack()
+end
+
+function DoExit()
+    MsgCenter:Unsubscribe(Notify_ConditionPackageBuy, OnConditionPackageBuy)
+    isInit = nil
+    grid = nil
+end

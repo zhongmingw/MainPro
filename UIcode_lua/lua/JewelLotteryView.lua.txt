@@ -1,0 +1,152 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-01-28 17:58:50
+
+local isInit = false
+
+local topRes
+local bonusBtnObj
+local bonusProgress
+local bonusProgressNumTxt
+
+local onceConsume
+local tenthConsume
+
+local spineRoot
+local lotterySpine
+
+local effectObj
+
+local JEWEL_LOTTERY_ONCE = 1
+local JEWEL_LOTTERY_TENTH = 10
+
+function DoInit()	
+    self.Anim = 0
+end
+
+function InitUI()
+    topRes = GetConsumeArr(self:GetComponentAtPath("Center/Top",CLS_RECTTRANSFORM))
+    bonusBtnObj = self:GetGameObjectAtPath("Center/BonusBtn")
+    bonusProgress = self:GetComponentAtPath("Center/Progress",CLS_SLIDER)
+    bonusProgressNumTxt = self:GetComponentAtPath("Center/Progress/NumTxt",CLS_TEXT)
+    onceConsume = {
+        icon = self:GetGameObjectAtPath("button/LotteryOnceBtn/Consume/IconImg"),
+        num = self:GetComponentAtPath("button/LotteryOnceBtn/Consume/NumTxt",CLS_TEXT)
+    }
+    tenthConsume = {
+        icon = self:GetGameObjectAtPath("button/LotteryTenthBtn/Consume/IconImg"),
+        num = self:GetComponentAtPath("button/LotteryTenthBtn/Consume/NumTxt",CLS_TEXT)
+    }
+    spineRoot = self:GetComponentAtPath("Center/SpineRoot",CLS_RECTTRANSFORM)
+    effectObj = self:GetGameObjectAtPath("Effect")
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitJewelLotteryData")
+end
+
+function BeoforeReturnBack()
+    self:HideView(self.gameObject.name)
+end
+
+local function RefreshTopView(topData)
+    for i,v in ipairs(topRes) do
+        ShowOneConsume(v.icon, v.num, topData[i])
+    end
+end
+
+local function RefreshBonusView(bonusData)
+    SetSliderProgress(bonusProgressNumTxt, bonusProgress, bonusData.curNum, bonusData.allNum)
+    bonusBtnObj:SetSelfAndChildrenGray(bonusData.curNum < bonusData.allNum)
+end
+
+local function RefreshConsumes(consumes)
+    ShowOneConsume(onceConsume.icon, onceConsume.num, consumes[JEWEL_LOTTERY_ONCE])
+    SetFontColorWithEnough(onceConsume.num,function()
+        return CheckItemEnough(consumes[JEWEL_LOTTERY_ONCE].id,consumes[JEWEL_LOTTERY_ONCE].typeId,consumes[JEWEL_LOTTERY_ONCE].count,false)
+    end,color2)
+    ShowOneConsume(tenthConsume.icon, tenthConsume.num, consumes[JEWEL_LOTTERY_TENTH])
+    SetFontColorWithEnough(tenthConsume.num,function()
+        return CheckItemEnough(consumes[JEWEL_LOTTERY_TENTH].id,consumes[JEWEL_LOTTERY_TENTH].typeId,consumes[JEWEL_LOTTERY_TENTH].count,false)
+    end,color2)
+end
+
+local function RefreshLotterySpine()
+    if lotterySpine then
+        return
+    end
+    local spineName = "JewelLotterySpine"
+    local animName = "stand"
+    CsBridge.CacheAssetsByModule( self.Module,  function()
+        local obj = CsBridge.objectCache:CreateObject(spineName, true, spineRoot)
+        lotterySpine = obj:GetComponent(CLS_SKELETONGRAPHIC)
+        lotterySpine:PlayAnimation(animName, true)
+    end, spineName)
+end
+
+function OnNotification_RefreshJewelLottryView(objs)
+    local topData, bonusData, consumes = objs[0], objs[1], objs[2]
+    RefreshTopView(topData)
+    RefreshBonusView(bonusData)
+    RefreshConsumes(consumes)
+    RefreshLotterySpine()
+end
+
+function OnNotification_ShowJewelLotteryEffect(objs)
+    local onFinished = objs[0]
+    effectObj:SetSelfActive(true)
+    lotterySpine:PlayAnimation("born", false, function()
+        effectObj:SetSelfActive(false)
+        onFinished()
+        lotterySpine:PlayAnimation("stand", true)
+    end)
+end
+
+function OnLotteryOnceBtnClick(sender)
+    self:SendCommand("LotteryJewel", JEWEL_LOTTERY_ONCE)
+end
+
+function OnLotteryTenthBtnClick(sender)
+    self:SendCommand("LotteryJewel", JEWEL_LOTTERY_TENTH)
+end
+
+function OnBonusBtnClick(sender)
+    self:SendCommand("GetJewelBonus")
+end
+
+function OnConsume1Click(sender)
+    self:SendCommand("ShowJewelLotteryConsumeTip", 1)
+end
+
+function OnConsume2Click(sender)
+    self:SendCommand("ShowJewelLotteryConsumeTip", 2)
+end
+
+function OnHelpBtnClick(sender)
+    ShowHelpTip(self,INSTRUCTION_JEWEL_LOTTERY)
+end
+
+function DoExit()
+    isInit = nil
+
+    topRes = nil
+    bonusBtnObj = nil
+    bonusProgress = nil
+    bonusProgressNumTxt = nil
+
+    onceConsume = nil
+    tenthConsume = nil
+
+    spineRoot = nil
+    lotterySpine = nil
+
+    effectObj = nil
+
+    JEWEL_LOTTERY_ONCE  = nil
+    JEWEL_LOTTERY_TENTH  = nil
+end

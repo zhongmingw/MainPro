@@ -1,0 +1,69 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-09-12 15:30:24
+
+local isInit = false
+
+local winSpine
+local numRoot
+local numLayout
+
+local SCALE_FACTOR = 0.8
+local SPACE_FACTOR = 10
+local MAX_SPACE = -28
+
+function DoInit()
+    self.Anim = 0
+    self.Shadow = 2
+end
+
+function InitUI()
+    winSpine = self:GetComponentAtPath("Center/SpineGO/WinSpine",CLS_SKELETONGRAPHIC)
+    numRoot = self:GetComponentAtPath("Center/NumRoot",CLS_RECTTRANSFORM)
+    numLayout = self:GetComponentAtPath("Center/NumRoot",CLS_HORIZONTAL_LAYOUT_GROUP)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitGloryRoadPassFightData")
+end
+
+function OnClose()
+    for i=0,numRoot.childCount-1 do
+        numRoot:GetChild(i).gameObject:SetSelfActive(false)
+    end
+end
+
+function OnNotification_RefreshGloryRoadPassFightView(objs)
+    winSpine:PlayAnimation("apear",false,nil,
+	function ()
+		winSpine:PlayAnimation("stand",true,nil,nil)
+    end)
+    SetPassImg(objs[0])
+end
+
+function SetPassImg(passNumArr)
+    for i=0,numRoot.childCount-1 do
+        local numObj = numRoot:GetChild(i).gameObject
+        if passNumArr[i+1] then
+            CsBridge.IconData.SetIconByName(numObj,"new_com_number"..passNumArr[i+1])
+            numObj:SetSelfActive(true)
+        else
+            numObj:SetSelfActive(false)
+        end
+    end
+end
+
+function DoExit()
+     isInit = nil
+     winSpine= nil
+     numRoot= nil
+     numLayout= nil
+     SCALE_FACTOR = nil
+     SPACE_FACTOR = nil
+     MAX_SPACE = nil
+end

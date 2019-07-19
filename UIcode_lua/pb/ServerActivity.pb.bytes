@@ -1,0 +1,837 @@
+
+ˇÖ
+ServerActivity.protoServerActivitystage.protoplayerData.protoSkyscraperData.protoArenaData.protoLimitTurnTableData.proto"’
+ActiveActivityItem
+
+id (
+type (
+	startTime (
+endTime (
+content (	
+title (	
+description (	
+bgPic (	
+topPic	 (	
+rawPic
+ (	
+order (
+active ("
+GetActivityReq
+types ("I
+GetActivityResp6
+
+activities (2".ServerActivity.ActiveActivityItem"!
+GetAllActivitiesReq
+
+id ("Q
+GetAllActivitiesResp9
+activityItems (2".ServerActivity.ActiveActivityItem"%
+GetAPArenaActivityReq
+type ("T
+GetAPArenaActivityResp:
+activityItems (2#.ServerActivity.APArenaActivityItem"u
+APArenaActivityItem
+subId (
+count (
+title (	"
+rewards (2.stage.RewardItem
+score ("&
+GetAutoTaskActivityReq
+type ("V
+GetAutoTaskActivityResp;
+activityItems (2$.ServerActivity.AutoTaskActivityItem"õ
+AutoTaskActivityItem
+subId (
+star (
+count (
+title (	"
+rewards (2.stage.RewardItem
+finishedCount (
+taken ("'
+GetDestructionActivityReq
+
+id ("l
+GetDestructionActivityResp=
+
+activities (2).ServerActivity.DestructionActivityConfig
+endTime ("t
+DestructionActivityConfig
+
+id (
+type ("
+rewards (2.stage.RewardItem
+name (	
+pic (	"^
+DestructionChallengeReq
+
+id (
+type ()
+formationPos (2.stage.FormationPos"h
+RaidDestructionReq
+
+id (
+type (
+count ()
+formationPos (2.stage.FormationPos"K
+RaidDestructionResp"
+rewards (2.stage.RewardItem
+isKilled ("&
+GetDestructionRankReq
+count ("ç
+GetDestructionRankResp6
+	rankItems (2#.ServerActivity.DestructionRankItem;
+playerRankItem (2#.ServerActivity.DestructionRankItem"f
+DestructionRankItem2
+playerBaseInfo (2.playerData.PlayerBaseInfo
+score (
+rank ("v
+PlayerDestruction
+type (
+	monsterId (
+monsterCurHp (
+monsterLevel (
+monsterMaxHp ("g
+HeroSummonActivityConfig
+
+id (
+subId (
+hero ("
+rewards (2.stage.RewardItem"&
+GetHeroSummonActivityReq
+
+id ("Y
+GetHeroSummonActivityResp<
+
+activities (2(.ServerActivity.HeroSummonActivityConfig"$
+GetCallHeroActivityReq
+
+id ("ô
+GetCallHeroActivityResp:
+
+activities (2&.ServerActivity.CallHeroActivityConfig
+score (
+
+totalScore (
+round (
+maxRound ("Ñ
+CallHeroActivityConfig
+
+id (
+subId (
+count (
+title (	"
+rewards (2.stage.RewardItem
+payIdd (" 
+GetSuperPackageReq
+
+id ("P
+GetSuperPackageResp9
+
+activities (2%.ServerActivity.ActivityPackageConfig"Ÿ
+ActivityPackageConfig
+
+activityId (
+
+id (
+remain (
+vip (
+price (
+pid (	
+currency (	
+title (	
+desp	 (	
+currencySign
+ (	"
+rewards (2.stage.RewardItem"'
+GetLoginRewardActivityReq
+
+id ("Y
+GetLoginRewardActivityResp;
+activityItems (2$.ServerActivity.DailyLoginConfigItem"W
+DailyLoginConfigItem0
+config (2 .ServerActivity.DailyLoginConfig
+state ("W
+DailyLoginConfig
+
+activityId (
+day ("
+rewards (2.stage.RewardItem"3
+LoginRewardReq
+
+activityId (
+dayId ("5
+LoginRewardResp"
+rewards (2.stage.RewardItem"'
+GetDailyRewardActivityReq
+
+id ("Q
+GetDailyRewardActivityResp3
+activity (2!.ServerActivity.DailyRewardConfig"Z
+DailyRewardConfig
+
+activityId (
+title (	"
+rewards (2.stage.RewardItem"*
+GetDragonCallHeroActivityReq
+
+id ("ü
+GetDragonCallHeroActivityResp:
+
+activities (2&.ServerActivity.CallHeroActivityConfig
+score (
+
+totalScore (
+round (
+maxRound ("{
+DragonCallHeroActivityConfig
+
+id (
+subId (
+count (
+title (	"
+rewards (2.stage.RewardItem"#
+GetMiracleActivityReq
+
+id ("Q
+GetMiracleActivityResp7
+
+activities (2#.ServerActivity.MiracleActivityResp"S
+MiracleActivityResp-
+config (2.ServerActivity.MiracleConfig
+score ("k
+MiracleConfig
+
+id (
+camp (
+count (
+title (	"
+rewards (2.stage.RewardItem"*
+GetHonorOfComposeActivityReq
+
+id ("_
+GetHonorOfComposeActivityResp>
+
+activities (2*.ServerActivity.HonorOfComposeActivityResp"a
+HonorOfComposeActivityResp4
+config (2$.ServerActivity.HonorOfComposeConfig
+count ("x
+HonorOfComposeConfig
+
+id (
+star (
+title (	"
+rewards (2.stage.RewardItem
+rewardLimit ("#
+GetLotteryActivityReq
+
+id ("ó
+GetLotteryActivityResp9
+
+activities (2%.ServerActivity.LotteryActivityConfig
+score (
+
+totalScore (
+round (
+maxRound ("t
+LotteryActivityConfig
+
+id (
+subId (
+count (
+title (	"
+rewards (2.stage.RewardItem"#
+GetPveDropActivityReq
+
+id ("S
+GetPveDropActivityResp9
+
+activities (2%.ServerActivity.PveDropActivityConfig"G
+PveDropActivityConfig
+
+id ("
+rewards (2.stage.RewardItem"'
+GetLotteryDropActivityReq
+
+id ("[
+GetLotteryDropActivityResp=
+
+activities (2).ServerActivity.LotteryDropActivityConfig"K
+LotteryDropActivityConfig
+
+id ("
+rewards (2.stage.RewardItem"$
+GetExchangeActivityReq
+
+id ("O
+GetExchangeActivityResp4
+
+activities (2 .ServerActivity.ExchangeItemResp"X
+ExchangeItemResp4
+activity (2".ServerActivity.ExchangeItemConfig
+remain ("õ
+ExchangeItemConfig
+
+id (
+subId ("
+rewards (2.stage.RewardItem!
+prices (2.stage.RewardItem
+buyLimit (
+	extraInfo ("7
+ExchangeReq
+
+id (
+subId (
+count ("6
+ExchangeResp&
+rewardItems (2.stage.RewardItem" 
+GetDailyPackageReq
+
+id ("[
+GetDailyPackageResp0
+
+activities (2.ServerActivity.DailyPackage
+
+isTodayBuy ("
+DailyPackage
+
+activityId (
+payId (
+remain (
+vip (
+price (
+pid (	
+currency (	
+title (	
+desp	 (	
+currencySign
+ (	"
+rewards (2.stage.RewardItem
+status (
+day ("=
+HeroGangReq
+
+id (
+subId (
+subMaterial ("'
+GetCycleChargeActivityReq
+
+id ("[
+GetCycleChargeActivityResp-
+activity (2.ServerActivity.CycleCharge
+canBuy ("“
+CycleCharge
+
+activityId (
+payId (
+remain (
+vip (
+price (
+pid (	
+currency (	
+title (	
+desp	 (	
+currencySign
+ (	"
+rewards (2.stage.RewardItem")
+GetLimitCallHeroActivityReq
+
+id ("_
+GetLimitCallHeroActivityResp?
+
+activities (2+.ServerActivity.LimitCallHeroActivityConfig"9
+LimitCallHeroActivityConfig
+
+id (
+heroId ("'
+GetDailyChargeActivityReq
+
+id ("Y
+GetDailyChargeActivityResp;
+
+activities (2'.ServerActivity.DailyChargeActivityResp"k
+DailyChargeActivityResp1
+config (2!.ServerActivity.DailyChargeConfig
+score (
+active ("n
+DailyChargeConfig
+
+id (
+day (
+price (
+title (	"
+rewards (2.stage.RewardItem"]
+HalloweenChallengeReq
+
+id (
+level ()
+formationPos (2.stage.FormationPos"%
+GetHalloweenActivityReq
+
+id ("Z
+GetHalloweenActivityResp
+status (
+HallowmasPrice (
+HallowmasLimit ("m
+PlayerHalloween
+level (
+
+id (
+acId (1
+monsterInfos (2.ServerActivity.MonsterInfo"5
+MonsterInfo
+pos (
+curHp (
+
+hp (">
+PlayerHalloweenInfo
+count (
+lastPurchaseTime ("
+GetGroupBuyReq
+
+id ("P
+GetGroupBuyResp+
+goods (2.ServerActivity.GroupBuyGood
+discount (	"z
+GroupBuyGood.
+config (2.ServerActivity.GroupBuyConfig
+remain (*
+groupBuy (2.ServerActivity.GroupBuy"v
+GroupBuyConfig
+
+id (
+count (#
+goodItem (2.stage.RewardItem$
+	priceItem (2.stage.RewardItem"2
+GetGroupBuyInfoReq
+acId (
+goodId ("J
+GetGroupBuyInfoResp3
+groupBuyInfos (2.ServerActivity.GroupBuyInfo"$
+GetMyGroupBuyInfoReq
+acId ("D
+GetMyGroupBuyInfoResp+
+	groupBuys (2.ServerActivity.GroupBuy"M
+GroupBuyInfo*
+groupBuy (2.ServerActivity.GroupBuy
+	avaliable ("Ñ
+GroupBuy
+version (
+
+activityId (
+goodId (
+createdTime (
+count (
+rebateCount (
+
+id (	"6
+ParticipateGroupBuyReq
+acId (
+goodId ("$
+GroupBuyStatusResp
+status ("1
+CreateGroupBuyReq
+acId (
+goodId ("C
+RefreshDiscountBuyReq
+acId (
+free (
+useGem ("(
+RefreshDiscountBuyResp
+status (".
+DiscountBuyReq
+acId (
+goodId ("!
+DiscountBuyResp
+status ("~
+PlayerDiscountActivity
+acId (
+lastFreeRefreshTime (
+refreshCount (#
+goods (2.ServerActivity.Good"`
+Good5
+
+goodConfig (2!.ServerActivity.DiscountBuyConfig
+count (
+
+totalCount ("∆
+DiscountBuyConfig
+
+id (
+Discount (
+Count (
+special (
+lowestDiscount (#
+goodItem (2.stage.RewardItem$
+	priceItem (2.stage.RewardItem
+purchase (" 
+InitDiscountBuyReq
+
+id ("m
+InitDiscountBuyResp
+status (!
+DoubleElevenDiscountPrice (#
+DoubleElevenDiscountRefresh ("#
+GetNewDailyPackageReq
+
+id ("H
+GetNewDailyPackageResp.
+items (2.ServerActivity.NewDailyPackage"ä
+NewDailyPackage
+
+activityId (
+level (
+payId (
+type ("
+rewards (2.stage.RewardItem
+remain (
+vip (
+price (
+pId	 (	
+currency
+ (	
+title (	
+description (	
+currencySign (	
+status ("/
+GetActivityRankReq
+
+id (
+count ("¥
+GetCombatActivityRankResp5
+	rankInfos (2".SkyscraperData.CombatRankInfoItem8
+selfRankInfo (2".SkyscraperData.CombatRankInfoItem
+endTime (
+rewardClaimed (""
+GetActivityRewardReq
+
+id (";
+GetActivityRewardResp"
+rewards (2.stage.RewardItem"ü
+GetArenaActivityRankResp+
+	rankInfos (2.ArenaData.ArenaRankItem.
+selfRankInfo (2.ArenaData.ArenaRankItem
+endTime (
+rewardClaimed ("+
+GetInvestmentActivityReq
+useless ("R
+GetInvestmentResp=
+
+activities (2).ServerActivity.GetInvestmentActivityResp"k
+GetInvestmentActivityResp=
+
+activities (2).ServerActivity.InvestmentActivityConfigs
+endTime ("Ä
+InvestmentActivityConfigs
+acId (
+type (
+enabled ((
+payInfo (2.ServerActivity.PayInfo
+title (	
+description (	
+bgPic (	
+topPic (	7
+configs	 (2&.ServerActivity.InvestmentActivityInfo
+progress
+ ("b
+InvestmentActivityInfo
+active (8
+config (2(.ServerActivity.InvestmentActivityConfig"z
+InvestmentActivityConfig
+
+id (
+type (
+title (	
+	parameter ("
+rewards (2.stage.RewardItem"J
+GetInvestmentActivityRewardReq
+acId (
+type (
+parm ("E
+GetInvestmentActivityRewardResp"
+rewards (2.stage.RewardItem"â
+PayInfo
+payId (
+vipExp (
+price (
+pId (	
+currency (	
+title (	
+desc (	
+currencySign (	"ñ
+GetJewelActivityResp:
+
+activities (2&.ServerActivity.CallHeroActivityConfig
+score (
+
+totalScore (
+round (
+maxRound ("X
+GetGloryRoadActivityResp<
+
+activities (2(.ServerActivity.GetGloryRoadActivityInfo"u
+GetGloryRoadActivityInfo7
+config (2'.ServerActivity.GloryRoadActivityConfig
+active (
+curCount ("<
+GetGloryRoadActivityRewardReq
+acId (
+count ("H
+GetGloryRoadActivityRewardResp&
+rewardItems (2.stage.RewardItem"g
+GloryRoadActivityConfig
+
+id (
+count (
+title (	"
+rewards (2.stage.RewardItem" 
+GetActivityByIdReq
+
+id ("c
+GetFirstChargeActivityResp6
+config (2&.ServerActivity.CallHeroActivityConfig
+score ("&
+GetHeroGrowthActivityReq
+
+id ("a
+GetHeroGrowthActivityResp2
+
+activities (2.ServerActivity.HeroGrowthItem
+showTips ("y
+HeroGrowthItem
+subId (
+count (
+description (	"
+rewards (2.stage.RewardItem
+progress ("*
+GetActivitySlideshowReq
+useless ("Q
+GetActivitySlideshowResp5
+list (2'.ServerActivity.ActivitySlideshowConfig"h
+ActivitySlideshowConfig
+
+id (
+skipType (
+skipParameter (
+SlideshowPicture (	"%
+ActivitySlideshowLogReq
+
+id ("*
+ActivitySlideshowLogResp
+status (")
+LimitLotteryShopReq
+
+activityId ("\
+LimitLotteryShopResp1
+results (2 .ServerActivity.LotteryShopGoods
+	priceType ("ü
+LotteryShopGoods
+
+id (
+shopId (%
+
+rewardItem (2.stage.RewardItem
+cost (2.stage.RewardItem
+remainCount (
+
+limitCount ("H
+LimitLotteryShoppingReq
+
+activityId (
+
+id (
+count ("A
+LimitLotteryShoppingResp%
+
+rewardItem (2.stage.RewardItem"%
+ExchangeShopReq
+
+activityId ("J
+ExchangeShopResp6
+shopList (2$.ServerActivity.ExchangeShopItemList"x
+ExchangeShopItemList
+
+id (
+cost (2.stage.RewardItem3
+	goodsList (2 .ServerActivity.LotteryShopGoods"=
+BarteringReq
+
+activityId (
+
+id (
+count ("6
+BarteringResp%
+
+rewardItem (2.stage.RewardItem"%
+Rush2BuyShopReq
+
+activityId ("q
+Rush2BuyShopResp-
+nowShop (2.ServerActivity.Rush2BuyShop.
+nextShop (2.ServerActivity.Rush2BuyShop"l
+Rush2BuyShop
+
+id (
+	startTime (
+endTime (,
+goods (2.ServerActivity.Rush2BuyGoods"∂
+Rush2BuyGoods
+
+id (!
+reward (2.stage.RewardItem
+cost (2.stage.RewardItem
+count (
+limit (
+remain ('
+originalCost (2.stage.RewardItem"-
+Rush2BuyReq
+goodsId (
+count ("
+Rush2BuyResp
+status ("!
+GetArenaStandActReq
+
+id ("a
+GetArenaStandActResp:
+
+activities (2&.ServerActivity.CallHeroActivityConfig
+score ("
+GetHeroBoutActReq
+
+id ("_
+GetHeroBoutActResp:
+
+activities (2&.ServerActivity.CallHeroActivityConfig
+score ("!
+GetBattlePassActReq
+
+id ("a
+GetBattlePassActResp:
+
+activities (2&.ServerActivity.CallHeroActivityConfig
+score ("!
+GetTrialTowerActReq
+
+id ("a
+GetTrialTowerActResp:
+
+activities (2&.ServerActivity.CallHeroActivityConfig
+score ("&
+LimitedTaskActivityReq
+acid ("ã
+LimitedTaskActivityResp6
+items (2'.ServerActivity.LimitedTaskActivityItem8
+zeroPos (2'.ServerActivity.LimitedTaskActivityItem"ó
+LimitedTaskActivityItem
+acid (
+
+id (
+count (
+curCount (
+title (	
+active ("
+rewards (2.stage.RewardItem"8
+LimitedTaskActivityRewardReq
+acid (
+
+id ("G
+LimitedTaskActivityRewardResp&
+rewardItems (2.stage.RewardItem"(
+GMLimitedTaskActivityReq
+type ("+
+GMLimitedTaskActivityResp
+status ("¶
+JewelActivityConfig
+
+activityId (
+subId (
+count (
+description (	&
+rewardItems (2.stage.RewardItem
+curCount (
+active ("0
+GetJewelQualityActivityReq
+
+activityId ("[
+GetJewelQualityActivityResp<
+activityConfigs (2#.ServerActivity.JewelActivityConfig"=
+GetJewelQualityRewardReq
+
+activityId (
+subId ("C
+GetJewelQualityRewardResp&
+rewardItems (2.stage.RewardItem"•
+HeroActivityConfig
+
+activityId (
+subId (
+count (
+description (	&
+rewardItems (2.stage.RewardItem
+active (
+curCount ("-
+GetHeroLevelActivityReq
+
+activityId ("W
+GetHeroLevelActivityResp;
+activityConfigs (2".ServerActivity.HeroActivityConfig":
+GetHeroLevelRewardReq
+
+activityId (
+subId ("@
+GetHeroLevelRewardResp&
+rewardItems (2.stage.RewardItem",
+GetHeroStarActivityReq
+
+activityId ("V
+GetHeroStarActivityResp;
+activityConfigs (2".ServerActivity.HeroActivityConfig"9
+GetHeroStarRewardReq
+
+activityId (
+subId ("?
+GetHeroStarRewardResp&
+rewardItems (2.stage.RewardItem"c
+ActivityRankItem2
+playerBaseInfo (2.playerData.PlayerBaseInfo
+score (
+rank ("0
+GetHonorCityRankReq
+
+id (
+count ("≤
+GetHonorCityRankResp8
+groupRankInfos (2 .ServerActivity.ActivityRankItem;
+selfGroupRankInfo (2 .ServerActivity.ActivityRankItem3
+	rankInfos (2 .ServerActivity.ActivityRankItem6
+selfRankInfo (2 .ServerActivity.ActivityRankItem
+endTime (O
+groupRewardConfigs (23.LimitTurnTableData.LotteryActivityRankRewardConfigJ
+rewardConfigs (23.LimitTurnTableData.LotteryActivityRankRewardConfig
+donateCount (
+honorCityDonateMax	 (
+honorCityDonateScore
+ (
+honorCityDonatePrice (
+honorCityDonateItem ("W
+Task
+
+id (
+count (
+curCount (
+score (
+description (	"&
+GetHonorCityTaskReq
+useless (";
+GetHonorCityTaskResp#
+tasks (2.ServerActivity.Task")
+GetSummonUpCountActivityReq
+
+id ("û
+GetSummonUpCountActivityResp:
+
+activities (2&.ServerActivity.CallHeroActivityConfig
+score (
+
+totalScore (
+round (
+maxRound (

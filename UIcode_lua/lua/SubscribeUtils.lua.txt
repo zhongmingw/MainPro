@@ -1,0 +1,44 @@
+---手动领取钻石和vip经验
+local function GetSubscribeReward(callback)
+    local req = {}
+    req.id = 1
+    HttpRequest("getSubscriptionReward", "GetSubscriptionRewardReq", "GetSubscriptionRewardResp", req, function(resp)
+        if resp and callback then
+            callback(resp)
+        end
+    end)
+end
+
+---设置奖励数据
+local function SetItemData(typeId, id, count)
+    local item = {}
+    item.typeId = typeId
+    item.id = id
+    item.count = count
+    return item
+end
+
+---插入奖励
+local function InsertReward(result, item)
+    if item.count > 0 then
+        table.insert(result, item)
+    end
+end
+
+---获取钻石和vip经验
+local function GetSubscribeDiamondAndVipReward(payId)
+    local payTbl = ResTblContainer:GetTable(PayTbl.tblName)
+    local result = {}
+    local DIAMOND_ID = 2
+    local VIPEXP_ID = 14
+    local rewardItem = SetItemData(ItemTypeEnum.Resource, DIAMOND_ID, tonumber(payTbl:Get(payId, PayTbl.reward)))
+    local vipItem = SetItemData(ItemTypeEnum.Resource, VIPEXP_ID, tonumber(payTbl:Get(payId, PayTbl.vip)))
+    InsertReward(result, rewardItem)
+    InsertReward(result, vipItem)
+    return result
+end
+
+return {
+    GetSubscribeReward = GetSubscribeReward,
+    GetSubscribeDiamondAndVipReward = GetSubscribeDiamondAndVipReward,
+}

@@ -1,0 +1,70 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-03-20 16:23:57
+
+local levelUpSkeleton
+local rewardGrid
+
+local centerObj
+
+local spParent
+
+local t
+
+local spineGo
+
+local waitAnim = false
+
+function DoInit()
+    self.Anim=7
+    rewardGrid = self:GetComponentAtPath("Center/ScrollRect/Viewport/RewardGrid" ,"UIItemGrid")    
+    centerObj = self:GetGameObjectAtPath("Center")
+    spParent = self:GetGameObjectAtPath("Center/SpParent")
+end
+
+function OnAnimationFinished()
+end
+
+function OnClose()
+    spineGo = nil
+    levelUpSkeleton = nil
+end
+
+--没动画的话 这里会后调用
+function SetParamDataList(objs)
+    local rewards = objs[0]
+    CsBridge.audioManager:PlayUI(ResTblContainer:GetPropToStr(4,sound.name,sound.tblName))
+     if rewards ~= nil then
+        rewardGrid:RefreshItemSlots(MergeRewards(rewards),self.gameObject,"ItemSlot")
+    end
+    CsBridge.CacheAssetsByModule(self.Module,  function()
+        spineGo = CsBridge.objectCache:CreateObject("LevelSpine", true, spParent.transform)
+        levelUpSkeleton = spineGo:GetComponent(CLS_SKELETONGRAPHIC)
+        levelUpSkeleton:PlayAnimation("apear", false, function()
+            if self.enabled then
+                levelUpSkeleton:PlayAnimation("stand", true)
+            end
+        end)
+    end, "LevelSpine")
+    CsBridge.UnityHelper.SetAnchoredPosition(centerObj, 0, 2200)
+    if t then
+        t:DoKill()
+    end
+    t = CsBridge.TweenUtils.MoveTo(centerObj.transform, 0, 0, 0.1, nil, 6)
+    t:DoPlay()
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+    levelUpSkeleton = nil
+    rewardGrid = nil
+    centerObj = nil
+    t = nil
+    spineGo = nil
+    spParent = nil
+    waitAnim  = nil
+end

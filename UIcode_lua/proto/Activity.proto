@@ -1,0 +1,194 @@
+import "stage.proto";
+package Activity;
+
+message WonderActivityPackageConfig 
+{
+    required int32 activityId=1;
+    required int32 payId=2;
+    required int32 type=3;
+    required string rewardStr=4;
+	required int32 buyLimit=5;
+}
+
+message ActivityPackage
+{
+    required WonderActivityPackageConfig detail=1; 
+    required int32 count=2; 
+}
+
+message GetActivityPackageReq 
+{
+    required int32 type=1; 
+}
+
+message GetActivityPackageResp 
+{
+    repeated ActivityPackage activityPackages=1; 
+}
+
+message GetChargedNumReq
+{
+    required int32 activityId=1;
+    required int32 payId=2;
+}
+
+message GetChargedNumResp
+{
+    required int32 num=1;
+}
+
+
+message OnlineRewardConfig
+{
+    required int32 id = 1;
+    required int32 rewardId = 2;
+    required int32 time = 3;
+    required string title = 4;
+    repeated stage.RewardItem rewards = 5;
+}
+
+message GetOnlineRewardActivityReq
+{
+    required int32 id = 1;
+}
+
+message GetOnlineRewardActivityResp
+{
+    repeated OnlineRewardConfig activities = 1;
+    required int64 onlineRewardStartTime = 2;
+    required int32 rewardId = 3;
+}
+
+message OnlineRewardReq
+{
+    required int32 id = 1;
+    required int32 rewardId = 2;
+}
+
+message OnlineRewardResp
+{
+    repeated stage.RewardItem rewardItems = 1;
+}
+
+message GmOnlineRewardReq
+{
+    required int32 useless = 1;
+}
+
+message GmOnlineRewardResp
+{
+    required int32 status = 1;
+}
+
+message GmGetOnlineRewardReq
+{
+    required int32 id = 1;
+    required int32 rewardId = 2;
+}
+
+message GmGetOnlineRewardResp
+{
+    repeated stage.RewardItem rewardItems = 1;
+}
+
+message GmResetOnlineRewardReq
+{
+    required int32 useless = 1;
+}
+
+message GmResetOnlineRewardResp
+{
+    required int32 status = 1;
+}
+
+message GetActivityPackageInfoReq 
+{
+    repeated int32 types = 1; //礼包类型 1.周礼包 2.月礼包
+}
+
+message ActivityPackageInfo
+{     
+    required int32 type=1; //类型
+    required int64 endTime=2; //结束时间
+}
+
+message GetActivityPackageInfoResp 
+{
+    repeated ActivityPackageInfo activityPackageInfos = 1; //活动礼包信息
+}
+
+message GetFirstChargeRewardReq
+{
+    required int32 useless = 1;
+}
+
+message GetFirstChargeRewardResp
+{
+    repeated stage.RewardItem rewardItems = 1;
+    required bool firstCharge = 2;
+}
+
+message CheckSevenTargetReq
+{
+    required int32 useless = 1;
+}
+
+message CheckSevenTargetResp
+{
+    required bool isOpen = 1;
+    required int64 endTime = 2;
+    required bool showTips = 3;
+}
+
+message SevenTargetReq
+{
+    required int32 useless = 1;
+}
+
+message SevenTargetResp
+{
+    required int32 dayCount = 1;
+    required int64 taskEndTime = 2;
+    required int64 awardTime = 3;
+    repeated SevenTarget taskList = 4;
+    repeated string icons = 5;
+}
+
+message SevenTarget
+{
+    required int32 id = 1;
+    required string description = 2;
+    required int32 type = 3;
+    required int32 date = 4;
+    required int32 level = 5;
+    required int32 progress = 6;
+    required int32 goal = 7;
+    required int32 status = 8;//任务完成情况：0:未完成;1:已完成
+    required int32 rewardClaimed = 9;//0:未领取;1:已领取
+    required int32 unlocked = 10;
+    repeated stage.RewardItem rewards = 11;
+    required string typeTag = 12;
+    required int32 showProgress = 13; //0:not, 1:show progress
+}
+
+message SevenTargetRewardReq
+{
+    required int32 id = 1;
+}
+
+message SevenTargetRewardResp
+{
+    repeated stage.RewardItem rewardItems = 1;
+}
+
+message HeroSubstitutionReq
+{
+    required int32 heroId = 1;
+    required int32 mainUid = 2;
+    repeated int32 subUids = 3;
+}
+
+message HeroSubstitutionResp
+{
+    repeated stage.RewardItem results = 1;
+}

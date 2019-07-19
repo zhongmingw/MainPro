@@ -1,0 +1,150 @@
+--[[
+	file: LeagueFinalListView.lua
+	author: hangang
+	description: League final match list view
+]]
+
+require "KnockoutMatchItemSlot"
+
+local finalGridObj, semifinalGridObj, quaterfinalGridObj
+local finalTitleObj, semifinalTitleObj, quaterfinalTitleObj
+local cachedViewData
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 1     --shadow type
+
+	local path = "Center/ScrollRect/Viewport/Grid/Final"
+	finalTitleObj = self:GetGameObjectAtPath(path)
+	path = "Center/ScrollRect/Viewport/Grid/FinalGrid"
+	finalGridObj = self:GetGameObjectAtPath(path)
+
+	path = "Center/ScrollRect/Viewport/Grid/SemiFinal"
+	semifinalTitleObj = self:GetGameObjectAtPath(path)
+	path = "Center/ScrollRect/Viewport/Grid/SemiFinalGrid"
+	semifinalGridObj = self:GetGameObjectAtPath(path)
+
+	path = "Center/ScrollRect/Viewport/Grid/QuarterFinal"
+	quaterfinalTitleObj = self:GetGameObjectAtPath(path)
+	path = "Center/ScrollRect/Viewport/Grid/QuarterFinalGrid"
+	quaterfinalGridObj = self:GetGameObjectAtPath(path)
+end 
+
+--On animation finished event--------------------------------------------------------
+function OnAnimationFinished()
+	self:SendCommand("GetFinalListViewData")	
+end
+
+--UIController events handlers-------------------------------------------------------
+function OnNotification_RefreshFinalListView(objs)
+	if self.gameObject.activeInHierarchy then
+		cachedViewData = objs[0]
+		RefreshView(cachedViewData)
+	end
+end
+
+function RefreshView(data)
+	local view = self.gameObject
+	local itemSlotName = "KnockoutMatchItemSlot"
+
+	local matches = data.finalMatches
+	if false or #matches > 0 then
+		finalGridObj:SetActive(true)
+		finalTitleObj:SetActive(true)
+		BindItems(finalGridObj, matches)
+	else	
+		finalGridObj:SetActive(false)
+		finalTitleObj:SetActive(false)
+	end
+
+	matches = data.semifinalMatches
+	if false or #matches > 0 then
+		semifinalGridObj:SetActive(true)
+		semifinalTitleObj:SetActive(true)
+		BindItems(semifinalGridObj, matches)
+	else	
+		semifinalGridObj:SetActive(false)
+		semifinalTitleObj:SetActive(false)
+	end
+
+	matches = data.quaterfinalMatches
+	if #matches > 0 then
+		quaterfinalGridObj:SetActive(true)
+		quaterfinalTitleObj:SetActive(true)
+		BindItems(quaterfinalGridObj, matches)
+	else	
+		quaterfinalGridObj:SetActive(false)
+		quaterfinalTitleObj:SetActive(false)
+	end
+
+	local component = self:GetGameObjectAtPath("Center/ScrollRect/Viewport/Grid")
+	component:SetActive(false)
+	component:SetActive(true)
+end
+
+function BindItems(gridObj, data)
+	local gridTrans = gridObj.transform
+	for i = 0, gridTrans.childCount - 1 do
+		local itemSlot = gridTrans:GetChild(i):GetComponent("Client.Library.ItemSlot")
+		OnKnockoutMatchItemSlotBindValue(itemSlot, data[i+1])
+	end
+end
+
+--UI event handlers-------------------------------------------------------------------
+function OnSlotImgClick(sender)
+	local itemSlotTrans = sender.transform.parent
+	local itemData = GetItemSlotData(itemSlotTrans)
+	self:SendCommand("FinalListViewMatchItemClicked", itemData)
+end
+
+function GetItemSlotData(itemSlotTrans)
+	local gridObj = itemSlotTrans.parent.gameObject
+	local data
+	if gridObj == finalGridObj then
+		data = cachedViewData.finalMatches
+	elseif gridObj == semifinalGridObj then
+		data = cachedViewData.semifinalMatches
+	elseif gridObj == quaterfinalGridObj then
+		data = cachedViewData.quaterfinalMatches
+	end
+
+	local itemIdx = itemSlotTrans:GetSiblingIndex() + 1
+	return data[itemIdx]
+end
+
+function OnPlayer01Click(sender)
+	local itemSlotTrans = sender.transform.parent
+	local itemData = GetItemSlotData(itemSlotTrans)
+	local playerData = itemData.player1Data
+	self:SendCommand("FinalListViewPlayerClicked", playerData)
+end
+
+function OnPlayer02Click(sender)
+	local itemSlotTrans = sender.transform.parent
+	local itemData = GetItemSlotData(itemSlotTrans)
+	local playerData = itemData.player2Data
+	self:SendCommand("FinalListViewPlayerClicked", playerData)
+end
+
+--On closing--------------------------------------------------------------------------
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close() 
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	finalGridObj = nil 
+	semifinalGridObj = nil 
+	quaterfinalGridObj = nil
+	finalTitleObj = nil 
+	semifinalTitleObj = nil 
+	quaterfinalTitleObj = nil
+	cachedViewData = nil
+end

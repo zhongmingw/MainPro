@@ -1,0 +1,341 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-06-29 11:08:20
+
+local yield_return = (require 'cs_coroutine').yield_return
+
+require "TurnTableItemSlot"
+
+local tableObj
+local tableGrid
+local tableArrowObj
+
+local luckyCoinTxt
+local lotteryOnceTxt
+local lotteryTenthTxt
+
+local refreshTimeTxt
+local noFreeFlag 
+local refreshPriceNumTxt
+local refreshTitleTxt
+
+local idleTweener
+
+local effectObj
+local lotterySpine
+local luaMono 
+
+local LOTTERY_ONCE = 1
+local LOTTERY_TENTH = 10
+local LoTTERY_TENTH_PRICE
+
+local callback 
+local stopLotteryTimer = false
+local skip = false
+
+local co
+
+local isInit = false
+
+local TICKER_REFRESHTIMER = "ticker_RefreshTimer_TurnTableView"
+local TICKER_SHOWTABLELOTTERANIM = "ticker_ShowTableLotteryAnim_TurnTableView"
+
+function DoInit()
+    self.Shadow = 1
+end
+
+function InitUI()
+    tableObj = self:GetGameObjectAtPath("Center/TurnTable/Table")
+    tableGrid = tableObj.transform:GetComponentAtPath("TableGrid" ,CLS_UI_ITEM_GRID)
+    tableArrowObj = self:GetGameObjectAtPath("Center/TurnTable/Arrow")
+
+    luckyCoinTxt = self.transform:GetComponentAtPath("Center/LuckyCoin/NumTxt" ,CLS_TEXT)
+    lotteryOnceTxt = self.transform:GetComponentAtPath("button/TurnOnceBtn/NumTxt" ,CLS_TEXT)
+    lotteryTenthTxt = self.transform:GetComponentAtPath("button/TurnTenthBtn/NumTxt" ,CLS_TEXT)
+
+    refreshTimeTxt = self.transform:GetComponentAtPath("Center/TurnTable/RefreshTimeTxt" ,CLS_TEXT)
+    noFreeFlag = self:GetGameObjectAtPath("button/RefreshBtn/NoFreeFlag")
+    refreshPriceNumTxt = noFreeFlag.transform:GetComponentAtPath("NumTxt" ,CLS_TEXT)
+    refreshTitleTxt = self.transform:GetComponentAtPath("button/RefreshBtn/TitleTxt" ,CLS_TEXT)
+
+    effectObj = self:GetGameObjectAtPath("Effect")
+    lotterySpine = self.transform:GetComponentAtPath("Center/TurnTable/LotterySpine" ,CLS_SKELETONGRAPHIC)
+    luaMono = tableObj:GetComponent("LuaMono")
+
+    LoTTERY_TENTH_PRICE = math.floor(LOTTERY_TENTH*GetConstValue("lotteryDiscount")/100)
+    self:GetComponentAtPath("button/TurnTenthBtn/number01Txt" ,CLS_TEXT).text = LoTTERY_TENTH_PRICE
+end
+
+function OnAnimationFinished(objs)
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitTurnTableData")
+end
+
+function OnDoUnhide()
+    if idleTweener and not idleTweener:IsPlaying() then
+        idleTweener:DoPlay()
+        luaMono.enabled = true
+        MsgCenter:Broadcast(Notify_SetTurnTableIdle,tableArrowObj.transform)
+    end
+    self:SendCommand("RevertRefreshTimer")
+end
+
+function Active()
+    luaMono.enabled = true
+    MsgCenter:Broadcast(Notify_SetTurnTableIdle,tableArrowObj.transform)
+end
+
+function OnNotification_RefreshTurnTableView(objs)
+    local turnTableItems = objs[0]
+    local luckyCoin = objs[1]
+    local nextRefreshTime = objs[2]
+    local hasFreeRefresh = objs[3]
+
+    refreshPriceNumTxt.text = GetConstValue("lotteryResetPrice")
+
+    tableGrid:RefreshItemSlots(turnTableItems,self.gameObject,"TurnTableItemSlot")
+    RefreshLuckyCoin(luckyCoin)
+
+    RefreshTimer(nextRefreshTime,hasFreeRefresh)
+    ShowTableIdleAnim()
+end
+
+function OnNotification_ShowTableLotteryAnim(objs)
+    effectObj:SetSelfActive(true)
+    callback = objs[1]
+    ShowTableLotteryAnim(objs[0],function()
+        if not skip then
+            LotteryAnimEnd()
+        end
+    end,objs[2])
+end
+
+function OnNotification_UpdateSingleItemSlot(objs)
+    local updateItems = objs[0]
+    for i,updateItem in ipairs(updateItems) do
+        tableGrid:SingleRefreshSlot(updateItem)
+    end
+end
+
+function OnNotification_UpdateLuckyCoin(objs)
+    RefreshLuckyCoin(objs[0])
+end
+
+function OnNotification_RefreshTimer(objs)
+    RefreshTimer(objs[0],objs[1])
+end
+
+function RefreshTimer(nextRefreshTime,hasFreeRefresh)
+    CsBridge.timeManager:WaitForNextFrame(function()
+        if self == nil or self.Module == nil then
+		    return
+		end
+        noFreeFlag:SetSelfActive(not hasFreeRefresh)
+        refreshTitleTxt.alignment = hasFreeRefresh and CS.TMPro.TextAlignmentOptions.Midline or CS.TMPro.TextAlignmentOptions.MidlineRight
+        Timer:AddTicker(TICKER_REFRESHTIMER,nextRefreshTime,function(targetTime)
+            if self == nil or self.Module == nil then
+                return
+            end
+            refreshTimeTxt.text = CheckTimeRemain(targetTime,false)
+        end,function()
+            if not hasFreeRefresh then
+                self:SendCommand("AutoRefreshTurnTable")
+            end
+        end,nil)
+    end)
+end
+
+function RefreshLuckyCoin(luckyCoin)
+    luckyCoinTxt.text = luckyCoin
+    SetFontColorWithEnough(lotteryOnceTxt, function()
+        return luckyCoin >= LOTTERY_ONCE
+    end)
+    SetFontColorWithEnough(lotteryTenthTxt, function()
+        return luckyCoin >= LoTTERY_TENTH_PRICE
+    end)
+end
+
+function ShowTableIdleAnim()
+    if idleTweener and idleTweener:IsPlaying() then
+        return
+    end
+    idleTweener = CsBridge.TweenUtils.DoTurnTableIdleRotate(tableObj.transform,15,14)
+    idleTweener:DoPlay()
+    luaMono.enabled = true
+    MsgCenter:Broadcast(Notify_SetTurnTableIdle,tableArrowObj.transform)
+end
+
+function ShowTableLotteryAnim(reward,onFinished,count)
+    MsgCenter:Broadcast(Notify_SetTurnTableIdle,nil)
+    luaMono.enabled = false
+    if idleTweener then
+        idleTweener:DoKill()
+    end
+    lotterySpine.gameObject:SetSelfActive(true)
+    if count == LOTTERY_ONCE then
+        lotterySpine:PlayAnimation("a_1",true)
+    elseif count == LOTTERY_TENTH then
+        lotterySpine:PlayAnimation("a_2",true)
+    end
+
+    local data = tableGrid:GetItemDataByData(reward)
+    stopLotteryTimer = false
+    Timer:AddTicker(TICKER_SHOWTABLELOTTERANIM,2000+CsBridge.timeManager.ServerTime,nil,function()
+        if self == nil or self.Module == nil then
+            return
+        end
+        lotterySpine.gameObject:SetSelfActive(false)
+    end,nil)
+    LotteryAnim(4,data.itemSlot.transform.localEulerAngles.z,4.25,function(t,b,c,d)
+        if t<d/4 then
+            local x = t/(d/4)
+            local y = x*x*x*x*x
+            lotterySpine.timeScale = tonumber(string.format("%.2f",5*x*x*x*x))
+            return b+c/4*y
+        else
+            local x = (t-d/4)/(d-d/4)
+            local y = (x-1)*(x-1)*(x-1)*(x-1)*(x-1)+1
+            lotterySpine.timeScale = tonumber(string.format("%.2f",5*(x-1)*(x-1)*(x-1)*(x-1)))
+            return b+(c/4)+(c-c/4)*y
+        end
+    end,onFinished,function()
+        return stopLotteryTimer
+    end,-1)
+    co = coroutine.create(function() 
+        yield_return(0)
+        luaMono.enabled = true
+        MsgCenter:Broadcast(Notify_SetTurnTableLottery,tableArrowObj.transform)    
+    end)
+    assert(coroutine.resume(co))
+end
+
+function LotteryAnim(turnNum,targetAngle,duration,easeFuc,onFinished,forceStop,direction)
+    local z = tableObj.transform.localEulerAngles.z
+    local delta = direction*(turnNum*360+targetAngle) - z
+
+    CsBridge.timeManager:UpdateFrame(duration,function(interval)
+        if self == nil or self.Module == nil then
+		    return
+		end
+        tableObj:SetRotation(0,0,easeFuc(interval,z,delta,duration))
+    end,onFinished,forceStop)
+end
+
+function LotteryAnimEnd()
+    MsgCenter:Broadcast(Notify_SetTurnTableLottery,nil)
+    luaMono.enabled = false
+    callback()
+    effectObj:SetSelfActive(false)
+    --lotterySpine.gameObject:SetSelfActive(false)
+    co = coroutine.create(function()
+        yield_return(0)
+        ShowTableIdleAnim()
+    end)
+    assert(coroutine.resume(co))
+end
+
+function OnRefreshBtnClick(sender)
+    Timer:StopTicker(TICKER_REFRESHTIMER)
+    self:SendCommand("ManualRefreshTurnTable")
+end
+
+function OnEffectClick(sender)
+    skip = true
+    stopLotteryTimer = true
+    Timer:StopTicker(TICKER_SHOWTABLELOTTERANIM)
+    lotterySpine.gameObject:SetSelfActive(false)
+    LotteryAnimEnd()
+end
+
+function OnTurnOnceBtnClick(sender)
+    skip = false
+    self:SendCommand("Lottery",LOTTERY_ONCE,LOTTERY_ONCE)
+end
+
+function OnTurnTenthBtnClick(sender)
+    skip = false
+    self:SendCommand("Lottery",LOTTERY_TENTH,LoTTERY_TENTH_PRICE)
+end
+
+function OnTableGridTurnTableItemSlotClick(obj)
+    ShowRewardTip(self,obj.m_data.reward)
+end
+
+function OnAddBtnClick(sender)
+    self:SendCommand("BuyLuckyCoin")
+end
+
+function OnStoreBtnClick(sender)
+    if idleTweener then
+        idleTweener:DoPause()
+    end
+    LinkSystem(UI_OPEN_TYPE_SHOP,self,{3})
+end
+
+function OnRecordBtnClick(sender)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("TurnTableRecordView","TurnTableModel",true,true)
+        view:SetParamDataList(function()
+            self:Active()
+            --self:SendCommand("RevertRefreshTimer")
+        end)
+	end, "TurnTableRecordView","TurnTableRecordItemSlot")
+end
+
+function OnHelpBtnClick(sender)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("HelpView","TurnTableModel",false,true)
+        view:SetData(INSTRUCTION_TURNTABLE)
+	end, "HelpView")
+end
+
+function OnCloseBtnClick(sender)
+    self:ReturnBack()
+end
+
+function OnClose()
+    Timer:StopTicker(TICKER_REFRESHTIMER)
+    Timer:StopTicker(TICKER_SHOWTABLELOTTERANIM)
+end
+
+function DoExit()
+	self.Module=nil
+    Timer:StopTicker(TICKER_REFRESHTIMER)
+    Timer:StopTicker(TICKER_SHOWTABLELOTTERANIM)
+    tableObj = nil
+    tableGrid = nil
+    tableArrowObj = nil
+
+    luckyCoinTxt = nil
+    lotteryOnceTxt = nil
+    lotteryTenthTxt = nil
+
+    refreshTimeTxt = nil
+    noFreeFlag  = nil
+    refreshPriceNumTxt = nil
+    refreshTitleTxt = nil
+
+    idleTweener = nil
+
+    effectObj = nil
+    lotterySpine = nil
+    luaMono  = nil
+
+    LOTTERY_ONCE = nil
+    LOTTERY_TENTH = nil
+    LoTTERY_TENTH_PRICE = nil
+
+    callback  = nil
+    stopLotteryTimer = nil
+    skip = nil
+
+    co = nil
+
+    isInit = nil
+    TICKER_REFRESHTIMER = nil
+    TICKER_SHOWTABLELOTTERANIM = nil
+end

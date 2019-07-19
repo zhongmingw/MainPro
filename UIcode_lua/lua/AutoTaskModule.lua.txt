@@ -1,0 +1,16 @@
+function ResourceIds(objs)
+	local arr={1,2}
+	return arr
+  end
+
+function AssetNames(objs)
+	local arr={"AutoTaskView","AutoTaskItemSlot"}
+	return arr
+end
+
+function OnEnter(objs,onFinished)
+	self:OpenView("AutoTaskView","AutoTaskModel")
+	if(onFinished ~= nil)then
+		onFinished()  
+	end
+end

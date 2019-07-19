@@ -1,0 +1,442 @@
+local settingVersionUtils = require "SettingVersionUtils"
+local curType = 1
+local curBgMusic
+local bgmTable
+
+--option
+local curPlayer
+local curOption
+local curLanguage
+local languageArr
+local bindUser
+local bindPwd
+
+--server
+local curServerArr
+
+local optionOpenState
+
+local function RealNameChecked()
+    CheckExchangeEnabled()
+end
+
+function DoInit()
+    CsBridge.MsgCenter.Subscribe(CsBridge.SysMsgDef.Notify_LanguageChanged, InitLanguage)
+    MsgCenter:Subscribe(Notify_RealNameChecked, RealNameChecked)
+end
+
+function DoOnExit()
+    CsBridge.MsgCenter.Unsubscribe(CsBridge.SysMsgDef.Notify_LanguageChanged, InitLanguage)
+    MsgCenter:Unsubscribe(Notify_RealNameChecked, RealNameChecked)
+    curType = nil
+    curBgMusic = nil
+    bgmTable = nil
+
+    --option
+    curPlayer = nil
+    curOption = nil
+    curLanguage = nil
+    languageArr = nil
+    bindUser = nil
+    bindPwd = nil
+
+    --server
+    curServerArr = nil
+    optionOpenState = nil
+end
+
+--打开Setting的界面
+function OnCommand_InitSetting(objs)
+    curBgMusic = CsBridge.audioManager.CurBGMusic == "" and ResTblContainer:GetPropToStr(objs[0], sound.name, sound.tblName) or CsBridge.audioManager.CurBGMusic
+end
+
+--外部调用
+function OnCommand_OpenTypeView(objs)
+    curType = objs[0]
+end
+
+function OnCommand_InitSettingData(objs)
+    self:SendNotification("RefreshSettingView", curType)
+end
+
+function OnCommand_SwitchType(objs)
+    local type = objs[0]
+    if curType == type then
+        return
+    end
+    curType = type
+    self:SendNotification("RefreshSettingView", curType)
+end
+
+--option logic
+function OnCommand_InitSettingOptionData(objs)
+    if curPlayer == nil or curOption == nil or languageArr == nil then
+        InitOptionData()
+    end
+
+    local isAndroid = CsBridge.sDKHelper.platform == "android"
+    local isEditor = CsBridge.sDKHelper.platform == "windows"
+
+    self:SendNotification("RefreshSettingOptionView", curPlayer, curOption)
+    CheckExchangeEnabled()
+end
+
+function InitOptionData()
+    local playerInfo = appData:checkData("PlayerInfo")
+    local userName = CsBridge.sDKHelper.enableSDK and playerInfo.userId or CsBridge.UnityHelper.GetString("local_userName")
+    curPlayer = settingVersionUtils.GetCurPlayerInfo(playerInfo, userName)
+    curPlayer.isAnonLogin = string.len(userName) == 0
+    local marqueeEnabled = true
+    local marqueeConfig = CsBridge.UnityHelper.GetString("local_marqueeEnabled")
+    if not IsNilOrEmpty(marqueeConfig) then
+        marqueeEnabled = marqueeConfig == "true"
+    end
+    curOption = {
+        music = CsBridge.audioManager.MusicEnabled,
+        sound = CsBridge.audioManager.SoundEnabled,
+        marquee = marqueeEnabled
+    }
+    InitLanguage()
+end
+
+function InitLanguage()
+    languageArr = {}
+    local ids = GetIds(LanguageTbl.tblName)
+
+    local tbl = ResTblContainer:GetTable(LanguageTbl.tblName)
+    for i = 0, ids.Length - 1 do
+        local id = ids[i]
+        local infos = tbl:GetRow(id, LanguageTbl.name, LanguageTbl.language)
+        local language = {
+            id = tonumber(id),
+            name = infos[0],
+            language = infos[1],
+            IsSelected = false
+        }
+        if language.language == CsBridge.localizationHelper.Language then
+            curOption.language = language
+            language.IsSelected = true
+        end
+        table.insert(languageArr, language)
+    end
+end
+
+function OnCommand_OpenSelectLanguageView(objs)
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        CsBridge.OpenView("SelectLanguageView", "SettingModel", false, true)
+    end, "SelectLanguageView", "LanguageItemSlot")
+end
+
+function OnCommand_InitSelectLanguageData(objs)
+    self:SendNotification("RefreshSelectLanguageView", languageArr)
+end
+
+function OnCommand_SelectLanguage(objs)
+    SelectLanguage(objs[0])
+end
+
+function SelectLanguage(lan)
+    if curOption.language == lan then
+        return
+    end
+    if curOption.language ~= nil then
+        CancelSelectLanguage(curOption.language)
+    end
+    curOption.language = lan
+    CsBridge.localizationHelper.Language = curOption.language.language
+    self:SendNotification("SelectLanguage", curOption.language)
+end
+
+function CancelSelectLanguage(language)
+    self:SendNotification("CancelSelectLanguage", language)
+end
+
+function GetLanguageByLanguage(language)
+    for i, lan in ipairs(languageArr) do
+        if lan.language == language then
+            return lan
+        end
+    end
+    return nil
+end
+
+function OnCommand_SwitchMusic(objs)
+    curOption.music = not curOption.music
+    CsBridge.audioManager.MusicEnabled = curOption.music
+    if curOption.music then
+        self:SendNotification("PlayBg", curBgMusic)
+    end
+    CsBridge.UnityHelper.SetString("local_musicEnabled", tostring(curOption.music))
+    self:SendNotification("RefreshSettingOptionView", curPlayer, curOption)
+end
+
+function OnCommand_SwitchSound(objs)
+    curOption.sound = not curOption.sound
+    CsBridge.audioManager.SoundEnabled = curOption.sound
+    CsBridge.UnityHelper.SetString("local_soundEnabled", tostring(curOption.sound))
+    self:SendNotification("RefreshSettingOptionView", curPlayer, curOption)
+end
+
+function OnCommand_SwitchMarquee(objs)
+    curOption.marquee = not curOption.marquee
+    CsBridge.UnityHelper.SetString("local_marqueeEnabled", tostring(curOption.marquee))
+
+    MsgCenter:Broadcast(Notify_Settings_Marquee, curOption.marquee)
+    self:SendNotification("RefreshSettingOptionView", curPlayer, curOption)
+end
+
+function OnCommand_ChangeAccount(objs)
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("AccountView", "AccountModel", false, true)
+        view:SetParamDataList(OnChangeAccountEnd)
+    end, "AccountView")
+end
+
+function OnChangeAccountEnd(userName, pwd)
+    local changeAccount = {
+        isAutoLogin = true,
+        userName = userName,
+        pwd = pwd
+    }
+    CS.Client.Library.MoneyBanner.SetBannerVisible(false)
+    CsBridge.moduleManager:ResetMainModule("LoginModule", nil, { changeAccount })
+end
+
+function OnCommand_OpenBindUserView(objs)
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        CsBridge.OpenView("BindUserView", "SettingModel", false, true)
+    end, "BindUserView")
+end
+
+function OnCommand_OpenChangePwdView(objs)
+    settingVersionUtils.OpenChangePwdView(self, curPlayer)
+end
+
+function OnCommand_BackLoginView(objs)
+    CsBridge.sDKHelper:logout()
+end
+
+function OnCommand_BindUser(objs)
+    local userName = objs[0]
+    local pwd = objs[1]
+    local confirmPwd = objs[2]
+
+    if string.len(userName) == 0 then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("local_1"), 1)
+    elseif string.len(pwd) == 0 then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("local_2"), 1)
+    elseif confirmPwd ~= pwd then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("local_4"), 1)
+    else
+        local req = {
+            user = userName,
+            pwd = CsBridge.MD5.GetMd5String(pwd)
+        }
+        bindUser = req.user
+        bindPwd = req.pwd
+        HttpRequest("bindUser", "BindUserReq", "BindUserResp", req, OnBindUserResp)
+    end
+end
+
+function OnBindUserResp(resp)
+    if resp ~= nil then
+        self:SendNotification("CloseBindUserView")
+        CsBridge.UnityHelper.SetString("local_userName", bindUser)
+        CsBridge.UnityHelper.SetString("local_pwd", bindPwd)
+        curPlayer.userName = bindUser
+        curPlayer.isAnonLogin = false
+        self:SendNotification("RefreshSettingOptionView", curPlayer, curOption)
+    end
+end
+
+function OnCommand_ChangePwd(objs)
+    local oldPwd = objs[0]
+    local newPwd = objs[1]
+    local confirmPwd = objs[2]
+
+    if string.len(oldPwd) == 0 then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("Setting_OldPwdNull"), 1)
+    elseif string.len(newPwd) == 0 then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("Setting_NewPwdNull"), 1)
+    elseif confirmPwd ~= newPwd then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("local_4"), 1)
+    elseif CsBridge.MD5.GetMd5String(oldPwd) ~= CsBridge.UnityHelper.GetString("local_pwd") then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("ChangePwd_NoSameOldPwd"), 1)
+    elseif oldPwd == newPwd then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("ChangePwd_SameNewAndOldPwd"), 1)
+    else
+        local req = {
+            account = CsBridge.UnityHelper.GetString("local_userName"),
+            oldPwd = CsBridge.MD5.GetMd5String(oldPwd),
+            newPwd = CsBridge.MD5.GetMd5String(newPwd)
+        }
+        HttpRequest("changePwd", "ChangePwdReq", "ChangePwdResp", req, function(resp)
+            if resp.result == 0 then
+                self:SendNotification("CloseChangePwdView")
+                CsBridge.UnityHelper.SetString("local_pwd", req.newPwd)
+                CsBridge.hintUILayer:ShowHintBox(Language:getStr("ChangePwd_Success"))
+            end
+        end)
+    end
+end
+
+--server logic
+function OnCommand_InitSettingServerData(objs)
+    if curServerArr ~= nil then
+        self:SendNotification("RefreshSettingServerView", curServerArr)
+    else
+        local req = {
+            id = 0
+        }
+        HttpRequest("getAllZones", "GetAllZonesReq", "GetAllZonesResp", req, OnGetAllZoneResp)
+    end
+end
+
+function OnGetAllZoneResp(resp)
+    if resp ~= nil then
+        InitServerData(resp.zoneInfos)
+        self:SendNotification("RefreshSettingServerView", curServerArr)
+    end
+end
+
+function InitServerData(zoneInfos)
+    curServerArr = {}
+    local playerInfo = appData:checkData("PlayerInfo")
+    for i, zoneInfo in ipairs(zoneInfos) do
+        local server = {
+            name = zoneInfo.zoneInfo.nameId
+        }
+        if zoneInfo.playerBaseInfo ~= nil then
+            server.player = {
+                name = zoneInfo.playerBaseInfo.name,
+                icon = zoneInfo.playerBaseInfo.icon,
+                level = zoneInfo.playerBaseInfo.level,
+                vip = zoneInfo.playerBaseInfo.vip,
+                atServer = playerInfo.zone == server.name
+            }
+        end
+        table.insert(curServerArr, server)
+    end
+
+    table.sort(curServerArr, function(a, b)
+        if a.player and b.player then
+            if a.player.atServer or b.player.atServer then
+                return a.player.atServer
+            end
+            return tonumber(a.name) > tonumber(b.name)
+        end
+
+        if a.player or b.player then
+            return a.player ~= nil
+        end
+
+        return tonumber(a.name) > tonumber(b.name)
+    end)
+end
+
+function OnCommand_SwitchServer(objs)
+    CsBridge.messageManager:showAlertView(
+            Language:getStr("Setting_SwitchServerTitle"),
+            Language:getStr("Setting_SwitchServer"),
+            Language:getStr("local_cancel"),
+            nil,
+            Language:getStr("local_confirm"),
+            function()
+                SwitchServer(objs[0])
+            end
+    )
+end
+
+function SwitchServer(server)
+    CsBridge.UnityHelper.SetString("local_zone", server.name)
+    if CsBridge.sDKHelper.enableSDK then
+        CsBridge.sDKHelper:logout()
+    else
+        local data = {
+            isAutoLogin = true,
+        }
+        CS.Client.Library.MoneyBanner.SetBannerVisible(false)
+        CsBridge.moduleManager:ResetMainModule("LoginModule", nil, { data })    
+    end
+end
+
+--feedback logic
+function OnCommand_SubmitFeedback(objs)
+    local content = objs[0]
+    if string.len(content) == 0 then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("Feedback_CheckContent"))
+    else
+        local req = {
+            content = content
+        }
+        HttpRequest("sendFeedback", "SendFeedbackReq", "SendFeedbackResp", req, OnSendFeedback)
+    end
+end
+
+function OnSendFeedback(resp)
+    if resp.result == 0 then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("Feedback_Success"))
+        self:SendNotification("FeedbackSuccess")
+    end
+end
+
+--exchange logic
+function OnCommand_ExchangeKey(objs)
+    local key = objs[0]
+    if key == nil or key == "" then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("EmptyCDKeyHint"))
+        return
+    end
+
+    ExchangeKey(key)
+end
+
+function ExchangeKey(key)
+    local req = {}
+    req.code = key
+    HttpRequest("rewardGiftCode", "RewardGiftCodeReq", "RewardGiftCodeResp", req, OnExchangeFinished)
+end
+
+function OnExchangeFinished(resp)
+    CsBridge.hintUILayer:ShowHintBox(Language:getStr("ExchangeSucceeded"))
+    self:SendNotification("OnExchangeFinished")
+end
+
+function OnCommand_CheckExchangeEnabled(objs)
+    CheckExchangeEnabled()
+end
+
+function CheckExchangeEnabled()
+    local req = {}
+    req.id = 0
+    HttpRequest("checkGiftCodeOpen", "CheckGiftCodeOpenReq", "CheckGiftCodeOpenResp", req, OnCheckExchangeFinished)
+end
+
+function OnCommand_RealNameCheck()
+    if optionOpenState == nil or optionOpenState.checkBtnGray == true then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("RealNameCheckMoreTimes"), 2)
+        return
+    end
+    self:OpenModule("RealNameCheckModule", nil)
+end
+
+function OnCheckExchangeFinished(resp)
+    optionOpenState = {}
+    optionOpenState.giftEnabled = resp.giftCodeOpen
+    optionOpenState.faceBookEnabled = resp.facebookOpen
+    optionOpenState.authenticationOpen = resp.authenticationOpen and UIOpen(UI_OPEN_TYPE_REAL_NAME_CHECK, false)
+    optionOpenState.checkBtnGray = false
+    optionOpenState.checkBtnTxtStr = Language:getStr("GoInto")
+    if optionOpenState.authenticationOpen then
+        local realNameCheckUtils = require "RealNameCheckUtils"
+        realNameCheckUtils.CheckRealName(function(isAuth)
+            if isAuth then
+                optionOpenState.checkBtnGray = true
+                optionOpenState.checkBtnTxtStr = Language:getStr("AlreadyCheck")
+            end
+            self:SendNotification("SetExchangeEnabled", optionOpenState)
+        end)
+    else
+        self:SendNotification("SetExchangeEnabled", optionOpenState)
+    end
+end

@@ -1,0 +1,121 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-07-10 14:05:50
+
+require "UnionReinforcementItemSlot"
+
+local isInit = false
+
+local donationCountTxt
+local requestRefreshTimeTxt
+local requestDonationBtn
+
+local donationGrid
+local nothingObj
+
+local TICKER_NAME = "ticker_UnionReinforcementView"
+
+function DoInit()
+    self.Shadow = 1
+end
+
+function InitUI()
+    donationCountTxt = self:GetComponentAtPath("Center/DonationCountTxt" ,CLS_TEXT)
+    requestRefreshTimeTxt = self:GetComponentAtPath("Center/RequestRefreshTimeTxt" ,CLS_TEXT)
+    requestDonationBtn = self:GetComponentAtPath("Bottom/RequestBtn" ,CLS_BUTTON_ARCHLY)
+    donationGrid = self:GetComponentAtPath("Center/donationSV/ScrollRect/Viewport/DonationGrid" ,CLS_UI_ITEM_GRID)
+    nothingObj = self:GetGameObjectAtPath("Center/Nothing")
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitReinforcementData")
+end
+
+function OnClose() 
+    donationGrid:ClearItems()
+end
+
+function OnNotification_RefreshReinforcementView(objs)
+    local viewData = objs[0]
+    if #viewData.items == 0 then
+        nothingObj:SetSelfActive(true)
+        donationGrid:ClearItems()
+    else
+        nothingObj:SetSelfActive(false)
+        donationGrid:RefreshItemSlots(viewData.items,self.gameObject,"UnionReinforcementItemSlot")
+    end
+    if viewData.requestDonationTime ~= nil then
+        RefreshRequestDonationTime(viewData.requestDonationTime)
+    end
+    donationCountTxt.text = viewData.donationCount
+    SetFontColorWithEnough(donationCountTxt,function()
+        return viewData.hasDonationCount
+    end)
+end
+
+function OnNotification_RefreshSingleReinforcementView(objs)
+    donationGrid:RefreshSlot(objs[0],objs[1])
+end
+
+function RefreshRequestDonationTime(requestDonationTime)
+    requestDonationBtn.Gray = CsBridge.timeManager.ServerTime < requestDonationTime
+    Timer:AddTicker(TICKER_NAME,requestDonationTime,function(targetTime)
+        if self == nil or self.Module == nil then
+            return
+        end
+        requestRefreshTimeTxt.text = CheckTimeRemain(targetTime,false)
+    end,function()
+        requestRefreshTimeTxt.text = "00:00:00"
+        --requestDonationBtn.Gray = false
+    end,nil)
+end
+
+function OnRequestBtnClick(sender)
+    self:SendCommand("OpenReinforcementMatView",self.gameObject.name)
+end
+
+function OnDonationGridPlayerClick(obj)
+    self:SendCommand("OpenMemberDetailView",obj.m_data.userId, obj.m_data.zone,self.gameObject.name)
+end
+
+function OnDonationGridPieceItemClick(obj)
+    ShowRewardTip(self,obj.m_data.requestItem)
+end
+
+function OnDonationGridDonationBtnClick(obj)
+    self:SendCommand("DonateReinforcement",obj.m_data)
+end
+
+local function Close()
+    self:HideView(self.gameObject.name)
+end
+
+function OnCloseBtnClick(sender)
+    Close()
+end
+
+function OnMaskClick(sender)
+    Close()
+end
+
+function OnClose()
+    Timer:StopTicker(TICKER_NAME)
+end
+
+function DoExit()
+	self.Module=nil
+    isInit = nil
+    Timer:StopTicker(TICKER_NAME)
+    donationCountTxt = nil
+    requestRefreshTimeTxt = nil
+    requestDonationBtn = nil
+
+    donationGrid = nil
+    nothingObj = nil
+    TICKER_NAME = nil
+end

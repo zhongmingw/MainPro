@@ -1,0 +1,30 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2018-11-26 11:20:48
+]]
+
+function OnConditionPackageItemSlotBindValue(slot,data)
+    local nameTxt = slot:GetComponentAtPath("NameTxt",CLS_TEXT)
+    local timerTxt = slot:GetComponentAtPath("TimerTxt",CLS_TEXT)
+    local bgImg = slot:GetGameObjectAtPath("bgImg")
+
+    CsBridge.IconData.SetIconByName(bgImg,data.bg)
+    nameTxt.text = data.name
+    local interval = 1
+    CsBridge.timeManager:FixedIntervalTimer(slot.gameObject, 
+        function(targetTime)
+            if slot == nil then
+                return
+            end
+            interval = interval+CS.UnityEngine.Time.deltaTime
+            if interval >= 1 then
+                interval = 0
+                timerTxt.text = string.format(Language:getStr("ConditionPackageCountDownWithTime"),CheckTimeRemain(targetTime,false))
+            end
+        end, 
+        function()
+            MsgCenter:Broadcast(Notify_ConditionPackageTimeOver)
+        end, data.targetTime, nil)
+end

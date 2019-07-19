@@ -1,0 +1,1715 @@
+--[[guild
+	file: UnionModel.lua
+	author: hangang
+	description: Union base logics,include union base settings,member list and union leaderboard
+]]
+
+require "ChatWorldData"
+require "UnionUtils"
+
+local UNIONINFO_SCROLL_HEIGHT1 = 535
+local UNIONINFO_SCROLL_HEIGHT2 = 460
+
+local ChildViewIdx =
+{
+	InfoView = 1,
+	LeaderboardView = 2,
+	ApplicationView = 3,
+}
+
+local GuildMailPrice = {
+	tblName = "GuildMailPrice",
+	min = "min",
+	max = "max",
+	price = "price"
+}
+
+local TICKER_DISSOLVING = "UnionDissolving"
+local TICKER_DEMISING = "UnionDemising"
+
+local unionNoticeCharCount = 0
+local unionNameCharCount = 0
+local renamePrice = 0
+local dissolveTime
+local demiseTime
+local mailCDTime
+local donationReinforceLimit
+local recruitCharCount
+local recruitTooLongTips
+local reinforceReward
+
+local recruitContent = nil
+
+local myUnionData
+local cachedApplications
+local cachedMemberList
+local reinforcementData
+local reinforcementDataFromTbl
+local DonationCDTbl
+local mailPriceTblData
+
+local function GetMailPriceTblData()
+	local data = {}
+	local tbl = ResTblContainer:GetTable(GuildMailPrice.tblName)
+	local mins = tbl:GetCol(GuildMailPrice.min)
+	for i=0,mins.Length-1 do
+		local min = tonumber(mins[i])
+		local infos = tbl:GetRow(min,GuildMailPrice.max,GuildMailPrice.price)
+		local max = tonumber(infos[0])
+		local prices = GetRewardFromTbl(infos[1])
+		local costData = {
+			min = min,
+			max = max,
+			price = prices[1]
+		}
+		table.insert(data,costData)
+	end
+	return data
+end
+
+------initialization-------
+function DoInit()
+	recruitCharCount = tonumber(GetConstValue("unionRecruitCharCount"))
+	recruitTooLongTips = Language:getStr("UnionRecruitTooLong")
+	recruitTooLongTips = string.format(recruitTooLongTips, tostring(math.floor(recruitCharCount / 2)))
+
+	dissolveTime = tonumber(GetConstValue("guildDissolveTime")) * 1000
+	demiseTime = tonumber(GetConstValue("guildLeaderTransferBufferTime")) * 1000 + 3000
+	unionNameCharCount = tonumber(GetConstValue("unionNameCharCount"))
+	unionNoticeCharCount = tonumber(GetConstValue("unionNoticeCharCount"))
+	renamePrice = tonumber(GetConstValue("guildNameResetCost"))
+	donationReinforceLimit = tonumber(GetConstValue("guildReinforceLimit"))
+	mailCDTime = tonumber(GetConstValue("mailTimeLimit")) * 1000
+	reinforceReward = {
+		typeId = ItemTypeEnum.Resource,
+		id = ResourceEnum.GuildCoin,
+		count = tonumber(GetConstValue("guildReinforceReward"))
+	}
+	mailPriceTblData = GetMailPriceTblData()
+	CsBridge.MsgCenter.Subscribe(CsBridge.SysMsgDef.Notify_WrongUnionAuthority, OnAuthorityError)
+end
+
+function DoOnExit()
+	CsBridge.MsgCenter.Unsubscribe(CsBridge.SysMsgDef.Notify_WrongUnionAuthority, OnAuthorityError)
+	self.Module = nil
+	Timer:StopTicker(TICKER_DISSOLVING)
+	Timer:StopTicker(TICKER_DEMISING)
+	ChildViewIdx = nil
+
+	TICKER_DISSOLVING = nil
+	TICKER_DEMISING = nil
+
+	unionNoticeCharCount = nil
+	unionNameCharCount = nil
+	renamePrice = nil
+	dissolveTime = nil
+	demiseTime = nil
+	mailCDTime = nil
+	donationReinforceLimit = nil
+	recruitCharCount = nil
+	recruitTooLongTips = nil
+	reinforceReward = nil
+
+	recruitContent = nil
+
+	myUnionData = nil
+	cachedApplications = nil
+	cachedMemberList = nil
+	reinforcementData = nil
+	reinforcementDataFromTbl = nil
+	DonationCDTbl = nil
+	GuildMailPrice = nil
+	mailPriceTblData = nil
+end
+
+local function GetRenameConsume()
+	local consume = {
+		typeId = ItemTypeEnum.Resource,
+		id = ResourceEnum.Gem,
+		count = renamePrice
+	}
+	local guildRenameCardId = GetConstValue("GuildRenameCard")
+	local pb = appData:checkItem("PackItem",guildRenameCardId)
+	if pb and pb.count ~= 0 then
+		consume.typeId = ItemTypeEnum.Item
+		consume.id = guildRenameCardId
+		consume.count = 1
+	end
+
+	return consume
+end
+
+------Server error handler-------
+function OnAuthorityError()
+	CsBridge.hintUILayer:ShowHintBox(Language:getStr("1103"))
+	self:ReturnBack()
+	MsgCenter:Broadcast(Notify_WithdrawUnion)
+end
+
+------Request union tip data-------
+function OnCommand_GetUnionTipData(objs)	
+	local unionID = objs[0]
+	GetUnionTipData(unionID)
+end
+
+function GetUnionTipData(unionID)
+	local req = {}
+	req.id = unionID
+	HttpRequest("checkUnion", "CheckUnionReq", "CheckUnionResp", req, OnGetUnionTipDataResp)
+end
+
+function OnGetUnionTipDataResp(data)
+	if data and data.union and data.memberList then
+		local unionData = {}
+		unionData.union = data.union
+		unionData.combat = data.unionCombat
+		unionData.rank = data.rank
+		local memberList = {}
+		unionData.memberList = memberList
+		for k, memberData in pairs(data.memberList) do
+			local item = memberData.basicInfo
+			item.combat = memberData.combat
+
+			table.insert(memberList, item)
+		end
+
+		local viewData = GetUnionTipViewData(unionData)
+		self:SendNotification("RefreshUnionTipView", viewData)
+	end	
+end
+
+function GetUnionTipViewData(data)
+	local viewData = {}
+
+	local unionData = data.union
+	viewData.name = unionData.name
+	viewData.id = tostring(unionData.id)
+	viewData.power = tostring(data.combat or 0)
+	viewData.memberText = tostring(unionData.memberCount) .. "/" .. tostring(unionData.memberMax)
+	viewData.powerLimitText = tostring(unionData.applyLevel)
+	viewData.notification = unionData.notice
+	viewData.level = "LV" .. tostring(unionData.level) .. ":"
+	viewData.icon = ResTblContainer:GetPropToStr(unionData.icon, GuildBanner.banner, GuildBanner.tblName)
+	viewData.dissolveBtnEnabled = false
+	viewData.cancelDslvBtnEnabled = false
+	viewData.recruitBtnEnabled = false
+	viewData.leaveBtnEnabled = false
+	viewData.settingsBtnEnabled = false
+	viewData.applicationTabEnabled = false
+	viewData.bannerBtnEnabled = false
+	viewData.showRewardBtn = false
+	viewData.showBottomPanel = false
+	viewData.scrollHeight = UNIONINFO_SCROLL_HEIGHT1
+	viewData.dissolveCountdown = ""
+	viewData.rank = tostring(data.rank or 99999)
+
+	local expRequired = ResTblContainer:GetPropToInt(unionData.level + 1, Guild.exp, Guild.tblName)
+	viewData.levelupProgress = expRequired == 0 and 1 or (unionData.exp / expRequired)
+	viewData.levelupDesc = expRequired == 0 and "Max" or tostring(unionData.exp) .. "/" .. tostring(expRequired)
+
+	viewData.memberList = GetMembersViewData(data.memberList, false)
+	return viewData
+end
+
+------Get union members-------
+function OnCommand_GetUnionMembers(objs)	
+	GetUnionMembers()
+end
+
+function GetUnionMembers()
+	local req = {}
+	req.useless = 0
+	HttpRequest("unionMemberList", "UnionMemberListReq", "UnionMemberListResp", req, OnGetUnionMemberResp)
+end
+
+function OnGetUnionMemberResp(resp)
+	cachedMemberList = {}
+	if resp and resp.memberList then
+		local memberList = resp.memberList
+		for k, memberData in pairs(memberList) do
+			local item = memberData.basicInfo
+			item.combat = memberData.combat
+
+			table.insert(cachedMemberList, item)
+		end
+	end
+	
+	local viewData = GetMembersViewData(cachedMemberList, true, true)
+	self:SendNotification("RefreshUnionInfoViewMembers", viewData)
+end
+
+------Get union infomation-------
+function OnCommand_GetUnionInfo(objs)	
+	TryGetUnionInfo()
+end
+
+function TryGetUnionInfo()
+	local req = {}
+	req.useless = 0
+	HttpRequest("myUnion", "MyUnionReq", "MyUnionResp", req, OnGetUnionInfoResp)
+end
+
+function OnGetUnionInfoResp(resp)
+	myUnionData = resp
+	Dissolving()
+	Demising()
+	
+	local viewData = GetUnionViewData(myUnionData)
+	self:SendNotification("RefreshUnionInfoView", viewData)
+end
+
+function GetUnionViewData(unionData)
+	local viewData = {}
+	SetUnionBaseViewData(unionData, viewData)
+	return viewData
+end
+
+function SetUnionBaseViewData(svrData, viewData)
+	local unionData = svrData.union
+	viewData.name = unionData.name
+	viewData.rank = tostring(svrData.rank or 99999)
+	viewData.id = tostring(unionData.id)
+	viewData.power = tostring(svrData.combat or 0)
+	viewData.memberText = tostring(unionData.memberCount) .. "/" .. tostring(unionData.memberMax)
+	viewData.powerLimitText = tostring(unionData.applyLevel)
+	viewData.notification = unionData.notice
+	viewData.level = "LV" .. tostring(unionData.level) .. ":"
+	viewData.icon = ResTblContainer:GetPropToStr(unionData.icon, GuildBanner.banner, GuildBanner.tblName)
+	viewData.autoGrantApplications = unionData.autoApproval == ServerEnum_AutoGrant.On
+	viewData.showBottomPanel = true
+	viewData.scrollHeight = UNIONINFO_SCROLL_HEIGHT2
+
+	local showDonationTips = false
+	if not _G.unionDonationTried then showDonationTips = GetRequestReinfEnabled() end
+	viewData.showDonationTips = showDonationTips
+
+	local expRequired = ResTblContainer:GetPropToInt(unionData.level + 1, Guild.exp, Guild.tblName)
+	viewData.levelupProgress = expRequired == 0 and 1 or (unionData.exp / expRequired)
+	viewData.levelupDesc = expRequired == 0 and "Max" or tostring(unionData.exp) .. "/" .. tostring(expRequired)
+	local dissolveBtnEnabled = false
+	local recruitBtnEnabled = false
+	local leaveBtnEnabled = true
+	local settingsBtnEnabled = false
+	local cancelDslvBtnEnabled = false
+	local applicationTabEnabled = false
+	local bannerBtnEnabled = false
+	local unionMailEnabled = false
+	local auth = svrData.myAuthority
+	local authorities = MemberAuthorities[auth]
+	local dissolving = unionData.dismissStartTime ~= 0
+	for i = 1, #authorities do
+		local authority = authorities[i]
+		if authority == UnionAuthorities.Dissolve then
+			dissolveBtnEnabled = not dissolving
+			cancelDslvBtnEnabled = dissolving
+			leaveBtnEnabled = false
+		elseif authority == UnionAuthorities.RecruitNewMember then
+			recruitBtnEnabled = true
+		elseif authority == UnionAuthorities.UpdateSettings then
+			settingsBtnEnabled = true
+		elseif authority == UnionAuthorities.GranteApplicaiton then
+			applicationTabEnabled = true
+		elseif authority == UnionAuthorities.ChangeBanner then
+			bannerBtnEnabled = true
+		elseif authority == UnionAuthorities.UnionMail then
+			unionMailEnabled = true
+		end 
+	end
+	
+	viewData.dissolveBtnEnabled = dissolveBtnEnabled
+	viewData.cancelDslvBtnEnabled = cancelDslvBtnEnabled
+	viewData.recruitBtnEnabled = recruitBtnEnabled
+	viewData.leaveBtnEnabled = leaveBtnEnabled
+	viewData.settingsBtnEnabled = settingsBtnEnabled
+	viewData.applicationTabEnabled = applicationTabEnabled
+	viewData.bannerBtnEnabled = bannerBtnEnabled
+	viewData.showRewardBtn = true
+	viewData.mailBtnEnabled = unionMailEnabled
+	viewData.dissolving = dissolving
+	
+	local dissolveCountdown = ""
+	if cancelDslvBtnEnabled then
+		dissolveCountdown = GetDissolveCountdown()
+	end
+	viewData.dissolveCountdown = dissolveCountdown
+end
+
+function GetMembersViewData(memberTbl, showDemise, showCheckIn)
+	local viewData = {}
+	local demiseStartTime = 0
+	local newLeaderID = ""
+	if showDemise then
+		demiseStartTime = myUnionData.union.prisidentTransferStartTime
+		newLeaderID = myUnionData.union.transferRecord
+	end
+	for k, itemData in pairs(memberTbl) do
+		local memberViewData = {}
+		local memberData = itemData
+		memberViewData.playerInfo = memberData
+		memberViewData.userId = memberData.userId
+		memberViewData.name = FormatWorldPlayerName(memberData.name, memberData.zone)
+		memberViewData.power = tostring(itemData.combat)
+		memberViewData.isOnline = memberData.isOnline
+		memberViewData.bossScore = memberData.hurt
+		memberViewData.donation = memberData.donate
+		memberViewData.lastLoginTime = FormatElapsedTime(memberData.lastOnline)
+		memberViewData.title = FormatTitle(memberData.authority)
+		memberViewData.zone = memberData.zone
+
+		if showCheckIn then
+			memberViewData.showCheckinPanel = true
+			memberViewData.checkedIn = memberData.isSignIn or false
+		end
+		
+		memberViewData.demiseVisible = false
+		memberViewData.demiseCoundown = ""
+		if showDemise and demiseStartTime > 0 
+			and FormatUserID(memberData.userId, memberData.zone) == newLeaderID
+		then
+			memberViewData.demiseVisible = true
+			memberViewData.demiseCountdown = FormatRestTime(demiseStartTime + demiseTime)
+		end
+		
+		table.insert(viewData, memberViewData)
+	end
+
+	return viewData
+end
+
+function FormatRestTime(timestamp)
+	return CheckTimeRemain(timestamp, false)
+end
+
+function FormatElapsedTime(timestamp)
+	return CsBridge.timeManager:checkTimePass(timestamp)
+end
+
+function FormatTitle(title)
+	local languageKey = "UnionMember"
+	if title == UnionMemberType.Elder then
+		languageKey = "UnionElder"
+	elseif title == UnionMemberType.Leader then
+		languageKey = "UnionLeader"
+	end
+	return Language:getStr(languageKey)
+end
+
+function GetDissolveCountdown()	
+	local dissolveCountdown = ""
+	local unionData = myUnionData.union
+	if unionData.dismissStartTime > 0 then
+		local endTime = unionData.dismissStartTime + dissolveTime
+		dissolveCountdown = FormatRestTime(endTime)
+	end
+
+	return dissolveCountdown
+end
+
+function Dissolving()
+	local unionData = myUnionData.union
+	if unionData.dismissStartTime > 0 then
+		local endTime = unionData.dismissStartTime + dissolveTime
+		local now = CsBridge.timeManager.ServerTime
+		if endTime > now then
+			Timer:AddTicker(TICKER_DISSOLVING, endTime, RefreshDissolvingCountdown, OnDissolvingFinished)
+		end
+	end
+end
+
+function RefreshDissolvingCountdown()
+	if self == nil or self.Module == nil then
+		return
+	end
+	local countdownText = GetDissolveCountdown()
+	self:SendNotification("RefreshDissolveCountdown", countdownText)
+end
+
+function OnDissolvingFinished()
+	CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionDissolved"))
+	self:ReturnBack()
+	MsgCenter:Broadcast(Notify_WithdrawUnion)
+end
+
+function Demising()
+	local unionData = myUnionData.union
+	if unionData.prisidentTransferStartTime > 0 then
+		local endTime = unionData.prisidentTransferStartTime + demiseTime
+		local now = CsBridge.timeManager.ServerTime
+		if endTime > now then
+			Timer:AddTicker(TICKER_DEMISING, endTime, RefreshDemisingCountdown, OnDemisingFinished)
+		end
+	end
+end
+
+function RefreshDemisingCountdown()
+	if self == nil or self.Module == nil then
+		return
+	end
+	local demiseStartTime = myUnionData.union.prisidentTransferStartTime
+	local countdownText = FormatRestTime(demiseStartTime + demiseTime)
+	self:SendNotification("RefreshDemiseCountdown", countdownText)
+end
+
+function OnDemisingFinished()
+	CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionLeaderDemised"))
+	FetchDataAfterDemising()
+end
+
+function FetchDataAfterDemising()
+	local req = {}
+	req.useless = 0
+	local onFinished = function()
+		TryGetUnionInfo()
+		GetUnionMembers()
+	end
+	HttpRequest("checkMyUnion", "CheckMyUnionReq", "CheckMyUnionResp", req, onFinished)
+end
+
+function StopRefreshCoroutine()
+	Timer:StopTicker(TICKER_DEMISING)
+	Timer:StopTicker(TICKER_DISSOLVING)
+end
+
+------Union leaderboard-------
+function OnCommand_OpenUnionLeaderboardView(objs)
+	GetUnionLeaderboard()
+end
+
+function GetUnionLeaderboard()
+	local req = {}
+	req.useless = 0
+	HttpRequest("unionRank", "UnionRankReq", "UnionRankResp", req, OnGetLeaderboardResp)
+end
+
+function OnGetLeaderboardResp(resp)
+	if resp and resp.rankList then
+		local viewData = GetUnionLeaderboardViewData(resp)
+		self:SendNotification("RefreshLeaderboardView", viewData)
+	end
+end
+
+function GetUnionLeaderboardViewData(data)
+	local viewData = {}
+	local itemList = {}
+	viewData.unions = itemList
+	
+	local unions = data.rankList
+	local myUnionID = myUnionData.union.id
+	for idx = 1, #unions do
+		local union = unions[idx]
+		local itemData = GetUnionRankItemViewData(union, idx)
+		if union.id == myUnionID then
+			viewData.myUnionData = itemData
+		end
+
+		table.insert(itemList, itemData)
+	end
+
+	if not viewData.myUnionData then
+		viewData.myUnionData = GetUnionRankItemViewData(data.union, data.rank)
+	end
+
+	return viewData
+end
+
+function GetUnionRankItemViewData(union, rank)
+	local RIBBON_IDX_MAX = 3
+	local ICON_NAME_RIBBON = "new_com_paiming"
+
+	local itemData = {}
+	itemData.id = union.id
+	itemData.name = union.name
+	itemData.icon = ResTblContainer:GetPropToStr(union.icon, GuildBanner.banner, GuildBanner.tblName)
+	itemData.name = union.name
+	itemData.levelText = tostring(union.level)
+	itemData.rankText = tostring(rank)
+	itemData.showRibbon = rank <= RIBBON_IDX_MAX
+	itemData.ribbonIcon = ICON_NAME_RIBBON .. itemData.rankText
+	itemData.memeberText = tostring(union.memberCount) .. "/" .. tostring(union.memberMax)
+	itemData.powerText = GetValueAbbreviation(union.combat)
+
+	return itemData
+end
+
+------Member operation-------
+function OnCommand_OpenMemberOprtView(objs)
+	if not myUnionData then
+		return
+	end
+
+	local memberID = objs[0]
+	local zone = objs[1]
+	local playerInfo = appData:checkData("PlayerInfo")
+	if playerInfo.userId == memberID and playerInfo.zone == zone then
+		return
+	end
+
+	local positionY = objs[2]
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			CsBridge.OpenView("UnionMemberOprtView","UnionModel", false, true)
+			self:SendNotification("RefreshMemberOprtView", GetMemberOprtViewData(memberID, zone, positionY))
+		end,
+		"UnionMemberOprtView")
+end
+
+function GetMemberOprtViewData(memberID, zone, positionY)
+	local viewData = {}
+	viewData.positionY = positionY
+	
+	local memberData = GetMemberData(memberID, zone)
+	local targetMemberType = memberData.authority
+	local ownMemberType = myUnionData.myAuthority
+
+	local promoteBtnEnabled, demoteBtnEnabled = false, false
+	local promoteBtnVisible = targetMemberType == UnionMemberType.Member
+	local demoteBtnVisible = not promoteBtnVisible
+	local promoteLeaderBtnEnabled = false
+	local kickoutBtnEnabled = false
+	local cancelDemiseBtnEnabled = false
+
+	local demising = myUnionData.union.prisidentTransferStartTime > 0
+	local newLeaderID = myUnionData.union.transferRecord
+
+	if ownMemberType == UnionMemberType.Elder then
+		kickoutBtnEnabled = targetMemberType == UnionMemberType.Member
+	elseif ownMemberType == UnionMemberType.Leader then
+		promoteBtnEnabled = targetMemberType == UnionMemberType.Member
+		demoteBtnEnabled = targetMemberType == UnionMemberType.Elder
+		promoteLeaderBtnEnabled = targetMemberType == UnionMemberType.Elder and not demising
+		kickoutBtnEnabled = targetMemberType == UnionMemberType.Member
+		cancelDemiseBtnEnabled = demising and FormatUserID(memberID, zone) == newLeaderID
+	end
+	viewData.demoteBtnVisible = demoteBtnVisible
+	viewData.promoteBtnVisible = promoteBtnVisible
+	viewData.promoteBtnEnabled = promoteBtnEnabled
+	viewData.demoteBtnEnabled = demoteBtnEnabled
+	viewData.promoteLeaderBtnEnabled = promoteLeaderBtnEnabled
+	viewData.kickoutBtnEnabled = kickoutBtnEnabled
+	viewData.cancelDemiseBtnEnabled = cancelDemiseBtnEnabled
+
+	viewData.memberID = memberID
+	viewData.zone = zone
+	viewData.memberName = memberData.name
+
+	return viewData
+end
+
+function GetMemberData(memberID, zone)
+	local memberList = cachedMemberList
+	for k, memberData in pairs(memberList) do
+		if memberData.userId == memberID and memberData.zone == zone then
+			return memberData
+		end
+	end
+
+	return nil
+end
+
+------Show details-------
+function OnCommand_OpenMemberDetailView(objs)
+	local uid = tostring(objs[0])
+	local zone = tostring(objs[1])
+	local parentView = objs[2]
+	local isLocal = false
+	local showUnionInfoBtn = false
+	local siblingIdx = -1
+	CsBridge.CacheAssetsByModule( self.Module,
+		function()
+			local view = CsBridge.OpenView("PlayerInfoView", "PlayerInfoModel", true, true)
+			view:SetParamDataList(isLocal, uid, zone, siblingIdx, showUnionInfoBtn)
+		end, 
+		"PlayerInfoView","AchievementItemSlot")
+end
+
+function OnCommand_Mail(objs)
+	if not CheckPlayerCanSendPrivateMail() then
+        return
+    end
+	local memberID = objs[0]
+	local zone = objs[1]
+	local parentView = objs[2]
+	local memberData = GetMemberData(memberID, zone)
+	local nick = FormatMailReciver(memberData.name, zone)
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			local view=CsBridge.OpenView("SendMailView","SendMailModel", true, true)
+			view:SetParamDataList(nick, memberID, zone)
+		end, 
+		"SendMailView")
+end
+
+------Promote-------
+function OnCommand_PromoteElder(objs)
+	local memberID = objs[0]
+	local zone = objs[1]
+	local memberData = GetMemberData(memberID, zone)
+	local title = Language:getStr("hint")
+	local text = string.gsub(Language:getStr("PromoteElderHint"), "%%s", memberData.name)
+	local cancelText = Language:getStr("local_cancel")
+	local confirmText = Language:getStr("local_confirm")
+	local cancelCbk = nil
+	local confirmCbk = function()
+		PromoteToElder(memberID, zone)
+	end
+	CsBridge.messageManager:showAlertView(title, text, cancelText, cancelCbk, confirmText, confirmCbk)
+end
+
+function PromoteToElder(memberID, zone)
+	local req = {}
+	req.userId = FormatUserID(memberID, zone)
+	HttpRequest("memberToVice", "MemberToViceReq", "MemberToViceResp", req, OnMemberOptResp)
+end
+
+function OnMemberOptResp(resp)
+	self:HideView("UnionMemberOprtView")
+	GetUnionMembers()
+end
+
+------Demote-------
+function OnCommand_Demote(objs)
+	local memberID = objs[0]
+	local zone = objs[1]
+	local memberData = GetMemberData(memberID, zone)
+	local title = Language:getStr("hint")
+	local text = string.gsub(Language:getStr("DemoteHint"), "%%s", memberData.name)
+	local cancelText = Language:getStr("local_cancel")
+	local confirmText = Language:getStr("local_confirm")
+	local cancelCbk = nil
+	local confirmCbk = function()
+		Demote(memberID, zone)
+	end
+	CsBridge.messageManager:showAlertView(title, text, cancelText, cancelCbk, confirmText, confirmCbk)
+end
+
+function Demote(memberID, zone)
+	local req = {}
+	req.userId = FormatUserID(memberID, zone)
+	HttpRequest("viceToMember", "ViceToMemberReq", "ViceToMemberResp", req, OnMemberOptResp)
+end
+
+------Promote to leader-------
+function OnCommand_PromoteToLeader(objs)
+	local unionData = myUnionData.union
+	if unionData.prisidentTransferStartTime > 0 then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionDemiseProcessing"))
+		return
+	end
+
+	local memberID = objs[0]
+	local zone = objs[1]
+	local memberData = GetMemberData(memberID, zone)
+	local title = Language:getStr("hint")
+	local text = string.gsub(Language:getStr("PromoteToLeaderHint"), "%%s", memberData.name)
+	local cancelText = Language:getStr("local_cancel")
+	local confirmText = Language:getStr("local_confirm")
+	local cancelCbk = nil
+	local confirmCbk = function()
+		PromoteToLeader(memberID, zone)
+	end
+	CsBridge.messageManager:showAlertView(title, text, cancelText, cancelCbk, confirmText, confirmCbk)
+end
+
+function PromoteToLeader(memberID, zone)
+	local req = {}
+	req.userId = FormatUserID(memberID, zone)
+	local cbk = function(resp)
+		TryGetUnionInfo()
+		OnMemberOptResp(resp)
+	end
+	HttpRequest("presidentTransfer", "PresidentTransferReq", "PresidentTransferResp", req, cbk)
+end
+
+------Cancel demising-------
+function OnCommand_CancelDemising(objs)
+	local title = Language:getStr("hint")
+	local text = Language:getStr("CancelDemisingHint")
+	local cancelText = Language:getStr("local_cancel")
+	local confirmText = Language:getStr("local_confirm")
+	local cancelCbk = nil
+	local confirmCbk = function()
+		CancelDemising()
+	end
+	CsBridge.messageManager:showAlertView(title, text, cancelText, cancelCbk, confirmText, confirmCbk)
+end
+
+function CancelDemising()
+	local req = {}
+	req.useless = 0
+	local cbk = function(resp)
+		TryGetUnionInfo()
+		OnMemberOptResp(resp)
+	end
+	HttpRequest("cancelPresidentTransfer", "CancelPresidentTransferReq", "CancelPresidentTransferResp", req, cbk)
+end
+
+------Knick out-------
+function OnCommand_KnickOut(objs)
+	local memberID = objs[0]
+	local zone = objs[1]
+	local memberData = GetMemberData(memberID, zone)
+	local title = Language:getStr("hint")
+	local text = string.gsub(Language:getStr("KnickOutHint"), "%%s", memberData.name)
+	local cancelText = Language:getStr("local_cancel")
+	local confirmText = Language:getStr("local_confirm")
+	local cancelCbk = nil
+	local confirmCbk = function()
+		KnickOut(memberID, zone)
+	end
+	CsBridge.messageManager:showAlertView(title, text, cancelText, cancelCbk, confirmText, confirmCbk)
+end
+
+function KnickOut(memberID, zone)
+	local req = {}
+	req.userId = FormatUserID(memberID, zone)
+	HttpRequest("fireMember", "FireMemberReq", "FireMemberResp", req, OnMemberOptResp)
+end
+
+------Get applications-------
+function OnCommand_GetApplication(objs)
+	GetApplications(RefreshApplicationView)
+end
+
+function OnCommand_GetApplicationTips(objs)
+	GetApplications(SetApplicationTips)
+end
+
+function GetApplications(onFinished)
+	local req = {}
+	req.useless = 0
+	HttpRequest("applyUnionList", "ApplyUnionListReq", "ApplyUnionListResp", req, onFinished)
+end
+
+function SetApplicationTips(resp)
+	local showTips = false
+	if resp and resp.applyList then
+		showTips = #resp.applyList > 0
+	end
+
+	self:SendNotification("SetApplicationTips", showTips)
+end
+
+function RefreshApplicationView(resp)
+	cachedApplications = {}
+	if resp and resp.applyList then
+		local memberList = resp.applyList
+		for k, memberData in pairs(memberList) do
+			local item = memberData.basicInfo
+			item.combat = memberData.combat
+
+			table.insert(cachedApplications, item)
+		end
+	end
+	
+	local viewData = GetApplicationViewData(cachedApplications)
+	self:SendNotification("RefreshApplicationView", viewData)
+end
+
+function GetApplicationViewData(svrData)
+	local viewData = {}
+	viewData.applications = GetMembersViewData(svrData, false)
+	SetUnionBaseViewData(myUnionData, viewData)
+
+	return viewData
+end
+
+------Grante applications-------
+function OnCommand_HandleAllApplication(objs)
+	if #cachedApplications > 0 then
+		local memberIDs = {}
+		for k, application in pairs(cachedApplications) do
+			local formatedUserID = FormatUserID(application.userId, application.zone)
+			table.insert(memberIDs, formatedUserID)
+		end
+		
+		local granted = objs[0]
+		if granted then
+			local space = GetEnabledSpace()
+			if space <= 0 then
+				CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionIsFull"))
+				return
+			elseif #memberIDs > space then
+				local count = #memberIDs - space
+				for i = 1, count do
+					table.remove(memberIDs)
+				end
+			end
+		end
+
+		GranteApplications(memberIDs, granted)
+	else
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("NoApplication"))
+	end
+end
+
+function GetEnabledSpace()
+	local union = myUnionData.union
+	return union.memberMax - union.memberCount
+end
+
+function OnCommand_GranteApplication(objs)
+	local memberID = objs[0]
+	local zone = objs[1]
+	local granted = objs[2] or false
+	GranteApplications({FormatUserID(memberID, zone)}, granted)
+end
+
+function GranteApplications(memberIDs, granted)
+	local req = {}
+	local Flag = ServerEnum_GrantOptions
+	req.userIds = memberIDs
+	req.decision = granted and Flag.Granted or Flag.Rejected
+	HttpRequest("approvalUnion", "ApprovalUnionReq", "ApprovalUnionResp", req, OnGrantOprtResp)
+end
+
+function OnGrantOprtResp(resp)
+	GetApplications(function(resp)
+	    RefreshApplicationView(resp)
+		SetApplicationTips(resp)
+	end)
+end
+
+------Update auto grant settings-------
+function OnCommand_SetAutoGrant(objs)
+	if not AssertAuthority(UnionAuthorities.SetAutoGrant) then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("1103"))
+		return	
+	end
+
+	local autoGrantOn = objs[0]
+	SetAutoGrant(autoGrantOn)
+end
+
+function AssertAuthority(authority)
+	local auth = myUnionData.myAuthority
+	local authorities = MemberAuthorities[auth]
+	for k, item in pairs(authorities) do
+		if item == authority then
+			return true
+		end
+	end
+
+	return false
+end
+
+function SetAutoGrant(autoGrantOn)
+	local req = {}
+	local Flag = ServerEnum_AutoGrant
+	req.open = autoGrantOn and Flag.On or Flag.Off
+	HttpRequest("updateUnionAutoApproval", "UpdateUnionAutoApprovalReq", "UpdateUnionAutoApprovalResp", req, OnSetAutoGrantResp)
+end
+
+function OnSetAutoGrantResp(resp)
+	TryGetUnionInfo()	
+	GetApplications(RefreshApplicationView)
+end
+
+------Withdraw union-------
+function OnCommand_Withdraw(objs)
+	local title = Language:getStr("hint")
+	local text = Language:getStr("UnionWithdrawHint")
+	local cancelText = Language:getStr("local_cancel")
+	local confirmText = Language:getStr("local_confirm")
+	local cancelCbk = nil
+	local confirmCbk = Withdraw
+	CsBridge.messageManager:showAlertView(title, text, cancelText, cancelCbk, confirmText, confirmCbk)
+end
+
+function Withdraw()
+	local req = {}
+	req.useless = 0
+	HttpRequest("quitUnion", "QuitUnionReq", "QuitUnionResp", req, OnWithdrawResp)
+end
+
+function OnWithdrawResp(resp)
+	self:ReturnBack(function()
+		MsgCenter:Broadcast(Notify_WithdrawUnion)
+	end)	
+end
+
+------Recruit new members-------
+function OnCommand_ShowUnionRecuitView(objs)
+	local parentViewName = objs[0]
+	local union = myUnionData.union
+	local level = union.level
+	local name = union.name
+	local content = "#" .. name .. "#" .. Language:getStr("DefaultUnionRecruitWords")
+	CsBridge.CacheAssetsByModule( self.Module,
+			function()
+				local recuitView = CsBridge.OpenView("UnionRecruitView","UnionModel", true, true)
+				recuitView:SetParamDataList(content, Recruit)
+			end,
+			"UnionRecruitView")
+end
+
+function Recruit(text)
+	local maxLen = recruitCharCount
+	if CsBridge.UnityHelper.GetStringLen(text) > maxLen then
+		CsBridge.hintUILayer:ShowHintBox(recruitTooLongTips)
+		return
+	end
+
+	self:HideView("UnionRecruitView")
+
+	local union = myUnionData.union
+	local level = union.level
+	local name = union.name
+	local unionID = union.id
+	text = string.gsub(text, ":", "")
+	text = string.gsub(text, ",", ".")
+	recruitContent = tostring(unionID) .. "|" .. text
+	
+	CsBridge.MsgCenter.Subscribe(1001, FirstChatMsgAction)
+	CsBridge.chatManager:init()
+	enterGame(unionID)
+end
+
+function FirstChatMsgAction(obj)
+	if recruitContent then
+		chatRecruit(ChatType.union_recruit, recruitContent)
+		recruitContent = nil
+	end
+    CsBridge.chatManager:close()
+	CsBridge.MsgCenter.Unsubscribe(1001, FirstChatMsgAction)
+end
+
+------Dissolve union-------
+function OnCommand_Disslove(objs)
+	local title = Language:getStr("hint")
+	local text = Language:getStr("DissolveUnionHint")
+	local cancelText = Language:getStr("local_cancel")
+	local confirmText = Language:getStr("local_confirm")
+	local cancelCbk = nil
+	local confirmCbk = Dissolve
+	CsBridge.messageManager:showAlertView(title, text, cancelText, cancelCbk, confirmText, confirmCbk)
+end
+
+function Dissolve()
+	local req = {}
+	req.useless = 0
+	HttpRequest("dismissUnion", "DismissUnionReq", "DismissUnionResp", req, OnDissloveResp)
+end
+
+function OnDissloveResp(resp)
+	TryGetUnionInfo()
+end
+
+------Cancel dissolving-------
+function OnCommand_CancelDissloving(objs)
+	CancelDissloving()
+end
+
+function CancelDissloving()
+	Timer:StopTicker(TICKER_DISSOLVING)
+
+	local req = {}
+	req.useless = 0
+	HttpRequest("cancelDismissUnion", "CancelDismissUnionReq", "CancelDismissUnionResp", req, OnDissloveResp)
+end
+
+------Update required level-------
+function UpdateRequiredLevel(level)
+	local req = {}
+	req.level = level
+	HttpRequest("updateUnionApplyLevel", "UpdateUnionApplyLevelReq", "UpdateUnionApplyLevelResp", req, OnUpdateSettingsResp)
+end
+
+function OnUpdateSettingsResp(resp)
+	self:SendNotification("UpdateSettingsFinished")
+	CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionSettingsUpdated"))
+	TryGetUnionInfo()
+end
+
+------Update notification-------
+function UpdateNotification(notice)
+	local maxLen = unionNoticeCharCount
+	if CsBridge.UnityHelper.GetStringLen(notice) > maxLen then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionNotificationTooLong"))
+		return
+	end
+
+	local req = {}
+	req.notice = notice
+	HttpRequest("updateUnionNotice", "UpdateUnionNoticeReq", "UpdateUnionNoticeResp", req, OnUpdateSettingsResp)
+end
+
+------Rename-------
+function Rename(newName)
+	local title = Language:getStr("hint")
+	local text = Language:getStr("UnionRenameHint")
+	local consume = GetRenameConsume()
+	text = string.format(text, consume.count..GetRewardName(consume))
+	local cancelText = Language:getStr("local_cancel")
+	local confirmText = Language:getStr("local_confirm")
+	local cancelCbk = nil
+	local confirmCbk = function()
+		DoRename(newName)
+	end
+	CsBridge.messageManager:showAlertView(title, text, cancelText, cancelCbk, confirmText, confirmCbk)
+end
+
+function DoRename(newName)
+	local maxLen = unionNameCharCount
+	local minLen = 4
+
+	if newName == myUnionData.union.name then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("InputSameNameTips"))
+		return
+	end
+
+	if CsBridge.UnityHelper.GetStringLen(newName) > maxLen or CsBridge.UnityHelper.GetStringLen(newName) < minLen then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionNameTooLong"))
+		return
+	end
+
+	local consume = GetRenameConsume()
+	if not CheckItemEnough(consume.id,consume.typeId,consume.count,true) then
+		return 
+	end
+
+	local req = {}
+	req.name = newName
+	HttpRequest("updateUnionName", "UpdateUnionNameReq", "UpdateUnionNameResp", req, OnUpdateSettingsResp)
+end
+
+------Change banner-------
+function ChangeBanner(bannerID)
+	local req = {}
+	req.icon = bannerID
+	HttpRequest("updateUnionIcon", "UpdateUnionIconReq", "UpdateUnionIconResp", req, OnUpdateSettingsResp)
+end
+
+------Get log-------
+function OnCommand_GetLog(objs)
+	GetLog()
+end
+
+function GetLog()
+	local req = {}
+	req.useless = 0
+	HttpRequest("unionLogs", "UnionLogsReq", "UnionLogsResp", req, OnGetLogResp)
+end
+
+function OnGetLogResp(resp)
+	if resp and resp.logs then
+		local logList = resp.logs
+		local viewData = GetLogViewData(logList)
+		self:SendNotification("RefreshLogView", viewData)
+	end
+end
+
+function GetLogViewData(svrData)
+	local viewData = {}
+	local currentDate = ""
+	for k, logData in pairs(svrData) do
+		local date, time = FormatUnionLogTime(logData.time)
+		if date ~= currentDate then
+			local dayLog = {}
+			dayLog.date = date
+			dayLog.showDate = true
+			dayLog.time = ""
+			dayLog.content = ""
+			table.insert(viewData, dayLog)
+			currentDate = date
+		end
+		
+		local itemViewData = {}
+		itemViewData.showDate = false
+		itemViewData.date = ""
+		itemViewData.time = time
+		itemViewData.content = FormatUnionLogContent(logData.content, logData.id)
+		table.insert(viewData, itemViewData)
+	end
+
+	return viewData
+end
+
+function FormatUnionLogContent(contentJson, logID)
+	local paramTbl = FormatUnionLog(contentJson, GetLogViewData)
+	local dataTbl = ResTblContainer:GetTable(GuildLog.tblName)
+	local logStr = dataTbl:Get(logID, GuildLog.content)
+
+	if logID == 1 or logID == 9 then
+		logStr = string.gsub(logStr, "{leaderName}", paramTbl.leaderName)
+	elseif logID == 2 or logID == 8 then
+		logStr = string.gsub(logStr, "{leaderName}", paramTbl.leaderName)
+		logStr = string.gsub(logStr, "{timeLast}", paramTbl.timeLast)
+	elseif logID == 3 or logID == 4 then
+		logStr = string.gsub(logStr, "{name}", paramTbl.name)
+	elseif logID == 5 or logID == 6 then
+		logStr = string.gsub(logStr, "{name}", paramTbl.name)
+		logStr = string.gsub(logStr, "{leaderName}", paramTbl.leaderName)
+		if logID == 5 then
+			logStr = string.gsub(logStr, "{position}", Language:getStr("UnionElder"))
+		else
+			logStr = string.gsub(logStr, "{position}", Language:getStr("UnionMember"))
+		end
+	elseif logID == 7 then
+		logStr = string.gsub(logStr, "{name}", paramTbl.name)
+		logStr = string.gsub(logStr, "{leaderName}", paramTbl.leaderName)
+	elseif logID == 10 or logID == 11 then
+		logStr = string.gsub(logStr, "{level}", paramTbl.level)
+	elseif logID == 12 then
+		local bossID = paramTbl.monsterName
+		local heroID = ResTblContainer:GetPropToInt(bossID,Monster.actorId,Monster.actorTbl)
+		local bossName = ResTblContainer:GetPropToStr(heroID,HeroBase.title,HeroBase.actorTbl)
+		logStr = string.gsub(logStr, "{monsterName}", bossName)
+	elseif logID == 13 or logID == 14 then
+		logStr = string.gsub(logStr, "{guildName}", paramTbl.guildName)
+	end
+	
+	return logStr
+end
+
+function FormatUnionLogTime(timeStamp)
+	local date, time = "", ""
+	date = GLuaFormatTime(timeStamp, "MM-dd")
+	time = GLuaFormatTime(timeStamp, "HH:mm")
+	return date, time
+end
+
+------reinforcement--------
+function GetRequestReinfEnabled()
+	local playerUnionRecord = appData:checkData("PlayerUnionRecord")
+	local cdTime = GetRequestCD(playerUnionRecord.lastRequestReinforcementQuality)
+	local enabled = CsBridge.timeManager.ServerTime >= (playerUnionRecord.lastRequestReinforcementTime + cdTime)
+	return enabled
+end
+
+function OnCommand_InitReinforcementData(objs)
+	InitReinforcementData()
+end
+
+function OnCommand_InitReinforcementMatData(objs)
+	if reinforcementDataFromTbl == nil then
+		reinforcementDataFromTbl = GetUnionReinforcementDataFromTbl()
+	end
+	InitReinforcementMatData()
+	self:SendNotification("RefreshReinforcementMatView",reinforcementData.reinforcementMatList)
+end
+
+function OnCommand_SelectDonationMat(objs)
+	local index = objs[0]+1
+
+	local mat = reinforcementData.reinforcementMatList[index]
+	if mat.selected then
+		return
+	end
+	if reinforcementData.curSelectMat ~= nil then
+		CancelSelectDonationMat(reinforcementData.curSelectMat)
+	end
+	SelectDonationMat(mat)
+end
+
+function OnCommand_ConfirmRequestPieces(objs)
+	if reinforcementData.curSelectMat == nil then
+		return
+	end
+	local req = {
+		itemId = reinforcementData.curSelectMat.id
+	}
+	HttpRequest("requestReinforcement","RequestReinforcementReq","RequestReinforcementResp",req,function(resp)
+		if resp.status == 0 then
+			InitReinforcementData()
+		end
+	end,true,true)
+end
+
+function OnCommand_DonateReinforcement(objs)
+	if reinforcementData.donateCount + 1 > donationReinforceLimit then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionReinforce_HasMaxDonation"),2)
+		return
+	end
+	local playerInfo = appData:checkData("PlayerInfo")
+	local data = objs[0]
+	local userId, zone = data.userId, data.zone
+	local reinforcement = FindReinforcement(userId, zone)
+	local req = {
+		userId = FormatUserID(userId, zone),
+		itemId = reinforcement.itemId,
+		time = reinforcement.startTime
+	}
+	HttpRequest("donateReinforcement","DonateReinforcementReq","DonateReinforcementResp",req,function(resp)
+		if resp.status ~= 0 then
+			CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionReinfoce_DonationFaild"), 2)
+		else 
+			CsBridge.hintUILayer:ShowRewardBox(reinforceReward.typeId, reinforceReward.id, reinforceReward.count)
+		end
+		InitReinforcementData()
+	end,true,true)
+end
+
+function FindReinforcement(userId, zone)
+	for k, item in pairs(reinforcementData.reinforcementList) do
+		if item.userId == userId and item.zone == zone then
+			return item
+		end
+	end
+end
+
+function InitReinforcementData()
+	local req = {
+		useless = 0
+	}
+	HttpRequest("unionReinforcement","UnionReinforcementReq","UnionReinforcementResp",req,function(resp)
+		if resp.status == 0 then
+			reinforcementData = {}
+			reinforcementData.reinforcementList = GetReinforcementData(resp.requestList)
+			local playerUnionRecord = appData:checkData("PlayerUnionRecord")
+			reinforcementData.donateCount = playerUnionRecord.reinforcementDonateCount
+			reinforcementData.lastRequestReinforcementTime = playerUnionRecord.lastRequestReinforcementTime
+			reinforcementData.requestDonationCD = GetRequestCD(playerUnionRecord.lastRequestReinforcementQuality)
+			local viewData = GetReinforcementViewData(true)
+			self:SendNotification("RefreshReinforcementView",viewData)
+		end
+	end,true,true)
+end
+
+function GetReinforcementData(pbs)
+	local reinforcementList = {}
+	if pbs~=nil then
+		for i,pb in ipairs(pbs) do
+			local reinforcement = {
+				userId = pb.info.userId,
+				itemId = pb.info.itemId,
+				requestCount = pb.info.requestCount,
+				receivedCount = pb.info.receivedCount,
+				startTime = pb.info.startTime,
+				nick = pb.info.nick,
+				authority = pb.info.authority,
+				hasDonation = not pb.canDonate,
+				zone = pb.info.zone,
+				id = FormatUserID(pb.info.userId, pb.info.zone)
+			}
+			table.insert(reinforcementList, reinforcement)
+		end
+	end
+	return reinforcementList
+end
+
+function GetReinforcementViewData(getRequstDonationTime)
+	local viewData = {}
+	viewData.items = {}
+	for k,reinforcement in pairs(reinforcementData.reinforcementList) do
+		local data = GetSingleReinforcementViewData(reinforcement)
+		if data ~= nil then
+			table.insert(viewData.items, data)
+		end
+	end
+	viewData.donationCount = donationReinforceLimit-reinforcementData.donateCount.."/"..donationReinforceLimit
+	viewData.hasDonationCount = donationReinforceLimit > reinforcementData.donateCount
+	if getRequstDonationTime then
+		viewData.requestDonationTime = reinforcementData.lastRequestReinforcementTime+reinforcementData.requestDonationCD
+	end
+	return viewData
+end
+
+function GetSingleReinforcementViewData(reinforcement)
+	local viewData = {}
+	viewData.userId = reinforcement.userId
+	viewData.zone = reinforcement.zone
+	viewData.hasDonation = reinforcement.hasDonation
+	local member = {}
+	local memberData = GetMemberData(reinforcement.userId, reinforcement.zone)
+	if memberData == nil then
+		return nil
+	end
+	member.name = memberData.name
+	member.icon = memberData.icon
+	member.level = memberData.level
+	member.vip = memberData.vip
+	member.zone = memberData.zone
+	viewData.member = member
+	viewData.requestItem = {
+		typeId = ItemTypeEnum.Item,
+		id = reinforcement.itemId,
+		count = reinforcement.requestCount,
+		receivedCount = reinforcement.receivedCount,
+	}
+	local ownItem = appData:checkItem("PackItem",reinforcement.itemId)
+	viewData.requestItem.ownCount = ownItem ~= nil and ownItem.count or 0
+	local playerInfo = appData:checkData("PlayerInfo")
+	if viewData.userId == playerInfo.userId and viewData.zone == playerInfo.zone then
+		viewData.isOwn = true
+	else
+		viewData.isOwn = false
+	end
+	viewData.hasMaxDonation = reinforcementData.donateCount + 1 > donationReinforceLimit
+	return viewData
+end
+
+function InitReinforcementMatData()
+	reinforcementData.reinforcementMatList = {}
+	local pbs = appData:checkAllItems("PackItem")
+	if pbs ~= nil then
+		for i=0,pbs.Length-1 do
+			local pb = pbs[i]
+			if reinforcementDataFromTbl[pb.itemId] ~= nil and pb.count ~= 0 then
+				local mat = {
+					typeId = ItemTypeEnum.Item,
+					id = pb.itemId,
+					count = pb.count
+				}
+				table.insert(reinforcementData.reinforcementMatList, mat)
+			end
+		end
+	end
+end
+
+function SelectDonationMat(mat)
+	mat.IsSelected = true
+	reinforcementData.curSelectMat = mat
+	self:SendNotification("RefreshSingleDonationMat",mat)
+end
+
+function CancelSelectDonationMat(mat)
+	mat.IsSelected = false
+	reinforcementData.curSelectMat = nil
+	self:SendNotification("RefreshSingleDonationMat",mat)
+end
+
+function GetRequestCD(quality)
+	if DonationCDTbl == nil then
+		DonationCDTbl = {}
+		DonationCDTbl.tblName = "GuildDonation"
+		DonationCDTbl.quality = "quality"
+		DonationCDTbl.coolDown = "coolDown"
+	end
+	return ResTblContainer:GetPropToInt(quality,DonationCDTbl.coolDown,DonationCDTbl.tblName) * 1000
+end
+
+function GetUnionReinforcementDataFromTbl()
+	local GuildDonationItem = {}
+	GuildDonationItem.tblName = "GuildDonationItem"
+	GuildDonationItem.isOpen = "open"
+	local data = {}
+	local ids = GetIds(GuildDonationItem.tblName)
+	local tbl=ResTblContainer:GetTable(GuildDonationItem.tblName)
+	for i=0,ids.Length-1 do
+		local id = tonumber(ids[i])
+		local isOpen = tbl:GetInt(id, GuildDonationItem.isOpen)
+		if isOpen == 1 then
+			data[id] = isOpen
+		end
+	end
+	return data 
+end
+
+------Union mail--------
+function OnCommand_OpenUnionMailView(objs)
+	local parentViewName = objs[0]
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			local view=CsBridge.OpenView("UnionMailView","UnionModel", true, true)
+			local reciver = "@all"
+			local userID = ""
+			local zone = ""
+			local onFinished = nil
+			view:SetParamDataList(reciver, userID, zone, onFinished)
+		end, 
+		"UnionMailView")
+end
+
+local function ShowMsgBox(desp,confirmCallback)
+	CsBridge.messageManager:PopMsgBox(
+	Language:getStr("local_confirm"),desp,
+	Language:getStr("local_cancel"),nil,
+	Language:getStr("local_confirm"),function()
+		if confirmCallback then confirmCallback() end
+	end)
+end
+
+local function GetSendUnionMailCost(mailCount)
+	local len = #mailPriceTblData
+	for i=1,len do
+		local costData = mailPriceTblData[i]
+		if mailCount >= costData.min and mailCount <= costData.max then
+			return costData.price
+		end
+	end
+	return mailPriceTblData[len].price
+end
+
+function OnCommand_SendMail(objs)
+	local content = objs[1]
+	if not AssertUnionMailEnabled() then
+		return
+	end
+	local unionPB = appData:checkData("PlayerUnionRecord")
+	local mailCount = unionPB.mailCount or 0
+	local nextMailCount = mailCount+1
+	local cost = GetSendUnionMailCost(nextMailCount)
+	local costDesp = cost.count..GetRewardName(cost)
+	local desp = string.format(Language:getStr("SendUnionMailConfirm"),mailCount,costDesp)
+	ShowMsgBox(desp,function()
+		SendUnionMail(content)
+	end)
+end
+
+function AssertUnionMailEnabled()
+	local enabled = true
+
+	local unionPB = appData:checkData("PlayerUnionRecord")
+	local lastOperationTime = unionPB.lastMailUnionTime or 0
+	if lastOperationTime > 0 then
+		local endTime = lastOperationTime + mailCDTime
+		enabled = CsBridge.timeManager.ServerTime > endTime
+
+		if not enabled then 
+			local text = Language:getStr("SendMail_CD")
+			text = string.format(text, CheckTimeRemain(endTime))
+			CsBridge.hintUILayer:ShowHintBox(text)
+			return enabled
+		end
+	end
+
+	return enabled
+end
+
+function SendUnionMail(content)
+	local req={}
+    req.content = content
+    HttpRequest("mailUnion", "MailUnionReq", "MailUnionResp", req, OnUnionMailSent)
+end
+
+function OnUnionMailSent(resp)
+    if resp~= nil then  
+        self:SendNotification("SendMail",resp)
+    end
+end
+
+------Open child view-------
+function OnCommand_OpenChildView(obj)
+	OpenTab(obj[0])
+end
+
+function OpenTab(idx)
+	CloseUnionViewChildren()
+
+	local viewIdx = idx
+	local modelName, parentViewName = "UnionModel", "UnionView"
+	if viewIdx == ChildViewIdx.InfoView then
+		CsBridge.CacheAssetsByModule( self.Module,
+			function()
+				CsBridge.OpenView("UnionInfoView",modelName, false, false)
+				TryGetUnionInfo()
+				GetUnionMembers()
+			end,
+			"UnionInfoView", "UnionMemberItemSlot")
+	elseif viewIdx == ChildViewIdx.LeaderboardView then
+		CsBridge.CacheAssetsByModule( self.Module,
+			function()
+				CsBridge.OpenView("UnionLeaderboardView",modelName, false, false)
+				GetUnionLeaderboard()
+			end,
+			"UnionLeaderboardView", "UnionRankItemSlot")
+	elseif viewIdx == ChildViewIdx.ApplicationView then
+		CsBridge.CacheAssetsByModule( self.Module,
+			function()
+				CsBridge.OpenView("UnionApplicationView",modelName, false, false)
+				GetApplications(RefreshApplicationView)
+		end,
+		"UnionApplicationView", "UnionApplicationItemSlot")
+	end
+end
+
+function OnCommand_InitUnionTipView(objs)
+	local unionID = objs[0]
+	local parentViewName = objs[1]
+	CsBridge.CacheAssetsByModule( self.Module,
+		function()
+			CsBridge.OpenView("UnionInfoView","UnionModel", false, false)
+			GetUnionTipData(unionID)
+		end,
+		"UnionInfoView", "UnionMemberItemSlot")
+end
+
+function OnCommand_OpenUnionOprtView(objs)
+	local parentViewName = objs[0]
+	CsBridge.CacheAssetsByModule( self.Module,
+		function()
+			local recuitView = CsBridge.OpenView("UnionOprtView","UnionModel", false, true)
+		end,
+		"UnionOprtView")
+end
+
+function OnCommand_OpenSettingsView(objs)
+	local parentViewName = objs[0]
+	local requiredLevel = myUnionData.union.applyLevel
+	CsBridge.CacheAssetsByModule( self.Module,
+		function()
+			local recuitView = CsBridge.OpenView("UnionSettingsView","UnionModel", true, true)
+			recuitView:SetParamDataList(requiredLevel, UpdateRequiredLevel)
+		end,
+		"UnionSettingsView")
+end
+
+function OnCommand_OpenNotificationView(objs)
+	local notification = myUnionData.union.notice
+	local parentViewName = objs[0]
+	CsBridge.CacheAssetsByModule( self.Module,
+		function()
+			local view = CsBridge.OpenView("UnionNotificationView","UnionModel", true, true)
+			view:SetParamDataList(notification, UpdateNotification)
+		end,
+		"UnionNotificationView")
+end
+
+function OnCommand_OpenRenameView(objs)
+	local parentViewName = objs[0]
+	CsBridge.CacheAssetsByModule( self.Module,
+		function()
+			local view = CsBridge.OpenView("UnionRenameView","UnionModel", true, true)
+			view:SetParamDataList(GetRenameViewData(), Rename)
+		end,
+		"UnionRenameView")
+end
+
+function OnCommand_OpenReinforcementView(objs)
+	if not _G.unionDonationTried then
+		_G.unionDonationTried = true
+		MsgCenter:Broadcast(Notify_UnionDonationTried)
+	end
+
+	local parentViewName = objs[0]
+	CsBridge.CacheAssetsByModule( self.Module,
+	function()
+		local view = CsBridge.OpenView("UnionReinforcementView","UnionModel", true, true)
+	end,
+	"UnionReinforcementView","UnionReinforcementItemSlot")
+end
+
+function OnCommand_OpenReinforcementMatView(objs)
+	if CsBridge.timeManager.ServerTime < (reinforcementData.lastRequestReinforcementTime + reinforcementData.requestDonationCD) then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionReinfoce_RequestDonationCD"),2)
+		return
+	end
+	local parentViewName = objs[0]
+	CsBridge.CacheAssetsByModule( self.Module,
+	function()
+		local view = CsBridge.OpenView("UnionReinforcementMatView","UnionModel", false, true)
+	end,
+	"UnionReinforcementMatView","BagPiecesItemSlot")
+end
+
+function GetRenameViewData()
+	local viewData = {}
+	viewData.name = myUnionData.union.name
+	viewData.consume = GetRenameConsume()
+	if CheckItemEnough(viewData.consume.id,viewData.consume.typeId,viewData.consume.count,false) then
+		viewData.priceColor = color2
+	else
+		viewData.priceColor = color26
+	end
+	return viewData
+end
+
+function GetGem()
+	local playerInfo = appData:checkData("PlayerInfo")
+	local balance = playerInfo.payGem + playerInfo.rewardGem
+
+	return balance
+end
+
+function OnCommand_OpenBannerView(objs)
+	local name = myUnionData.union.name
+	local parentViewName = objs[0]
+	CsBridge.CacheAssetsByModule( self.Module,
+		function()
+			local view = CsBridge.OpenView("UnionBannerView","UnionModel", true, true)
+			view:SetParamDataList(GetBannerViewData(), ChangeBanner)
+		end,
+		"UnionBannerView", "UnionBannerItemSlot")
+end
+
+function GetBannerViewData()
+	local viewData = {}
+
+	local currentIcon = myUnionData.union.icon
+	local tblName = GuildBanner.tblName
+	local itemIds = GetIds(tblName)
+	local rowData
+	local tbl=ResTblContainer:GetTable(tblName)
+    for  i = 0, itemIds.Length - 1 do
+        local id = tonumber(itemIds[i])
+		rowData = {}
+		rowData.id = id
+		rowData.icon = tbl:Get(id, GuildBanner.banner)
+		rowData.selected = id == currentIcon
+		viewData[id] = rowData
+    end
+
+	return viewData
+end
+
+function OnCommand_OpenLogView(objs)
+	local name = myUnionData.union.name
+	local parentViewName = objs[0]
+	CsBridge.CacheAssetsByModule( self.Module,
+		function()
+			local view = CsBridge.OpenView("UnionLogView","UnionModel", false, true)
+			GetLog()
+		end,
+		"UnionLogView", "UnionLogItemSlot")
+end
+
+function OnCommand_OpenHelpView(objs)
+	local instuctionID = 35
+	local parentViewName = objs[0]
+	CsBridge.CacheAssetsByModule( self.Module,
+		function()
+			local view = CsBridge.OpenView("HelpView","UnionModel", false, true)
+			view:SetData(instuctionID)
+		end,
+		"HelpView")    
+end
+
+------Hide all views-------
+function OnCommand_CloseUnionView(obj)
+	CloseUnionViewChildren()
+end
+
+function CloseUnionViewChildren()
+	StopRefreshCoroutine()
+	self:SendNotification("CloseUnionView")
+end
+
+function OnCommand_OpenTipView(objs)
+	local data = objs[0]
+	local itemType = data.typeId
+	if itemType == ItemTypeEnum.Hero then
+		ShowHeroTip(self, data.id, 1, 1)
+	else
+		ShowTip(self, data.typeId, data.id)
+	end
+end
+
+function OnCommand_OpenSignRewardView(objs)
+	local parentViewName = objs[0]
+	CsBridge.CacheAssetsByModule( self.Module,
+		function()
+			local view = CsBridge.OpenView("UnionSignRewardView","UnionModel", true, true)
+			view:SetParamDataList(GetSignViewData())
+		end,
+		"UnionSignRewardView", "ItemSlot")
+end
+
+function GetSignViewData()
+	local viewData = {}
+	local level = myUnionData.union.level
+	local rewardStr = ResTblContainer:GetPropToStr(level, Guild.checkinReward, Guild.tblName)
+	viewData.currentRewards = GetRewardFromTbl(rewardStr)
+
+	if ResTblContainer:TblHasId(level + 1,Guild.tblName) then
+		rewardStr = ResTblContainer:GetPropToStr(level + 1, Guild.checkinReward, Guild.tblName)
+		viewData.newRewards = GetRewardFromTbl(rewardStr)
+	else
+		rewardStr = ResTblContainer:GetPropToStr(level, Guild.checkinReward, Guild.tblName)
+		viewData.newRewards = {}
+	end
+
+	return viewData
+end

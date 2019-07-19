@@ -1,0 +1,53 @@
+require "HonorCityScoreItemSlot"
+local recordGrid
+local isInit = false
+function DoInit()
+	self.Shadow = 1
+end 
+
+function InitUI()
+	recordGrid = self:GetComponentAtPath("RecordSV/ScrollRect/Viewport/Grid",CLS_UI_ITEM_GRID)
+end
+
+function SetData(data)
+	if not isInit then
+		InitUI()
+		isInit = true
+	end
+	local taskData = data
+	recordGrid:RefreshItemSlots(taskData,self.gameObject,"HonorCityScoreItemSlot")
+end
+
+function OnHonorCityScoreItemSlotBindValue(slot, data)
+    local selfTrans = slot.transform
+    local finishedImgObj = selfTrans:GetGameObjectAtPath("iconImg")
+    local desTxt = selfTrans:GetComponentAtPath("desTxt", CLS_TEXT)
+    local scoreTxt = selfTrans:GetComponentAtPath("scoreTxt", CLS_TEXT)
+    local countTxt = selfTrans:GetComponentAtPath("countTxt", CLS_TEXT)
+
+    desTxt.text = data.description
+    scoreTxt.text = data.scoretxt
+    countTxt.text = data.progress
+    if data.isFinished then
+    	CsBridge.UnityHelper.SetTextColor(countTxt,0,255,0)
+    else
+    	CsBridge.UnityHelper.SetTextColor(countTxt,255,0,0)
+    end
+    finishedImgObj:SetActive(data.isFinished)
+end
+
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close()
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	
+end

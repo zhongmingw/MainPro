@@ -1,0 +1,56 @@
+import "stage.proto";
+package TurnTableData;
+
+message DrawItem
+{
+    required int32 id = 1;
+    required bool disable = 2;
+    required stage.RewardItem rewardItem = 3;
+}
+
+message LotteryInfo
+{
+    repeated DrawItem drawItems = 1;
+    required int64 lastRefreshTime = 2;
+    required bool hasFreeRefresh = 3;
+}
+
+message Record
+{
+    required int32 type = 1;
+    required int32 id = 2;
+    required int32 count = 3;
+    required string nick = 4;
+    required int32 ext = 5;
+    required string zone = 6;
+}
+
+message RefreshLotteryReq
+{
+    required int32 id = 1;
+}
+
+message RefreshLotteryResp
+{
+    required int32 result = 1;
+}
+
+message DrawLotteryReq
+{
+    required int32 count = 1;
+}
+
+message DrawLotteryResp
+{
+    repeated stage.RewardItem rewardItems = 1;
+}
+
+message GetLotteryHitRecordReq
+{
+    required int32 id = 1;
+}
+
+message GetLotteryHitRecordResp
+{
+    repeated Record records = 1;
+}

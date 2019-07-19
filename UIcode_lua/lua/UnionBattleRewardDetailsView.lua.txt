@@ -1,0 +1,76 @@
+--[[
+	file: UnionBattleRewardDetailsView.lua
+	author: hangang
+	description: union battle opponent details view
+]]
+
+local itemsGrid
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 1     --shadow type
+	InitUI()            --cache UI items
+end
+
+function InitUI()
+	local path = "Center/ScrollRect/Viewport/Grid"
+    itemsGrid = self:GetComponentAtPath(path, CLS_UI_ITEM_GRID)
+end
+
+--UIController events handlers-------------------------------------------------------
+function OnNotification_RefreshRewardDetailsView(objs)
+	local viewData = objs[0]
+	itemsGrid:RefreshItemSlots(viewData.items, self.gameObject, "UnionBattleRewardDetailsItem")
+end
+
+--Bind item slots--------------------------------------------------------------------
+function OnUnionBattleRewardDetailsItemBindValue(slot, data)
+	local selfTrans = slot.transform
+	local path = "Other"
+	local otherRoot = selfTrans:Find(path)
+
+	path = "percentTxt"
+	local percentTxt = otherRoot:GetComponentAtPath(path, CLS_TEXT)
+	percentTxt.text = data.percent
+
+	path = "slider/descTxt"
+	local descTxt = otherRoot:GetComponentAtPath(path, CLS_TEXT)
+	descTxt.text = data.description
+
+    path = "slider"
+    local slider = otherRoot:GetComponentAtPath(path, CLS_SLIDER)
+    slider.value = data.proportion
+
+    path = "Ribbon/rankTxt"
+	local rankTxt = otherRoot:GetComponentAtPath(path, CLS_TEXT)
+	rankTxt.text = data.rankText
+
+	path = "Ribbon/ribbonImg"
+	local ribbonImageObj = otherRoot:Find(path).gameObject
+	ribbonImageObj:SetActive(data.showRibbon)
+	if data.showRibbon then
+		CsBridge.IconData.SetIconByName(ribbonImageObj, data.ribbonIcon)
+	end
+end
+
+--UI event handlers-------------------------------------------------------------------
+function OnHelpBtnClick(sender)
+	self:SendCommand("OnHelpBtnClick", self.gameObject.name)
+end
+
+--On closing--------------------------------------------------------------------------
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close() 
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	itemsGrid = nil
+end

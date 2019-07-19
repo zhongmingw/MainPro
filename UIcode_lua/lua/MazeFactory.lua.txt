@@ -1,0 +1,51 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-05-05 14:33:23
+]]
+
+local MazeDef = require "MazeDef"
+local MazeEntryGrid = require "MazeEntryGrid"
+local MazeExitGrid = require "MazeExitGrid"
+local MazeNormalGrid = require "MazeNormalGrid"
+local MazeMonsterGrid = require "MazeMonsterGrid"
+local MazeBoxGrid = require "MazeBoxGrid"
+local MazeEventSelectGrid = require "MazeEventSelectGrid"
+local MazeEventItemGrid = require "MazeEventItemGrid"
+local MazeEventTrapGrid = require "MazeEventTrapGrid"
+local GridType = MazeDef.GridType
+local GridState = MazeDef.GridState
+local MazeEvent = MazeDef.MazeEvent
+local EventType = MazeDef.EventType
+
+-- grid create static factory
+local function CreateMazeGridBySvrData(svrData)
+     local grid
+     local state = svrData.isBlock and GridState.Block or (svrData.isOpen and GridState.On or GridState.Off)
+     if svrData.type == GridType.Entry then
+          grid = MazeEntryGrid(svrData.row,svrData.col,state,svrData.type)
+     elseif svrData.type == GridType.Exit then
+          grid = MazeExitGrid(svrData.row,svrData.col,state,svrData.type,svrData)
+     elseif svrData.type == GridType.Normal then
+          grid = MazeNormalGrid(svrData.row,svrData.col,state,svrData.type)
+     elseif svrData.type == GridType.Monster then
+          grid = MazeMonsterGrid(svrData.row,svrData.col,state,svrData.type,svrData)
+     elseif svrData.type == GridType.Box then
+          grid = MazeBoxGrid(svrData.row,svrData.col,state,svrData.type,svrData)
+     elseif svrData.type == GridType.Event then
+          local evtType = ResTblContainer:GetPropToInt(svrData.triggerId,MazeEvent.eventType,MazeEvent.tblName)
+          if evtType == EventType.Select then
+               grid = MazeEventSelectGrid(svrData.row,svrData.col,state,svrData.type,svrData)
+          elseif evtType == EventType.Item then
+               grid = MazeEventItemGrid(svrData.row,svrData.col,state,svrData.type,svrData)
+          elseif evtType == EventType.Trap then
+               grid = MazeEventTrapGrid(svrData.row,svrData.col,state,svrData.type,svrData)
+          end
+     end 
+     return grid
+ end
+
+ return {
+    CreateMazeGridBySvrData = CreateMazeGridBySvrData
+ }

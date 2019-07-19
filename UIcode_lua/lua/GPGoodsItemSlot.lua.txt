@@ -1,0 +1,20 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2018-11-05 11:37:33
+]]
+
+function OnGPGoodsItemSlotBindValue(slot,data)
+    local itemBase = slot:GetComponentAtPath("ItemSlot",CLS_RECTTRANSFORM)
+    local buyBtn = slot:GetComponentAtPath("BuyBtn",CLS_BUTTON_ARCHLY)
+    local minDiscountTxt = slot:GetComponentAtPath("MinDiscountTxt",CLS_TEXT)
+    local priceImg = slot:GetGameObjectAtPath("PriceImg")
+    local priceTxt = slot:GetComponentAtPath("PriceTxt",CLS_TEXT)
+
+    BindItemBaseValue(itemBase,data.goods)
+    minDiscountTxt.text = string.format(Language:getStr("GPMinDiscount"),data.minDiscount)
+    priceTxt.text = data.price
+    ShowOneConsume(priceImg,priceTxt,data.price)
+    buyBtn.Gray = data.remain == 0
+end

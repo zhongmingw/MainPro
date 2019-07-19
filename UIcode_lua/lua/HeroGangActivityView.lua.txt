@@ -1,0 +1,83 @@
+require "HeroGangItemSlot"
+
+local titleImgObj, countdownTxt
+local itemsGrid
+local bgImg
+local titleArtTxt
+local viewData
+
+function DoInit()
+	self.Shadow = CS.Client.Library.ShadowType.None
+	self.Anim = 0
+    InitUI()
+end
+
+function InitUI()
+    local selfTrans = self.transform
+	local path = "Center/Title/titleImg"
+	titleImgObj = self:GetGameObjectAtPath(path)
+
+	path = "Center/Title/countdownTxt"
+	countdownTxt = self:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Center/HeroGangGrid"
+	itemsGrid = self:GetComponentAtPath(path ,CLS_UI_ITEM_GRID)
+	bgImg = self:GetGameObjectAtPath("Center/Title/BgImg")
+	titleArtTxt = self:GetComponentAtPath("Center/Title/TitleArtImg",CLS_LOCALIZE)
+end
+
+function OnNotification_RefreshActivityView(objs)
+	if self.gameObject.activeInHierarchy then
+		viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function RefreshView(data)
+	bgImg:SetSelfActive(data.bg~=nil)
+	if data.bg ~= nil then
+        CsBridge.IconData.SetRawImageByName(bgImg,data.bg)
+        SetServerActivityArtFontByImage(titleArtTxt,data.bg)
+    end
+	countdownTxt.text = data.restTime
+    --descTxt.text = data.desc
+    --CsIconData.SetRawImageByName(titleImgObj, data.image)
+	itemsGrid:RefreshItemSlots(data.itemList, self.gameObject, "HeroGangItemSlot")
+end
+
+function OnNotification_RefreshCountdown(objs)
+	local data = objs[0]
+	RefreshCountdown(data)
+end
+
+function RefreshCountdown(countdownData)
+	if not viewData then--not ready
+		return
+	end
+
+	local currentActivityID = viewData.id
+	for activityID, restTime in pairs(countdownData) do
+		if activityID == currentActivityID then
+			countdownTxt.text = restTime
+			return
+		end
+	end
+end
+
+function OnHeroGangGridDetailsBtnClick(obj)
+    local data = obj.m_data
+    self:SendCommand("OpenHeroGangCompose",data.id)
+end
+
+function OnNotification_CloseActivityView(obj)
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	titleImgObj = nil
+	countdownTxt = nil
+	itemsGrid = nil
+	bgImg = nil
+	titleArtTxt = nil
+	viewData = nil
+end

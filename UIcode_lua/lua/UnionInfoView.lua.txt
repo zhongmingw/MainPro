@@ -1,0 +1,298 @@
+--[[
+	file: UnionInfoView.lua
+	author: hangang
+	description: View for union base information and member list
+]]
+
+local levelTxt, powerTxt, memberCountTxt, totalPowerTxt, 
+	idTxt, rankTxt, nameTxt, progressTxt, centerMemberCountTxt, dissolveCountdownTxt, demiseCountdownTxt
+local banerImgObj, noticeInput, expSlider
+local leaveBtnObj, dissolveBtnObj, recruitBtnObj, cancelDslvBtnObj, mailBtnObj
+local settingsBtn, notificationBtn, bannerBtn
+local memberScrollTF,memberGrid
+local bottomPanelObj, donationTipsObj
+
+local viewData
+
+function DoInit()
+	self.Shadow = 0
+	InitUI()
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	local path = "Top/Banner"
+	banerImgObj = selfTrans:GetGameObjectAtPath(path)
+	bannerBtn = banerImgObj:GetComponent(CLS_BUTTON_ARCHLY)
+
+	path = "Top/expSlider"
+	expSlider = selfTrans:GetComponentAtPath(path ,CLS_SLIDER)
+
+	path = "Top/expSlider/progressTxt"
+	progressTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Top/Labels/noticeTxt"
+	noticeInput = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Top/Labels/levelTxt"
+	levelTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Top/Labels/requiredTxt"
+	powerTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Top/Labels/memberCountTxt"
+	memberCountTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Top/Labels/totalPowerTxt"
+	totalPowerTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Top/Labels/idTxt"
+	idTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Top/Labels/rankTxt"
+	rankTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Top/Labels/nameTxt"
+	nameTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Top/SettingsBtn"
+	settingsBtn = selfTrans:GetComponentAtPath(path ,CLS_BUTTON_ARCHLY)
+
+	path = "Top/NotificationBtn"
+	notificationBtn = selfTrans:GetComponentAtPath(path ,CLS_BUTTON_ARCHLY)
+
+	path = "Center/CancelDissolveBtn"
+	cancelDslvBtnObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "Center/dissolveCountdownTxt"
+	dissolveCountdownTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Center/memberCountTxt"
+	centerMemberCountTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Center/LeaveBtn"
+	leaveBtnObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "Center/RecruitBtn"
+	recruitBtnObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "Center/DissolveBtn"
+	dissolveBtnObj = selfTrans:GetGameObjectAtPath(path)
+
+	memberScrollTF = selfTrans:Find("Center/memberSV/ScrollRect")
+
+	path = "Center/memberSV/ScrollRect/Viewport/Grid"
+	memberGrid = selfTrans:GetComponentAtPath(path ,CLS_UI_ITEM_GRID)
+
+	path = "Bottom"
+	bottomPanelObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "Bottom/RewardGrid/DonationBtn/Tips"
+	donationTipsObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "Bottom/RewardGrid/UnionMailBtn"
+	mailBtnObj = selfTrans:GetGameObjectAtPath(path)
+end
+
+function OnNotification_RefreshUnionInfoView(objs)
+	if self.gameObject.activeInHierarchy then
+		viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function RefreshView(data)
+	levelTxt.text = data.level
+	powerTxt.text = data.powerLimitText
+	memberCountTxt.text = data.memberText
+	totalPowerTxt.text = data.power
+	idTxt.text = data.id
+	rankTxt.text = data.rank
+	nameTxt.text = data.name
+	progressTxt.text = data.levelupDesc
+	centerMemberCountTxt.text = data.memberText
+	dissolveCountdownTxt.text = data.dissolveCountdown
+
+	settingsBtn.gameObject:SetActive(data.settingsBtnEnabled)
+	CsBridge.IconData.SetIconByName(banerImgObj, data.icon)
+	noticeInput.text = data.notification
+	expSlider.value = data.levelupProgress
+	leaveBtnObj:SetActive(data.leaveBtnEnabled)
+	dissolveBtnObj:SetActive(data.dissolveBtnEnabled)
+	cancelDslvBtnObj:SetActive(data.cancelDslvBtnEnabled)
+	recruitBtnObj:SetActive(data.recruitBtnEnabled)
+	bottomPanelObj:SetActive(data.showBottomPanel)
+	memberScrollTF:ResetSizeDelta({x = memberScrollTF.sizeDelta.x, y = data.scrollHeight})
+	donationTipsObj:SetActive(data.showDonationTips)
+	mailBtnObj:SetActive(data.mailBtnEnabled)
+end
+
+function OnNotification_RefreshUnionInfoViewMembers(objs)
+	local data = objs[0]
+	memberGrid:RefreshItemSlots(data, self.gameObject, "UnionMemberItemSlot")
+end
+
+function OnNotification_RefreshDissolveCountdown(objs)
+	if self.gameObject.activeInHierarchy then
+		local countdownText = objs[0]
+		dissolveCountdownTxt.text = countdownText
+	end
+end 
+
+function OnNotification_RefreshDemiseCountdown(objs)
+	if self.gameObject.activeInHierarchy and demiseCountdownTxt then
+		demiseCountdownTxt.text = objs[0]
+	end
+end
+
+function OnNotification_RefreshUnionTipView(objs)
+	viewData = objs[0]
+	RefreshView(viewData)
+	memberGrid:RefreshItemSlots(viewData.memberList, self.gameObject, "UnionMemberItemSlot")
+end
+
+function OnUnionMemberItemSlotBindValue(slot, data)
+	local path = "PlayerBase"
+	local playerRoot = slot.transform:Find(path)
+	BindPlayerBaseInfoValue(playerRoot,data.playerInfo)
+	
+	local path = "Other"
+	local otherRoot = slot.transform:Find(path)
+
+	path = "loginTimeTxt"
+	local loginTimeTxt = otherRoot:GetComponentAtPath(path ,CLS_TEXT)
+	loginTimeTxt.text = data.lastLoginTime
+
+	path = "powerTxt"
+	local powerTxt = otherRoot:GetComponentAtPath(path ,CLS_TEXT)
+	powerTxt.text = data.power
+
+	path = "nameTxt"
+	local nameTxt = otherRoot:GetComponentAtPath(path ,CLS_TEXT)
+	nameTxt.text = data.name
+
+	path = "titleTxt"
+	local titleTxt = otherRoot:GetComponentAtPath(path ,CLS_TEXT)
+	titleTxt.text = data.title
+
+	path = "demise"
+	local demiseRoot = otherRoot:Find(path)
+	demiseRoot.gameObject:SetActive(data.demiseVisible)
+	if data.demiseVisible then
+		path = "demiseCountdownTxt"
+		demiseCountdownTxt = demiseRoot:GetComponentAtPath(path ,CLS_TEXT)
+		demiseCountdownTxt.text = data.demiseCountdown
+	end
+
+	path = "Checkin"
+	local checkinRoot = otherRoot:Find(path)
+	checkinRoot.gameObject:SetActive(data.showCheckinPanel or false)
+	if data.showCheckinPanel then
+		path = "checkedImg"
+		local checkedInObj = checkinRoot:GetGameObjectAtPath(path)
+		checkedInObj:SetActive(data.checkedIn)
+		path = "checkinImg"
+		local notCheckinObj = checkinRoot:GetGameObjectAtPath(path)
+		notCheckinObj:SetActive(not data.checkedIn)
+	end
+end
+
+function OnGridPlayerBaseClick(obj, itemIndex)
+	if viewData.showBottomPanel then
+		local slotData = obj.m_data
+		local memberID = slotData.userId
+		local zone = slotData.zone
+		local icon = obj.transform:Find("PlayerBase")
+		local posY = icon.transform.position.y
+		self:SendCommand("OpenMemberOprtView", memberID, zone, posY)
+	end
+end
+
+function OnLeaveBtnClick(sender)
+	self:SendCommand("Withdraw")
+end
+
+function OnRecruitBtnClick(sender)	
+	local parentViewName = self.gameObject.name
+	self:SendCommand("ShowUnionRecuitView", parentViewName)
+end
+
+function OnDissolveBtnClick(sender)	
+	self:SendCommand("Disslove")
+end
+
+function OnCancelDissolveBtnClick(sender)	
+	self:SendCommand("CancelDissloving")
+end
+
+function OnSettingsBtnClick(sender)	
+	self:SendCommand("OpenUnionOprtView", self.gameObject.name)
+end
+
+function OnNotificationBtnClick(sender)	
+	if viewData.settingsBtnEnabled then
+		self:SendCommand("OpenNotificationView", self.gameObject.name)
+	end
+end
+
+function OnBannerClick(sender)
+	if viewData.bannerBtnEnabled then
+		self:SendCommand("OpenBannerView", self.gameObject.name)
+	end
+end
+
+function OnDonationBtnClick(sender)
+	donationTipsObj:SetActive(false)
+	self:SendCommand("OpenReinforcementView", self.gameObject.name)
+end
+
+function OnLogBtnClick(sender)
+	self:SendCommand("OpenLogView", self.gameObject.name)
+end
+
+function OnHelpBtnClick(sender)
+	self:SendCommand("OpenHelpView", self.gameObject.name)
+end
+
+function OnRewardBtnClick(sender)
+	self:SendCommand("OpenSignRewardView", self.gameObject.name)
+end
+
+function OnUnionMailBtnClick(sender)
+	self:SendCommand("OpenUnionMailView", self.gameObject.name)
+end
+
+function OnNotification_CloseUnionView(obj)
+	demiseCountdownTxt = nil
+	self:HideView("UnionInfoView")
+end
+
+function DoExit()
+	levelTxt = nil
+	powerTxt = nil
+	memberCountTxt = nil
+	totalPowerTxt = nil
+	idTxt = nil
+	rankTxt = nil
+	nameTxt = nil
+	progressTxt = nil
+	centerMemberCountTxt = nil
+	dissolveCountdownTxt = nil
+	demiseCountdownTxt = nil
+	banerImgObj = nil
+	noticeInput = nil
+	expSlider = nil
+	leaveBtnObj = nil
+	dissolveBtnObj = nil
+	recruitBtnObj = nil
+	cancelDslvBtnObj = nil
+	mailBtnObj = nil
+	settingsBtn = nil
+	notificationBtn = nil
+	bannerBtn = nil
+	memberGrid = nil
+	bottomPanelObj = nil
+	donationTipsObj = nil
+
+	viewData = nil
+end

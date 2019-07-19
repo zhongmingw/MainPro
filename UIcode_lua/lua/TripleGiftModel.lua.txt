@@ -1,0 +1,90 @@
+--[[
+	file: TripleGiftModel.lua
+	author: hangang
+	description: Triple gift view controller
+]]
+
+local cachedData
+
+local payIdList = {
+	1,
+	4,
+	6
+}
+
+------Http request----------------------------------------------------------------
+function FetchTripleGiftStatus(finishedCallback)
+	local req = {}
+	req.id = 0
+	local url, requestCls, responseCls = "getFirstChargeActivity", "GetActivityByIdReq", "GetFirstChargeActivityResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+------initialization----------------------------------------------------------------
+function DoInit()
+end
+
+------View events handler-----------------------------------------------------------------
+function OnCommand_GetBaseViewData(objs)
+    FetchTripleGiftStatus(RefreshBaseView)
+end
+
+function RefreshBaseView(respData)
+    cachedData = respData
+	local viewData = GetViewData(respData)
+	self:SendNotification("RefreshView", viewData)
+end
+
+function OnCommand_OpenTipView(objs)
+	local data = objs[0]
+	local itemType = data.typeId
+	if itemType == ItemTypeEnum.Hero then
+		ShowHeroTip(self, data.id, 1, 1)
+	else
+		ShowTip(self, itemType, data.id)
+	end
+end
+
+local function GetConfigPayId(config)
+	local payId = config.payId
+	if payId and payId ~= 0 then
+		return payId
+	end
+	return payIdList[config.subId]
+end
+
+function OnCommand_BuyBtnClicked(objs)
+	local payId = GetConfigPayId(cachedData.config)
+	if CheckCanBuy(nil,payId) then
+        local payData=CheckPayData(payId)
+		DoPay(payData, function(resp)
+			local confirmCbk = function()
+            	FetchTripleGiftStatus(RefreshBaseView)
+			end
+			PopRewardView(self,cachedData.config.rewards, confirmCbk)
+        end)
+    else
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("cannotbuycard"))
+    end
+end
+
+------Helpers-----------------------------------------------------------------------------
+function GetViewData(data)
+	local viewData = {}
+
+    if data.config then
+	    viewData.rewards = data.config.rewards
+        viewData.step = data.config.subId
+		viewData.goal = string.format(Language:getStr("FirstChargeGoal"), data.config.count/100)
+    else
+        viewData.step = 0
+    end
+    
+	return viewData
+end
+
+function DoOnExit()
+	cachedData = nil
+
+	payIdList = nil
+end

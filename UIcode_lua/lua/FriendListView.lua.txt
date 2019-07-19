@@ -1,0 +1,286 @@
+local friendCountTxt
+local powerTxt
+local friendshipTxt
+local summonBtn
+local friendGrid
+local sendBtn
+local friends
+local curChallenge
+local friendDetailWindow
+local detailView
+local inAnimation
+local curFriend
+local challengeBoss=false
+local maskBtnTxt
+local nothing
+
+function DoInit()
+    self.Anim = 0
+    self.Shadow=0
+    friendCountTxt = self:GetComponentAtPath("other/numberTxt" ,CLS_TEXT)
+    summonBtn = self:GetComponentAtPath("other/summonBtn" ,CLS_BUTTON_ARCHLY)
+    sendBtn = self:GetComponentAtPath("button/sendBtn" ,CLS_BUTTON_ARCHLY)
+    powerTxt = self:GetComponentAtPath("other/kuang01/number01Txt" ,CLS_TEXT)
+    friendshipTxt = self:GetComponentAtPath("other/kuang02/number01Txt" ,CLS_TEXT)
+    friendGrid = self:GetComponentAtPath("other/playerSV/ScrollRect/Viewport/Grid" ,CLS_UI_ITEM_GRID)
+    friendDetailWindow = self:GetGameObjectAtPath("FriendDetailView")
+    detailView = friendDetailWindow.transform:GetGameObjectAtPath("DetailView")
+    maskBtnTxt = detailView.transform:GetComponentAtPath("maskBtn/nameTxt" ,CLS_TEXT)
+    nothing = self:GetGameObjectAtPath("other/Nothing")
+end
+
+function IsSetAnchor()
+    return true
+end
+
+function BeoforeReturnBack()
+    self.gameObject:SetSelfActive(false)
+end
+
+function OnAnimationFinished()
+    self:SendCommand("InitFriendList")
+end
+
+function OnNotification_InitFriendList(objs)
+    friends=objs[0]
+    Refresh()
+    if #friends.friends > 0 then
+        nothing:SetSelfActive(false)
+        friendGrid.gameObject:SetSelfActive(true)
+        friendGrid:RefreshItemSlots(objs[0].friends, self.gameObject, "FriendListItemSlot")
+    else
+        nothing:SetSelfActive(true)
+        friendGrid.gameObject:SetSelfActive(false)
+    end
+end
+
+function OnFriendListItemSlotBindValue(slot,data)
+    local nickTxt = slot:GetComponentAtPath("nameTxt" ,CLS_TEXT)
+    local timeTxt = slot:GetComponentAtPath("numberTxt" ,CLS_TEXT)
+    local receivedBtn = slot:GetComponentAtPath("receivedBtn" ,CLS_BUTTON_ARCHLY)
+    local rewardBtn = slot:GetComponentAtPath("rewardBtn" ,CLS_BUTTON_ARCHLY)
+    local boss = slot:GetGameObjectAtPath("jindu")
+    local player=slot.transform:Find("Player")
+    BindPlayerBaseInfoValue(player,data.friendBasicInfoResp)
+    nickTxt.text=FormatWorldPlayerName(data.friendBasicInfoResp.nick, data.friendBasicInfoResp.zone)
+    timeTxt.text=CsBridge.timeManager:checkTimePass(data.friendBasicInfoResp.lastOnlineTime)
+    if data.canReceive then
+        receivedBtn.Gray=false
+    else
+        receivedBtn.Gray=true
+    end
+    if data.canDonate then
+        rewardBtn.Gray=false
+    else
+        rewardBtn.Gray=true
+    end
+
+    if data.haveMonster and data.monsterId > 0 then
+        boss:SetSelfActive(true)
+        local hero=boss.transform:Find("hero/hero").gameObject
+        local slider=boss.transform:Find("slider"):GetComponent(CLS_SLIDER)
+        BindHeroBaseValue(hero,data.monsterInfo)
+        slider.value=data.curHpPercentage/100
+    else
+        boss:SetSelfActive(false)
+    end
+end
+
+function OnGridPlayerClick(obj)
+    if not inAnimation then
+        curFriend=obj.m_data
+        local icon=obj.transform:Find("Player")
+        friendDetailWindow:SetSelfActive(true)
+        if curFriend.sheild then
+            maskBtnTxt:SetText(Language:getStr("unmaskFriend"))
+        else
+            maskBtnTxt:SetText(Language:getStr("maskFriend"))
+        end
+        inAnimation=true
+        detailView:SetGlobalPositionY(icon.position.y)
+        detailView:PlayViewAnimation(function()
+            inAnimation=false
+        end, CsBridge.ViewAnimantion.Common)
+    end
+end
+
+function OnDetailMaskClick(sender)
+    if not inAnimation then
+        inAnimation=true
+        detailView:PlayViewAnimation(function()
+            inAnimation=false
+            friendDetailWindow:SetSelfActive(false)
+        end,CsBridge.ViewAnimantion.Fade)
+    end
+end
+
+function OnGridreceivedBtnClick(obj)
+    self:SendCommand("ReceivedFriendShip",obj.m_data)
+end
+
+function OnGridrewardBtnClick(obj)
+    self:SendCommand("DonateFriendShip",obj.m_data)
+end
+
+function OnNotification_ReceivedFriendShip(objs)
+    local data=objs[0]
+    Refresh()
+    friendGrid:SingleRefreshSlot(data)
+end
+
+function OnNotification_DonateFriendShip(objs)
+    local data=objs[0]
+    Refresh()
+    friendGrid:SingleRefreshSlot(data)
+end
+
+function Refresh()
+    local playerInfo=appData:checkData("PlayerInfo")
+    local limit = GetConstValue("friendCountLimit")
+    friendCountTxt.text=#friends.friends.."/"..(limit+GetVipAddFriendCount(playerInfo.vip))
+    powerTxt.text=tostring(playerInfo.strength)
+    friendshipTxt.text=tostring(playerInfo.friendCoin)
+    if checkCanSend() then
+        sendBtn.Gray=false
+    else
+        sendBtn.Gray=true
+    end
+end
+
+function GetVipAddFriendCount(vip)
+    return ResTblContainer:GetPropToInt(vip,VipTbl.friendCountAdd,VipTbl.tblName)
+end 
+
+function checkCanSend()
+    if friends and friends.friends then
+        for i=1,#friends.friends do
+            local friend=friends.friends[i]
+            if friend.canDonate or friend.canReceive then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+function OnsendBtnClick(sender)
+    if checkCanSend() then
+        self:SendCommand("Auto")
+    else
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("NoDonateOrReceive"))
+    end
+end
+
+function OnNotification_Auto(objs)
+    local datas=objs[0]
+    for i=1,#datas do
+        friendGrid:SingleRefreshSlot(datas[i])
+    end
+    Refresh()
+end
+
+function OnGridheroClick(obj)
+    local data=obj.m_data
+    self:SendCommand("ChallengeFriendBoss", data)
+end
+
+function OnNotification_ChallengeFriendBoss(objs)
+    challengeBoss=true
+    curChallenge=objs[0]
+end
+
+local function RefreshView()
+    self:SendCommand("InitFriendList")
+end
+
+function OnDoUnhide()
+    RefreshView()
+end
+
+function Active()
+    RefreshView()
+end
+
+function OnChallengeFriendBtnClick(sender)
+	if not UIOpen(UI_OPEN_TYPE_LIMIT_FRIENDHELP,true) then
+		return
+	else
+	    local playerInfo=appData:checkData("PlayerInfo")
+        if (playerInfo.strength < 0) then
+	        CsBridge.hintUILayer:ShowHintBox(Language:getStr("NoPower"),2)
+	        return
+	    end
+	end
+    friendDetailWindow:SetSelfActive(false)
+    self:SendCommand("ChallengeFriend",curFriend)
+end
+
+function OnNotification_ChallengeFriend(objs)
+    challengeBoss=false
+end
+
+function OnmailBtnClick(sender)
+    if not CheckPlayerCanSendPrivateMail() then
+        return
+    end
+    friendDetailWindow:SetSelfActive(false)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+		self:Deactive("FriendGenView")
+		self:Deactive("FriendListView")
+		local view=CsBridge.OpenView("SendMailView","SendMailModel")
+        local nick = curFriend.friendBasicInfoResp.nick
+        local userID = curFriend.friendBasicInfoResp.userId
+        local zone = curFriend.friendBasicInfoResp.zone
+		view:SetParamDataList(nick, userID, zone, function()
+		    self:Active("FriendGenView")
+		    self:Active("FriendListView")		    
+		end)
+	end, "SendMailView")
+end
+
+function OnmaskBtnClick(sender)
+    friendDetailWindow:SetSelfActive(false)
+    self:SendCommand("MaskFriend", curFriend)
+end
+
+function OnNotification_MaskFriend(objs)
+    friendGrid:SingleRefreshSlot(objs[0])
+end
+
+function OndeleteFriendBtnClick(sender)
+    friendDetailWindow:SetSelfActive(false)
+    self:SendCommand("DeleteFriend",curFriend)
+end
+
+function OndetailBtnClick(sender)
+    friendDetailWindow:SetSelfActive(false)
+	local friendInfo = curFriend.friendBasicInfoResp
+	self:SendCommand("ShowPlayerTips", friendInfo)
+end
+
+function OnsummonBtnClick(sender)
+    LinkSystem(UI_OPEN_TYPE_HEROSUMMON,self)
+end
+
+function OnDeleteFriendsBtnClick(sender)
+    self:SendCommand("ListViewManageBtnClicked")
+end
+
+function DoExit()
+	self.Module=nil
+    friendCountTxt = nil
+    powerTxt = nil
+    friendshipTxt = nil
+    summonBtn = nil
+    friendGrid = nil
+    sendBtn = nil
+    friends = nil
+    curChallenge = nil
+    friendDetailWindow = nil
+    detailView = nil
+    inAnimation = nil
+    curFriend = nil
+    challengeBoss= nil
+    maskBtnTxt = nil
+    nothing = nil
+end

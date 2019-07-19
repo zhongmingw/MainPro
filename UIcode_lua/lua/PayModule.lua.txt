@@ -1,0 +1,15 @@
+function AssetNames(objs)
+	local arr={"PayView", "PayTypeView", "WebPayView", "HelpView"}
+	return arr
+end
+
+function OnEnter(objs,onFinished)
+	CS.Client.Library.MoneyBanner.SetBannerVisible(false)
+	local view = self:OpenView("PayView","PayModel")
+	if(objs~= nil and objs.Length > 0) then
+	    view:SetParamDataList(objs[0])
+	end
+	if(onFinished ~= nil)then
+		onFinished()  
+	end
+end

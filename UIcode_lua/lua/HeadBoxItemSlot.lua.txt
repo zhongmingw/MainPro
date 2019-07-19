@@ -1,0 +1,42 @@
+
+function OnHeadBoxItemSlotBindValue(slot, data)
+    local spine_TF = slot.transform:Find("SpineRoot")
+    local frame_Sprite = slot:GetComponentAtPath("FrameSprite" ,CLS_IMAGE)
+    local timer_Lab = slot:GetComponentAtPath("TimerTxt" ,CLS_TEXT)
+    local selectedFlagObj = slot:GetGameObjectAtPath("selection")
+	selectedFlagObj:SetSelfActive(data.selected)
+    if spine_TF.childCount~=0  then
+        for i=spine_TF.childCount-1,0,-1 do
+            local model = spine_TF:GetChild(i)
+            CsBridge.objectCache:Recycle(model.gameObject)
+        end
+    end
+    if data.expireTime==0 then
+        timer_Lab.gameObject:SetSelfActive(false)
+    else
+        timer_Lab.gameObject:SetSelfActive(true)
+        local interval = 1
+        CsBridge.timeManager:FixedIntervalTimer(timer_Lab.gameObject,
+        function (targetTime)
+            interval=interval+CS.UnityEngine.Time.deltaTime
+            if interval>=1 then
+                interval=0
+                timer_Lab:SetText(CheckTimeRemain(targetTime,false))
+            end
+        end,
+        function ()
+            timer_Lab:SetText("00:00:00")
+            skeleton:ChangeMaterial("SpineGray")
+        end,data.expireTime)
+    end
+    local iconSpine = ResTblContainer:GetPropToStr(data.id, AvatarBox.iconSpine, AvatarBox.tblName)
+    if iconSpine~=nil and iconSpine~="" then
+        CsBridge.SpineHelper.CreatSpineModel(iconSpine,spine_TF,
+        function(skeleton)
+            CsBridge.UnityHelper.SetUILocalScale(skeleton.rectTransform,1.1)
+        end)
+    end
+    local icon = ResTblContainer:GetPropToStr(data.id, AvatarBox.icon, AvatarBox.tblName)
+    CsBridge.IconData.SetIconByName(frame_Sprite.gameObject,icon)
+
+end

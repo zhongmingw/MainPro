@@ -1,0 +1,334 @@
+local UP_HOLE = 1--上方孔位
+local RIGHT_HOLE = 2--右
+local DOWN_HOLE = 3--下
+local LEFT_HOLE = 4--左
+
+local isInit = false
+local jewelGrid
+local getJewel
+local composeSpineRoot
+local upImg
+local downImg
+local rightImg
+local leftImg
+local middleImg
+local imgObjTab = {}
+local runeImg
+local gainIconImg
+local resIcon
+local costNumTxt
+local mainId
+local shadeRect
+local refreshCallback
+local mainStarRoot
+local takeDownBtn
+
+local jewelData = {
+    [UP_HOLE] = {},
+    [RIGHT_HOLE] = {},
+    [DOWN_HOLE] = {},
+    [LEFT_HOLE] = {},
+}
+
+local runeSpine = {
+    [UP_HOLE] = {"RuneRightUpSpine","youshang","youshang_loop"},
+    [RIGHT_HOLE] = {"RuneRightDownSpine","youxia","youxia_loop"},
+    [DOWN_HOLE] = {"RuneLeftDownSpine","zuoxia","zuoxia_loop"},
+    [LEFT_HOLE] = {"RuneLeftUpSpine","zuoshang","zuoshang_loop"},
+}
+
+local runeSpineObj = {}
+
+function DoInit()	
+    self.Anim = 0
+end
+
+function InitUI()
+    jewelGrid = self:GetComponentAtPath("JewelGrid", CLS_UI_ITEM_GRID)
+    jewelGrid:RefreshItemSlots(jewelData,self.gameObject,"JewelComposeSlot")
+    runeImg = self:GetComponentAtPath("BGS/spineRoot/fuernImg", CLS_IMAGE)
+    gainIconImg = self:GetComponentAtPath("GainJewelBtn/GainIconImg", CLS_IMAGE)
+    composeSpineRoot = self.transform:Find("BGS/spineRoot")
+    upImg = self:GetComponentAtPath("BGS/upImg", CLS_IMAGE)
+    downImg = self:GetComponentAtPath("BGS/downImg", CLS_IMAGE)
+    rightImg = self:GetComponentAtPath("BGS/rightImg", CLS_IMAGE)
+    leftImg = self:GetComponentAtPath("BGS/leftImg", CLS_IMAGE)
+    leftImg = self:GetComponentAtPath("BGS/leftImg", CLS_IMAGE)
+    middleImg = self:GetComponentAtPath("BGS/middleImg", CLS_IMAGE)
+    shadeRect = self.transform:Find("Shade")
+    resIcon = self:GetComponentAtPath("iconImg", CLS_IMAGE)
+    costNumTxt = self:GetComponentAtPath("numberTxt" ,CLS_TEXT)
+    mainStarRoot = self.transform:Find("GainJewelBtn/GainIconImg/StarRoot")
+    takeDownBtn = self:GetComponentAtPath("TakeDownBtn",CLS_BUTTON_ARCHLY)
+
+    imgObjTab[UP_HOLE] = upImg
+    imgObjTab[RIGHT_HOLE] = rightImg
+    imgObjTab[DOWN_HOLE] = downImg
+    imgObjTab[LEFT_HOLE] = leftImg
+end
+
+local function RefreshView()
+    local composeSpine = composeSpineRoot.transform
+    local num = 0
+    mainId = nil
+    for k,v in pairs(jewelData) do
+        if v.icon then
+            mainId = v.mainId
+            num = num + 1
+            imgObjTab[k].fillAmount = 1
+            local spineName = runeSpine[k][1]
+            local anim1 = runeSpine[k][2]
+            local anim2 = runeSpine[k][3]
+            if not runeSpineObj[k] then
+                CsBridge.CacheAssetsByModule(self.Module,function()
+                    runeSpineObj[k] = CsBridge.objectCache:CreateObject(spineName, true)
+                    runeSpineObj[k].transform:SetParent(composeSpine,false)
+                    runeSpineObj[k]:GetComponent("SkeletonGraphic"):PlayAnimation(anim1 ,false ,function()
+                        runeSpineObj[k]:GetComponent("SkeletonGraphic"):PlayAnimation(anim2 ,false ,nil)
+                    end)
+                end,spineName)
+            else
+                runeSpineObj[k]:SetActive(true)
+                runeSpineObj[k]:GetComponent("SkeletonGraphic"):PlayAnimation(anim1 ,false ,function()
+                    runeSpineObj[k]:GetComponent("SkeletonGraphic"):PlayAnimation(anim2 ,false ,nil)
+                end)
+            end
+        else
+            if runeSpineObj[k] then
+                runeSpineObj[k]:SetActive(false)
+            end
+            imgObjTab[k].fillAmount = 0
+        end
+    end
+    if mainId then
+        self:SendCommand("GetMainIcon",mainId)
+        SetStar(mainStarRoot,1)
+    else
+        SetStar(mainStarRoot,0)
+        gainIconImg.gameObject:SetActive(false)
+        resIcon.gameObject:SetActive(false)
+        costNumTxt.gameObject:SetActive(false)
+    end
+    if num > 0 then
+        runeImg.gameObject:SetActive(false)
+        if num == LEFT_HOLE then
+            middleImg.gameObject:SetActive(true)
+        else
+            middleImg.gameObject:SetActive(false)
+        end
+    else
+        middleImg.gameObject:SetActive(false)
+        runeImg.gameObject:SetActive(true)
+    end
+    takeDownBtn.Gray = num == 0
+    jewelGrid:RefreshItemSlots(jewelData,self.gameObject,"JewelComposeSlot")
+end
+
+local function ClearComposeView()
+    jewelData = {
+        [UP_HOLE] = {},
+        [RIGHT_HOLE] = {},
+        [DOWN_HOLE] = {},
+        [LEFT_HOLE] = {},
+    }
+    RefreshView()
+    jewelGrid:RefreshItemSlots(jewelData,self.gameObject,"JewelComposeSlot")
+    resIcon.gameObject:SetActive(false)
+    costNumTxt.gameObject:SetActive(false)
+    shadeRect.gameObject:SetActive(false)
+    self:SendCommand("ClearSelectedArr")
+end
+
+function SetParamDataList(obj)
+    if obj ~= nil then
+        refreshCallback = obj[0]
+    end
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+        ClearComposeView()
+    end
+end
+
+function BeoforeReturnBack()
+    self:HideView(self.gameObject.name)
+end
+
+function OnJewelGridJewelComposeSlotClick(obj)
+    local index = obj.m_index
+    self:SendCommand("OpenJewelComposeSelectView", index)
+end
+
+function OnNotification_RefreshRedFlag(objs)
+    refreshCallback()
+end
+
+function OnNotification_RefreshResCost(objs)
+    local resId = objs[0]
+    local num = objs[1]
+    resIcon.gameObject:SetActive(true)
+    costNumTxt.gameObject:SetActive(true)
+    SetIconByResourceId(resIcon.gameObject,resId)
+    costNumTxt.text = num
+end
+
+function OnNotification_RefreshMainIcon(objs)
+    local mainIcon = objs[0]
+    local resId = objs[1]
+    local num = objs[2]
+    CsBridge.IconData.SetIconByName(gainIconImg.gameObject,mainIcon)
+    gainIconImg.gameObject:SetActive(true)
+    resIcon.gameObject:SetActive(true)
+    costNumTxt.gameObject:SetActive(true)
+    SetIconByResourceId(resIcon.gameObject,resId)
+    costNumTxt.text = num
+end
+
+function OnNotification_RefreshJewelData(objs)
+    local selectedArr = objs[0]
+    for k,v in pairs(jewelData) do
+        if selectedArr[k] then
+            jewelData[k].icon = selectedArr[k].icon
+            jewelData[k].id = selectedArr[k].id
+            jewelData[k].mainId = selectedArr[k].mainId
+            jewelData[k].star = selectedArr[k].star
+        else
+            jewelData[k].icon = nil
+            jewelData[k].id = nil
+            jewelData[k].mainId = nil
+            jewelData[k].star = 0
+        end
+    end
+    RefreshView()
+end
+
+function OnNotification_ComposeSuccess(objs)
+    local jewelItems = objs[0]
+    local composeSpine = composeSpineRoot.transform
+    shadeRect.gameObject:SetActive(true)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local spineObjDown = CsBridge.objectCache:CreateObject("JewelComposeSpine", true)
+        spineObjDown.transform:SetParent(composeSpine,false)
+        spineObjDown:GetComponent("SkeletonGraphic"):PlayAnimation("hecheng_down",false,function()
+            CsBridge.GameObject.Destroy(spineObjDown)
+        end)
+    end,"JewelComposeSpine")
+    local t1 = CsBridge.TweenUtils.ScaleTo(composeSpine,1,1,0.6)
+    t1:OnCompleteAction(function()
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            local spineObjUp = CsBridge.objectCache:CreateObject("JewelComposeUp", true)
+            spineObjUp.transform:SetParent(composeSpine,false)
+            spineObjUp:GetComponent("SkeletonGraphic"):PlayAnimation("hecheng_up",false,function()
+                for k,v in pairs(jewelData) do
+                    jewelData[k] = {}
+                end
+                jewelGrid:RefreshItemSlots(jewelData,self.gameObject,"JewelComposeSlot")
+                gainIconImg.gameObject:SetActive(false)
+                shadeRect.gameObject:SetActive(false)
+                ShowRewardReceivedTip(self,jewelItems)
+                CsBridge.GameObject.Destroy(spineObjUp)
+            end)
+        end,"JewelComposeUp")
+    end)
+end
+
+function OnJewelComposeSlotBindValue(slot, data)
+    local fgImg = slot:GetGameObjectAtPath("fgImg")
+    local iconImg = slot:GetGameObjectAtPath("IconSprite")
+    local spineRootObj = slot:GetGameObjectAtPath("spineRoot")
+    local starRoot = slot.transform:Find("StarRoot")
+    local spineRoot = spineRootObj.transform
+
+    local updateObj = spineRoot.childCount ~= 0 and spineRoot:GetChild(0) or nil
+    if updateObj ~= nil then
+        CsBridge.SpineHelper.ClearSpineModel("",updateObj.gameObject)
+    end
+    if data.icon then
+        fgImg.gameObject:SetActive(true)
+        iconImg.gameObject:SetActive(true)
+        CsBridge.IconData.SetIconByName(iconImg.gameObject,data.icon)
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            CsBridge.objectCache:CreateObject("JewelClickSpine", true, spineRoot)
+        end,"JewelClickSpine")
+
+        spineRootObj:SetSelfActive(true)
+        SetStar(starRoot,data.star or 0)
+    else
+        SetStar(starRoot,0)
+        fgImg.gameObject:SetActive(false)
+        iconImg.gameObject:SetActive(false)
+        spineRootObj:SetSelfActive(false)
+    end
+end
+
+function OnComposeBtnClick(sender)
+    self:SendCommand("ComposeJewel")
+end
+
+function OnGainJewelBtnClick(sender)
+    local mainId = nil
+    for k,v in pairs(jewelData) do
+        if v.mainId then
+            mainId = v.mainId
+            break
+        end
+    end
+    if mainId then
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            local view = CsBridge.OpenView("ItemTipView","ItemTipModel",false,true)
+            local reward = {
+                id = mainId,
+                typeId = ItemTypeEnum.Jewel,
+                count = 1,
+            }
+            view:SetParamDataList(reward,itemBaseIndex+itemDespIndex+PropsIndex+itemSuitIndex)
+            view:SendCommand("InitItemData")
+        end, "ItemTipView")
+    end
+end
+
+function OnTakeDownBtnClick(sender)
+    local flag = false
+    for k,v in pairs(jewelData) do
+        if v.icon then
+            flag = true
+            break
+        end
+    end
+    if flag then
+        ClearComposeView()
+    else
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("Jewel_NoJewelTakeDown"))
+    end
+end
+
+function OnPlacedBtnClick(sender)
+    self:SendCommand("PlacedJewel")
+end
+
+
+function OnClose()
+    ClearComposeView()
+end
+
+function DoExit()
+    isInit = nil
+    jewelGrid = nil
+    getJewel = nil
+    composeSpineRoot = nil
+    upImg = nil
+    downImg = nil
+    rightImg = nil
+    leftImg = nil
+    middleImg = nil
+    imgObjTab = nil
+    runeImg = nil
+    gainIconImg = nil
+    resIcon = nil
+    costNumTxt = nil
+    jewelData = nil
+    runeSpine = nil
+end

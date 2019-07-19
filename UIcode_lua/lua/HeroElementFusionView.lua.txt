@@ -1,0 +1,275 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-07-25 10:25:49
+require "ElementCrystalItemSlot"
+
+local isInit = false
+
+local raceBg
+local oldElementIconBg
+local oldElementIcon
+local newElementIconBg
+local newElementIcon
+local fusionIconObj
+local maxFusionIconObj
+local maxElementIconBg
+local maxElementIcon
+
+local heroBaseTF 
+local oldElementLevel
+local newElementLevel
+local elementArrowObj
+local elementMaxLevelTxt
+local raceObj 
+local elementExpSlider
+local elementExpSliderNumTxt
+local attrs
+local arrowObj 
+
+local elementCrystalGrid
+local useOnceBtn 
+local useTenthBtn
+
+local effectObj
+
+local USE_ONCE = 1
+local USE_TENTH = 10
+
+function DoInit()	
+    self.Shadow = 1
+end
+
+function InitUI()
+    raceBg = self:GetGameObjectAtPath("BGS/RaceBg")
+    oldElementIconBg = self:GetGameObjectAtPath("Center/FusionIcon/OldLvImg") 
+    oldElementIcon = self:GetGameObjectAtPath("Center/FusionIcon/OldName") 
+    newElementIconBg = self:GetGameObjectAtPath("Center/FusionIcon/NewLvImg") 
+    newElementIcon = self:GetGameObjectAtPath("Center/FusionIcon/NewName") 
+    fusionIconObj = self:GetGameObjectAtPath("Center/FusionIcon") 
+    maxFusionIconObj = self:GetGameObjectAtPath("Center/MaxFusionIcon") 
+    maxElementIcon = self:GetGameObjectAtPath("Center/MaxFusionIcon/MaxName") 
+    maxElementIconBg = self:GetGameObjectAtPath("Center/MaxFusionIcon/MaxLvImg")
+
+    heroBaseTF = self.transform:Find("Center/Lvup/HeroBase")
+    oldElementLevel = self:GetComponentAtPath("Center/Lvup/OldLevelTxt" ,CLS_TEXT) 
+    newElementLevel = self:GetComponentAtPath("Center/Lvup/NewLevelTxt" ,CLS_TEXT) 
+    elementArrowObj = self:GetGameObjectAtPath("Center/Lvup/ArrowObj") 
+    elementMaxLevelTxt = self:GetComponentAtPath("Center/Lvup/MaxLevelTxt" ,CLS_TEXT) 
+    elementExpSlider = self:GetComponentAtPath("Center/Lvup/progress" ,CLS_SLIDER) 
+    elementExpSliderNumTxt = elementExpSlider.transform:GetComponentAtPath("NumTxt" ,CLS_TEXT) 
+    arrowObj = self:GetGameObjectAtPath("Center/ArrowObj") 
+    attrs = {}
+    local heroAttrs = self.transform:Find("Center/Attrs")
+    for i=0,heroAttrs.childCount-1 do
+        local attr = heroAttrs:GetChild(i)
+        table.insert(attrs, {
+            nameTxt = attr:GetComponentAtPath("NameTxt" ,CLS_TEXT), 
+            oldValTxt = attr:GetComponentAtPath("NumTxt" ,CLS_TEXT), 
+            newValTxt = attr:GetComponentAtPath("NewNumTxt" ,CLS_TEXT) 
+        })
+    end
+
+    
+    elementCrystalGrid = self:GetComponentAtPath("Center/FusionMatGrid" ,CLS_UI_ITEM_GRID)
+    useOnceBtn = self:GetComponentAtPath("Center/UseOnceBtn" ,CLS_BUTTON_ARCHLY) 
+    useTenthBtn = self:GetComponentAtPath("Center/UseTenthBtn" ,CLS_BUTTON_ARCHLY) 
+
+    effectObj = self:GetGameObjectAtPath("Effect") 
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitHeroElementFusionData")
+end
+
+function IsSetAnchor()
+	return true
+end
+
+function OnClose()
+    useOnceBtn.Gray = true
+    useTenthBtn.Gray = true
+    maxFusionIconObj:SetSelfActive(false)
+    fusionIconObj:SetSelfActive(false)
+    effectObj:SetSelfActive(false)
+end
+
+function OnNotification_RefreshHeroElementFusionView(objs)
+    local curHero = objs[0]
+    local elementCrystalArr = objs[1]
+    
+    maxFusionIconObj:SetSelfActive(curHero.elementFusion.hasMax)
+    fusionIconObj:SetSelfActive(not curHero.elementFusion.hasMax)
+    elementMaxLevelTxt.gameObject:SetSelfActive(curHero.elementFusion.hasMax)
+    elementArrowObj:SetSelfActive(not curHero.elementFusion.hasMax)
+    oldElementLevel.gameObject:SetSelfActive(not curHero.elementFusion.hasMax)
+    newElementLevel.gameObject:SetSelfActive(not curHero.elementFusion.hasMax)
+    arrowObj:SetSelfActive(not curHero.elementFusion.hasMax)
+    SetFontColor(elementExpSliderNumTxt, curHero.elementFusion.hasMax and color12 or {255,254,254})
+    SetHeroBgIcon(curHero)
+    if curHero.elementFusion.hasMax then
+        elementMaxLevelTxt.text = Language:getStr("LV.")..curHero.elementLevel
+        elementExpSlider.value = 1
+        elementExpSliderNumTxt.text = Language:getStr("MAX")
+    else
+        oldElementLevel.text = Language:getStr("LV.")..curHero.elementLevel
+        newElementLevel.text = Language:getStr("LV.")..curHero.elementLevel+1
+        SetSliderProgress(elementExpSliderNumTxt,elementExpSlider,curHero.elementExp,curHero.elementFusion.levelUpExp)
+    end
+    BindHeroBaseValue(heroBaseTF,curHero)
+    --SetRaceIconByHeroId(raceObj,curHero.heroId)
+    for i,attr in ipairs(attrs) do
+        attr.nameTxt.text = curHero.elementFusion.attrs[i].name
+        attr.oldValTxt.text = "+"..(curHero.elementFusion.hasMax and "" or curHero.elementFusion.attrs[i].tbVal)
+        attr.newValTxt.text = "+"..(curHero.elementFusion.hasMax and curHero.elementFusion.attrs[i].tbVal or curHero.newElementFusion.attrs[i].tbVal)
+    end
+
+    --default select first mat
+    if elementCrystalArr then
+        elementCrystalGrid:RefreshItemSlots(elementCrystalArr,self.gameObject,"ElementCrystalItemSlot")
+        SelectElementCrystal(elementCrystalArr[1])
+    end
+end
+
+function OnNotification_UpdateSingleElementCrystal(objs)
+    local elementCrystal = objs[0]
+    elementCrystalGrid:SingleRefreshSlot(elementCrystal)
+    useOnceBtn.Gray = not CheckPackItemEnough(elementCrystal.id,USE_ONCE,false)
+    useTenthBtn.Gray = not CheckPackItemEnough(elementCrystal.id,USE_TENTH,false)
+end
+
+function OnNotification_SelectElementCrystal(objs)
+    local elementCrystal = objs[0]
+    elementCrystal.IsSelected = true
+    elementCrystalGrid:SingleRefreshSlot(elementCrystal)
+end
+
+function OnNotification_CancelSelectElementCrystal(objs)
+    local elementCrystal = objs[0]
+    elementCrystal.IsSelected = false
+    elementCrystalGrid:SingleRefreshSlot(elementCrystal)
+end
+
+function OnNotification_ShowHeroElementFusionLevelUpEffect(objs)
+    local exp = objs[0]
+    local upLv = objs[1]
+    local curMat = objs[2]
+    local callback = objs[3]
+    effectObj:SetSelfActive(true)
+    SetUpdateEffect(elementCrystalGrid:GetItemDataByData(curMat).itemSlot.transform)
+    DoSliderEffect(upLv+exp,callback)
+end
+
+function DoSliderEffect(value,callback)
+    if value <= 0 then
+        if callback ~= nil then
+            callback()
+            effectObj:SetSelfActive(false)
+        end
+    elseif value < 1 then
+        CsBridge.TweenUtils.DOSliderValue(elementExpSlider,value,0.3,function()
+            if callback ~= nil then
+                callback()
+                effectObj:SetSelfActive(false)
+            end
+        end)
+    else
+        CsBridge.TweenUtils.DOSliderValue(elementExpSlider,1,0.3,function()
+            if value-1 > 0 then
+                elementExpSlider.value = 0
+            end
+            DoSliderEffect(value-1,callback)
+        end)
+    end
+end
+
+
+function OnFusionMatGridElementCrystalItemSlotClick(obj)
+    if not obj.m_data.IsSelected then
+        SelectElementCrystal(obj.m_data)
+    end
+end
+
+function SetHeroBgIcon(curHero)
+    CsBridge.IconData.SetIconByName(raceBg, curHero.elementFusion.raceBg)
+    if curHero.elementFusion.hasMax then
+        SetElementIconAndBg(maxElementIcon,maxElementIconBg,curHero.elementFusion)
+    else
+        SetElementIconAndBg(oldElementIcon,oldElementIconBg,curHero.elementFusion)
+        SetElementIconAndBg(newElementIcon,newElementIconBg,curHero.newElementFusion)    
+    end
+end
+
+function SetElementIconAndBg(icon,bg,elementFusion)
+    CsBridge.IconData.SetIconByName(icon,elementFusion.icon)
+    CsBridge.IconData.SetIconByName(bg,elementFusion.bg)
+end
+
+function SelectElementCrystal(elementCrystal)
+    useOnceBtn.Gray = not CheckPackItemEnough(elementCrystal.id,USE_ONCE,false)
+    useTenthBtn.Gray = not CheckPackItemEnough(elementCrystal.id,USE_TENTH,false)
+    self:SendCommand("SelectElementCrystal",elementCrystal)
+end
+
+function OnUseOnceBtnClick(sender)
+    self:SendCommand("UseElementCrystal",USE_ONCE)
+end
+
+function OnUseTenthBtnClick(sender)
+    self:SendCommand("UseElementCrystal",USE_TENTH)
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name)
+    self:SendCommand("CloseHeroElementFusion")
+end
+
+function OnMaskClick(sender)
+    self:HideView(self.gameObject.name)
+    self:SendCommand("CloseHeroElementFusion")
+end
+
+function OnInfoBtnClick(sender)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        CsBridge.OpenView("HeroElementFusionInfoView","ElementFusionModel",false,true)
+	end, "HeroElementFusionInfoView")
+end
+
+function DoExit()
+
+    isInit = nil
+
+    raceBg = nil
+    oldElementIconBg = nil
+    oldElementIcon = nil
+    newElementIconBg = nil
+    newElementIcon = nil
+    fusionIconObj = nil
+    maxFusionIconObj = nil
+    maxElementIconBg = nil
+    maxElementIcon = nil
+
+    heroBaseTF  = nil
+    oldElementLevel = nil
+    newElementLevel = nil
+    elementArrowObj = nil
+    elementMaxLevelTxt = nil
+    raceObj  = nil
+    elementExpSlider = nil
+    elementExpSliderNumTxt = nil
+    attrs = nil
+    arrowObj  = nil
+
+    elementCrystalGrid = nil
+    useOnceBtn  = nil
+    useTenthBtn = nil
+
+    effectObj = nil
+
+    USE_ONCE  = nil
+    USE_TENTH  = nil
+end

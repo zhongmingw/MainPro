@@ -1,0 +1,414 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-03-27 14:50:31
+local utils = require "HeroBagUtils"
+
+local ArrOperation = {
+    Update = 1,
+    Add = 2,
+    Remove = 3
+}
+
+local HeroMatPos = {
+    Sub1 = 1,
+    Sub2 = 2,
+    Sub3 = 3
+}
+
+local HeroDistillSkillType = utils.HeroDistillSkillType
+
+local curHero
+
+local curMatIndex
+local curSelectedMaterialArr
+local tmpSelectedMaterialArr
+local ownMaterialArr
+
+local function UpdateHeroDistillationData(hero)
+    if hero == nil then
+        return
+    end
+    local newHero = appData:checkItem("HeroItem",hero.uid)
+    hero.distillationStar = newHero.distillationStar
+    hero.distillationLevel = newHero.distillationLevel
+    hero.distillation = GetHeroDistillation(hero)
+end
+
+local function CheckOwnHasMat()
+    for i,mat in ipairs(curHero.distillation.heroMatArr) do
+        local compareFunc = nil
+        if mat.type == HeroMatType.FixedQualityAndRace then
+            compareFunc = function(data) 
+                if data.quality == mat.quality and data.raceId == mat.raceId and not data.selected then
+                    return true
+                end
+            end
+        elseif mat.type == HeroMatType.FixedAll then
+            compareFunc = function(data) 
+                if data.heroId == mat.heroId and data.distillationStar == 0 and not data.selected then
+                    return true
+                end
+            end
+        end
+        if mat.count <= CheckItemCountInTb(ownMaterialArr,mat,compareFunc) then
+            mat.redFlag = true
+        else
+            mat.redFlag = false
+        end
+    end
+end
+
+local function FormatDogFood(uid)
+    ownMaterialArr = {}
+
+    --add hero card
+    local tbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    local ids = tbl:GetCol(HeroBase.id)
+    for i=0, ids.Length-1 do
+        local id = tonumber(ids[i])
+        local itemId = tbl:GetInt(id,HeroBase.item)
+        if itemId ~= 0 then
+            local item = appData:checkItem("PackItem",itemId)
+            if item and item.count ~= 0 then
+                for i=1, item.count do
+                    local ownMat = {
+                        uid = -1*itemId,
+                        heroId = id,
+                        grade = 0,
+                        level = 0,
+                        distillationStar = 0,
+                        distillationLevel = 0,
+                        raceId = tbl:GetInt(id,HeroBase.group),
+                        quality = tbl:GetInt(id,HeroBase.quality),
+                        selected = false,
+                        selectedPos = 0,
+                    }
+                    table.insert(ownMaterialArr, ownMat)
+                end
+            end        
+        end
+    end
+
+    local curHeroArr = utils.FormatAllOwnedHeroData()
+    for i,hero in ipairs(curHeroArr) do
+        if hero.uid ~= uid then
+            local ownMat = {
+                uid = hero.uid,
+                heroId = hero.heroId,
+                grade = hero.grade,
+                level = hero.level,
+                duty = hero.duty,
+                showDuty = CheckHeroInDuty(hero,GetNoDelHeroLockDuty()),
+                raceId = hero.race,
+                quality = hero.quality,
+                distillationStar = hero.distillationStar,
+                distillationLevel = hero.distillationLevel,
+                selected = false,
+                selectedPos = 0,
+            }
+            table.insert(ownMaterialArr, ownMat)
+        end
+    end
+end
+
+local function UpdateSelectMaterialData()
+    curSelectedMaterialArr = {}
+    for i,ownMat in ipairs(ownMaterialArr) do
+        if ownMat.selectedPos == 0 or ownMat.selectedPos == curMatIndex then
+            local curMat = curHero.distillation.heroMatArr[curMatIndex]
+            if curMat.type == HeroMatType.FixedQualityAndRace then
+                if ownMat.raceId == curMat.raceId and ownMat.quality == curMat.quality and ownMat.distillationStar == 0 then
+                    table.insert(curSelectedMaterialArr, ownMat)
+                end
+            elseif curMat.type == HeroMatType.FixedAll then
+                if ownMat.heroId == curMat.heroId and ownMat.distillationStar == 0 then
+                    table.insert(curSelectedMaterialArr, ownMat)
+                end
+            end
+        end
+    end
+end
+
+local function InitSelectMaterialData()
+    curSelectedMaterialArr = {}
+    tmpSelectedMaterialArr = {}
+    for i,v in ipairs(curHero.distillation.heroMatArr[curMatIndex].putMatList) do
+        table.insert(tmpSelectedMaterialArr, v)
+    end
+    UpdateSelectMaterialData()
+end
+
+local function SelectMaterial(index)
+    table.insert(tmpSelectedMaterialArr, curSelectedMaterialArr[index])
+    self:SendNotification("SelectMaterial",index)
+end
+
+local function CancelSelectMaterial(materialData)
+    for i=1,#tmpSelectedMaterialArr do
+        if tmpSelectedMaterialArr[i] == materialData then
+            table.remove(tmpSelectedMaterialArr,i)
+        end
+    end
+    self:SendNotification("CancelSelectMaterial",materialData)
+end
+
+local function CheckMatCount()
+    for i,mat in ipairs(curHero.distillation.heroMatArr) do
+        if #mat.putMatList < mat.count then
+            return false
+        end
+    end
+    return true
+end
+
+local function GetCheckMatArr(mat)
+    if mat ~= nil then
+        return mat.putMatList
+    end
+    return nil
+end
+
+local function ClearHeroMatData(hero)
+    if hero.distillation then
+        for i,v in ipairs(hero.distillation.heroMatArr) do
+            v.putMatList = {}
+        end
+    end
+end
+
+local function GetHeroOfCurHeroArrByHeroMatArr(heroMatArr)
+    local heroArr = {}
+    for i,heroMat in ipairs(heroMatArr) do
+        for i,v in ipairs(heroMat.putMatList) do
+            table.insert(heroArr, v)
+        end
+    end
+    return heroArr
+end
+
+local function UpdateHeroDistillation()
+    if curHero.distillation ~= nil then
+        if not curHero.distillation.hasMax then
+            FormatDogFood(curHero.uid)
+            ClearHeroMatData(curHero)
+            CheckOwnHasMat(curHero)
+        end
+        self:SendNotification("RefreshHeroDistillationView",curHero.distillation)
+    end
+end
+
+local function OnDistillResp(resp)
+    local rewards = {}
+    local distillationHeroMatArr = curHero.distillation.heroMatArr
+    utils.UpdateHeroData(curHero)
+    table.insert(rewards, {
+        id=curHero.heroId,
+        typeId=ItemTypeEnum.Hero,
+        count=1,
+        distillationStar=curHero.distillationStar,
+        distillationLevel=curHero.distillationLevel})
+    if resp.status == 0 and resp.rewardItems then
+        table.insertto(rewards,resp.rewardItems,2)
+    end
+    
+    local confirmCbk = function()
+        MsgCenter:Broadcast(Notify_UpdatehHeroShowView_TopRes,{true,false})
+        MsgCenter:Broadcast(Notify_UpdateCurHero)
+        local updateArr = GetHeroOfCurHeroArrByHeroMatArr(distillationHeroMatArr)
+        MsgCenter:Broadcast(Notify_UpdateCurHeroArr,{
+            operation = ArrOperation.Remove,
+            updateArr = updateArr
+        })
+        MsgCenter:Broadcast(Notify_HeroDistill)
+        MsgCenter:Broadcast(Notify_UpdateHeroDistillRedTip)
+        UpdateHeroDistillationData(curHero)
+        UpdateHeroDistillation()
+    end
+    ShowRewardReceivedTip(self, rewards, confirmCbk)
+end
+
+local function DoDistill()
+    local subMaterial1 = {}
+    local subMaterial2 = {}
+    local subMaterial3 = {}
+    local matArr = curHero.distillation.heroMatArr[HeroMatPos.Sub1]
+    if matArr then
+        for i,mat in ipairs(matArr.putMatList) do
+            table.insert(subMaterial1, mat.uid)
+        end
+    end
+    matArr = curHero.distillation.heroMatArr[HeroMatPos.Sub2]
+    if matArr then
+        for i,mat in ipairs(matArr.putMatList) do
+            table.insert(subMaterial2, mat.uid)
+        end    
+    end
+    matArr = curHero.distillation.heroMatArr[HeroMatPos.Sub3]
+    if matArr then
+        for i,mat in ipairs(matArr.putMatList) do
+            table.insert(subMaterial3, mat.uid)
+        end 
+    end
+    utils.RequestHeroDistillation(curHero.uid,subMaterial1,subMaterial2,subMaterial3,OnDistillResp)
+end
+
+local function RefreshHeroDistillRedTip()
+    local ret = false
+    if curHero then
+        ret = CheckHeroDistillationRedFlag(curHero)
+        self:SendNotification("RefreshHeroDistillRedTip",ret)
+    end
+    return ret
+end
+
+local function OnUpdateHeroDistillRedTip(obj)
+    local ret = RefreshHeroDistillRedTip()
+    MsgCenter:Broadcast(Notify_UpdateHeroShowHeroDistillRedTip,ret)
+end
+
+local function OnHeroShowViewSwitchHero(obj)
+    curHero = obj
+    UpdateHeroDistillationData(curHero)
+    UpdateHeroDistillation()
+    MsgCenter:Broadcast(Notify_UpdateHeroDistillRedTip)
+end
+
+function DoInit()
+    MsgCenter:Subscribe(Notify_UpdateHeroDistillRedTip,OnUpdateHeroDistillRedTip)
+    MsgCenter:Subscribe(Notify_HeroShowView_SwitchHero,OnHeroShowViewSwitchHero)
+end
+
+function DoOnExit()
+    MsgCenter:Unsubscribe(Notify_UpdateHeroDistillRedTip,OnUpdateHeroDistillRedTip)
+    MsgCenter:Unsubscribe(Notify_HeroShowView_SwitchHero,OnHeroShowViewSwitchHero)
+
+    ArrOperation = nil
+    
+    HeroMatPos = nil
+    
+    HeroDistillSkillType = nil
+    curHero = nil
+    curMatIndex = 0
+    curSelectedMaterialArr = nil
+    tmpSelectedMaterialArr = nil
+    ownMaterialArr = nil
+end
+
+function InitProperties()
+end
+
+function OnCommand_InitData(objs)
+    curHero = objs[0]
+    UpdateHeroDistillationData(curHero)
+    UpdateHeroDistillation()
+end
+
+function OnCommand_OpenMaterialSelect(objs)
+    curMatIndex = objs[0]+1
+    InitSelectMaterialData()
+    oneViewSelectArr = {}
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        CsBridge.OpenView("HeroComposeMaterialSelectView","HeroDistillationModel")
+    end, "HeroComposeMaterialSelectView")
+end
+
+function OnCommand_InitMaterialSelectData(objs)
+    self:SendNotification("InitMaterialSelectView",curSelectedMaterialArr,#curSelectedMaterialArr==0)
+end
+
+function OnCommand_SelectMaterial(objs)
+    local selectIndex = objs[0]
+    local selectHero = curSelectedMaterialArr[selectIndex+1]
+    if #tmpSelectedMaterialArr+1 > curHero.distillation.heroMatArr[curMatIndex].count then
+        utils.ShowHintBox(Language:getStr("HeroCompose_MatEnough"))
+        return
+    end
+    if DownHeroFromFormation(self,selectHero,selectIndex) then
+        return
+    end
+    local index = selectIndex+1
+    SelectMaterial(index)
+end
+
+function OnCommand_CancelSelectMaterial(objs)
+    local materialData = objs[0]
+    CancelSelectMaterial(materialData)
+end
+
+function OnCommand_ConfirmSelectMaterial()
+    local putList = curHero.distillation.heroMatArr[curMatIndex].putMatList
+    for i,mat in ipairs(putList) do
+        mat.selected = false
+        mat.selectedPos = 0
+    end
+    curHero.distillation.heroMatArr[curMatIndex].putMatList = {}
+    for i,mat in ipairs(tmpSelectedMaterialArr) do
+        mat.selected = true
+        mat.selectedPos = curMatIndex
+        table.insert(curHero.distillation.heroMatArr[curMatIndex].putMatList, mat)
+    end
+    tmpSelectedMaterialArr = {}
+    CheckOwnHasMat(curHero)
+    self:SendNotification("RefreshHeroMaterial",curHero.distillation) 
+end
+
+function OnCommand_NoSelectMaterial()
+    for i,mat in ipairs(tmpSelectedMaterialArr) do
+        self:SendNotification("CancelSelectMaterial",mat)
+    end
+    tmpSelectedMaterialArr = {}
+end
+
+function OnCommand_ShowSkillTip(objs)
+    local skillData
+    local distill = curHero.distillation
+    local type = objs[0]
+    if type == HeroDistillSkillType.Old then
+        skillData = distill.oldSkill
+    elseif type == HeroDistillSkillType.New then
+        skillData = distill.newSkill
+    elseif type == HeroDistillSkillType.Max then
+        skillData = distill.maxSkill
+    end
+    utils.OpenSkillTipView(self, skillData)
+end
+
+function OnCommand_Distillation(objs)
+    if curHero.distillation.hasMax then
+        utils.ShowHintBox(Language:getStr("HeroDistill_HasMax"))
+        return
+    end
+    if not CheckMatCount() then
+        utils.ShowHintBox(Language:getStr("HeroCompose_MatNoEnough"))
+        return
+    end
+    local consume = curHero.distillation.consume
+    if not CheckResEnough(consume.id,consume.count,true) then
+        return
+    end
+    local matArr = curHero.distillation.heroMatArr
+
+    local subList1 = GetCheckMatArr(matArr[HeroMatPos.Sub1])
+    local subList2 = GetCheckMatArr(matArr[HeroMatPos.Sub2])
+    local subList3 = GetCheckMatArr(matArr[HeroMatPos.Sub3])
+    local overLevel = 1
+    if CheckMatHasHighLevel(overLevel,subList1,subList2,subList3) then
+        CsBridge.messageManager:PopMsgBox("",
+        Language:getStr("HeroDistill_Confirm"),
+        Language:getStr("local_cancel"),nil,
+        Language:getStr("local_confirm"),function()
+            DoDistill()
+        end)
+    else
+        DoDistill()
+    end
+end
+
+function OnCommand_OnClose(objs)
+    curHero = nil
+    curMatIndex = 0
+    curSelectedMaterialArr = nil
+    tmpSelectedMaterialArr = nil
+    ownMaterialArr = nil
+end

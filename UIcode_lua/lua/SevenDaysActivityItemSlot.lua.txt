@@ -1,0 +1,17 @@
+local loadedClientData=require "ClientData"
+local luaIconData=require "IconData"
+require "ItemSlot"
+
+function OnSevenDaysActivityItemSlotBindValue(slot, data)
+    local day_Lab = slot:GetComponentAtPath("DayTxt" ,CLS_TEXT)
+    local current_GO = slot:GetGameObjectAtPath("lightImg")
+    local received_GO = slot:GetGameObjectAtPath("Received_GO")
+	local itemsGrid = slot:GetComponentAtPath("ItemGrid" ,CLS_UI_ITEM_GRID)
+    day_Lab.text=tostring(data.day)
+    current_GO:SetSelfActive(data.claimBtnEnabled)
+    received_GO:SetSelfActive(data.showMask)
+	itemsGrid:RefreshItemSlots(data.rewards,slot.m_grid.viewBase.gameObject,"ItemSlot")
+
+    local claimBtn = slot:GetComponentAtPath("ClaimBtn", CLS_BUTTON_ARCHLY)
+    claimBtn.interactable = data.claimBtnEnabled
+end

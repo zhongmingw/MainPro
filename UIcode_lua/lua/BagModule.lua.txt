@@ -1,0 +1,16 @@
+
+function DoInit()
+
+end
+
+function AssetNames(objs)
+  local arr={"BagView"}
+  return arr
+end
+
+function OnEnter(objs,onFinished)
+	  self:OpenView("BagView","BagModel")
+    if(onFinished ~= nil)then
+	     onFinished()  
+    end
+end

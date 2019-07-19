@@ -1,0 +1,190 @@
+--[[
+	file: LeaderboardActivityUtils.lua
+	author: zhangyue
+	description: LeaderboardActivity utilities
+]]
+
+
+local DataConstant = {
+	RIBBON_IDX_MAX = 3,
+	ICON_NAME_RIBBON = "new_com_paiming",
+}
+
+local GetRewardConfUrls = {
+	[ActivityType.PowerLeaderboard] = "getCombatRankRewardConfig",
+	[ActivityType.GlobalPowerLeaderboard] = "getCombatGroupRankRewardConfig",
+	[ActivityType.ArenaLeaderboard] = "getArenaRankRewardConfig",
+	[ActivityType.CombatRankAct] = "getMulTeamArenaScoreRankActivityRewardConfig",
+	[ActivityType.GemLeaders] = "getGemSpendRankActivityRewardConfig",
+}
+local GetRewardUrls = {
+	[ActivityType.PowerLeaderboard] = "getCombatRankReward",
+	[ActivityType.GlobalPowerLeaderboard] = "getCombatGroupRankReward",
+	[ActivityType.ArenaLeaderboard] = "getArenaRankReward",
+	[ActivityType.CombatRankAct] = "getMulTeamArenaScoreRankActivityReward",
+	[ActivityType.GemLeaders] = "getGemSpendRankActivityReward",
+}
+
+local FormatLeaderboardRewards, GetLeaderboardItemViewData
+local GetLeaderboardRewardViewData
+
+local function GetLeaderboardRewards(activityBaseData, activityData, onClosed, model)
+	local url = GetRewardConfUrls[activityData.type]
+	local requestCls, responseCls = "GetLotteryRankRewardReq", "GetLotteryRankRewardResp"
+	local currentActivityID = activityData.id
+	local finishedCbk = function(resp)
+		CsBridge.CacheAssetsByModule(
+			model.Module,
+			function()
+				CsBridge.OpenView("LeaderboardActivityRewardView","ServerActivityModel", true, true)
+				local viewData = GetLeaderboardRewardViewData(resp, activityBaseData, activityData)
+				viewData.onClosed = function()
+					onClosed(currentActivityID)
+				end
+				model:SendNotification("RefreshLeadersActivityRwrdView", viewData)
+			end,
+			"LeaderboardActivityRewardView",
+			"ItemSlot",
+			"APArenaRewardItemSlot")
+
+	end
+	local req = {
+		id = currentActivityID,
+	}
+	HttpRequest(url, requestCls, responseCls, req, finishedCbk)
+end
+
+local function ClaimLeadersActivityRewards(currentActivityID, activityType, model)
+	local url = GetRewardUrls[activityType]
+	local requestCls, responseCls = "GetActivityRewardReq", "GetActivityRewardResp"
+
+	local finishedCbk = function(resp)
+		local confirmCbk = function()
+			model:SendNotification("LeadersActivityRewardClaimed")
+		end
+		ShowRewardReceivedTip(model, resp.rewards, confirmCbk)
+	end
+
+	local req = {
+		id = currentActivityID,
+	}
+	HttpRequest(url, requestCls, responseCls, req, finishedCbk)
+end
+
+GetLeaderboardRewardViewData = function(data, activityBaseData, activityData)
+	local selfRank = activityData.selfRankInfo.rank
+	local viewData = {}
+	local activity = activityBaseData
+	viewData.rules = activity.description
+	viewData.awardTime = activityData.rankingEndTime
+	viewData.curRank = selfRank > 0 and tostring(selfRank) or "-"
+	viewData.rewards = FormatLeaderboardRewards(data.rewardConfigs)
+	viewData.ownRewards = {}
+	if selfRank > 0 then
+		viewData.curRank = selfRank > 0 and tostring(selfRank) or "-"
+		if selfRank > 0 then
+			for k, rewardConfig in pairs(data.rewardConfigs) do
+				if rewardConfig.min <= selfRank and rewardConfig.max >= selfRank then
+					viewData.ownRewards = rewardConfig.rewardItems
+					break
+				end
+			end
+		else
+			viewData.ownRewards = {}
+		end
+	end
+	viewData.claimBtnEnabled = (not activityData.rewardClaimed)
+		and (CsBridge.timeManager.ServerTime >= activityData.rankingEndTime)
+		and #viewData.ownRewards > 0
+	return viewData
+end
+
+FormatLeaderboardRewards = function(rewardConfigs)
+	local rewardList = {}
+	local itemData, itemViewData
+	for  i = 1, #rewardConfigs do
+		itemData = rewardConfigs[i]
+		itemViewData = {}
+		itemViewData.id = itemData.min
+		itemViewData.rankText = itemData.min == itemData.max
+			and tostring(itemData.min)
+			or (tostring(itemData.min) .. "-" .. tostring(itemData.max))
+		itemViewData.rankText = itemData.max > 10000
+			and (tostring(id) .. "+")
+			or itemViewData.rankText
+		itemViewData.rewards = itemData.rewardItems
+
+		itemViewData.showRibbon = itemData.min <= DataConstant.RIBBON_IDX_MAX
+			and itemData.max <= DataConstant.RIBBON_IDX_MAX
+		itemViewData.ribbonIcon = DataConstant.ICON_NAME_RIBBON .. itemViewData.rankText
+
+		table.insert(rewardList, itemViewData)
+		end
+	table.sort(rewardList, function(a, b)
+		return a.id < b.id
+	end)
+
+	return rewardList
+end
+
+local function GetActivityViewData(viewData, data, showTips)
+	local activityType = data.type
+	viewData.ownData = GetLeaderboardItemViewData(data.selfRankInfo, activityType)
+	viewData.rewardClaimed = data.rewardClaimed
+	viewData.rankingEndTime = data.rankingEndTime
+	viewData.showLeaders = (CsBridge.timeManager.ServerTime >= data.rankingEndTime)
+	viewData.showClaimTips = showTips
+
+	local playerList = {}
+	viewData.playerList = playerList
+	for k, playerData in pairs(data.rankInfos) do
+		local itemViewData = GetLeaderboardItemViewData(playerData, activityType)
+		table.insert(playerList, itemViewData)
+	end
+
+	table.sort(playerList, function(a, b)
+		return a.id < b.id
+	end)
+end
+
+GetLeaderboardItemViewData = function(itemData, activityType)
+	local itemViewData = {}
+	if itemData.playerBaseInfo.haveGroup then
+		itemViewData.name = FormatWorldPlayerName(itemData.playerBaseInfo.name, itemData.playerBaseInfo.zone)
+	else
+		itemViewData.name = itemData.playerBaseInfo.name
+	end
+	local value = itemData.score
+	itemViewData.power = GetValueAbbreviation(value)
+	itemViewData.playerInfo = itemData.playerBaseInfo
+	if activityType == ActivityType.PowerLeaderboard or activityType == ActivityType.GlobalPowerLeaderboard then
+		itemViewData.header = Language:getStr("Power")
+	elseif activityType == ActivityType.GemLeaders then
+		itemViewData.header = Language:getStr("Global_125")
+	else
+		itemViewData.header = Language:getStr("Global_4")
+	end
+
+	local rank = itemData.rank
+	itemViewData.rank = rank > 0 and tostring(rank) or "-"
+	itemViewData.showRibbon = rank <= DataConstant.RIBBON_IDX_MAX and rank > 0
+	itemViewData.ribbonIcon = DataConstant.ICON_NAME_RIBBON .. itemViewData.rank
+	itemViewData.id = rank
+
+	return itemViewData
+end
+
+local function InitData(data, activityData)
+	activityData.rankInfos = data.rankInfos or {}
+	activityData.selfRankInfo = data.selfRankInfo
+	activityData.rankingEndTime = data.endTime
+	activityData.activityEndTime = activityData.endTime
+	activityData.rewardClaimed = data.rewardClaimed
+end
+
+return{
+	GetLeaderboardRewards = GetLeaderboardRewards,
+	ClaimLeadersActivityRewards = ClaimLeadersActivityRewards,
+	GetActivityViewData = GetActivityViewData,
+	InitData = InitData,
+}

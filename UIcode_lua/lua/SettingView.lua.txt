@@ -1,0 +1,73 @@
+local togGroup
+
+local curView
+local isInit = false
+
+function DoInit()
+	self.Shadow = 1
+end
+
+function IsSetAnchor()
+	return true
+end
+
+function InitUI()
+	togGroup = self:GetComponentAtPath("Top/TogGroup" ,CLS_TOGGLE_GROUP_ARCHLY)
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+	end
+	self:SendCommand("InitSettingData")
+end
+
+function OnNotification_RefreshSettingView(objs)
+	local curType = objs[0]
+	togGroup:SetToggleOn(curType-1)
+	if curView ~= nil then
+		curView:HideView(curView.gameObject.name)
+	end 
+	if curType == 1 then
+		CsBridge.CacheAssetsByModule(self.Module,function()
+			curView = CsBridge.OpenView("SettingOptionView","SettingModel",false,false)
+		end,"SettingOptionView")
+	elseif curType == 2 then
+		CsBridge.CacheAssetsByModule(self.Module,function()
+			curView = CsBridge.OpenView("SettingServerView","SettingModel",false,false)
+		end,"SettingServerView","ServerItemSlot")
+	elseif curType == 3 then
+		CsBridge.CacheAssetsByModule(self.Module,function()
+			curView = CsBridge.OpenView("SettingFeedbackView","SettingModel",false,false)
+		end,"SettingFeedbackView")
+	end 
+end 
+
+function OnTogGroupClick(isOn,index)
+	if not isOn then
+		return
+	end 
+	self:SendCommand("SwitchType", index+1)
+end 
+
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close() 
+	if curView ~= nil then
+		curView:HideView(curView.gameObject.name)
+	end 
+	self:ReturnBack()
+end
+
+function DoExit()
+	togGroup  = nil
+
+	curView = nil
+	isInit = nil
+end

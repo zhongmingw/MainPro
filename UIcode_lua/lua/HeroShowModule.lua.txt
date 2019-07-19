@@ -1,0 +1,18 @@
+
+function DoInit()
+
+end
+
+function AssetNames(objs)
+  local arr={"HeroShowView","HeroInfoView", "HeroEquipView", "SkillItemSlot", "PutEquipItemSlot"}
+  return arr
+end
+
+function OnEnter(objs,onFinished)
+	local view=self:OpenView("HeroShowView","HeroShowModel")
+	view:SetDataList(objs)
+	if(onFinished ~= nil)then
+		 onFinished()  
+	end
+end
+

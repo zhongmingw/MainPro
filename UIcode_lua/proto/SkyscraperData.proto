@@ -1,0 +1,107 @@
+import "playerData.proto";
+import "stage.proto";
+package SkyscraperData;
+
+message SkyTowerItem 
+{
+    required int32 id=1; //通过的最高关卡id
+    required int32 remains=2;//剩余自然恢复的钥匙个数
+    required int32 itemKeyRemains=3;//剩余的道具钥匙个数
+    required int64 lastRenewTime=4;//上次恢复钥匙的时间
+    repeated int32 extraRewards = 5;
+}
+
+message GetPassSkyTowerPlayerReq 
+{
+    required int32 id=1; //关卡id
+}
+
+message GetPassSkyTowerPlayerResp 
+{
+    repeated PassSkyTowerPlayerResp infos=1;
+}
+
+message PassSkyTowerPlayerResp 
+{
+    required int64 time=1;
+    required playerData.PlayerBaseInfo playerBaseInfo=2;
+}
+
+message GetPassSkyTowerVideoReq 
+{
+    required int32 id=1; //关卡id
+    required int32 index=2;//第几个录像（1,2,3）
+}
+
+message TrySkyTowerReq 
+{
+    repeated stage.FormationPos formationPos = 1;
+}
+
+message GetSkyTowerRankInfoReq 
+{
+    required int32 type=1; //需要获取的类型：1/排行榜最高的名单，数量由count决定，2/获取自己的名次
+    required int32 count=2;//type为1时有效，2时无效
+}
+
+message GetSkyTowerRankInfoResp 
+{
+    repeated SkyTowerRankInfoItem rankInfos=1;
+    required SkyTowerRankInfoItem selfRankInfo=2;
+}
+
+message SkyTowerRankInfoItem 
+{
+    required playerData.PlayerBaseInfo playerBaseInfo=1; //玩家基本信息
+    required int32 score=2;//分数
+    required int32 rank=3;
+    required int64 combat = 4;
+}
+
+message CampaignRankInfoItem
+{
+    required playerData.PlayerBaseInfo playerBaseInfo=1; //玩家基本信息
+    required int32 score=2;
+    required int32 rank=3;
+    required int64 combat = 4;
+}
+
+message GetCampaignRankReq
+{
+    required int32 count = 1;
+}
+
+message GetCampaignRankResp
+{
+    repeated CampaignRankInfoItem rankInfos = 1;
+    required CampaignRankInfoItem selfRankInfo = 2;
+}
+
+message CombatRankInfoItem
+{
+    required playerData.PlayerBaseInfo playerBaseInfo=1; //玩家基本信息
+    required int32 score=2;
+    required int32 rank=3;
+    required int64 combat = 4;
+}
+
+message GetPvpCombatRankReq
+{
+    required int32 count = 1;
+}
+
+message GetPvpCombatRankResp
+{
+    repeated CampaignRankInfoItem rankInfos = 1;
+    required CampaignRankInfoItem selfRankInfo = 2;
+}
+
+message SkyTowerExtraRewardReq
+{
+    required int32 stageId = 1;
+}
+
+message SkyTowerExtraRewardResp
+{
+    repeated stage.RewardItem rewardItems = 1;
+}

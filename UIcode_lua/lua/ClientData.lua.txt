@@ -1,0 +1,1022 @@
+ItemBase = {}
+ItemBase.actorTbl = "ItemBase"
+ItemBase.id = "id"
+ItemBase.category = "category"
+ItemBase.type = "type"
+ItemBase.quality = "quality"
+ItemBase.title = "title"
+ItemBase.icon = "icon"
+ItemBase.summary = "summary"
+ItemBase.desp = "desp"
+ItemBase.sellable = "sellable"
+ItemBase.price = "price"
+ItemBase.isChip = "isChip"
+ItemBase.chipCount = "chipCount"
+ItemBase.systemId="systemId"
+ItemBase.open="open"
+ItemBase.pieceStar="pieceStar"
+ItemBase.group = "group"
+
+AuraBase = {}
+AuraBase.actorTbl = "AuraBase";
+AuraBase.id = "id";
+AuraBase.title = "title";
+AuraBase.icon = "icon";
+AuraBase.desp = "desp";
+AuraBase.cond = "cond";
+AuraBase.condDesp = "condDesp";
+
+HeroQuality = {}
+HeroQuality.actorTbl = "HeroQuality";
+HeroQuality.id = "id";
+HeroQuality.quality = "quality";
+HeroQuality.maxGrade = "maxGrade";
+HeroQuality.crystalConsumption = "crystalConsumption"
+
+PiecesComposition = {}
+PiecesComposition.actorTbl = "PiecesComposition";
+PiecesComposition.id = "id";
+PiecesComposition.count = "count";
+PiecesComposition.fixedResult = "fixedResult";
+
+HeroBase = {}
+HeroBase.actorTbl = "HeroBase";
+HeroBase.id = "id";
+HeroBase.model = "model";
+HeroBase.title = "title";
+HeroBase.desp = "desp";
+HeroBase.icon = "icon";
+HeroBase.job = "job";
+HeroBase.group = "group";
+HeroBase.quality = "quality";
+HeroBase.attackId = "attackId";
+HeroBase.skillId = "skillId";
+HeroBase.passiveStr = "passiveStr";
+HeroBase.attackType = "attackType";
+HeroBase.sfxFactor="sfxFactor";
+HeroBase.sound = "sound";
+HeroBase.refrence = "refrence"
+HeroBase.spareSkill = "spareSkill"
+HeroBase.item = "item"
+HeroBase.isBoss = "isBoss"
+
+SkillBase = {}
+SkillBase.actorTbl = "SkillBase";
+SkillBase.id = "id";
+SkillBase.subIdStr = "subIdStr";
+SkillBase.title = "title";
+SkillBase.icon = "icon";
+SkillBase.desp = "desp";
+SkillBase.combat = "combat";
+SkillBase.attackType = "attackType";
+SkillBase.isShake = "isShake";
+
+PassiveSkill = {}
+PassiveSkill.actorTbl = "PassiveSkill";
+PassiveSkill.id="id";
+PassiveSkill.title="title";
+PassiveSkill.icon="icon";
+PassiveSkill.openGrade="openGrade";
+PassiveSkill.desp="desp";
+PassiveSkill.combat="combat";
+PassiveSkill.addMark="addMark";
+
+StateBase = {}
+StateBase.actorTbl = "StateBase";
+StateBase.id = "id";
+StateBase.desName = "desName";
+StateBase.type = "type";
+StateBase.popColor = "popColor";
+StateBase.popName = "popName";
+StateBase.stateSfx = "stateSfx";
+StateBase.pos = "pos";
+StateBase.defHp="defHpStr";
+StateBase.dot="dotStr";
+StateBase.effect="effectStr";
+StateBase.ctrl="ctrlType";
+StateBase.specialId="special"
+
+UIOpenBase = {}
+UIOpenBase.actorTbl = "UIOpenBase";
+UIOpenBase.id = "id";
+UIOpenBase.name = "name";
+UIOpenBase.type = "type";
+UIOpenBase.conditionType = "conditionType";
+UIOpenBase.level = "level";
+UIOpenBase.vipLevel = "vipLevel";
+UIOpenBase.newHandGuide = "newHandGuide";
+UIOpenBase.normalMaxCount = "normalMaxCount";
+UIOpenBase.dailyMaxCount = "dailyMaxCount";
+UIOpenBase.icon = "icon";
+UIOpenBase.addCountItemId = "addCountItemId";
+UIOpenBase.LinkedUI="LinkedUI";
+UIOpenBase.isOpen="isOpen";
+UIOpenBase.guildLevel="guildLevel";
+UIOpenBase.preview = "preview"
+UIOpenBase.icon = "icon"
+UIOpenBase.desc = "desc"
+
+PosBase = {}
+PosBase.tblName = "PosBase";
+PosBase.id = "id";
+PosBase.desName = "desName";
+PosBase.x = "x";
+PosBase.y = "y";
+
+GameBaseInfo = {}
+GameBaseInfo.actorTbl = "GameBaseInfo";
+GameBaseInfo.name = "name";
+GameBaseInfo.desName = "desName";
+GameBaseInfo.value = "value";
+
+ShopConfig = {}
+ShopConfig.tblName = "Shop"
+ShopConfig.id = "id";
+ShopConfig.name = "name";
+ShopConfig.icon = "icon";
+ShopConfig.priceType = "res";
+ShopConfig.refreshType = "type";
+ShopConfig.refreshInterval = "time";
+ShopConfig.refreshPrice = "price";
+ShopConfig.sys = "sys";
+ShopConfig.isOpen = "isOpen";
+
+HeroSummon = {}
+HeroSummon.tblName = "HeroSummon";
+HeroSummon.id="id";
+HeroSummon.consume1 = "consumeStr1";
+HeroSummon.consume2 = "consumeStr2";
+HeroSummon.free = "free";
+HeroSummon.cd = "cd";
+
+Resource = {}
+Resource.ResourceTbl = "Resource";
+Resource.id="id";
+Resource.name = "name";
+Resource.desp = "desp";
+Resource.icon = "icon";
+
+HeroLevelUp = {}
+HeroLevelUp.actorTbl = "HeroLevelUp";
+HeroLevelUp.id="id";
+HeroLevelUp.grade = "grade";
+HeroLevelUp.level = "level";
+HeroLevelUp.soulCoin = "soulCoin";
+HeroLevelUp.coin = "coin";
+
+HeroEvelution = {}
+HeroEvelution.actorTbl = "HeroEvelution";
+HeroEvelution.id="grade";
+HeroEvelution.stepStoneCoin = "stepStoneCoin";
+HeroEvelution.coin = "coin";
+
+Attribute = {}
+Attribute.actorTbl = "Attribute";
+Attribute.id="id";
+Attribute.name = "name";
+Attribute.desp = "desp";
+Attribute.icon = "icon";
+Attribute.type = "type";
+Attribute.value = "value";
+
+Hero = {}
+Hero.actorTbl = "Hero";
+Hero.id="id";
+Hero.soldierId="soldierId";
+Hero.relationId="relationId";
+Hero.initHp="initHp";
+Hero.initSpeed="initSpeed";
+Hero.initPhyAtk="initPhyAtk";
+Hero.initPhyDef="initPhyDef";
+Hero.initMagicAtk="initMagicAtk";
+Hero.initMagicDef="initMagicDef";
+Hero.initCritRate="initCritRate";
+Hero.initAntiCritRate="initAntiCritRate";
+Hero.initCritHurt="initCritHurt";
+Hero.initAntiCritHurt="initAntiCritHurt";
+Hero.increasePropId="increasePropId";
+Hero.open="open"
+Hero.changePermit="changePermit"
+Hero.distillation="distillation"
+
+HeroBag = {}
+HeroBag.tblName = "HeroBag";
+HeroBag.count = "count";
+HeroBag.price = "price";
+
+HeroSummonShop = {}
+HeroSummonShop.HeroSummonTbl = "HeroSummonShop";
+HeroSummonShop.id="id";
+HeroSummonShop.type="type";
+HeroSummonShop.typeId="typeId";
+HeroSummonShop.count="count";
+HeroSummonShop.priceType="priceType";
+HeroSummonShop.priceTypeId="priceTypeId";
+HeroSummonShop.price = "price";
+HeroSummonShop.startTime = "startTime";
+HeroSummonShop.price = "price";
+HeroSummonShop.duration = "duration";
+HeroSummonShop.limitType = "limitType";
+HeroSummonShop.limitCount = "limitCount";
+HeroSummonShop.discount = "discount";
+
+Goods = {}
+Goods.tblName = "Goods"
+Goods.id="id";
+Goods.type="type";
+Goods.typeId="typeId";
+Goods.count="count";
+Goods.priceType="priceType";
+Goods.priceTypeId="priceTypeId";
+Goods.price = "price";
+Goods.startTime = "startTime";
+Goods.price = "price";
+Goods.shopID = "shop";
+Goods.duration = "duration";
+Goods.limitCount = "limitCount";
+Goods.isOpen = "isOpen";
+Goods.discount = "discountView";
+
+Equipment = {}
+Equipment.actorTbl = "Equipment";
+Equipment.id="id";
+Equipment.quality="quality";
+Equipment.type="type";
+Equipment.order="order";
+Equipment.propStr="propStr";
+Equipment.exPropStr="exPropStr";
+Equipment.suitId="suitId";
+Equipment.composeCost="composeCost";
+Equipment.upgradeMaterialId="upgradeMaterialId"
+
+EquipmentSuits = {}
+EquipmentSuits.actorTbl = "EquipmentSuits";
+EquipmentSuits.id="id";
+EquipmentSuits.title="title";
+EquipmentSuits.needCount1="needCount1";
+EquipmentSuits.fightingProps1="fightingProps1";
+EquipmentSuits.special1="special1";
+EquipmentSuits.desp1="desp1";
+EquipmentSuits.needCount2="needCount2";
+EquipmentSuits.fightingProps2="fightingProps2";
+EquipmentSuits.special2="special2";
+EquipmentSuits.desp2="desp2";
+EquipmentSuits.needCount3="needCount3";
+EquipmentSuits.fightingProps3="fightingProps3";
+EquipmentSuits.special3="special3";
+EquipmentSuits.desp3="desp3";
+
+HeroAttributeGrowth = {}
+HeroAttributeGrowth.actorTbl = "HeroAttributeGrowth";
+HeroAttributeGrowth.id="id";
+HeroAttributeGrowth.maxLife="maxLife";
+HeroAttributeGrowth.phyAttack="phyAttack";
+HeroAttributeGrowth.phyDef="phyDef";
+HeroAttributeGrowth.magicAttack="magicAttack";
+HeroAttributeGrowth.magicDef="magicDef";
+
+Challenge = {}
+Challenge.tblName = "Challenge";
+Challenge.id="id";
+Challenge.type="type";
+Challenge.difficulty="difficulty";
+Challenge.rewardStr="rewardStr";
+Challenge.recommendFight="recommendFight";
+Challenge.requiredLevel="requiredLevel";
+Challenge.icon="icon";
+Challenge.requireFight="requireFight"
+
+Campaign={}
+Campaign.actorTbl = "Campaign";
+Campaign.id="id";
+Campaign.stageId="stageId";
+Campaign.chapterId="chapterId";
+Campaign.difficulty="difficulty";
+Campaign.name="name";
+Campaign.time="time";
+Campaign.level="level";
+Campaign.monsterStr="monsterStr";
+Campaign.goldReward="goldReward";
+Campaign.soulReward="soulRewardStr";
+Campaign.expReward="expRewardStr";
+Campaign.resourceRewardStr="resourceRewardStr";
+Campaign.otherRewardStr="otherRewardStr";
+Campaign.map="map";
+
+Skyscraper={}
+Skyscraper.tblName = "Skyscraper";
+Skyscraper.id="id";
+Skyscraper.monsterStr="monsterStr";
+Skyscraper.passRewardStr="passRewardStr";
+Skyscraper.tryRewardStr="tryRewardStr";
+Skyscraper.fight="fight";
+
+Monster={}
+Monster.actorTbl = "Monster";
+Monster.id="id";
+Monster.type="type";
+Monster.actorId="actorId";
+Monster.grade="grade";
+Monster.level="level";
+
+APArenaRank={}
+APArenaRank.tblName = "APArenaRank";
+APArenaRank.id="id";
+APArenaRank.min="min";
+APArenaRank.max="max";
+
+APArenaRankReward={}
+APArenaRankReward.tblName = "APArenaRankReward";
+APArenaRankReward.id="id";
+APArenaRankReward.min="min";
+APArenaRankReward.max="max";
+APArenaRankReward.dailyRewardStr="dailyRewardStr";
+APArenaRankReward.seasonRewardStr="seasonRewardStr";
+
+TempleRankReward={}
+TempleRankReward.tblName = "TempleRankReward";
+TempleRankReward.id="id";
+TempleRankReward.min="min";
+TempleRankReward.max="max";
+TempleRankReward.dailyRewardStr="dailyRewardStr";
+TempleRankReward.seasonRewardStr="seasonRewardStr";
+
+TempleReward={}
+TempleReward.tblName = "TempleReward";
+TempleReward.id="id";
+TempleReward.rank="rank";
+TempleReward.rewardStr="rewardStr";
+
+TeamArenaRank={}
+TeamArenaRank.tblName = "APArenaRank";
+TeamArenaRank.id="id";
+TeamArenaRank.min="min";
+TeamArenaRank.max="max";
+
+TeamArenaRankReward={}
+TeamArenaRankReward.tblName = "TeamArenaRankReward";
+TeamArenaRankReward.id="id";
+TeamArenaRankReward.min="min";
+TeamArenaRankReward.max="max";
+TeamArenaRankReward.dailyRewardStr="dailyRewardStr";
+TeamArenaRankReward.seasonRewardStr="seasonRewardStr";
+
+HeroDecomposition={}
+HeroDecomposition.tblName = "HeroDecomposition";
+HeroDecomposition.quality="quality";
+HeroDecomposition.resultStr="resultStr";
+
+AutoTask={}
+AutoTask.tblName = "AutoTask";
+AutoTask.id="id";
+AutoTask.name="name";
+AutoTask.taskQuality = "taskQuality";
+AutoTask.combat="combat";
+AutoTask.heroNum="heroNum";
+AutoTask.camp = "camp";
+AutoTask.job="job";
+AutoTask.heroQuality="heroQuality";
+AutoTask.time = "time";
+AutoTask.rewardStr="rewardStr";
+
+AutoTaskQuality={}
+AutoTaskQuality.tblName = "AutoTaskQuality";
+AutoTaskQuality.quality="quality";
+AutoTaskQuality.icon="icon";
+
+AutoTaskHaste={}
+AutoTaskHaste.tblName = "AutoTaskHaste";
+AutoTaskHaste.id="id";
+AutoTaskHaste.minTime="minTime";
+AutoTaskHaste.maxTime = "maxTime";
+AutoTaskHaste.gemCost="gemCost";
+
+BGM = {}
+BGM.tblName = "BGM"
+BGM.moduleName = "ModuleName"
+BGM.bgmName = "BGMName"
+
+DailyTask = {}
+DailyTask.tblName = "DailyTask"
+DailyTask.id = "id"
+DailyTask.desc = "desc"
+DailyTask.count = "count"
+DailyTask.linkedSys = "linkedSys"
+DailyTask.rewardStr = "rewardStr"
+DailyTask.open = "open"
+
+DailyTaskExtraReward = {}
+DailyTaskExtraReward.tblName = "DailyTaskExtraReward"
+DailyTaskExtraReward.id = "id"
+DailyTaskExtraReward.progress = "progress"
+DailyTaskExtraReward.normalRewardStr = "normalRewardStr"
+DailyTaskExtraReward.specialRewardStr = "specialRewardStr"
+DailyTaskExtraReward.minLevel = "minLevel"
+DailyTaskExtraReward.maxLevel = "maxLevel"
+DailyTaskExtraReward.extraRewardStr = "extraRewardStr"
+
+Job = {}
+Job.tblName = "Job"
+Job.id = "id"
+Job.icon = "icon"
+Job.name = "name"
+
+Instruction = {}
+Instruction.tblName = "Instruction"
+Instruction.id = "id"
+Instruction.content = "content"
+
+Chapter = {}
+Chapter.tblName = "Chapter"
+Chapter.id = "id"
+Chapter.name = "name"
+Chapter.icon = "icon"
+
+sound = {}
+sound.tblName = "sound"
+sound.id = "sound_id"
+sound.name = "sound_name"
+
+BattleBg = {}
+BattleBg.tblName = "BattleBg"
+BattleBg.id = "id"
+BattleBg.type = "type"
+BattleBg.level = "level"
+BattleBg.battleBG = "battleBG"
+BattleBg.quickPass = "quickPass"
+
+WeaponSfx = {}
+WeaponSfx.tblName = "WeaponSfx"
+WeaponSfx.id = "id"
+WeaponSfx.sfxName = "sfxName"
+WeaponSfx.type = "type"
+WeaponSfx.follow = "follow"
+WeaponSfx.pos = "pos"
+WeaponSfx.sound = "sound"
+
+Subskill = {}
+Subskill.tblName = "Subskill"
+Subskill.id = "id"
+Subskill.attackType = "attackType"
+Subskill.attackSfx = "attackSfx"
+Subskill.hurtSfx = "hurtSfx"
+
+OtherRes = {}
+OtherRes.tblName = "OtherRes"
+OtherRes.res = "res"
+
+DefHpStr = {}
+DefHpStr.tblName = "DefHpStr"
+DefHpStr.id = "id"
+DefHpStr.sfxId = "sfxId"
+
+DotStrEffect = {}
+DotStrEffect.tblName = "DotStrEffect";
+DotStrEffect.id = "id"
+DotStrEffect.sfxId = "sfxId"
+
+EffectStrEffect = {}
+EffectStrEffect.tblName = "EffectStrEffect"
+EffectStrEffect.id = "id"
+EffectStrEffect.posSfxId = "posSfxId"
+EffectStrEffect.negSfxId = "negSfxId"
+EffectStrEffect.posIcon = "posIcon"
+EffectStrEffect.negIcon = "negIcon"
+
+ControlEffect = {}
+ControlEffect.tblName = "ControlEffect"
+ControlEffect.id = "id"
+ControlEffect.sfxId = "sfxId"
+ControlEffect.playType = "playType"
+ControlEffect.material = "material"
+
+SpecialEffect = {}
+SpecialEffect.tblName = "SpecialEffect"
+SpecialEffect.id = "id"
+SpecialEffect.sfxId = "sfxId"
+SpecialEffect.triggleId = "triggleId"
+SpecialEffect.special = "special"
+
+Camp = {}
+Camp.tblName = "Camp"
+Camp.id = "id"
+Camp.camp = "camp"
+Camp.icon = "icon"
+
+AutoRewardHero={}
+AutoRewardHero.tblName = "AutoRewardHero";
+AutoRewardHero.id = "id";
+AutoRewardHero.level = "level";
+AutoRewardHero.heroNum = "heroNum";
+
+GetGold = {}
+GetGold.tblName = "GetGold"
+GetGold.id = "id"
+GetGold.reward = "reward"
+GetGold.cost = "cost"
+
+Rune = {}
+Rune.tblName = "Rune"
+Rune.name = "name"
+Rune.level = "level"
+Rune.lockCost = "lockCost"
+Rune.icon = "icon"
+Rune.quality = "quality"
+Rune.star = "star"
+Rune.transformConsumption = "transformConsumption"
+Rune.upgradeConsumption = "upgradeConsumption"
+Rune.attributeNum = "attributeNum"
+Rune.attribute1 = "attribute1"
+Rune.attribute2 = "attribute2"
+Rune.attribute3 = "attribute3"
+Rune.attribute4 = "attribute4"
+Rune.attribute5 = "attribute5"
+Rune.attribute6 = "attribute6"
+Rune.attribute7 = "attribute7"
+Rune.attribute8 = "attribute8"
+Rune.attribute9 = "attribute9"
+Rune.attribute10 = "attribute10"
+
+Relic = {}
+Relic.tblName = "Relic"
+Relic.id = "id"
+Relic.name = "name"
+Relic.icon = "icon"
+Relic.quality = "quality"
+Relic.attribute = "attribute"
+Relic.stepAttribute = "stepAttribute"
+Relic.activate = "activate"
+Relic.activateStr = "activateStr"
+Relic.stepActivateStr = "stepActivateStr"
+Relic.show = "show"
+
+RelicQuality = {}
+RelicQuality.tblName = "RelicQuality"
+RelicQuality.quality = "quality"
+RelicQuality.star = "star"
+
+RelicExp = {}
+RelicExp.tblName = "RelicExp"
+RelicExp.id = "id"
+RelicExp.exp = "exp"
+RelicExp.supplyExp = "supplyExp"
+
+AutoRewardLineup={}
+AutoRewardLineup.tblName = "AutoRewardLineup";
+AutoRewardLineup.id = "id";
+AutoRewardLineup.fight = "fight";
+AutoRewardLineup.extraResource = "extraResource";
+
+Achievement = {}
+Achievement.tblName = "Achievement"
+Achievement.id = "id"
+Achievement.name = "name"
+Achievement.desp = "desp"
+Achievement.count = "count"
+Achievement.reward = "reward"
+Achievement.type = "type"
+
+VipTbl={}
+VipTbl.tblName="Vip"
+VipTbl.vip="vip"
+VipTbl.needExp="exp"
+VipTbl.heroBagAdd="heroBag"
+VipTbl.coinAdd="getGold"
+VipTbl.stageHookAdd="campaign"
+VipTbl.taskCountAdd="autoTask"
+VipTbl.drawDiscount="heroSummon"
+VipTbl.challengeCountAdd="challenge"
+VipTbl.arenaCountAdd="APArena"
+VipTbl.quickBattle="fastPlay"
+VipTbl.donateCountAdd="guildTrade"
+VipTbl.friendCountAdd="friend"
+VipTbl.wishing="lottery"
+VipTbl.advancedSummon="heroSummonReward"
+VipTbl.reward="reward"
+VipTbl.monthcardDailyReward="moonCard"
+VipTbl.color = "color"
+VipTbl.multifight = "multifight"
+VipTbl.skipPly = "skipPly"
+
+LanguageTbl = {}
+LanguageTbl.tblName = "Language"
+LanguageTbl.id = "id"
+LanguageTbl.name = "name"
+LanguageTbl.language = "language"
+Level = {}
+Level.tblName = "Level"
+Level.level = "level"
+Level.exp = "exp"
+
+Loading = {}
+Loading.tblName = "Loading"
+Loading.hero = "hero"
+Loading.desp = "desp"
+Loading.open = "open"
+
+RandomName = {}
+RandomName.tblName = "RandomName"
+RandomName.id = "id"
+RandomName.firstName = "firstName"
+RandomName.secondName = "secondName"
+
+DestructionRankReward = {}
+DestructionRankReward.tblName = "DestructionRankReward"
+DestructionRankReward.min = "min"
+DestructionRankReward.max = "max"
+DestructionRankReward.reward = "reward"
+
+HeroRefine = {}
+HeroRefine.tblName = "HeroRefine"
+HeroRefine.id = "id"
+HeroRefine.mainId = "mainId"
+HeroRefine.subId1 = "subId1"
+HeroRefine.subId2 = "subId2"
+HeroRefine.subId3 = "subId3"
+HeroRefine.isOpen = "isOpen"
+
+Difficulty = {}
+Difficulty.tblName = "Difficulty"
+Difficulty.difficulty = "difficulty"
+Difficulty.name = "name"
+Difficulty.bg = "bg"
+Difficulty.icon = "icon"
+
+CardTbl = {}
+CardTbl.tblName = "Card"
+CardTbl.activityid = "activityid"
+CardTbl.reward = "reward"
+CardTbl.desp = "desp"
+CardTbl.value = "value"
+CardTbl.transid = "transid"
+CardTbl.preBuyTime = "preBuyTime"
+
+Valhalla = {}
+Valhalla.tblName = "Valhalla"
+Valhalla.id = "id"
+Valhalla.rewardStr = "rewardStr"
+
+ValhallaExtraReward = {}
+ValhallaExtraReward.tblName = "ValhallaExtraReward"
+ValhallaExtraReward.id = "id"
+ValhallaExtraReward.count = "count"
+ValhallaExtraReward.reward = "reward"
+
+HeroDistillation = {}
+HeroDistillation.tblName = "HeroDistillation"
+HeroDistillation.id = "id"
+HeroDistillation.hero = "hero"
+HeroDistillation.star = "star"
+HeroDistillation.attribute = "attribute"
+HeroDistillation.passiveSkill = "passiveSkill"
+HeroDistillation.target = "target"
+HeroDistillation.mainId = "mainId"
+HeroDistillation.mainCount = "mainCount"
+HeroDistillation.subId1 = "subId1"
+HeroDistillation.subCount1 = "subCount1"
+HeroDistillation.subId2 = "subId2"
+HeroDistillation.subCount2 = "subCount2"
+HeroDistillation.count = "count"
+
+HeroDistillationLevel = {}
+HeroDistillationLevel.tblName = "HeroDistillationLevel"
+HeroDistillationLevel.id = "id"
+HeroDistillationLevel.grade = "grade"
+HeroDistillationLevel.level = "level"
+HeroDistillationLevel.soulCoin = "soulCoin"
+HeroDistillationLevel.coin = "coin"
+
+GuildBanner = {}
+GuildBanner.tblName = "GuildBanner"
+GuildBanner.id = "id"
+GuildBanner.banner = "banner"
+
+Guild = {}
+Guild.tblName = "Guild"
+Guild.id = "level"
+Guild.exp = "exp"
+Guild.level = "level"
+Guild.memberCount = "memberNum"
+Guild.checkinReward = "checkinReward"
+
+GuildTech = {}
+GuildTech.tblName = "GuildTech"
+GuildTech.id = "id"
+GuildTech.name = "name"
+GuildTech.icon = "icon"
+GuildTech.job = "job"
+GuildTech.levelCount = "levelCount"
+GuildTech.attribute = "attribute"
+GuildTech.preconditionId = "preconditionId"
+GuildTech.preconditionlevel = "preconditionlevel"
+GuildTech.consumption = "consumption"
+
+GuildDungeon = {}
+GuildDungeon.tblName = "GuildDungeon"
+GuildDungeon.id = "id"
+GuildDungeon.bossId = "bossId"
+GuildDungeon.reward = "reward"
+
+GuildDungeonPrice = {}
+GuildDungeonPrice.tblName = "GuildDungeonPrice"
+GuildDungeonPrice.id = "count"
+GuildDungeonPrice.count = "count"
+GuildDungeonPrice.price = "price"
+
+GuildTrade = {}
+GuildTrade.tblName = "GuildTrade"
+GuildTrade.id = "id"
+GuildTrade.quality = "quality"
+GuildTrade.time = "time"
+GuildTrade.reward = "reward"
+GuildTrade.upgrade = "upgrade"
+
+GuildTradeUpgrade = {}
+GuildTradeUpgrade.tblName = "GuildTradeUpgrade"
+GuildTradeUpgrade.level = "level"
+GuildTradeUpgrade.exp = "exp"
+GuildTradeUpgrade.count = "count"
+GuildTradeUpgrade.timeReduction = "timeReduction"
+GuildTradeUpgrade.productIncrease = "productIncrease"
+GuildTradeUpgrade.shipIcon = "shipIcon"
+
+GuildTradeUpgradeConsumption = {}
+GuildTradeUpgradeConsumption.tblName = "GuildTradeUpgradeConsumption"
+GuildTradeUpgradeConsumption.id = "id"
+GuildTradeUpgradeConsumption.consumption = "consumption"
+GuildTradeUpgradeConsumption.exp = "exp"
+GuildTradeUpgradeConsumption.Reward = "Reward"
+
+ElementCamp = {}
+ElementCamp.tblName = "ElementCamp"
+ElementCamp.level = "level"
+ElementCamp.propStr = "propStr"
+ElementCamp.exp = "exp"
+
+ElementFusion = {}
+ElementFusion.tblName = "ElementFusion"
+ElementFusion.level = "level"
+ElementFusion.icon = "icon"
+ElementFusion.bg = "bg"
+ElementFusion.exp = "exp"
+ElementFusion.propStr = "propStr"
+ElementFusion.name = "name"
+ElementFusion.campExp = "campExp"
+
+ElementCrystal = {}
+ElementCrystal.tblName = "ElementCrystal"
+ElementCrystal.id = "id"
+ElementCrystal.camp = "camp"
+ElementCrystal.exp = "exp"
+
+tips = {}
+tips.tblName = "tips"
+tips.id = "id"
+tips.weight = "weight"
+tips.text = "text"
+
+BannerTbl = {}
+BannerTbl.tblName = "Banner"
+BannerTbl.id = "id"
+BannerTbl.times = "times"
+BannerTbl.priority = "priority"
+BannerTbl.content = "content"
+
+GuildTechReset = {}
+GuildTechReset.tblName = "GuildTechReset"
+GuildTechReset.consumption = "consumption"
+GuildTechReset.price = "price"
+
+SkillBreak = {}
+SkillBreak.skillId = "skillId"
+SkillBreak.grade = "grade"
+SkillBreak.targetSkillId = "targetSkillId"
+SkillBreak.consumption = "consumption"
+
+SkillLevelUp = {}
+SkillLevelUp.tblName = "SkillLevelUp"
+SkillLevelUp.subSkillId = "subSkillId"
+SkillLevelUp.hurtFactor = "hurtFactor"
+SkillLevelUp.cureFactor = "cureFactor"
+SkillLevelUp.skillFactor = "skillFactor"
+SkillLevelUp.stateFactor = "stateFactor"
+SkillLevelUp.stateId = "stateId"
+SkillLevelUp.targetProb = "targetProb"
+SkillLevelUp.hurtStr = "hurtStr"
+SkillLevelUp.cureStr = "cureStr"
+SkillLevelUp.defHpStr = "defHpStr"
+SkillLevelUp.effectStr = "effectStr"
+SkillLevelUp.dotStr = "dotStr"
+
+SkilllevelUpConsumption = {}
+SkilllevelUpConsumption.tblName = "SkilllevelUpConsumption"
+SkilllevelUpConsumption.grade = "grade"
+SkilllevelUpConsumption.level = "level"
+SkilllevelUpConsumption.consumption = "consumption"
+
+AvatarBox = {}
+AvatarBox.tblName = "AvatarBox"
+AvatarBox.id = "id"
+AvatarBox.name = "name"
+AvatarBox.icon = "icon"
+AvatarBox.iconSpine = "iconSpine"
+AvatarBox.open = "open"
+AvatarBox.time = "time"
+AvatarBox.product = "product"
+
+LeagueRewardTbl = {}
+LeagueRewardTbl.tblName = "FTArenaRankReward"
+LeagueRewardTbl.id = "id"
+LeagueRewardTbl.round = "round"
+LeagueRewardTbl.loserRewardStr = "loserRewardStr"
+LeagueRewardTbl.winnerRewardStr = "winnerRewardStr"
+LeagueRewardTbl.loseDescriptStr = "loseDescriptStr"
+LeagueRewardTbl.winDescriptStr = "winDescriptStr"
+
+GuildLog = {}
+GuildLog.tblName = "GuildLog"
+GuildLog.id = "id"
+GuildLog.content = "content"
+
+GuildwarPrice = {}
+GuildwarPrice.tblName = "GuildwarPrice"
+GuildwarPrice.count = "count"
+GuildwarPrice.price = "price"
+
+GuildwarRankReward = {}
+GuildwarRankReward.tblName = "GuildwarRankReward"
+GuildwarRankReward.min = "min"
+GuildwarRankReward.max = "max"
+GuildwarRankReward.seasonRewardStr = "seasonRewardStr"
+GuildwarRankReward.seasonOtherReward = "seasonOtherReward"
+
+GloryRoadTbl = {
+    tblName = "Multifight",
+    id = "id",
+    floor = "floor",
+    stage = "stage",
+    monster1 = "monster1",
+    passive1 = "passive1",
+    monster2 = "monster2",
+    passive2 = "passive2",
+    rewards = "rewards",
+    firstRewards = "firstRewards"
+}
+HeroBreak = {
+    tblName = "HeroBreak",
+    id = "id",
+    main = "main",
+    material1 = "material1",
+    material2 = "material2",
+    material3 = "material3",
+    other = "other",
+    isOpen = "isOpen"
+}
+
+HeroBreakLevel = {
+    tblName = "HeroBreakLevel",
+    id = "id",
+    grade = "grade",
+    level = "level",
+    soulCoin = "soulCoin",
+    coin = "coin"
+}
+Jewel = {
+    tblName = "Jewel",
+    id = "id",
+    name = "name",
+    icon = "icon",
+    quality = "quality",
+    star = "star",
+    type = "type",
+    subType = "subType",
+    effectType1 = "effectType1",
+    effect1 = "effect1",
+    restriction1 = "restriction1",
+    desp1 = "desp1",
+    effectType2 = "effectType2",
+    effect2 = "effect2",
+    restriction2 = "restriction2",
+    desp2 = "desp2",
+    effectType3 = "effectType3",
+    effect3 = "effect3",
+    restriction3 = "restriction3",
+    desp3 = "desp3",
+    effectType4 = "effectType4",
+    effect4 = "effect4",
+    restriction4 = "restriction4",
+    desp4 = "desp4",
+    effectType5 = "effectType5",
+    effect5 = "effect5",
+    restriction5 = "restriction5",
+    desp5 = "desp5"
+}
+
+JewelTypeTbl = {
+    tblName = "JewelType",
+    type = "type",
+    desp = "desp"
+}
+
+JewelRefine = {
+    tblName = "JewelRefine",
+    id = "id",
+    main = "main",
+    sub1 = "sub1",
+    sub2 = "sub2",
+    sub3 = "sub3",
+    extra = "extra"
+}
+
+
+JewelComposeTbl = {
+	tblName = "JewelCompose",
+	id = "id",
+	quality = "quality",
+	type = "type",
+	subType = "subType",
+	extra = "extra",
+}
+GuildwarPersonalReward = {
+    tblName = "GuildwarPersonalReward",
+    rankMax = "rankMax",
+    rankMin = "rankMin",
+    rate = "rate",
+}
+
+HeroAttributeRatio = {}
+HeroAttributeRatio.tblName = "HeroAttributeRatio"
+HeroAttributeRatio.grade = "grade"
+HeroAttributeRatio.ratio = "ratio"
+
+---用于计算英雄解封需要的资源
+SoulorbReset = {}
+SoulorbReset.actorTbl = "SoulorbReset"
+SoulorbReset.grage = "grade"
+SoulorbReset.resource = "resource"
+
+---用于计算灵魂纹章的属性
+SoulorbRate = {}
+SoulorbRate.actorTbl = "SoulorbRate"
+SoulorbRate.star = "star"
+SoulorbRate.rate1 = "rate1"
+
+
+---用于显示矿场地图
+Mineral = {}
+Mineral.actorTbl = "Mineral"
+Mineral.id = "id"
+Mineral.type = "type"
+
+---用于计算和显示矿点类型
+MineralType = {}
+MineralType.actorTbl = "MineralType"
+MineralType.id = "id"
+MineralType.name = "name"
+MineralType.icon = "icon"
+MineralType.mapIcon = "mapIcon"
+MineralType.outPut = "outPut"
+MineralType.time = "time"
+MineralType.outputDescribe = "outputDescribe"
+MineralType.timeMax = "timeMax"
+MineralType.heroQuality = "heroQuality"
+MineralType.heroLevel = "heroLevel"
+MineralType.mostNum = "mostNum"
+MineralType.fontColor = "fontColor"
+MineralType.gradientTopColor = "gradientTopColor"
+MineralType.gradientBottomColor = "gradientBottomColor"
+
+---用于显示矿产科技
+MineralScience = {}
+MineralScience.actorTbl = "MineralScience"
+MineralScience.id = "id"
+MineralScience.name = "name"
+MineralScience.icon = "icon"
+MineralScience.conditionType = "conditionType"
+MineralScience.conditionParameter = "conditionParameter"
+MineralScience.conditionDescribe = "conditionDescribe"
+MineralScience.expend = "expend"
+MineralScience.outputPromote = "outputPromote"
+MineralScience.scienceDescribe = "scienceDescribe"
+
+---用于计算矿产购买消耗
+MineralProtect = {}
+MineralProtect.actorTbl = "MineralProtect"
+MineralProtect.id = "id"
+MineralProtect.numMix = "numMix"
+MineralProtect.numMax = "numMax"
+MineralProtect.expend = "expend"
+
+---用于购买恢复
+MineralHero = {}
+MineralHero.actorTbl = "MineralHero"
+MineralHero.id = "id"
+MineralHero.numMix = "numMix"
+MineralHero.numMax = "numMax"
+MineralHero.expend = "expend"
+
+---实名认证奖励
+AuthenticationReward = {}
+AuthenticationReward.actorTbl = "AuthenticationReward"
+AuthenticationReward.id = "id"
+AuthenticationReward.reward = "reward"

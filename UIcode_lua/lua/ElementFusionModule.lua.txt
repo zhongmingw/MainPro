@@ -1,0 +1,21 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-07-23 17:16:00
+
+local cache=CS.Client.Library.ObjectCache.instance
+
+function DoInit()
+end
+
+function AssetNames(objs)
+    local arr = {"ElementFusionView"}
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    self:OpenView("ElementFusionView", "ElementFusionModel")
+    if(onFinished ~= nil) then
+        onFinished()
+    end
+end

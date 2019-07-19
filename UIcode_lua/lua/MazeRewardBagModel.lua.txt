@@ -1,0 +1,54 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-05-24 09:56:17
+
+local MazeDef = require "MazeDef"
+local MazeUtils = require "MazeUtils"
+
+local svrData
+
+local function GetBagItemDataBySvrData(itemMap)
+    local data = {}
+    for k,v in pairs(itemMap) do
+        if v ~= 0 then
+            local item = {
+                id = k,
+                count = v
+            }
+            table.insert(data, item)
+        end
+    end
+    return data
+end
+
+local function GetMazeRewardBagData(totalReward)
+    local data = MazeUtils.GetRewardItemsBySvrData(totalReward)
+    return data
+end
+
+function DoOnExit()
+    MazeDef = nil
+    MazeUtils = nil
+
+    svrData = nil
+end
+
+function OnCommand_InitData(objs)
+    local data = objs[0]
+    svrData = {
+        totalReward = data.totalReward or {},
+        row = data.row or 0,
+        col = data.col or 0
+    }
+end
+
+function OnCommand_InitMazeRewardBagData(objs)
+    local data = GetMazeRewardBagData(svrData.totalReward)
+    self:SendNotification("RefreshMazeRewardBagView",data)
+end
+
+function OnCommand_OpenTip(objs)
+    local data = objs[0]
+    ShowTip(self,data.typeId,data.id)
+end

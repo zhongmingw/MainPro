@@ -1,0 +1,79 @@
+local pb = require "pb"
+local DoHttpRequest, DoBackgroundHttpRequest
+
+--Post http request and block game process untill return
+--with loading scene and retry on failed
+function HttpRequest(url,reqPbMsg,respPbMsg,req,onFinished)
+    local showloading, retryOnFailed = true, true
+    DoHttpRequest(url,reqPbMsg,respPbMsg,req,onFinished,showloading,retryOnFailed)
+end
+
+--Post blocked http request with more parameters specified
+function HttpRequestEx(url,reqPbMsg,respPbMsg,req,onFinished,retryOnFailed,showloading)
+    if retryOnFailed == nil then retryOnFailed = false end
+    if showloading == nil then showloading = false end
+    DoHttpRequest(url,reqPbMsg,respPbMsg,req,onFinished,showloading,retryOnFailed)
+end
+
+--Post a background http request
+--without loading scene and do not retry on failed
+function HttpBackgroundRequest(url,reqPbMsg,respPbMsg,req,onFinished)
+    local showloading, retryOnFailed = false, false
+    DoBackgroundHttpRequest(url,reqPbMsg,respPbMsg,req,onFinished,showloading,retryOnFailed)
+end
+
+--Post a background http request with more parameters specified
+function HttpBackgroundRequestEx(url,reqPbMsg,respPbMsg,req,onFinished,retryOnFailed,showloading)
+    if retryOnFailed == nil then retryOnFailed = false end
+    if showloading == nil then showloading = false end
+    DoBackgroundHttpRequest(url,reqPbMsg,respPbMsg,req,onFinished,showloading,retryOnFailed)
+end
+
+DoHttpRequest = function(url,reqPbMsg,respPbMsg,req,onFinished,showloading,retryOnFailed)
+    local reqMsg=checkProtoMessage(reqPbMsg)
+    local respMsg=checkProtoMessage(respPbMsg)
+    local data = assert(pb.encode(reqMsg, req))
+    local param = CS.Client.Library.LuaHttpParam.CreateHttpParam()
+    param.bytes=data
+    CsBridge.httpBehaviour:HttpRequest(url,param,
+    function (resp)
+      local result = pb.decode(respMsg, resp.bytes)
+      if onFinished then
+        onFinished(result)
+      end
+    end,showloading,retryOnFailed)
+end
+
+DoBackgroundHttpRequest = function(url,reqPbMsg,respPbMsg,req,onFinished,showloading,retryOnFailed)
+  local reqMsg=checkProtoMessage(reqPbMsg)
+  local respMsg=checkProtoMessage(respPbMsg)
+  local data = assert(pb.encode(reqMsg, req))
+  local param = CS.Client.Library.LuaHttpParam.CreateHttpParam()
+  param.bytes=data
+  CsBridge.httpBehaviour:InfoHttpRequest(url,param,
+  function (resp)
+    local result = pb.decode(respMsg, resp.bytes)
+    if onFinished then
+      onFinished(result)
+    end
+  end,showloading,retryOnFailed)
+end
+
+function HttpBattle(url,reqPbMsg,req,onBattle)
+  local respPbMsg="BattleInfo"
+  local reqMsg=checkProtoMessage(reqPbMsg)
+  local respMsg=checkProtoMessage(respPbMsg)
+  local data = assert(pb.encode(reqMsg, req))
+  local param = CS.Client.Library.LuaHttpParam.CreateHttpParam()
+  param.bytes=data
+  CsBridge.httpBehaviour:HttpRequest(url,param,
+  function (resp)
+    if resp==nil then
+      return 
+    end
+    local result = pb.decode(respMsg, resp.bytes)
+    if(onBattle~=nil) then
+      onBattle(result)
+    end
+  end,true,true)
+end

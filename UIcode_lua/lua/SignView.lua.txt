@@ -1,0 +1,147 @@
+local signedDayTxt
+local dayGrid
+local buyBtn
+local loaded = false
+
+local signData
+local signed = false
+
+local TICKER_NAME = "ticker_SignView"
+
+function DoInit()
+    self.Anim = 0
+    signedDayTxt=self:GetComponentAtPath("OTHER/numberTxt",CLS_TEXT)
+    dayGrid=self:GetComponentAtPath("OTHER/daysSV/ScrollRect/Viewport/Grid",CLS_UI_ITEM_GRID)
+    buyBtn=self:GetComponentAtPath("BUTTON/buyBtn",CLS_BUTTON_ARCHLY)
+end
+
+function IsSetAnchor()
+    return true
+end
+
+function BeoforeReturnBack()
+    self.gameObject:SetSelfActive(false)
+end
+
+function OnAnimationFinished()
+    self:SendCommand("InitSign")
+end
+
+function OnNotification_InitSign(objs)
+    signData=objs[0]
+    signedDayTxt.text=signData.count.."/"..signData.total
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        if (not loaded) then
+            loaded = true
+            dayGrid:RefreshItemSlots(signData.dailyRewardsData,self.gameObject,"SignItemSlot")
+        else
+            for i=1,#signData.dailyRewardsData do
+                dayGrid:SingleRefreshSlot(signData.dailyRewardsData[i])
+            end
+        end
+	end, "SignItemSlot")
+	refreshBtn()
+end
+
+function refreshBtn()
+	if signData.count >= signData.curIndex then
+        buyBtn.Gray=true
+    else
+        buyBtn.Gray=false
+    end
+end
+
+function OnSignItemSlotBindValue(slot,data)
+    local item=slot:GetGameObjectAtPath("item")
+    local itemTrans = item.transform
+    local selected=itemTrans:GetGameObjectAtPath("selected")
+    local itemBase=itemTrans:GetGameObjectAtPath("Item")
+    local signed=itemTrans:GetGameObjectAtPath("SignedGO")
+    local timeObj=slot:GetGameObjectAtPath("time")
+    local timeTxt=timeObj.transform:GetComponentAtPath("numberTxt",CLS_TEXT)
+    BindItemBaseValue(itemBase.transform,data.rewards[1])
+    if(data.id <= data.maxAvaliableId) then
+        item:SetScale(1,1)
+        item:SetButtonInitScale(1,1)
+        item:SetPosition(0,0,0)
+        if data.signed then
+            signed:SetSelfActive(true)
+            selected:SetSelfActive(false)
+        else
+            signed:SetSelfActive(false)
+            selected:SetSelfActive(true)
+        end
+        timeObj:SetSelfActive(false)
+    elseif (data.id==data.maxAvaliableId+1) then
+        item:SetScale(0.9,0.9)
+        item:SetButtonInitScale(0.9,0.9)
+        item:SetPosition(0,5,0)
+        selected:SetSelfActive(false)
+        signed:SetSelfActive(false)
+        timeObj:SetSelfActive(true)
+        Timer:AddTicker(TICKER_NAME,GetReloadTimestamp(GetConstValue("commonReloadTime")*3600000),function (target)
+            if self == nil or self.Module == nil then
+                return
+            end
+            timeTxt:SetText(CheckTimeRemain(target,false))
+        end,function ()
+            self:SendCommand("InitSign")
+        end,nil)
+    else
+        item:SetScale(1,1)
+        item:SetButtonInitScale(1,1)
+        item:SetPosition(0,0,0)
+        selected:SetSelfActive(false)
+        signed:SetSelfActive(false)
+        timeObj:SetSelfActive(false)
+    end
+end
+
+function OnGriditemClick(obj)
+    local data=obj.m_data
+    ShowRewardTip(self,data.rewards[1])
+end
+
+function OnbuyBtnClick(sender)
+    self:SendCommand("DoSign")
+end
+
+function OnNotification_Signed(objs)
+    local data=objs[0]
+    dayGrid:SingleRefreshSlot(data)
+    refreshBtn()
+    signedDayTxt.text=signData.count.."/"..signData.total
+    signed = true
+end
+
+function OnruleBtnClick(sender)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("HelpView","ActivityModel",false,true)
+        view:SetData(11)
+	end, "HelpView")    
+end
+
+function ResetSignStatus()
+    signed = false
+end
+
+function FinishSign()
+    return signed
+end
+
+function OnClose()
+    Timer:StopTicker(TICKER_NAME)
+end
+
+function DoExit()
+	self.Module=nil
+    Timer:StopTicker(TICKER_NAME)
+    signedDayTxt = nil
+    dayGrid = nil
+    buyBtn = nil
+    loaded = nil
+
+    signData = nil
+    signed = nil
+    TICKER_NAME = nil
+end

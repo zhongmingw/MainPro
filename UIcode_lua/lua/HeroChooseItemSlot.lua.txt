@@ -1,0 +1,21 @@
+
+function OnHeroChooseItemSlotBindValue(slot,heroData)
+	slot.m_SelectSprite=slot.transform:Find("CheckSprite").gameObject
+	slot.m_SelectSprite:SetActive(slot.IsSelected)
+	local heroBase_TF=slot.transform:Find("HeroBase")
+	BindHeroBaseValue(heroBase_TF,heroData)
+	local lock_GO=slot.transform:Find("LockGO").gameObject
+	local taskLockGO=slot.transform:Find("TaskLockGO").gameObject
+	local dutys = CheckHeroDuty(heroData)
+	if dutys == nil then
+		lock_GO:SetActive(false)
+		taskLockGO:SetActive(false)
+	elseif ContainItem(dutys,1) or ContainItem(dutys,2) then
+		lock_GO:SetActive(true)
+		taskLockGO:SetActive(false)
+	elseif ContainItem(dutys,11) then
+		lock_GO:SetActive(false)
+		taskLockGO:SetActive(true)
+	end 
+	--lock_GO.gameObject:SetActive(CheckHeroDuty(heroData))
+end

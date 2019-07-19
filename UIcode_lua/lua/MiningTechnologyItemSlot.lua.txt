@@ -1,0 +1,35 @@
+---绑定数据
+function OnMiningTechnologyItemSlotBindValue(slot, data)
+    local slotTrans = slot.transform
+    ---@type UnityEngine.UI.Image
+    local iconImgObj = slotTrans:GetGameObjectAtPath("iconImg")
+    ---@type UnityEngine.TextMesh
+    local desTxt = slotTrans:GetComponentAtPath("desTxt", CLS_TEXT)
+    ---@type UnityEngine.TextMesh
+    local upCountTxt = slotTrans:GetComponentAtPath("upCountTxt", CLS_TEXT)
+    ---@type UnityEngine.GameObject
+    local stateImgObj = slotTrans:GetGameObjectAtPath("stateImg")
+    ---@type UnityEngine.TextMesh
+    local titleTxt = slotTrans:GetComponentAtPath("titleTxt", CLS_TEXT)
+    ---@type UnityEngine.TextMesh
+    local openconditionTxt = slotTrans:GetComponentAtPath("openconditionTxt", CLS_TEXT)
+    ---@type UnityEngine.GameObject
+    local openBtnObj = slotTrans:GetGameObjectAtPath("OpenBtn")
+    ---@type UnityEngine.UI.Image
+    local resImg = slotTrans:GetComponentAtPath("OpenBtn/resImg", CLS_IMAGE)
+    ---@type UnityEngine.TextMesh
+    local resNumTxt = slot:GetComponentAtPath("OpenBtn/resNumTxt", CLS_TEXT)
+
+    CsBridge.IconData.SetIconByName(iconImgObj, data.icon)
+    desTxt.text = data.scienceDescribe
+    upCountTxt.text = data.outputPromoteStr
+    titleTxt.text = data.name
+    openconditionTxt.text = data.conditionDescribe
+    ShowOneConsume(resImg, resNumTxt, data.consume)
+    CsBridge.IconData.SetIconByName(stateImgObj, data.stateImageName)
+    openBtnObj:SetActive(data.canOpen)
+    stateImgObj:SetActive(not data.canOpen)
+    SetFontColorWithEnough(resNumTxt, function()
+        return data.selfConsume.count >= data.consume.count
+    end, color2)
+end

@@ -1,0 +1,194 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-03-16 15:09:39
+
+require "WorldBossRewardItemSlot"
+
+local isInit = false
+
+local selfRewardObj
+local selfRankTxt
+local selfLeftRewardGrid
+local selfRightRewardGrid
+local killRewardGrid
+local timeTxt
+
+local rankRewardGrid
+local rankRewardLayout
+local rankRewardGridTrans
+local rankRewardGridSizeDeltaY
+local rankRewardGridSizeDelta
+
+local initRewardGridHeight
+local rewardItemSlotWidth
+local rewardItemSlotSpacingX
+
+local view
+
+local TIMER_WORLD_BOSS_REWARD = "WorldBossReward"
+
+function DoInit()	
+    self.Anim = 0
+end
+
+function InitUI()
+    selfRewardObj = self:GetGameObjectAtPath("Center/ScrollRect/Viewport/ContentGrid/SelfRewardGO")
+    selfRankTxt = self:GetComponentAtPath("Center/ScrollRect/Viewport/ContentGrid/SelfRewardGO/RankTxt",CLS_TEXT)
+    selfLeftRewardGrid = self:GetComponentAtPath("Center/ScrollRect/Viewport/ContentGrid/SelfRewardGO/SelfRewardGrid/SelfLeftGrid",CLS_UI_ITEM_GRID)
+    selfRightRewardGrid = self:GetComponentAtPath("Center/ScrollRect/Viewport/ContentGrid/SelfRewardGO/SelfRewardGrid/SelfRightGrid",CLS_UI_ITEM_GRID)
+    killRewardGrid = self:GetComponentAtPath("Center/ScrollRect/Viewport/ContentGrid/RuleGO/KillRewardGrid",CLS_UI_ITEM_GRID)
+    local sizeDelta =  selfLeftRewardGrid.transform:CheckSizeDelta()
+    if initRewardGridHeight == nil then
+        initRewardGridHeight = sizeDelta.y
+    end
+    if rewardItemSlotWidth == nil then
+        rewardItemSlotWidth = sizeDelta.x
+    end
+    if rewardItemSlotSpacingX == nil then
+        rewardItemSlotSpacingX = selfLeftRewardGrid.transform:GetComponent("HorizontalLayoutGroup").spacing
+    end
+    timeTxt = self:GetComponentAtPath("Center/ScrollRect/Viewport/ContentGrid/TimerGO/TimeTxt",CLS_TEXT)
+    rankRewardGrid = self:GetComponentAtPath("Center/ScrollRect/Viewport/ContentGrid/RankRewardGrid",CLS_UI_ITEM_GRID)
+    rankRewardLayout = rankRewardGrid:GetComponent("VerticalLayoutGroup")
+    rankRewardGridTrans = rankRewardGrid.transform
+    rankRewardGridSizeDelta = rankRewardGridTrans:CheckSizeDelta()
+    rankRewardGridSizeDeltaY = rankRewardGridSizeDelta.y
+    view = self
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitWorldBossRewardData")
+end
+
+function OnClose()
+    rankRewardGrid:ClearItems()
+    Timer:StopTicker(TIMER_WORLD_BOSS_REWARD)
+end
+
+function BeoforeReturnBack()
+    self:HideView(self.gameObject.name)
+end
+
+local function SetRankRewardSizeDelta(count)
+    local height = rankRewardLayout.padding.top + rankRewardLayout.padding.bottom + rankRewardGridSizeDeltaY * count + (count-1) * rankRewardLayout.spacing
+    rankRewardGridSizeDelta.y = height
+    rankRewardGridTrans:ResetSizeDelta(rankRewardGridSizeDelta)
+end
+
+local function GetGridSizeDelta(slotCount)
+    local sizeDelta = {
+        x = rewardItemSlotWidth*slotCount+rewardItemSlotSpacingX*(slotCount-1),
+        y = initRewardGridHeight
+    }
+    return sizeDelta
+end
+
+local function RefreshSelfRewardView(rewardData)
+    if rewardData.selfRank == -1 then
+        selfRewardObj:SetSelfActive(false)
+        return
+    end
+    selfRewardObj:SetSelfActive(true)
+    selfRankTxt.text = string.format(Language:getStr("WorldBoss_UnionMaxRank"),rewardData.selfRank)
+    selfLeftRewardGrid.transform:ResetSizeDelta(GetGridSizeDelta(#rewardData.selfRewardItems.rewards))
+    selfRightRewardGrid.transform:ResetSizeDelta(GetGridSizeDelta(#rewardData.selfRewardItems.otherRewards))
+    selfLeftRewardGrid:RefreshItemSlots(rewardData.selfRewardItems.rewards,self.gameObject,"ItemSlot")
+    selfRightRewardGrid:RefreshItemSlots(rewardData.selfRewardItems.otherRewards,self.gameObject,"ItemSlot")
+end
+
+function OnNotification_RefreshWorldBossRewardView(objs)
+    local rewardData = objs[0]
+    RefreshSelfRewardView(rewardData)
+    SetRankRewardSizeDelta(#rewardData.rewardItems)
+    rankRewardGrid:RefreshItemSlots(rewardData.rewardItems,self.gameObject,"WorldBossRewardItemSlot")
+    killRewardGrid:RefreshItemSlots(rewardData.killRewards,self.gameObject,"ItemSlot")
+    Timer:AddTicker(TIMER_WORLD_BOSS_REWARD,rewardData.endTime,function()
+        timeTxt.text = CheckTimeRemain(rewardData.endTime)
+    end,function()
+        timeTxt.text = NO_TIME
+    end)
+end
+
+function OnWorldBossRewardItemSlotBindValue(slot, data)
+    local rankSprite = slot:GetGameObjectAtPath("RankSprite")
+    local rankTxt = slot:GetComponentAtPath("RankTxt",CLS_TEXT)
+    local leftGrid = slot:GetComponentAtPath("SV/Viewport/RewardGrid/LeftGrid",CLS_UI_ITEM_GRID)
+    local rightGrid = slot:GetComponentAtPath("SV/Viewport/RewardGrid/RightGrid",CLS_UI_ITEM_GRID)
+
+    if data.min<=3 and data.min>0 then
+        rankSprite:SetSelfActive(true)
+		CsBridge.IconData.SetIconByName(rankSprite,"new_com_paiming"..data.min)
+	else
+		rankSprite:SetSelfActive(false)
+    end
+    rankTxt.text = data.rank
+    leftGrid.transform:ResetSizeDelta(GetGridSizeDelta(#data.rewards))
+    rightGrid.transform:ResetSizeDelta(GetGridSizeDelta(#data.otherRewards))
+
+    leftGrid:RefreshItemSlots(data.rewards,view.gameObject,"ItemSlot")
+    rightGrid:RefreshItemSlots(data.otherRewards,view.gameObject,"ItemSlot")
+end
+
+function OnSelfLeftGridItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("ShowTips",data)
+end
+
+function OnSelfRightGridItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("ShowTips",data)
+end
+
+function OnLeftGridItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("ShowTips",data)
+end
+
+function OnRightGridItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("ShowTips",data)
+end
+
+function OnRewardDisBtnClick(sender)
+    self:SendCommand("OpenWorldBossRewardDisView")
+end
+
+function OnKillRewardGridItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("ShowTips",data)
+end
+
+function OnClose()
+    Timer:StopTicker(TIMER_WORLD_BOSS_REWARD)
+    killRewardGrid:ClearItems()
+end
+
+function DoExit()
+    isInit = nil
+    Timer:StopTicker(TIMER_WORLD_BOSS_REWARD)
+    selfRewardObj = nil
+    selfRankTxt = nil
+    selfLeftRewardGrid = nil
+    selfRightRewardGrid = nil
+    timeTxt = nil
+
+    rankRewardGrid = nil
+    rankRewardLayout = nil
+    rankRewardGridTrans = nil
+    rankRewardGridSizeDeltaY = nil
+    rankRewardGridSizeDelta = nil
+
+    initRewardGridHeight = nil
+    rewardItemSlotWidth = nil
+    rewardItemSlotSpacingX = nil
+
+    view = nil
+
+    TIMER_WORLD_BOSS_REWARD = nil
+    killRewardGrid = nil
+end

@@ -1,0 +1,417 @@
+require "CommPayUtils"
+local dailyTaskUtils = require "DailyTaskUtils"
+
+local GiftTbl = {}
+local curIndex = 0
+GiftTbl.tblName="activityMap"
+GiftTbl.id="id"
+GiftTbl.hasTime="hasTime"
+GiftTbl.view="view"
+GiftTbl.model="model"
+GiftTbl.showbanner="showbanner"
+GiftTbl.subgroup="type"
+
+
+local FixActivityTbl={}
+FixActivityTbl.tblName="FixedActivity"
+FixActivityTbl.id="id"
+FixActivityTbl.sortorder="sortorder"
+FixActivityTbl.title="title"
+FixActivityTbl.icon="icon"
+FixActivityTbl.background="background"
+FixActivityTbl.banner="banner"
+FixActivityTbl.open="open"
+
+DailyReward={}
+DailyReward.tblName = "DailyReward";
+DailyReward.keyid="keyid";
+DailyReward.id="id";
+DailyReward.round="round";
+DailyReward.rewardStr = "rewardStr";
+
+local curCardData
+local curGiftData
+local giftData={}
+
+local activities
+local curSignData
+local initedSign=false
+local SING_ROUND_COUNT = 30
+local FirstChargeId = 6
+local waitBack = false
+local SMALL_CARD_CARDTL_ID = 2
+local BIG_CARD_CARDTBL_ID = 3
+local SMALL_CARD_PAYTBL_ID = 7
+local BIG_CARD_PAYTBL_ID = 8
+
+local defaultActivityType
+local subState
+
+local function ShowHintTip(localStr)
+    CsBridge.hintUILayer:ShowHintBox(Language:getStr(localStr), 2)
+end
+
+function OnCommand_InitActivities(objs)
+    if objs and objs.Length > 0 then
+        defaultActivityType = objs[0]
+    end
+
+    DoInitActivities()
+end
+
+function RemoveActivy(id)
+    local pos = -1
+    for i,activity in ipairs(activities) do
+        if activity.id == id then
+            pos = i 
+            break
+        end
+    end
+    if pos ~= -1 then
+        table.remove(activities,pos)
+    end
+end
+
+function DoInitActivities()
+    activities = {}
+    local tbl=ResTblContainer:GetTable(GiftTbl.tblName)
+    local fixTbl=ResTblContainer:GetTable(FixActivityTbl.tblName)
+    local ids = tbl:GetCol(GiftTbl.id)
+    local types={}
+    for i=0,ids.Length - 1 do
+        local canOpen = fixTbl:GetInt(ids[i],FixActivityTbl.open) == 1
+        if canOpen then
+            local id=tonumber(ids[i])
+            local newData={}
+            newData.id=id
+            newData.sortorder=fixTbl:GetInt(ids[i],FixActivityTbl.sortorder)
+            newData.title=fixTbl:Get(ids[i],FixActivityTbl.title)
+            newData.icon=fixTbl:Get(ids[i],FixActivityTbl.icon)
+            newData.view=tbl:Get(ids[i],GiftTbl.view)
+            newData.model=tbl:Get(ids[i],GiftTbl.model)
+            newData.hasHint = CheckHasHint(id)
+            newData.showbanner=tbl:GetInt(ids[i],GiftTbl.showbanner)
+            newData.background=fixTbl:Get(ids[i],FixActivityTbl.background)
+            newData.subgroup=tbl:GetInt(ids[i],GiftTbl.subgroup)
+            if WonderActivityFlags[id]==nil then
+                newData.flag=true
+                WonderActivityFlags[id] = true
+            else
+                newData.flag=WonderActivityFlags[id]
+            end
+            if(newData.subgroup~=nil and newData.subgroup>0) then
+                table.insert(types,newData.subgroup)
+            end
+            newData.banner=fixTbl:Get(ids[i],FixActivityTbl.banner)
+
+            table.insert(activities,newData)
+        end
+    end
+    table.sort(activities, function(a,b)
+        return a.sortorder < b.sortorder
+    end)
+    if #types > 0 then
+        local req={}
+        req.types=types
+        HttpRequest("getActivitiePackageInfo", "GetActivityPackageInfoReq", "GetActivityPackageInfoResp", req, function(resp)
+            if resp ~= nil then
+                for i=1,#resp.activityPackageInfos do
+                    local activityConfig=resp.activityPackageInfos[i]
+                    for k=1,#activities do
+                        local newData=activities[k]
+                        
+                        if activityConfig.type==newData.subgroup then
+                            newData.hasTime=tbl:GetInt(newData.id,GiftTbl.hasTime)
+		                    newData.endTime=activityConfig.endTime
+                        end
+                    end
+                end
+            end
+            OpenDefaultActivity(activities, curIndex)
+        end)
+    else
+        OpenDefaultActivity(activities, curIndex)
+    end
+end
+
+function OpenDefaultActivity(data, activityIdx)
+    local idx = activityIdx
+    if defaultActivityType ~= nil and defaultActivityType > 0 then
+        local fixedActivityTbl = ResTblContainer:GetTable(FixActivityTbl.tblName)
+        local order = fixedActivityTbl:GetInt(defaultActivityType, FixActivityTbl.sortorder)
+        idx = order - 1
+    end
+    curIndex = idx
+    local flagData = activities[curIndex + 1]
+    flagData.flag = false
+    WonderActivityFlags[flagData.id] = false
+    self:SendNotification("InitActivities", data)
+    self:SendNotification("SelectActivity", idx)
+    self:SendNotification("RefreshItemFlag", flagData)
+end
+
+function CheckHasHint(type)
+    return false
+end
+
+function OnCommand_SelectActivity(objs)
+    local index = objs[0]
+    if(index ~= curIndex) then
+        self:SendNotification("HideChildView")
+
+        local oldIndex = curIndex
+        curIndex = index
+        local data = activities[curIndex+1]
+        data.flag = false
+        WonderActivityFlags[data.id] = false
+        self:SendNotification("RefreshItemFlag",data)
+        self:SendNotification("ReSelectActivity", oldIndex, curIndex)
+    end
+end
+
+local function InitCardViewRemainDay()
+    local cardInPayTblId = SMALL_CARD_PAYTBL_ID
+    if curCardData.activityid == SMALL_CARD_CARDTL_ID then
+        cardInPayTblId = SMALL_CARD_PAYTBL_ID
+    end
+    if curCardData.activityid == BIG_CARD_CARDTBL_ID then
+        cardInPayTblId = BIG_CARD_PAYTBL_ID
+    end
+    local cardData = appData:checkItem("CycleCardItem",tostring(cardInPayTblId))
+    if cardData then
+        GetRemainTimeData(curCardData, cardData.endTime)
+    else
+        GetRemainTimeData(curCardData, 0)
+    end
+end
+
+function OnCommand_InitCard(objs)
+    local card=objs[0]
+    curCardData={}
+    curCardData.activityid=card.id
+    curCardData.background=card.background
+    curCardData.icon=card.icon
+    curCardData.reward=ResTblContainer:GetPropToInt(card.id,CardTbl.reward,CardTbl.tblName)
+    curCardData.title=card.title
+    curCardData.desp=ResTblContainer:GetPropToStr(card.id,CardTbl.desp,CardTbl.tblName)
+    curCardData.value=ResTblContainer:GetPropToStr(card.id,CardTbl.value,CardTbl.tblName)
+    curCardData.transid=ResTblContainer:GetPropToInt(card.id,CardTbl.transid,CardTbl.tblName)
+    local tbl=ResTblContainer:GetTable(PayTbl.tblName)
+    curCardData.price=GetShowPrice(tbl:Get(curCardData.transid,PayTbl.currencySign),tbl:GetInt(curCardData.transid,PayTbl.price))
+	
+	curCardData.preBuyTime=ResTblContainer:GetPropToInt(card.id,CardTbl.preBuyTime,CardTbl.tblName)
+    curCardData.vipRewards=GetRewardFromTbl(ResTblContainer:GetPropToStr(card.id,CardTbl.vipRewards,CardTbl.tblName))
+    curCardData.itemData=CheckCardItemData(curCardData.transid)
+    curCardData.bonus = {
+        [1] = {
+            id = ResourceEnum.Gem,
+            typeId = ItemTypeEnum.Resource,
+            count = ResTblContainer:GetPropToInt(curCardData.transid,PayTbl.reward,PayTbl.tblName),
+        },
+    }
+    InitCardViewRemainDay()
+    self:SendNotification("InitCard", curCardData)
+end
+
+function CheckCardItemData(transid)
+    return appData:checkItem("CycleCardItem",tostring(transid))
+end
+
+function OnCommand_InitGift(objs)
+    local gift=objs[0]
+    curGiftData=CheckGift(gift.subgroup)
+    if curGiftData == nil then
+        curGiftData={}
+        curGiftData.activityid=gift.id
+        curGiftData.subgroup=gift.subgroup
+        curGiftData.background=gift.background
+        curGiftData.title=gift.title
+        curGiftData.banner=gift.banner
+        curGiftData.icon=gift.icon
+        curGiftData.endTime=gift.endTime
+		curGiftData.packages={}
+		table.insert(giftData,curGiftData)
+		self:SendNotification("InitGift", curGiftData)
+
+		local req={}
+	    req.type=gift.subgroup
+        HttpRequest("getActivitiePackage", "GetActivityPackageReq", "GetActivityPackageResp", req, function(resp)
+            if resp == nil then
+                return
+            end
+		    if (resp.activityPackages ~= nil) then
+		        for i=1,#resp.activityPackages do
+		            local pack=resp.activityPackages[i]
+		            local newData={}
+		            newData.activityPackage=pack
+		            newData.payData=CheckPayData(pack.detail.payId)
+		            newData.rewards=GetRewardFromTbl(pack.detail.rewardStr)
+		            table.insert(curGiftData.packages,newData)
+		        end
+		    end
+		    self:SendNotification("InitGiftItem", curGiftData)
+        end)
+	else
+	    self:SendNotification("InitGift", curGiftData)
+	end
+
+end
+
+function CheckGift(type)
+    for i=1,#giftData do
+	    if giftData[i].subgroup == type then
+		    return giftData[i]
+		end
+	end
+	return nil
+end
+
+function GetDailyRewardsData(dailyRewardInfo,curIndex)
+	local tbl=ResTblContainer:GetTable(DailyReward.tblName)
+    local ids = tbl:GetCol(DailyReward.keyid)
+    local dailyRewardsData={}
+    for i=0,ids.Length-1 do
+		if dailyRewardInfo.round==tonumber(tbl:Get(ids[i],DailyReward.round)) then
+            local data = {}
+			data.id=tonumber(ids[i])-(dailyRewardInfo.round-1)*SING_ROUND_COUNT
+			data.rewards=GetRewardFromTbl(tbl:Get(ids[i],DailyReward.rewardStr))
+			data.maxAvaliableId=curIndex
+			data.signed=false
+			if dailyRewardInfo.takenIds~=nil and next(dailyRewardInfo.takenIds)~=nil then
+                for k,v in ipairs(dailyRewardInfo.takenIds) do
+					if data.id==v then
+						data.signed=true
+					end
+				end
+			end
+			table.insert(dailyRewardsData,data)
+		end
+    end
+    return dailyRewardsData
+end 
+
+function OnCommand_InitSign(objs)
+    if (not initedSign) then
+        local req={}
+        req.id=0
+        HttpRequest("refreshDailyReward", "RefreshDailyRewardReq", "RefreshDailyRewardResp", req, function(resp)
+            initedSign=true
+            DoInitSign()
+        end)
+    else
+        self:SendNotification("InitSign",curSignData)
+    end
+end
+
+function DoInitSign()
+    local dailyRewardInfo = appData:checkData("DailyRewardInfo")
+    curSignData={}
+    local curSignIndex=dailyRewardInfo.maxAvaliableId
+	curSignData.dailyRewardsData=GetDailyRewardsData(dailyRewardInfo,curSignIndex)
+	curSignData.count = 0
+	if dailyRewardInfo.takenIds~=nil then
+		curSignData.count=#(dailyRewardInfo.takenIds)
+	end
+	curSignData.total=#curSignData.dailyRewardsData
+    curSignData.curIndex=curSignIndex
+    local result = curSignData.count < curSignData.curIndex
+    --MsgCenter:Broadcast(Notify_WonderActivityRedFlagChanged, result)
+    local data = activities[curIndex+1]
+    data.flag = result
+    WonderActivityFlags[data.id] = result
+    self:SendNotification("InitSign",curSignData)
+    self:SendNotification("RefreshItemFlag",data)
+end
+
+function OnCommand_BuyCard(objs)
+    local data=objs[0]
+    if CheckCanBuy(nil,data.transid) then
+        local payData=CheckPayData(data.transid)
+        DoPay(payData, function(resp)
+            ShowRewardRecivedView(data.bonus)
+            self:SendNotification("BuyCard",resp)
+        end)
+    else
+        ShowHintTip("cannotbuycard")
+    end
+end
+
+function ShowRewardRecivedView(rewards)
+    local confirmCbk = function()
+        self:SendNotification("payedGift",data)
+    end
+    PopRewardView(self, rewards, confirmCbk)
+end
+
+function OnCommand_DoPayGift(objs)
+    local data=objs[0]
+    if data.activityPackage.count < data.activityPackage.detail.buyLimit then
+        DoPayActivity(data.activityPackage.detail.activityId, data.payData, function (resp)
+            local req={}
+            req.activityId=data.activityPackage.detail.activityId
+            req.payId=data.payData.id
+            HttpRequest("getChargedNum", "GetChargedNumReq", "GetChargedNumResp", req,function(resp1)
+                data.activityPackage.count=data.activityPackage.count+1
+                ShowRewardRecivedView(data.rewards)
+                self:SendNotification("payedGift",data)
+            end) 
+        end)
+    else
+        ShowHintTip("cannotbuygift")
+    end
+end
+
+function OnCommand_DoSign()
+    if curSignData ~= nil and curSignData.count < curSignData.curIndex then
+        local req = {}
+        req.id = curSignData.count+1
+        HttpRequest("takeDailyReward", "TakeDailyRewardReq", "TakeDailyRewardResp", req,OnSignDailyReward) 
+    else
+        ShowHintTip("Signed")
+    end
+end
+
+function OnSignDailyReward(resp)
+    if resp==nil then
+        return
+    end
+    curSignData.count=curSignData.count+1
+    curSignData.dailyRewardsData[curSignData.count].signed=true
+    local result = curSignData.count < curSignData.curIndex
+    local item = resp.rewardItems[1]
+    CsBridge.hintUILayer:ShowRewardBox(item.typeId, item.id, item.count)
+    self:SendNotification("Signed",curSignData.dailyRewardsData[curSignData.count])
+    local data = activities[curIndex+1]
+    data.flag = result
+    WonderActivityFlags[data.id] = result
+    self:SendNotification("RefreshItemFlag",data)
+end
+
+function OnCommand_OpenTip(objs)
+    ShowTip(self,objs[0].typeId,objs[0].id)
+end
+
+function OnCommand_JumpToBuy(objs)
+    LinkSystem(UI_OPEN_TYPE_PAY,self)
+    waitBack = true
+end
+
+function DoOnExit()
+	GiftTbl = nil
+    FixActivityTbl=nil
+    curCardData = nil
+    curGiftData = nil
+    giftData = nil
+    activities = nil
+    curSignData = nil
+    initedSign = nil
+    SING_ROUND_COUNT = nil
+    FirstChargeId = nil
+    waitBack = nil
+    defaultActivityType = nil
+    SMALL_CARD_CARDTL_ID = nil
+    BIG_CARD_CARDTBL_ID = nil
+    SMALL_CARD_PAYTBL_ID = nil
+    BIG_CARD_PAYTBL_ID = nil
+    subState = nil
+end

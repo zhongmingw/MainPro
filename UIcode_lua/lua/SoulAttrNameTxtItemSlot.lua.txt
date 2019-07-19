@@ -1,0 +1,8 @@
+function OnSoulAttrNameTxtItemSlotBindValue(slot, data)
+    ---@type UnityEngine.Transform
+    local slotTrans = slot.transform
+    local attrNameTxt = slotTrans:Find("AttrNameTxt"):GetComponent(CLS_TEXT)
+    local propTxt = slotTrans:Find("PropTxt"):GetComponent(CLS_TEXT)
+    propTxt.text = data.propTxt
+    attrNameTxt.text = data.propNameTxt
+end

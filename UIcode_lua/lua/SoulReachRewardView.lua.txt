@@ -1,0 +1,88 @@
+require "SoulReachRewardItemSlot"
+local scroll
+local viewport
+local content
+local soulSeasonRewardGrid
+local gridTrans
+
+local rank_Lab
+local rule_Lab
+
+function InitUI()
+	scroll = self:GetComponentAtPath("Center/ScrollRect" ,"UnityEngine.UI.ScrollRect")
+	viewport=scroll.viewport
+	content=scroll.content
+	soulSeasonRewardGrid=self:GetComponentAtPath("Center/ScrollRect/Viewport/SoulSeasonRewardGrid",CLS_UI_ITEM_GRID)
+	gridTrans = soulSeasonRewardGrid.transform
+    rank_Lab=self:GetComponentAtPath("Center/RankGO/RankTxt",CLS_TEXT)
+	rule_Lab=self:GetComponentAtPath("Center/RuleGO/RuleTxt",CLS_TEXT)
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+    end 
+    self:SendCommand("InitSoulReachRewardData")
+end 
+
+local function ScrollToCenter(ItemSlot,index,maxNum)
+	local slot_y = ItemSlot.rect.size.y * index
+	local max_y = ItemSlot.rect.size.y * (maxNum-2)
+	if slot_y>max_y then
+		slot_y = max_y
+	end
+	CsBridge.TweenUtils.MoveToByAnchored(content,content.anchoredPosition.x,slot_y,0.3,function()end)
+end
+
+
+function OnNotification_InitSoulReachRewardData(objs)
+    local curRank = objs[0]
+	local rewardDataArr = objs[1]
+	local index = objs[2]
+	rank_Lab.text=(curRank~=nil and curRank~=-1) and tostring(curRank) or "-"
+	rule_Lab.text=Language:getStr("SoulPalace_ReachAwardsRule")
+	soulSeasonRewardGrid:RefreshItemSlots(rewardDataArr,self.gameObject,"SoulReachRewardItemSlot")
+
+	local itemSlot = soulSeasonRewardGrid.transform:GetChild(index)
+	if itemSlot then
+		local maxNum = #rewardDataArr
+		ScrollToCenter(itemSlot,index,maxNum)
+	end
+end
+
+function OnRewardGridItemSlotClick(obj)
+	local item = obj.m_data
+	if item.typeId == 3 then
+		return
+	end
+	CsBridge.CacheAssetsByModule(self.Module,
+	function()
+		local item = obj.m_data
+		local view = CsBridge.OpenView("ItemTipView", "ItemTipModel",false,true)
+		local rewardTmp={}
+		rewardTmp.id=item.id
+		rewardTmp.typeId=item.typeId
+		rewardTmp.count=1
+		if item.typeId == 0 then
+			rewardTmp.attrs = item.attrs
+		end 
+		if item.typeId == 4 then
+			rewardTmp.level = item.level
+		end 
+		view:SetParamDataList(rewardTmp,itemBaseIndex+itemDespIndex+PropsIndex+itemSuitIndex)
+		view:SendCommand("InitItemData")
+	end,"ItemTipView")
+end
+
+function OnClose()
+end
+
+function DoExit()
+	self.Module=nil
+	soulSeasonRewardGrid = nil
+	scroll = nil
+	gridTrans = nil
+	rank_Lab = nil
+	rule_Lab = nil
+end

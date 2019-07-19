@@ -1,0 +1,596 @@
+--[[
+	file: HeroBagUtils.lua
+	author: hangang
+	description: Hero bag module utilities
+]]
+
+local HeroRebirthPrice = {
+    tblName = "HeroRebirthPrice",
+    grade = "grade",
+    consumption = "consumption",
+    item = "item"
+}
+
+local HeroBagPageType = {
+    Hero = 1,
+    Book = 2
+}
+local HeroBagSortType = {
+    Level = 1,
+    Quality = 2
+}
+
+local HeroShowPageType = {
+    HeroInfo = 1,
+    HeroEquip = 2,
+    HeroDistillation = 3,
+    HeroRating = 4,
+    HeroJewelEquip = 5
+}
+
+local HeroDistillSkillType = {
+    Old = 1,
+    New = 2,
+    Max = 3
+}
+
+local CheckConditionPkg = CheckAndShowConditionPackageView
+local CheckHeroBreakConditionPkg, CheckGradeUpConditionPkg
+local GetResetHeroId
+local FormatAllOwnedHeroData
+local GetRuneDataFromTbl
+local GetHeroRune, InitBookHeroData, UpdateHeroData, GetHeroResetDataFromTbl
+local OpenHeroRatingView
+local GetRelicExpDataFromTbl, OpenSkillTipView
+local GetHeroNumAndBagNum
+local CheckRuneMaxLevel
+local GetRelic
+local RequestExtendHeroBag
+local RequestLockHero, RequestUnLockHero
+local RequestResetHero
+local RequestUpGradeHeroLevel
+local RequestGetRune, RequestTakeOffEquip, RequestPutOnEquip
+local RequestPutOnRelic, RequestPutOnAllEquip, RequestTakeOffAllEquip
+local RequestRuneConversionCancel, RequestRuneUpgrade, RequestRuneConversion, RequestRuneConversionSave
+local RequestRelicUpgrade
+local RequestHeroDistillation
+local RequestPutOnJewel, RequestTakeOffJewel, RequestPutOnAllJewel, RequestTakeOffAllJewel
+local ShowMsgBox, ShowFirstMsgBox, ShowHintBox
+
+CheckHeroBreakConditionPkg = function(model, goldRequired, battleSoulRequired, curHero)
+    local costArr = {
+        {
+            id = ResourceEnum.Coin,
+            count = goldRequired
+        },
+        {
+            id = ResourceEnum.BattleSoul,
+            count = battleSoulRequired
+        }
+    }
+    local notEnoughArr = CheckMulResEnough(costArr)
+    local havaEnoughRes = #notEnoughArr == 0
+    if not havaEnoughRes then
+        local resName = GetNameByResId(notEnoughArr[1])
+        ShowHintBox(string.format(Language:getStr("ResNotEnough"), resName))
+        local heroLevels = GetHeroAllLevel(curHero.grade, curHero.level, curHero.distillationLevel, curHero.breakLevel)
+        local goldData = GetConditionReqData(ConditionPackageType.HeroLevelUpInSufGold,heroLevels)
+        local battleSoulData = GetConditionReqData(ConditionPackageType.HeroLevelUpInSufSoul,heroLevels)
+        if #notEnoughArr == 1 then
+            local resId = notEnoughArr[1]
+            if resId == ResourceEnum.Coin then
+                CheckConditionPkg(model, goldData)
+            elseif resId == ResourceEnum.BattleSoul then
+                CheckConditionPkg(model, battleSoulData)
+            end
+        else
+            CheckConditionPkg(model, goldData, battleSoulData)
+        end
+    end
+    return havaEnoughRes
+end
+
+CheckGradeUpConditionPkg = function(model, curHero)
+    local nextGrade = curHero.grade+1
+    local tblName = HeroEvelution.actorTbl
+    local goldRequired = ResTblContainer:GetPropToInt(nextGrade,HeroEvelution.coin,tblName)
+    local resRequired = ResTblContainer:GetPropToInt(nextGrade,HeroEvelution.stepStoneCoin,tblName)
+    local costArr = {
+        {
+            id = ResourceEnum.Coin,
+            count = goldRequired
+        },
+        {
+            id = ResourceEnum.GreenSoul,
+            count = resRequired
+        }
+    }
+    local notEnoughArr = CheckMulResEnough(costArr)
+    local havaEnoughRes = #notEnoughArr == 0
+    if not havaEnoughRes then
+        ShowHintBox(string.format(Language:getStr("ResNotEnough"), GetNameByResId(notEnoughArr[1])))
+        local isShow = false
+        for i,v in ipairs(notEnoughArr) do
+            if v == ResourceEnum.GreenSoul then
+                isShow = true
+                break
+            end
+        end
+        if isShow then
+            CheckConditionPkg(model,GetConditionReqData(ConditionPackageType.HeroGradeUp,curHero.grade))
+        end
+    end
+
+    return havaEnoughRes
+end
+
+GetResetHeroId = function(oldHero)
+    local newHeroId = 0
+    local heroBaseTbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    local heroIdsArr = GetHeroRelationHeroIdArr(oldHero.heroId)
+    for i = 1, #heroIdsArr do
+        local targetId = heroIdsArr[i]
+        local quality = heroBaseTbl:GetInt(targetId, HeroBase.quality)
+        if quality == BASE_STAR then
+            newHeroId = targetId
+        end
+    end
+    return newHeroId
+end
+
+FormatAllOwnedHeroData = function()
+    local allHeroArr = {}
+    local pbs = appData:checkAllItems("HeroItem")
+    if pbs ~= nil then
+        local tbl=ResTblContainer:GetTable(HeroBase.actorTbl)
+        for i=0,pbs.Length-1 do
+            local hero = {
+                uid = pbs[i].uid,
+                heroId = pbs[i].heroId,
+                grade = pbs[i].grade,
+                level = pbs[i].level,
+                weaponId = pbs[i].weaponId or 0,
+                hatId = pbs[i].hatId or 0,
+                clothId = pbs[i].clothId or 0,
+                shoesId = pbs[i].shoesId or 0,
+                distillationStar = pbs[i].distillationStar,
+                distillationLevel = pbs[i].distillationLevel,
+                breakLevel = pbs[i].breakLevel,
+                relicId = pbs[i].relicId,
+                runeData = pbs[i].rune,
+                race = tbl:GetInt(pbs[i].heroId, HeroBase.group),
+                quality = tbl:GetInt(pbs[i].heroId, HeroBase.quality),
+                model = tbl:Get(pbs[i].heroId, HeroBase.model),
+                name = tbl:Get(pbs[i].heroId, HeroBase.title),
+                jewelIds = pbs[i].jewelIds,
+                canShowHeroInfo = true,
+            }
+            hero.job = tbl:GetInt(hero.heroId,HeroBase.job)
+            table.insert(allHeroArr,hero)
+        end
+    end
+
+    return allHeroArr
+end
+
+GetRuneDataFromTbl = function()
+    local result = {}
+    local tbl=ResTblContainer:GetTable(Rune.tblName)
+    local levels=tbl:GetCol(Rune.level)
+    for i=0,levels.Length-1 do
+        local data = {}
+        local infos = tbl:GetRow(levels[i],Rune.name,Rune.lockCost,Rune.transformConsumption,Rune.upgradeConsumption,Rune.attributeNum,Rune.attribute1,Rune.attribute2,Rune.attribute3,Rune.attribute4,Rune.attribute5,Rune.attribute6,Rune.attribute7,Rune.attribute8,Rune.attribute9,Rune.attribute10)
+        data.name = infos[0]
+        if i == levels.Length - 1 then
+            data.lockCost = nil
+        else
+            data.lockCost = GetRewardFromTbl(infos[1])
+        end
+        data.transformConsumption = GetRewardFromTbl(infos[2])
+        if i == levels.Length - 1 then
+            data.upgradeConsumption = {
+                {count = "-"},
+                {count = "-"}
+            }
+        else
+            data.upgradeConsumption = GetRewardFromTbl(infos[3])
+        end
+        data.attributeNum = tonumber(infos[4])
+        data.attrs = {}
+        for j=5,infos.Length-1 do
+            GetProp(infos[j],data.attrs)
+        end
+        table.insert(result, data)
+    end
+    return result
+end
+
+GetHeroRune = function(runeData)
+    local rune = {}
+    local runeDataFromTbl = GetRuneDataFromTbl()
+    if runeData == nil then
+        rune.level = 0
+    else
+        rune.attrIds = {}
+        rune.attrs = {}
+        
+        local runeTbData
+        for i=1, #runeData do
+            if i == 1 then
+                rune.level = runeData[i]
+                runeTbData = runeDataFromTbl[rune.level]
+            else --attr
+                table.insert(rune.attrIds, runeData[i])
+                table.insert(rune.attrs, runeTbData.attrs[runeData[i]])
+            end
+        end
+        rune.name = runeDataFromTbl[rune.level].name
+    end
+    return rune
+end
+
+InitBookHeroData = function()
+    local bookHeroArr = {}
+    local qualityTbl=ResTblContainer:GetTable(HeroQuality.actorTbl)
+    local heroTbl=ResTblContainer:GetTable(HeroBase.actorTbl)
+    for i, data in pairs(global_heroBaseArr) do
+        local isOpen = CheckHeroOpen(data.id)
+        if isOpen then
+            local hero = {
+                uid = i,
+                fakeUid = true,
+                heroId = data.id,
+                quality = data.quality,
+                isNotOwn = CheckHeroNotOwn(data.id),
+                showBaseAttr = true
+            }
+            hero.grade = qualityTbl:GetInt(hero.quality,HeroQuality.maxGrade)
+            hero.level = GetHeroMaxLevel(hero.grade)
+            hero.distillationStar = GetHeroMinDistillationStar(hero.quality)
+            hero.distillationLevel = GetDistillMaxLevel(hero.distillationStar + hero.quality)
+            hero.breakLevel = GetHeroBreakMaxLevel(hero.quality)
+            hero.race = heroTbl:GetInt(hero.heroId, HeroBase.group)
+            hero.job = heroTbl:GetInt(hero.heroId,HeroBase.job)
+            hero.skill = GetHeroSkillArr(hero)
+            hero.isBookHero = true
+            table.insert(bookHeroArr, hero)
+        end
+    end
+    table.sort(bookHeroArr,SortHeroByDescQuality)
+
+    return bookHeroArr
+end
+
+UpdateHeroData = function(curHero)
+    local newHero = appData:checkItem("HeroItem",curHero.uid)
+    curHero.heroId = newHero.heroId
+    curHero.quality = ResTblContainer:GetPropToInt(newHero.heroId,HeroBase.quality,HeroBase.actorTbl)
+    curHero.model = ResTblContainer:GetPropToStr(newHero.heroId,HeroBase.model,HeroBase.actorTbl)
+    curHero.level = newHero.level 
+    curHero.grade = newHero.grade 
+    curHero.weaponId = newHero.weaponId or 0
+    curHero.hatId = newHero.hatId or 0
+    curHero.clothId = newHero.clothId or 0
+    curHero.shoesId = newHero.shoesId or 0
+    curHero.relicId = newHero.relicId
+    curHero.runeData = newHero.rune
+    curHero.rune = GetHeroRune(newHero.rune)
+    curHero.relic = GetRelic(newHero.relicId)
+    curHero.dutyInPve = CheckHeroDutyInPve(newHero.duty)
+    curHero.lock = CheckHeroInDuty(newHero,HeroDuty.LOCK)
+    curHero.distillationStar = newHero.distillationStar
+    curHero.distillationLevel = newHero.distillationLevel
+    curHero.breakLevel = newHero.breakLevel
+    curHero.skill = GetHeroSkillArr(curHero)
+    curHero.distillation = GetHeroDistillation(curHero)
+    curHero.jewelIds = newHero.jewelIds
+end
+
+GetHeroResetDataFromTbl = function()
+    local data = {}
+    local tbl = ResTblContainer:GetTable(HeroRebirthPrice.tblName)
+    local grades = tbl:GetCol(HeroRebirthPrice.grade)
+    for i=0,grades.Length-1 do
+        local grade = tonumber(grades[i])
+        local infos = tbl:GetRow(tostring(grade),HeroRebirthPrice.consumption,HeroRebirthPrice.item)
+        local prices = {
+            consumption = tonumber(infos[0]),
+            item = infos[1] == "" and nil or GetRewardFromTbl(infos[1])[1]
+        }
+        data[grade] = prices
+    end
+    return data
+end
+
+OpenHeroRatingView = function(model, heroId, showBottomPanel, onFinished)
+    CsBridge.CacheAssetsByModule(
+        model.Module,
+        function()
+            local curView = CsBridge.OpenView("HeroRatingView", "HeroRatingModel")
+            curView:SetParamDataList(heroId, showBottomPanel)
+            if onFinished then
+                onFinished(curView)
+            end
+        end, 
+        "HeroRatingView",
+        "HeroReviewItemSlot")
+end
+
+GetRelicExpDataFromTbl = function()
+    local data = {}
+    local tbl=ResTblContainer:GetTable(RelicExp.tblName)
+    local ids = tbl:GetCol(RelicExp.id)
+    for i=0,ids.Length-1 do
+        local id = tonumber(ids[i])
+        local infos = tbl:GetRow(id,RelicExp.exp,RelicExp.supplyExp)
+        local exp = tonumber(infos[0])
+        local supplyExp = tonumber(infos[1])
+        local expData = {
+            exp = exp,
+            supplyExp = supplyExp
+        }
+        data[id] = expData 
+    end
+    return data
+end
+
+OpenSkillTipView = function(model, skillData)
+    CsBridge.CacheAssetsByModule(model.Module,function()
+            local view = model:OpenView("SkillTipView","SkillTipModel")
+            view:SetParamDataList(skillData)
+        end, "SkillTipView")
+end
+
+GetHeroNumAndBagNum = function()
+    local heroNum = 0
+    local heroItem = appData:checkAllItems("HeroItem")
+    if heroItem~= nil then
+        heroNum = heroItem.Length
+    end 
+    return heroNum,CheckHeroBagNum()
+end
+
+CheckRuneMaxLevel = function(curHero, runeDataFromTbl)
+    return curHero.rune.level >= #(runeDataFromTbl or GetRuneDataFromTbl())
+end
+
+GetRelic = function(relicUid)
+    local relic = {}
+    local pb = appData:checkItem("RelicItem",relicUid)
+    if pb == nil then
+        relic.id = 0
+        relic.level = 0
+    else
+        relic.id = pb.id 
+        relic.uid = pb.uid
+        relic.level = pb.level
+        relic.quality = ResTblContainer:GetPropToInt(relic.id, Relic.quality, Relic.tblName)
+        relic.owner = pb.owner
+    end
+    return relic 
+end
+
+RequestExtendHeroBag = function(onFinished)
+    local req = {
+        useless = 1
+    }
+    HttpRequest("extendHeroBag","ExtendHeroBagReq","ExtendHeroBagResp",req,onFinished)
+end
+
+RequestLockHero = function(heroUid, onFinished)
+    local req = {
+        heroUid = heroUid
+    }
+    HttpRequest("lockHero","LockHeroReq","LockHeroResp",req,onFinished)
+end
+
+RequestUnLockHero = function(heroUid, onFinished)
+    local req = {
+        heroUid = heroUid
+    }
+    HttpRequest("unlockHero","UnlockHeroReq","UnlockHeroResp",req,onFinished)
+end
+
+RequestResetHero = function(heroUid, reborn, onFinished)
+    local req = {
+        uid = heroUid,
+        reborn = reborn
+    }
+    HttpRequest("rebornHero","RebornHeroReq","RebornHeroResp",req,onFinished)
+end
+
+RequestUpGradeHeroLevel = function(heroUid, onFinished)
+    local req = {
+        uid = heroUid
+    }
+    HttpRequest("upgradeHeroLevel","HeroLevelUpReq","HeroLevelUpResp",req,onFinished)
+end
+
+RequestGetRune = function(heroUid, onFinished)
+    local req = {
+        heroUid = heroUid
+    }
+    HttpRequest("getRune","GetRuneReq","GetRuneResp",req,onFinished)
+end
+
+RequestTakeOffEquip = function(heroUid, type, onFinished)
+    local req = {
+        heroId = heroUid,
+        type = type
+    }
+    HttpRequest("takeOffEquip","TakeOffEquipReq","TakeOffEquipResp",req,onFinished)
+end
+
+RequestPutOnEquip = function(heroUid, equipId, onFinished)
+    local req = {
+        heroId = heroUid,
+        equipId = equipId
+    }
+    HttpRequest("putOnEquip","PutOnEquipReq","PutOnEquipResp",req,onFinished)
+end
+
+RequestPutOnRelic = function(relicUid, heroUid, onFinished)
+    local req = {
+        relicUid = relicUid,
+        heroId = heroUid
+    }
+    HttpRequest("putOnRelic","PutOnRelicReq","PutOnRelicResp",req,onFinished)
+end
+
+RequestPutOnAllEquip = function(heroUid, onFinished)
+    local req = {
+        heroId = heroUid
+    }
+    HttpRequest("putOnAllEquip","PutOnAllEquipReq","PutOnAllEquipResp",req,onFinished)
+end
+
+RequestTakeOffAllEquip = function(heroUid, onFinished)
+    local req = {
+        heroId = heroUid
+    }
+    HttpRequest("takeOffAllEquip","TakeOffAllEquipReq","TakeOffAllEquipResp",req,onFinished)
+end
+
+RequestRuneConversionCancel = function(heroUid, onFinished)
+    local req = {
+        heroUid = heroUid
+    }
+    HttpRequest("runeConversionCancel","RuneConversionCancelReq","RuneConversionCancelResp",req,onFinished)
+end
+
+RequestRuneUpgrade = function(heroUid, isLock, onFinished)
+    local req = {
+        heroUid = heroUid,
+        isLock = isLock
+    }
+    HttpRequest("runeUpgrade","RuneUpgradeReq","RuneUpgradeResp",req,onFinished)
+end
+
+RequestRuneConversion = function(heroUid, onFinished)
+    local req = {
+        heroUid = heroUid
+    }
+    HttpRequest("runeConversion","RuneConversionReq","RuneConversionResp",req,onFinished)
+end
+
+RequestRuneConversionSave = function(heroUid, onFinished)
+    local req = {
+        heroUid = heroUid
+    }
+    HttpRequest("runeConversionSave","RuneConversionSaveReq","RuneConversionSaveResp",req,onFinished)
+end
+
+RequestRelicUpgrade = function(relicUid, materialUids, onFinished)
+    local req = {
+        uid = relicUid,
+        materials = materialUids
+    }
+    HttpRequest("relicUpgrade","RelicUpgradeReq","RelicUpgradeResp",req,onFinished)
+end
+
+RequestHeroDistillation = function(heroUid, subMaterial1, subMaterial2, subMaterial3, onFinished)
+    local req = {
+        uid = heroUid,
+        subMaterial1 = subMaterial1,
+        subMaterial2 = subMaterial2,
+        subMaterial3 = subMaterial3
+    }
+    HttpRequest("heroDistillation","HeroDistillationReq","HeroDistillationResp",req,onFinished)
+end
+
+RequestPutOnJewel = function(heroUid, jewelUid, jewelPos, onFinished)
+    local req = {
+        heroUid = heroUid,
+        jewelId = jewelUid,
+        jewelPos = jewelPos
+    }
+    HttpRequest("putOnJewel","PutOnJewelReq","PutOnJewelResp",req,onFinished)
+end
+
+RequestTakeOffJewel = function(heroUid, jewelPos, onFinished)
+    local req = {
+        heroUid = heroUid,
+        jewelPos = jewelPos
+    }
+    HttpRequest("takeOffJewel","TakeOffJewelReq","TakeOffJewelResp",req,onFinished)
+end
+
+RequestPutOnAllJewel = function(heroUid, onFinished)
+    local req = {
+        heroUid = heroUid
+    }
+    HttpRequest("putOnAllJewel","PutOnAllJewelReq","PutOnAllJewelResp",req,onFinished)
+end
+
+RequestTakeOffAllJewel = function(heroUid, onFinished)
+    local req = {
+        heroUid = heroUid
+    }
+    HttpRequest("takeOffAllJewel","TakeOffAllJewelReq","TakeOffAllJewelResp",req,onFinished)
+end
+
+ShowMsgBox = function(desp, confirmCallback)
+    CsBridge.messageManager:PopMsgBox(Language:getStr("local_confirm"),
+    desp,
+    Language:getStr("local_cancel"),nil,
+    Language:getStr("local_confirm"),confirmCallback)
+end
+
+ShowFirstMsgBox = function(name, desp, confirmCallback)
+    CsBridge.messageManager:FristConfirmBox(name,
+    Language:getStr("local_confirm"),
+    desp,
+    Language:getStr("local_cancel"),nil,
+    Language:getStr("local_confirm"),confirmCallback)
+end
+
+ShowHintBox = function(desp, level)
+    CsBridge.hintUILayer:ShowHintBox(desp, level or 2)
+end
+
+return {
+    CheckConditionPkg = CheckConditionPkg,
+    CheckHeroBreakConditionPkg = CheckHeroBreakConditionPkg,
+    GetResetHeroId = GetResetHeroId,
+    FormatAllOwnedHeroData = FormatAllOwnedHeroData,
+    GetRuneDataFromTbl = GetRuneDataFromTbl,
+    GetHeroRune = GetHeroRune,
+    InitBookHeroData = InitBookHeroData,
+    UpdateHeroData = UpdateHeroData,
+    GetHeroResetDataFromTbl = GetHeroResetDataFromTbl,
+    OpenHeroRatingView = OpenHeroRatingView,
+    GetRelicExpDataFromTbl = GetRelicExpDataFromTbl,
+    OpenSkillTipView = OpenSkillTipView,
+    GetHeroNumAndBagNum = GetHeroNumAndBagNum,
+    CheckGradeUpConditionPkg = CheckGradeUpConditionPkg,
+    CheckRuneMaxLevel = CheckRuneMaxLevel,
+    GetRelic = GetRelic,
+    HeroBagPageType = HeroBagPageType,
+    HeroBagSortType = HeroBagSortType,
+    HeroShowPageType = HeroShowPageType,
+    HeroDistillSkillType = HeroDistillSkillType,
+    RequestExtendHeroBag = RequestExtendHeroBag,
+    RequestLockHero = RequestLockHero,
+    RequestUnLockHero = RequestUnLockHero,
+    RequestResetHero = RequestResetHero,
+    RequestUpGradeHeroLevel = RequestUpGradeHeroLevel,
+    RequestGetRune = RequestGetRune,
+    RequestTakeOffEquip = RequestTakeOffEquip,
+    RequestPutOnEquip = RequestPutOnEquip,
+    RequestPutOnRelic = RequestPutOnRelic,
+    RequestPutOnAllEquip = RequestPutOnAllEquip,
+    RequestTakeOffAllEquip = RequestTakeOffAllEquip,
+    RequestRuneConversionCancel = RequestRuneConversionCancel,
+    RequestRuneUpgrade = RequestRuneUpgrade,
+    RequestRuneConversion = RequestRuneConversion,
+    RequestRuneConversionSave = RequestRuneConversionSave,
+    RequestRelicUpgrade = RequestRelicUpgrade,
+    RequestHeroDistillation = RequestHeroDistillation,
+    RequestPutOnJewel = RequestPutOnJewel,
+    RequestTakeOffJewel = RequestTakeOffJewel,
+    RequestPutOnAllJewel = RequestPutOnAllJewel,
+    RequestTakeOffAllJewel = RequestTakeOffAllJewel,
+    ShowMsgBox = ShowMsgBox,
+    ShowFirstMsgBox = ShowFirstMsgBox,
+    ShowHintBox = ShowHintBox,
+}

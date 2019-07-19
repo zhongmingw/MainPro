@@ -1,0 +1,85 @@
+package RelicData;
+import "stage.proto";
+
+message RelicItem
+{
+    required int32 id = 1;
+    required int32 level = 2;
+    required int32 exp = 3;
+    required int32 uid = 4;
+    required int32 owner = 5;
+}
+
+message PutOnRelicReq
+{
+    required int32 relicUid = 1;
+    required int32 heroId = 2;
+}
+
+message PutOnRelicResp
+{
+    required int32 status = 1;
+}
+
+message RelicUpgradeReq
+{
+    required int32 uid = 1;
+    repeated int32 materials = 2;
+}
+
+message RelicUpgradeResp
+{
+    required int32 status = 1;
+}
+
+message GmGetRelicReq
+{
+    required int32 id = 1;
+    required int32 count = 2;
+}
+
+message GmGetRelicResp
+{
+    required int32 result = 1;
+}
+
+message GmUpgradeRelicReq
+{
+    required int32 id = 1;
+    required int32 level = 2;
+}
+
+message GmUpgradeRelicResp
+{
+    required int32 result = 1;
+}
+
+message GmTopRelicReq
+{
+    required int32 id = 1;
+}
+
+message GmTopRelicResp
+{
+    required int32 result = 1;
+}
+
+message RelicDecomposeReq
+{
+    repeated int32 relicUids = 1;
+}
+
+message RelicDecomposeResp
+{
+    repeated stage.RewardItem results = 1;
+}
+
+message GmRelicDecomposeReq
+{
+    required int32 quality = 1;
+}
+
+message GmRelicDecomposeResp
+{
+    required int32 result = 1;
+}

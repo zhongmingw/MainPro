@@ -1,0 +1,26 @@
+--获取阵容战斗力
+function GetFormationFight(formationType,showBaseAttr)
+	local HeroAttrData = require "HeroAttrData"
+	return HeroAttrData.GetFormationFight(formationType)
+end
+
+--获取英雄战斗力
+function GetHeroFight(heroInfo,showBaseAttr)
+	local HeroAttrData = require "HeroAttrData"
+	return HeroAttrData.GetHeroFightByHero(heroInfo)
+end
+
+--获取英雄某一个属性值
+function GetHeroAttr(heroInfo,id,isNextGrade,isNextLv)
+	local hero = table.copy(heroInfo)
+	if isNextGrade then
+		hero.grade = hero.grade + 1
+		hero.level = 1
+	end
+	if isNextLv then
+		hero.level = hero.level + 1
+	end
+	local HeroAttrData = require "HeroAttrData"
+	local heroAttrs = HeroAttrData.GetHeroAttrsByHero(hero)
+	return heroAttrs[id].val
+end

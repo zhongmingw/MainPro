@@ -1,0 +1,33 @@
+--- 绑定数据
+function OnLimitedTaskActivityItemSlotBindValue(slot, data)
+    ---@type UnityEngine.Transform
+    local selfTrans = slot.transform
+    ---@type Client.Library.UIItemGrid
+    local itemGrid = selfTrans:GetComponentAtPath("LimitedTaskRewardGrid", CLS_UI_ITEM_GRID)
+    ---@type UnityEngine.TextMesh
+    local titleTxt = selfTrans:GetComponentAtPath("TitleTxt", CLS_TEXT)
+    ---@type UnityEngine.UI.Slider
+    local slider = selfTrans:GetComponentAtPath("Slider", CLS_SLIDER)
+    ---@type UnityEngine.TextMesh
+    local sliderTxt = selfTrans:GetComponentAtPath("Slider/NumTxt", CLS_TEXT)
+    ---@type UnityEngine.GameObject
+    local sliderFrontImgObj = selfTrans:GetGameObjectAtPath("Slider/jindutiaoImg")
+    ---@type Client.Library.ButtonArchly
+    local receiveBtn = selfTrans:GetComponentAtPath("ReceiveBtn", CLS_BUTTON_ARCHLY)
+    ---@type UnityEngine.GameObject
+    local gotObj = selfTrans:GetGameObjectAtPath("Get")
+    ---@type UnityEngine.GameObject
+    local redFlag = selfTrans:GetGameObjectAtPath("ReceiveBtn/RedFlag")
+
+    titleTxt.text = data.title
+    receiveBtn.Gray = data.btnGray
+    receiveBtn.interactable = not data.btnGray
+    if data.rewards then
+        itemGrid:RefreshItemSlots(data.rewards, slot.m_grid.viewBase.gameObject, "ItemSlot")
+    end
+    slider.value = data.progressValue
+    sliderTxt.text = data.progressValueStr
+    CsBridge.IconData.SetIconByName(sliderFrontImgObj, data.frontImgName)
+    gotObj:SetActive(data.showGot)
+    redFlag:SetActive(data.canReceive)
+end

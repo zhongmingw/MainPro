@@ -1,0 +1,75 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-10-29 20:29:37
+require "HalloweenHeroItemSlot"
+
+local isInit = false
+
+local titleTxt
+local fightTxt
+local upGrid
+local auraImg
+
+function DoInit()	
+	self.Shadow = 1
+end
+
+function InitUI()
+    fightTxt = self:GetComponentAtPath("Center/FightTxt",CLS_TEXT)
+    titleTxt = self:GetComponentAtPath("Center/TitleTxt",CLS_TEXT)
+    upGrid = self:GetComponentAtPath("Center/UP",CLS_UI_ITEM_GRID)
+    auraImg = self:GetGameObjectAtPath("Center/UP/aureole/AuraImg")
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitHalloweenActivityLevelData")
+end
+
+function OnNotification_RefreshHalloweenActivityLevelView(objs)
+    local halloween = objs[0]
+    fightTxt.text = halloween.strength--GetValueAbbreviation(halloween.strength)
+    titleTxt.text = Language:getStr("HalloweenActivity_Level_"..halloween.level)
+    upGrid:RefreshItemSlots(halloween.monster,self.gameObject,"HalloweenHeroItemSlot")
+    ShowAura(objs[1])
+end
+
+function ShowAura(curAura)
+    if(curAura == nil) then
+        CsBridge.IconData.SetIconByName(auraImg,"new_com_guanghuan11")
+    else
+        CsBridge.IconData.SetIconByName(auraImg,curAura.icon)
+    end
+end
+
+function OnFightBtnClick(sender)
+    self:SendCommand("HalloweenFight")
+end
+
+function OnaureoleClick(sender)
+    self:SendCommand("OpenAuraView")
+end
+
+function OnNotification_CloseLevelView(objs)
+    self:HideView(self.gameObject.name)
+end
+
+function OnMaskClick()
+    self:HideView(self.gameObject.name)
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+    isInit = nil
+    titleTxt = nil
+    fightTxt = nil
+    upGrid = nil
+    auraImg = nil
+end

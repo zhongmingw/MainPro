@@ -1,0 +1,143 @@
+local realReward, otherRewards
+
+local rewardClaimed=false
+local rewardsRoot
+local rewardItems
+
+local CacheRewardItem
+local InitRewardItem, OnItemBtnClicked, ShowReward
+
+function DoInit()
+    self.Shadow = 2
+end
+
+function SetData(obj)
+	local rewards = obj
+	local realRewardIdx = 1
+	realReward = rewards[realRewardIdx]
+	otherRewards = {}
+	for i = 1, #rewards do
+		if i ~= realRewardIdx then
+			table.insert(otherRewards, rewards[i])
+		end
+	end
+end
+
+function OnAnimationFinished()	
+	rewardClaimed = false
+	if not rewardItems then
+		rewardsRoot = self.transform:Find("Center")
+		rewardItems = {}
+		for i = 1, rewardsRoot.childCount do
+			rewardItems[i] = CacheRewardItem(i)
+		end
+	end
+	for k, rewardItem in pairs(rewardItems) do
+		InitRewardItem(rewardItem)
+	end
+end
+
+CacheRewardItem = function(index)
+	local rewardItem = {}
+	rewardItem.index = index
+	local rewardRoot = rewardsRoot:Find("APArenaReward"..index) 
+	rewardItem.itemRoot=rewardRoot:Find("ItemSlot")
+	rewardItem.itemObj = rewardItem.itemRoot.gameObject
+	rewardItem.resultSpine=rewardRoot:GetComponentAtPath("ResultSpine",CLS_SKELETONGRAPHIC)
+	rewardItem.resultSpineObj = rewardItem.resultSpine.gameObject
+	rewardItem.clickSpine=rewardRoot:GetComponentAtPath("ClickSpine",CLS_SKELETONGRAPHIC)	
+	rewardItem.clickSpineObj = rewardItem.clickSpine.gameObject
+	rewardItem.unknownSpriteObj = rewardRoot:GetGameObjectAtPath("UnkownSprite")
+	rewardItem.unknownBtnObj = rewardRoot:GetGameObjectAtPath("UnkownItem"..index.."Btn")
+	return rewardItem
+end
+
+InitRewardItem = function(rewardItem)
+	rewardItem.unknownBtnObj:SetSelfActive(true)
+	rewardItem.unknownSpriteObj:SetSelfActive(true)
+	rewardItem.clickSpineObj:SetSelfActive(false)
+	rewardItem.itemObj:SetSelfActive(false)
+	rewardItem.resultSpineObj:SetSelfActive(true)
+	rewardItem.resultSpine:PlayAnimation("born",false,nil,
+		function ()
+			rewardItem.resultSpine:PlayAnimation("stand",true)
+		end
+	)
+end
+
+function OnUnkownItem1BtnClick(sender)
+	local index = 1
+	OnItemBtnClicked(index)
+end
+
+function OnUnkownItem2BtnClick(sender)
+	local index = 2
+	OnItemBtnClicked(index)
+end
+
+function OnUnkownItem3BtnClick(sender)
+	local index = 3
+	OnItemBtnClicked(index)
+end
+
+local function ShowOtherRewards(index)
+	local onFinished = function(idx)
+		rewardClaimed = true
+	end
+	local rewardIdx = 1
+	for k, rewardItem in pairs(rewardItems) do
+		if rewardItem.index ~= index then
+			ShowReward(otherRewards[rewardIdx], rewardItem.index, onFinished)
+			rewardIdx = rewardIdx + 1
+		end
+	end
+end
+
+ShowReward = function(data, index, onFinished)
+	local rewardItem = rewardItems[index]
+	rewardItem.itemObj:SetSelfActive(true)
+	if data then
+		BindItemBaseValue(rewardItem.itemRoot, data)
+	end
+	rewardItem.clickSpineObj:SetSelfActive(true)
+	rewardItem.clickSpine:PlayAnimation("a_1",false,
+		function (eventName)
+			rewardItem.unknownBtnObj:SetSelfActive(false)
+			rewardItem.unknownSpriteObj:SetSelfActive(false)
+		end,
+		function ()
+			rewardItem.clickSpineObj:SetSelfActive(false)
+			if onFinished then
+				onFinished(index)
+			end
+		end
+	)
+end
+
+OnItemBtnClicked = function(index)
+	if not rewardClaimed then
+		ShowReward(realReward, index, ShowOtherRewards)
+	end
+end
+
+function OnMaskClick(sender)
+    if rewardClaimed then
+    	self:HideView(self.gameObject.name)
+	end    
+end
+
+function OnClose()
+	if rewardItems then
+		for k, rewardItem in pairs(rewardItems) do
+			rewardItem.itemObj:SetSelfActive(false)
+		end
+	end
+end
+
+function DoExit()
+	realReward = nil
+	otherRewards = nil
+	rewardClaimed = nil
+	rewardItems = nil
+	rewardsRoot = nil
+end

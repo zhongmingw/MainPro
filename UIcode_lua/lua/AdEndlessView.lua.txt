@@ -1,0 +1,401 @@
+local TICKER_NAME = "ticker_adEndlessView"
+
+---@type table 服务器返回的广告信息列表
+local adData = {}
+---@type table 用于显示使用的广告信息列表
+local showAdData = {}
+
+---@type UnityEngine.GameObject
+local maskImageObj
+---@type Client.Library.UIItemGrid 小白点的排列
+local indexItemGrid
+---@type UnityEngine.Transform
+local indexItemGridTrans
+---@type Client.Library.ToggleGroupArchly 小白点的ToggleGroup
+local indexItemToggleGroup
+---@type Client.Library.UIItemGrid 内容的排列
+local aDItemGrid
+---@type UnityEngine.Transform
+local aDItemGridTransform
+---@type UnityEngine.RectTransform
+local aDItemGridRectTransform
+---@type UnityEngine.GameObject 自动移动的时候的遮罩，自动移动的时候，不让玩家点击
+local boxColliderObj
+---@type UnityEngine.GameObject
+local leftBtnObj
+---@type UnityEngine.GameObject
+local rightBtnObj
+
+---@type table 小白点的集合
+local indexItemArr
+---@type table 小白点的toggle集合
+local indexToggleArr
+---@type table 广告内容的集合
+local adItemArr
+---@type table 广告item 的Transform集合
+local adItemRectTransformArr
+
+---@type number 每一个item的宽度
+local itemWidth
+
+---@type number 当前数据个数
+local curDataAccount = 0
+---@type number 当前显示的数据下表
+local curDataIndex = 1
+---@type number y轴不能移动
+local constY
+
+---@type number 上一次重置时的grid的x轴坐标
+local lastReSetItemGridX
+---@type number 临时变量,上一帧的grid位置x
+local lastTempx
+
+---@type number 总共位移的个数，往左增加一个，往右减少一个
+local totalMovedAccount
+--- number 常量
+local autoTime
+---@type number 移动的时间
+local moveDur = 0.3
+---@type table 界面数据
+local viewData
+local exitCallback
+
+function DoInit()
+    self.Shadow = 1
+    local selfTrans = self.transform
+    maskImageObj = self:GetGameObjectAtPath("shadowImg")
+    rightBtnObj = self:GetGameObjectAtPath("RightBtn")
+    leftBtnObj = self:GetGameObjectAtPath("LeftBtn")
+    boxColliderObj = self:GetGameObjectAtPath("BoxCollider")
+    indexItemGrid = self:GetComponentAtPath("IndexItemGrid", CLS_UI_ITEM_GRID)
+    indexItemToggleGroup = self:GetComponentAtPath("IndexItemGrid", ToggleGroupArchly)
+    indexItemGridTrans = selfTrans:Find("IndexItemGrid")
+    aDItemGrid = self:GetComponentAtPath("ADItemGrid", CLS_UI_ITEM_GRID)
+    aDItemGridTransform = selfTrans:Find("ADItemGrid")
+    aDItemGridRectTransform = aDItemGridTransform
+    itemWidth = aDItemGridRectTransform.rect.width
+    indexItemArr = {}
+    indexToggleArr = {}
+    local indexAccount = indexItemGridTrans.childCount
+    for i = 0, indexAccount - 1 do
+        local indexGo = indexItemGridTrans:GetChild(i)
+        table.insert(indexToggleArr, indexGo:GetComponent(CLS_TOGGLE_ARCHLY))
+        table.insert(indexItemArr, indexGo)
+    end
+    adItemArr = {}
+    adItemRectTransformArr = {}
+
+    autoTime = GetConstValue("AdAutoTime")
+end
+
+function SetParamDataList(objs)
+    viewData,exitCallback = objs[0],objs[1]
+end
+
+function DoEnable()
+    print('DoEnable')
+end
+
+---设置界面显示需要的数据
+function OnNotification_InitViewData(obj)
+    showAdData = obj[0]
+    adData = obj[1]
+    curDataAccount = #adData
+    if curDataAccount <= 0 then
+        self:HideView(self.gameObject.name)
+    end
+    DestroyMoreItem()
+    InstantiateAdItem()
+    RefreshAdItems()
+    ForceReSetAdItemPos()
+    lastReSetItemGridX = 0
+    totalMovedAccount = 0
+    constY = 0
+    Timer:AddTicker(TICKER_NAME, CsBridge.timeManager.ServerTime + autoTime * 1000, nil, AutoMoveToLeftAdItem)
+    if #adData <= 1 then
+        rightBtnObj.gameObject:SetActive(false)
+        leftBtnObj.gameObject:SetActive(false)
+    end
+    local rightBtnObjTrans = rightBtnObj.transform
+    local leftBtnObjTrans = leftBtnObj.transform
+    local offset = 10
+    local dur = 0.5
+    local t1 = CsBridge.TweenUtils.MoveLeftRight(rightBtnObjTrans, rightBtnObjTrans.localPosition.x - offset, dur)
+    t1:DoPlay()
+    local t2 = CsBridge.TweenUtils.MoveLeftRight(leftBtnObjTrans, leftBtnObjTrans.localPosition.x + offset, dur)
+    t2:DoPlay()
+end
+
+function OnAnimationFinished()
+    self:SendCommand("InitViewData", viewData)
+end
+
+---自动向左移动
+function AutoMoveToLeftAdItem()
+    boxColliderObj.gameObject:SetActive(true)
+    local t1 = CsBridge.TweenUtils.MoveTo(aDItemGridTransform, -itemWidth, 0, moveDur, function()
+        MoveFirstItemAndGrid()
+        boxColliderObj.gameObject:SetActive(false)
+        lastTempx = aDItemGridTransform.position.x
+        Timer:AddTicker(TICKER_NAME, CsBridge.timeManager.ServerTime + autoTime * 1000, nil, AutoMoveToLeftAdItem)
+    end)
+    t1:DoPlay()
+end
+
+---自动向右移动
+function AutoMoveToRightAdItem()
+    boxColliderObj.gameObject:SetActive(true)
+    local t1 = CsBridge.TweenUtils.MoveTo(aDItemGridTransform, itemWidth, 0, moveDur, function()
+        MoveLastItemAndGrid()
+        boxColliderObj.gameObject:SetActive(false)
+        lastTempx = aDItemGridTransform.position.x
+        Timer:AddTicker(TICKER_NAME, CsBridge.timeManager.ServerTime + autoTime * 1000, nil, AutoMoveToLeftAdItem)
+    end)
+    t1:DoPlay()
+end
+
+---删除多余的item
+function DestroyMoreItem()
+    local IndexItemArrLength = #indexItemArr
+    for i = curDataAccount + 1, IndexItemArrLength do
+        CS.UnityEngine.GameObject.Destroy(indexItemArr[i].gameObject)
+        indexItemArr[i] = nil
+    end
+end
+
+---生产aditems
+function InstantiateAdItem()
+    adItemArr = {}
+    adItemRectTransformArr = {}
+    aDItemGrid:RefreshItemSlots(showAdData, self.gameObject, "AdItem")
+    local indexAccount = aDItemGrid.gameObject.transform.childCount
+    for i = 0, indexAccount - 1 do
+        local indexGo = aDItemGridTransform:GetChild(i)
+        table.insert(adItemRectTransformArr, indexGo:GetComponent(CLS_RECTTRANSFORM))
+        table.insert(adItemArr, indexGo)
+    end
+    for i = 1, #adItemArr do
+        adItemArr[i].localPosition = CsBridge.Vector3ForLua.CreateVector3ForLua((i - 2) * itemWidth, 0, 0):ToVector3()
+    end
+end
+
+---通过数据刷新界面
+function RefreshAdItems()
+    if #showAdData > 0 then
+        for i = 1, #showAdData do
+            BlindAdItemValue(adItemArr[i], showAdData[i])
+            adItemArr[i].gameObject.name = adItemArr[i].gameObject.name .. '_' .. tostring(showAdData[i].id)
+            adItemArr[i].gameObject:SetActive(true)
+        end
+    end
+end
+
+---绑定aditem的数据
+function BlindAdItemValue(itemGo, itemData)
+    local BtnImage = itemGo:GetGameObjectAtPath("BGS/BGImg")
+    CsBridge.IconData.SetRawImageByName(BtnImage, itemData.SlideshowPicture)
+end
+
+---强制item重新布局
+function ForceReSetAdItemPos()
+    if #adItemRectTransformArr == 1 then
+        adItemRectTransformArr[1].anchoredPosition = CsBridge.Vector2ForLua.CreateVector2ForLua(0, 0):ToVector2()
+    end
+    if #adItemRectTransformArr > 1 then
+        for i = 1, #adItemRectTransformArr do
+            adItemRectTransformArr[i].anchoredPosition = CsBridge.Vector2ForLua.CreateVector2ForLua((itemWidth * (i - 2)), 0):ToVector2()
+        end
+    end
+end
+
+---切换下表item 到正确的位置
+function ChangeIndexItemToRigth()
+    for i = 1, #adData do
+        if i == curDataIndex then
+            indexToggleArr[i].isOn = true
+        else
+            indexToggleArr[i].isOn = false
+        end
+    end
+end
+
+---右边按钮点击事件
+function OnRightBtnClick()
+    Timer:StopTicker(TICKER_NAME)
+    AutoMoveToLeftAdItem()
+end
+
+---左边按钮点击事件
+function OnLeftBtnClick()
+    Timer:StopTicker(TICKER_NAME)
+    AutoMoveToRightAdItem()
+end
+
+---广告内容item点击事件
+function OnADItemGridBGImgClick(obj)
+    Timer:StopTicker(TICKER_NAME)
+    self:SendCommand("OpenTargetView", adData[curDataIndex])
+end
+
+---下表小白点点击事件
+function OnIndexItemClick(obj)
+    print(obj.gameObject.name)
+end
+
+---adItem的父节点开始移动
+function OnADItemGridBeginDrag(obj)
+    Timer:StopTicker(TICKER_NAME)
+    constY = aDItemGridTransform.position.y
+    lastTempx = aDItemGridTransform.position.x
+end
+
+---aditem的父节点移动事件
+function OnADItemGridDrag(obj)
+    aDItemGridTransform.position = CsBridge.Vector3ForLua.CreateVector3ForLua(aDItemGridTransform.position.x, constY, aDItemGridTransform.position.z):ToVector3()
+    if aDItemGridRectTransform.anchoredPosition.x < lastTempx and lastReSetItemGridX - aDItemGridRectTransform.anchoredPosition.x >= itemWidth then
+        ---向左边移动的时候
+        MoveFirstItemAndGrid()
+    elseif aDItemGridRectTransform.anchoredPosition.x > lastTempx and aDItemGridRectTransform.anchoredPosition.x - lastReSetItemGridX >= itemWidth then
+        ---向右边移动的时候
+        MoveLastItemAndGrid()
+    end
+    lastTempx = aDItemGridTransform.position.x
+end
+
+---移动第一个和grid
+function MoveFirstItemAndGrid()
+    totalMovedAccount = totalMovedAccount + 1
+    local firstOne = adItemRectTransformArr[1]
+    for i = 2, #adItemRectTransformArr do
+        adItemRectTransformArr[i - 1] = adItemRectTransformArr[i]
+    end
+    adItemRectTransformArr[#adItemRectTransformArr] = firstOne
+    aDItemGridTransform.position = CsBridge.Vector3ForLua.CreateVector3ForLua(0, constY, aDItemGridTransform.position.z):ToVector3()
+    ForceReSetAdItemPos()
+    lastReSetItemGridX = aDItemGridRectTransform.anchoredPosition.x
+    curDataIndex = curDataIndex + 1
+    if curDataIndex > #adData then
+        curDataIndex = 1
+    end
+    BlindAdItemValue(adItemRectTransformArr[#adItemRectTransformArr], adData[curDataIndex])
+    ChangeIndexItemToRigth()
+end
+
+---移动最后一个和grid
+function MoveLastItemAndGrid()
+    totalMovedAccount = totalMovedAccount - 1
+    local lastOne = adItemRectTransformArr[#adItemRectTransformArr]
+
+    for i = #adItemRectTransformArr, 2, -1 do
+        adItemRectTransformArr[i] = adItemRectTransformArr[i - 1]
+    end
+    adItemRectTransformArr[1] = lastOne
+    aDItemGridTransform.position = CsBridge.Vector3ForLua.CreateVector3ForLua(0, constY, aDItemGridTransform.position.z):ToVector3()
+    ForceReSetAdItemPos()
+    lastReSetItemGridX = aDItemGridRectTransform.anchoredPosition.x
+    curDataIndex = curDataIndex - 1
+    if curDataIndex <= 0 then
+        curDataIndex = #adData
+    end
+    local temp = curDataIndex - 1
+    if temp <= 0 then
+        BlindAdItemValue(adItemRectTransformArr[1], adData[#adData])
+    else
+        BlindAdItemValue(adItemRectTransformArr[1], adData[curDataIndex - 1])
+    end
+
+    ChangeIndexItemToRigth()
+end
+
+---adItem的父节点移动结束事件
+function OnADItemGridEndDrag(obj)
+    boxColliderObj:SetActive(true)
+    ---向左移动，应该到达下一个位置
+    if aDItemGridRectTransform.anchoredPosition.x < 0 and lastReSetItemGridX - aDItemGridRectTransform.anchoredPosition.x > itemWidth / 3 then
+        local t1 = CsBridge.TweenUtils.MoveTo(aDItemGridTransform, -itemWidth, 0, moveDur, function()
+            MoveFirstItemAndGrid()
+            boxColliderObj:SetActive(false)
+            lastTempx = aDItemGridTransform.position.x
+        end)
+        t1:DoPlay()
+    end
+    ---向左移动，应该上一个的位置
+    if aDItemGridRectTransform.anchoredPosition.x < 0 and lastReSetItemGridX - aDItemGridRectTransform.anchoredPosition.x < itemWidth / 3 then
+        local t1 = CsBridge.TweenUtils.MoveTo(aDItemGridTransform, 0, 0, moveDur, function()
+            boxColliderObj:SetActive(false)
+            lastTempx = aDItemGridTransform.position.x
+        end)
+        t1:DoPlay()
+    end
+    ---向右移动，应该到达下一个位置
+    if aDItemGridRectTransform.anchoredPosition.x > 0 and aDItemGridRectTransform.anchoredPosition.x - lastReSetItemGridX > itemWidth / 3 then
+        local t1 = CsBridge.TweenUtils.MoveTo(aDItemGridTransform, itemWidth, 0, moveDur, function()
+            MoveLastItemAndGrid()
+            boxColliderObj:SetActive(false)
+            lastTempx = aDItemGridTransform.position.x
+        end)
+        t1:DoPlay()
+    end
+    ---向右移动，应该返回上一个位置
+    if aDItemGridRectTransform.anchoredPosition.x > 0 and aDItemGridRectTransform.anchoredPosition.x - lastReSetItemGridX < itemWidth / 3 then
+        local t1 = CsBridge.TweenUtils.MoveTo(aDItemGridTransform, 0, 0, moveDur, function()
+            boxColliderObj:SetActive(false)
+            lastTempx = aDItemGridTransform.position.x
+        end)
+        t1:DoPlay()
+    end
+
+    Timer:AddTicker(TICKER_NAME, CsBridge.timeManager.ServerTime + (autoTime + moveDur) * 1000, nil, AutoMoveToLeftAdItem)
+end
+
+---关闭界面
+function OnCloseBtnClick()
+    CsBridge.messageManager:PopMsgBox(Language:getStr("hint"), Language:getStr("IsCloseTips"), Language:getStr("Global_76"),
+            function()
+            end, Language:getStr("Global_8"), function()
+                maskImageObj:SetActive(false)
+                self:ReturnBack()
+            end)
+end
+
+function OnDoUnhide()
+    Timer:AddTicker(TICKER_NAME, CsBridge.timeManager.ServerTime + (autoTime + moveDur) * 1000, nil, AutoMoveToLeftAdItem)
+    self.transform.parent:SetSiblingIndex(100)
+end
+
+function OnClose()
+    Timer:StopTicker(TICKER_NAME)
+end
+
+---界面关闭触发
+function DoExit()
+    exitCallback()
+    Timer:StopTicker(TICKER_NAME)
+    adData = nil
+    showAdData = nil
+    maskImageObj = nil
+    indexItemGrid = nil
+    indexItemGridTrans = nil
+    indexItemToggleGroup = nil
+    aDItemGrid = nil
+    aDItemGridTransform = nil
+    aDItemGridRectTransform = nil
+    boxColliderObj = nil
+    leftBtnObj = nil
+    rightBtnObj = nil
+    indexItemArr = nil
+    indexToggleArr = nil
+    adItemArr = nil
+    adItemRectTransformArr = nil
+    itemWidth = nil
+    curDataAccount = nil
+    curDataIndex = nil
+    constY = nil
+    lastReSetItemGridX = nil
+    lastTempx = nil
+    totalMovedAccount = nil
+    autoTime = nil
+    moveDur = nil
+    viewData = nil
+    exitCallback = nil
+end

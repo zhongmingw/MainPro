@@ -1,0 +1,65 @@
+--[[
+	file: LeagueReplayView.lua
+	author: hangang
+	description: For player to replay league matches
+]]
+
+require "KnockoutMatchItemSlot"
+local matchesGrid
+local cachedMatch
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 1     --shadow type
+	matchesGrid = self:GetComponentAtPath("Center/MatchSV/ScrollRect/Viewport/Grid", CLS_UI_ITEM_GRID)
+end
+
+function SetParamDataList(objs)
+	cachedMatch = objs[0]
+end
+
+--On animation finished event--------------------------------------------------------
+function OnAnimationFinished()
+	self:SendCommand("GetBaseViewData", cachedMatch)	
+end
+
+--UIController events handlers-------------------------------------------------------
+function OnNotification_RefreshView(objs)
+	matchesGrid:RefreshItemSlots(objs[0], self.gameObject, "KnockoutMatchItemSlot")
+end
+
+--UI event handlers-------------------------------------------------------------------
+function OnGridPlayer01Click(itemSlot)
+	local data = itemSlot.m_data
+	local playerIdx = 1
+	self:SendCommand("PlayerClicked", data.battleIdx, data.fightIdx, playerIdx)
+end
+
+function OnGridPlayer02Click(itemSlot)
+	local data = itemSlot.m_data
+	local playerIdx = 2
+	self:SendCommand("PlayerClicked", data.battleIdx, data.fightIdx, playerIdx)
+end
+
+function OnGridSlotImgClick(itemSlot)
+	local data = itemSlot.m_data
+	self:SendCommand("MatchItemClicked", data.battleIdx, data.fightIdx)
+end
+
+--On closing--------------------------------------------------------------------------
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close() 
+	self:HideView("LeagueReplayView")
+end
+
+function DoExit()
+	matchesGrid = nil
+	cachedMatch = nil
+end

@@ -1,0 +1,136 @@
+local actData--事件信息
+local bgImg
+local titleArtTxt
+local rewardGrid
+local modelObj
+local heroModel
+local heroModelSkeleton
+local fightBtn
+local ruleTxt
+
+function DoInit()
+	self.Anim = 0
+	self.Shadow = CS.Client.Library.ShadowType.None
+	InitUI()
+end 
+function InitUI()
+	bgImg = self:GetGameObjectAtPath("BGS/bgImg")
+	titleArtTxt = self:GetComponentAtPath("BGS/TitleArtImg",CLS_LOCALIZE)
+	rewardGrid = self:GetComponentAtPath("other/RewardGrid" ,CLS_UI_ITEM_GRID)
+	modelObj = self:GetGameObjectAtPath("ModeCompose/HeroBase")
+	modelRoot = modelObj.transform:Find("HeroModelRoot")
+    heroNameTxt = modelObj.transform:GetComponentAtPath("NameTxt" ,CLS_TEXT) 
+    heroRaceObj = modelObj.transform:GetGameObjectAtPath("RaceBg") 
+    heroRaceImg = heroRaceObj.transform:GetGameObjectAtPath("RaceImg") 
+    heroStarRoot = modelObj.transform:Find("StarRoot")
+    fightBtn = self:GetComponentAtPath("FightingBtn" ,CLS_BUTTON_ARCHLY)
+	ruleTxt = self:GetComponentAtPath("other/ruleTxt" ,CLS_TEXT)
+	ruleTxt.text = CsBridge.UnityHelper.SpaceChange(CsBridge.UnityHelper.ReplaceString(ResTblContainer:GetPropToStr(INSTRUCTION_MONOPOLY_BOSS, Instruction.content, Instruction.tblName)))
+end
+function OnAnimationFinished()
+	bgImg:SetSelfActive(true)
+	CsBridge.IconData.SetRawImageByName(bgImg,"ui_bg_activity_yxtz")
+	SetServerActivityArtFontByImage(titleArtTxt,"ui_bg_activity_yxtz")
+	self:SendCommand("AnimationFinished")
+end
+function SetParamDataList(objs)
+	if objs ~= nil then
+
+	end
+end
+
+function OnNotification_SetActivityData(obj)
+	actData = obj[0]
+	isOver = actData.isOver
+	fightBtn.Gray = isOver
+	rewardGrid:RefreshItemSlots(actData.rewardItems,self.gameObject,"ItemSlot")
+    self:SendCommand("GetHeroInfo",actData.id)
+end
+
+function OnRewardGridItemSlotClick(obj)
+	local item = obj.m_data
+	if item.typeId == 3 then
+		return
+	end
+    CsBridge.CacheAssetsByModule(self.Module,
+	function()
+		local item = obj.m_data
+		local view = CsBridge.OpenView("ItemTipView", "ItemTipModel",false,true)
+		local rewardTmp={}
+		rewardTmp.id=item.id
+		rewardTmp.typeId=item.typeId
+		rewardTmp.count=1
+		if item.typeId == 0 then
+			rewardTmp.attrs = item.attrs
+		end 
+		if item.typeId == 4 then
+			rewardTmp.level = item.level
+		end 
+		view:SetParamDataList(rewardTmp,itemBaseIndex+itemDespIndex+PropsIndex+itemSuitIndex)
+		view:SendCommand("InitItemData")
+	end,"ItemTipView")
+end
+
+local function RefreshComposeHeroInfo(curHero)
+    heroNameTxt:SetText(curHero.title)
+    SetIconByRaceId(heroRaceImg,curHero.group)
+    SetHeroStar(curHero.quality, heroStarRoot)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local model = CsBridge.objectCache:CreateObject(curHero.model, true)
+        model.transform:SetParent(modelRoot, false)
+        CsBridge.UnityHelper.SetAnchoredPosition(model.gameObject,0,0)
+		CsBridge.UnityHelper.SetlocalScale(model.gameObject,-1,1,1)
+        heroModelSkeleton = model.transform:GetChild(0):GetComponent("Spine.Unity.SkeletonGraphic")
+        heroModelSkeleton:PlayAnimation("stand", true)
+        heroModel = model
+	end, curHero.model)
+end
+
+function OnNotification_SetHeroInfo(objs)
+	local curHero = objs[0]
+	if heroModel ~= nil then
+        DestroyModel(heroModel.gameObject)
+        heroModel = nil
+        heroModelSkeleton = nil
+    end
+	RefreshComposeHeroInfo(curHero)	
+end
+
+function OnNotification_SetIsOver(objs)
+	isOver = objs[0]
+	fightBtn.Gray = isOver
+end
+
+--挑战按钮
+function OnFightingBtnClick(sender)
+	if isOver then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("Monopoly_HasGetFightRewards"))
+	else
+		actData.url = "zillionaireBoss"
+		actData.req = "ZillionaireBossReq"
+		self:SendCommand("GoToChallenge",actData)
+	end
+end
+
+function OnNotification_CloseActivityView(obj)
+	self:HideView(self.gameObject.name)
+end
+
+function BeoforeReturnBack()
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	if heroModel ~= nil then
+        DestroyModel(heroModel.gameObject)
+        heroModel = nil
+        heroModelSkeleton = nil
+    end
+	actData = nil
+	bgImg = nil
+	titleArtTxt = nil
+	rewardGrid = nil
+	modelObj = nil
+	heroModel = nil
+	heroModelSkeleton = nil
+end

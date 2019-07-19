@@ -1,0 +1,21 @@
+require "GloryRoadUtils"
+
+function OnGloryRoadStageItemSlotBindValue(slot,data)
+    local titleTxt = slot:GetComponentAtPath("TitleTxt",CLS_TEXT)
+    local raidBtn = slot:GetGameObjectAtPath("RaidBtn")
+    local goBtn = slot:GetComponentAtPath("GoBtn",CLS_BUTTON_ARCHLY)
+    local rewardGrid = slot:GetComponentAtPath("RewardGrid",CLS_UI_ITEM_GRID)
+    local firstPassItemSlot = slot:GetComponentAtPath("FirstPassItemSlot",CLS_RECTTRANSFORM)
+    local firstPassFlag = firstPassItemSlot:GetGameObjectAtPath("FirstPassFlag")
+    local firstPassedFlag = firstPassItemSlot:GetGameObjectAtPath("CheckSprite")
+
+    titleTxt.text = string.format(Language:getStr("StageName"),data.subId)
+    raidBtn:SetSelfActive(data.state==StageState.Passed)
+    goBtn.gameObject:SetSelfActive(data.state~=StageState.Passed)
+    goBtn.Gray = data.state==StageState.UnPass
+
+    rewardGrid:RefreshItemSlots(data.rewards,slot.m_grid.viewBase.gameObject,"ItemSlot")
+    BindItemBaseValue(firstPassItemSlot,data.firstRewards[1])
+    firstPassFlag:SetSelfActive(data.state ~= StageState.Passed)
+    firstPassedFlag:SetSelfActive(data.state == StageState.Passed)
+end

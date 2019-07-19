@@ -1,0 +1,383 @@
+local ScreenUtils = require "ScreenUtils"
+local boxItemSelectRewardUtils = require "BoxItemSelectRewardUtils"
+
+local allBagArr
+local equipBagArr
+local itemBagArr
+local piecesBagArr
+local relicBagArr
+local relicBookArr
+local curType = 1
+
+--equip bag
+local curQuality = 1
+
+local waitItemJump = false
+
+local piecesRedResult
+local boxRedResult
+
+---@type table 背包中用于获取奖励的盒子-
+local boxItemViewResourceData
+
+function DoInit()
+end
+
+function InitProperties()
+end
+
+function DoEnable()
+    if waitItemJump then
+        UpdateBagArr()
+        GetCurBagArr(curType, true)
+        self:SendNotification("RefreshView", curType, #curBagArr == 0)
+        waitItemJump = false
+    end
+end
+
+function RefreshBagRedFlag()
+    local result = CheckBagItem(true)
+    piecesRedResult = result.piecesArr
+    boxRedResult = result.boxArr
+    self:SendNotification("RefreshBagRedFlag", table.count(boxRedResult) ~= 0, table.count(piecesRedResult) ~= 0)
+end
+
+function RefreshHeroPiecesRedFlag()
+    --local result = CheckBagItem(true,nil)
+    local redPieces = {}
+    for i, v in ipairs(curBagArr) do
+        if v.redFlag ~= (piecesRedResult[v.id] ~= nil) then
+            v.redFlag = piecesRedResult[v.id]
+            table.insert(redPieces, v)
+        end
+    end
+    self:SendNotification("RefreshHeroPiecesRedFlag", redPieces)
+end
+
+function RefreshBoxRedFlag()
+    local redBox = {}
+    for i, v in ipairs(curBagArr) do
+        if v.redFlag ~= (boxRedResult[v.id] ~= nil) then
+            v.redFlag = boxRedResult[v.id]
+            table.insert(redBox, v)
+        end
+    end
+    self:SendNotification("RefreshBoxRedFlag", redBox)
+end
+
+function OnCommand_InitBagData(objs)
+    InitBagArr()
+    GetCurBagArr(curType)
+    self:SendNotification("OpenTypeView", curType)
+    self:SendNotification("RefreshView", curType, #curBagArr == 0)
+    RefreshBagRedFlag()
+end
+
+function OnCommand_SwitchType(objs)
+    local type = objs[0]
+    if curType == type then
+        return
+    end
+    curType = type
+    GetCurBagArr(curType)
+    self:SendNotification("OpenTypeView", curType)
+    self:SendNotification("RefreshView", curType, #curBagArr == 0)
+end
+
+function GetCurBagArr(type, keepScreen)
+    if curType == 1 then
+        table.sort(allBagArr[1], SortByQuality)
+        if not keepScreen or keepScreen == nil then
+            self:SendNotification("InitScreen", curQuality)
+            curQuality = 1
+        end
+    end
+    if curType == 4 then
+        table.sort(allBagArr[4], SortRelicByQuality)
+    end
+    curBagArr = allBagArr[curType]
+end
+
+function InitBagArr()
+    allBagArr = {}
+    table.insert(allBagArr, {}) --equip
+    table.insert(allBagArr, {}) --item
+    table.insert(allBagArr, {}) --pieces
+    table.insert(allBagArr, {}) --relic
+
+    local packPbs = appData:checkAllItems("PackItem")
+    local relicPbs = appData:checkAllItems("RelicItem")
+    if packPbs ~= nil then
+        local tbl = ResTblContainer:GetTable(ItemBase.actorTbl)
+        for i = 0, packPbs.Length - 1 do
+            local packItem = {
+                uid = packPbs[i].uid,
+                id = packPbs[i].itemId,
+                typeId = 2,
+                count = packPbs[i].count
+            }
+            packItem.quality = tbl:GetInt(packItem.id, ItemBase.quality)
+            packItem.type = tbl:GetInt(packItem.id, ItemBase.category)
+            if packItem.count ~= 0 then
+                table.insert(allBagArr[packItem.type], packItem)
+            end
+        end
+    end
+    if relicPbs ~= nil then
+        local tbl = ResTblContainer:GetTable(Relic.tblName)
+        for i = 0, relicPbs.Length - 1 do
+            if relicPbs[i].owner == nil or relicPbs[i].owner == 0 then
+                local relic = {
+                    id = relicPbs[i].id,
+                    level = relicPbs[i].level,
+                    owner = relicPbs[i].owner,
+                    typeId = 4,
+                    count = 1
+                }
+                relic.quality = tbl:GetInt(relic.id, Relic.quality)
+                table.insert(allBagArr[4], relic)
+            end
+        end
+        allBagArr[4] = MergeRelic(allBagArr[4])
+    end
+end
+
+function UpdateBagArr()
+    allBagArr[curType] = {}
+    if curType == 4 then
+        local relicPbs = appData:checkAllItems("RelicItem")
+        if relicPbs ~= nil then
+            local tbl = ResTblContainer:GetTable(Relic.tblName)
+            for i = 0, relicPbs.Length - 1 do
+                if relicPbs[i].owner == nil or relicPbs[i].owner == 0 then
+                    local relic = {
+                        id = relicPbs[i].id,
+                        level = relicPbs[i].level,
+                        owner = relicPbs[i].owner,
+                        typeId = 4,
+                        count = 1
+                    }
+                    relic.quality = tbl:GetInt(relic.id, Relic.quality)
+                    table.insert(allBagArr[4], relic)
+                end
+            end
+            allBagArr[4] = MergeRelic(allBagArr[4])
+        end
+    else
+        local packPbs = appData:checkAllItems("PackItem")
+        if packPbs ~= nil then
+            local tbl = ResTblContainer:GetTable(ItemBase.actorTbl)
+            for i = 0, packPbs.Length - 1 do
+                local packItem = {
+                    uid = packPbs[i].uid,
+                    id = packPbs[i].itemId,
+                    typeId = 2,
+                    count = packPbs[i].count
+                }
+                packItem.quality = tbl:GetInt(packItem.id, ItemBase.quality)
+                packItem.type = tbl:GetInt(packItem.id, ItemBase.category)
+                if packItem.count ~= 0 and packItem.type == curType then
+                    table.insert(allBagArr[curType], packItem)
+                end
+            end
+        end
+    end
+end
+
+function OnCommand_CloseBagView(objs)
+    self:SendNotification("CloseSubView")
+    objs[0]()
+end
+
+function OnCommand_OpenTipView(objs)
+    local data = objs[0]
+    local item = {
+        id = data.id,
+        typeId = data.typeId,
+        count = 1,
+        uid = data.uid
+    }
+    if item.typeId == ItemTypeEnum.Relic then --神器
+        item.level = data.level
+        item.owner = data.owner
+    end
+    boxItemViewResourceData = item
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("ItemTipView", "ItemTipModel",false,true)
+        view:SetParamDataList(item, itemBaseIndex + itemDespIndex + PropsIndex + itemSuitIndex + itemBtnsIndex + itemActivateIndex, self)
+        view:SendCommand("InitExtraData", data.count, ItemTipViewDutyCallBack)
+        view:SendCommand("InitJumpData", function()
+            waitItemJump = true
+        end)
+        view:SendCommand("InitItemData")
+    end, "ItemTipView")
+end
+
+function ItemTipViewDutyCallBack()
+    InitBagArr()
+    GetCurBagArr(curType, true)
+    if curType == 1 then
+        ScreenEquip()
+    else
+        self:SendNotification("RefreshView", curType, #curBagArr == 0)
+    end
+    RefreshBagRedFlag()
+    RefreshHeroPiecesRedFlag()
+    RefreshBoxRedFlag()
+end
+
+--equip bag
+function OnCommand_InitEquipData(objs)
+    self:SendNotification("RefreshEquipView", curBagArr)
+end
+
+function OnCommand_ScreenEquip(objs)
+    local quality = objs[0]
+    if curQuality == quality then
+        return
+    end
+    local direct = quality - curQuality < 0 --false为往右
+    curQuality = quality
+    self:SendNotification("ScreenAnim", curQuality, direct)
+    ScreenEquip()
+end
+
+function ScreenEquip()
+    curBagArr = {}
+    for i, equip in ipairs(allBagArr[1]) do
+        if curQuality == 1 then
+            table.insert(curBagArr, equip)
+        elseif equip.quality == curQuality then
+            table.insert(curBagArr, equip)
+        end
+    end
+    self:SendNotification("ScreenEquip", curBagArr)
+end
+
+function SortByQuality(a, b)
+    if a.quality ~= b.quality then
+        return a.quality > b.quality
+    end
+    return a.id < b.id
+end
+
+--item bag
+function OnCommand_InitItemData(objs)
+    table.sort(curBagArr, SortById)
+    self:SendNotification("RefreshItemView", curBagArr)
+    RefreshBoxRedFlag()
+end
+
+--pieces bag
+function OnCommand_InitPiecesData(objs)
+    table.sort(curBagArr, SortPiecesByProcess)
+    self:SendNotification("RefreshPiecesView", curBagArr)
+    RefreshHeroPiecesRedFlag()
+end
+
+--relic bag
+function OnCommand_InitRelicData(objs)
+    self:SendNotification("RefreshRelicView", curBagArr)
+    ScreenUtils.InitScreen(ScreenRelic)
+end
+
+function OnCommand_UpdateRelicData(objs)
+    UpdateBagArr()
+    GetCurBagArr(curType, true)
+    self:SendNotification("RefreshView", curType, #curBagArr == 0)
+end
+
+function OnCommand_RebindScreen(objs)
+    ScreenUtils.InitScreen(ScreenRelic)
+    ScreenUtils.UpdateScreen()
+end
+
+function ScreenRelic(quality)
+    curBagArr = {}
+    for i, relic in ipairs(allBagArr[4]) do
+        if quality == 1 then
+            table.insert(curBagArr, relic)
+        elseif relic.quality == quality then
+            table.insert(curBagArr, relic)
+        end
+    end
+    self:SendNotification("ScreenRelic", curBagArr)
+end
+
+function OnCommand_OpenRelicBookView(objs)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        CsBridge.OpenView("RelicBookView","BagModel",true,true)
+    end,"RelicBookView","ItemSlot")
+end
+
+-------relic book---------
+function OnCommand_InitRelicBookData(objs)
+    InitRelicBookArr()
+    ScreenUtils.InitScreen(ScreenRelicBook)
+    self:SendNotification("RefreshRelicBookView", relicBookArr)
+end
+
+function ScreenRelicBook(quality)
+    local curRelicBookArr = {}
+    for i, relic in ipairs(relicBookArr) do
+        if quality == 1 then
+            table.insert(curRelicBookArr, relic)
+        elseif relic.quality == quality - 1 then
+            table.insert(curRelicBookArr, relic)
+        end
+    end
+    self:SendNotification("RefreshRelicBookView", curRelicBookArr)
+end
+
+function InitRelicBookArr()
+    relicBookArr = {}
+    local tbl = ResTblContainer:GetTable(Relic.tblName)
+    local ids = tbl:GetCol(Relic.id)
+    for i = 0, ids.Length - 1 do
+        local id = tonumber(ids[i])
+        local show = tbl:GetInt(id,Relic.show)
+        if show == 1 then
+            local relic = {
+                id = id,
+                level = 1,
+                owner = nil,
+                typeId = 4,
+                count = 1,
+                quality = ResTblContainer:GetPropToInt(id, Relic.quality, Relic.tblName)
+            }
+            table.insert(relicBookArr, relic)
+        end
+    end
+    table.sort(relicBookArr, SortRelicByDescQuality)
+end
+
+---向服务器请求选择宝箱界面数据
+function OnCommand_InitBoxItemSelectViewData(objs)
+    boxItemSelectRewardUtils.GetViewData(boxItemViewResourceData, function(backData)
+        self:SendNotification("InitBoxItemSelectViewData", backData.rewardItems)
+    end)
+end
+
+---选择一个选择宝箱界面的奖励
+function OnCommand_ChoiceOneReward(objs)
+    local data = objs[0]
+    boxItemSelectRewardUtils.ChoiceOneReward(boxItemViewResourceData, data, function(backdata)
+        self:SendNotification("ClearBoxItemSelectView")
+        ItemTipViewDutyCallBack()
+    end, self)
+end
+
+function DoOnExit()
+    ScreenUtils = nil
+    allBagArr = nil
+    equipBagArr = nil
+    itemBagArr = nil
+    piecesBagArr = nil
+    relicBagArr = nil
+    relicBookArr = nil
+    curType = nil
+    curQuality = nil
+    waitItemJump = nil
+    piecesRedResult = nil
+    boxRedResult = nil
+end

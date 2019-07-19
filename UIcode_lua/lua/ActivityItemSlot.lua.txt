@@ -1,0 +1,19 @@
+
+local UnityHelper=CS.Client.Library.UnityHelper
+local resTable=CS.Client.Library.ResTableContainer.instance
+local IconData=CS.Client.Library.IconData
+
+
+function OnActivityItemSlotBindValue(slot,data)
+
+	slot.m_SelectSprite=slot:GetGameObjectAtPath("CheckSprite")
+
+	local activityName_Lab = slot:GetComponentAtPath("ActivityNameTxt",CLS_TEXT)
+	local activity_Sprite = slot:GetComponentAtPath("ActivitySprite",CLS_IMAGE)
+	local newFlag = slot:GetGameObjectAtPath("NewFlag")
+
+	activityName_Lab.text=data.name
+	--print(data.flag)
+	IconData.SetIconByName(activity_Sprite.gameObject,data.icon)
+	newFlag:SetSelfActive(data.flag==true)
+end

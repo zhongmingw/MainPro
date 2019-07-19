@@ -1,0 +1,26 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-06-07 10:49:18
+
+
+local isInit = false
+
+function DoInit()
+    self.Shadow = 1	
+    self.Anim = 8
+end
+
+function OnWorldChatBtnClick(sender)
+    self:SendCommand("Share",1)
+    self:HideView(self.gameObject.name)
+end
+
+function OnLegionChatBtnClick(sender)
+    self:SendCommand("Share",2)
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	isInit = nil
+end

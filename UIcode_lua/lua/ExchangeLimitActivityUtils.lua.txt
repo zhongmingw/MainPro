@@ -1,0 +1,43 @@
+--[[
+	file: ExchangeLimitActivityUtils.lua
+	author: zhangyue
+	description: ExchangeLimitActivity utilities
+]]
+
+local urls = {
+    [ActivityType.LimitExchange] = "exchangeHero",
+    [ActivityType.LimitBox] = "exchangeBox",
+    [ActivityType.LimitActivity] = "exchangeActivityItem",
+    [ActivityType.GodWeapon] = "godWeapon",
+}
+
+local function Exchange(currentItemData, buyCount, activity, onFinished, model)
+    if currentItemData.remain == 0 then
+        CsBridge.hintUILayer:ShowHintBox(CsBridge.localizationHelper:getStr("1133"), 2)
+        return
+    end
+    for i, cost in ipairs(currentItemData.consumes) do
+        cost.count = cost.count * buyCount
+    end
+
+    if #CheckMulCostEnough(currentItemData.consumes, true) ~= 0 then
+        return
+    end
+
+    local currentActivityID = activity.id
+
+    local req = {
+        id = currentActivityID,
+        subId = currentItemData.id,
+        count = buyCount
+    }
+    local url = urls[activity.type]
+    HttpRequest(url, "ExchangeReq", "ExchangeResp", req, function(resp)
+        PopRewardView(model, resp.rewardItems)
+        onFinished(currentActivityID)
+    end)
+end
+
+return {
+    Exchange = Exchange,
+}

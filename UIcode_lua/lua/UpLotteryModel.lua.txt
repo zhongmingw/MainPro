@@ -1,0 +1,197 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-03-08 16:14:06
+
+local ACTIVITY_TYPE_UP_LOTTERY = 67
+local curActivityId
+
+local activityTitle
+local upHero
+local heroPool
+local consumes
+local refreshItem
+
+local topRes
+
+local UP_LOTTERY_ONCE = 1
+local UP_LOTTERY_TENTH = 10
+
+local function CheckActivityId(onFinished)
+    local req = {
+        types = {
+            ACTIVITY_TYPE_UP_LOTTERY
+        }
+    }
+    HttpRequest("getActivity","GetActivityReq","GetActivityResp",req,function(resp)
+        if resp and resp.activities ~= nil then
+			for i,activity in ipairs(resp.activities) do
+                if activity.type == ACTIVITY_TYPE_UP_LOTTERY then
+                    if onFinished then
+                        onFinished(activity.id)
+                    end
+                    return
+				end
+			end
+        end
+    end)
+end
+
+local function UpdateTopResData()
+    local item = appData:checkItem("PackItem",topRes.id)
+    topRes.count = item and item.count or 0
+end
+
+local function InitUpLottery(onFinished)
+    local req = {
+        acId = curActivityId
+    }
+    HttpRequest("getSummonUpActivityReward","GetSummonUpActivityReq","GetSummonUpActivityResp",req,function(resp)
+        consumes = {}
+        consumes[UP_LOTTERY_ONCE] = {
+            typeId = ItemTypeEnum.Item,
+            id = resp.summonUpCall,
+            count = UP_LOTTERY_ONCE
+        }
+        consumes[UP_LOTTERY_TENTH] = {
+            typeId = ItemTypeEnum.Item,
+            id = resp.summonUpCall,
+            count = UP_LOTTERY_TENTH
+        }
+        refreshItem = {
+            typeId = ItemTypeEnum.Resource,
+            id = ResourceEnum.Gem,
+            count = resp.summonUpRefreshPrice
+        }
+        topRes = {
+            typeId = ItemTypeEnum.Item,
+            id = resp.summonUpCall,
+            count = 0,
+            price = {
+                typeId = ItemTypeEnum.Resource,
+                id = ResourceEnum.Gem,
+                count = resp.summonUpCallPrice
+            }
+        }
+        UpdateTopResData()
+        upHero = table.copy(resp.up)
+        heroPool = {}
+        for i,v in ipairs(resp.pool) do
+            table.insert(heroPool, table.copy(v))
+        end
+        if onFinished then
+            onFinished()
+        end
+    end)
+end
+
+local function UpdateUpHero(onFinished)
+    local req = {
+        acId = curActivityId
+    }
+    HttpRequest("summonUpRefresh","SummonUpRefreshReq","SummonUpRefreshResp",req,function(resp)
+        upHero = table.copy(resp.up)
+        if onFinished then
+            onFinished()
+        end
+    end)
+end
+
+function DoInit()
+end
+
+function InitProperties()
+end
+
+function OnCommand_InitData(objs)
+    local name = objs[0]
+    activityTitle = name
+end
+
+function OnCommand_InitUpLotteryData(objs)
+    CheckActivityId(function(id)
+        curActivityId = id
+        InitUpLottery(function()
+            UpdateTopResData()
+            self:SendNotification("RefreshUpLotteryView", upHero, heroPool, consumes, topRes, activityTitle)
+        end)
+    end)
+end
+
+function OnCommand_RefreshUpHero(objs)
+    if not CheckItemEnough(refreshItem.id,refreshItem.typeId,refreshItem.count,true) then
+        return
+    end
+    CsBridge.messageManager:FristConfirmBox("UpLotteryRefreshUpHero", 
+    Language:getStr("local_confirm"), 
+    string.format(Language:getStr("UpLotteryRefreshHeroConfirm"),refreshItem.count..GetRewardName(refreshItem)),
+    Language:getStr("local_cancel"),nil,
+    Language:getStr("local_confirm"),function()
+        UpdateUpHero(function()
+            self:SendNotification("RefreshUpHero",upHero)
+        end)
+    end)
+end
+
+function OnCommand_Lottery(objs)
+    local count = objs[0]
+    local consume = consumes[count]
+    if not CheckHeroBagEnough(count,true) then
+        return
+    end
+    if not CheckItemEnough(consume.id,consume.typeId,consume.count, true) then
+        return
+    end
+    local req = {
+        acId = curActivityId,
+        count = count
+    }
+    HttpRequest("summonUpCall","SummonUpCallReq","SummonUpCallResp",req,function(resp)
+        if resp and resp.rewardItems then
+            self:SendNotification("ShowLotteryEffect", function()
+                local confirmCbk = function()
+                    UpdateTopResData()
+                    self:SendNotification("RefreshTopView",topRes)
+                    self:SendNotification("RefreshConsumeBtnState", consumes)
+                    upHero = table.copy(resp.up)
+                    self:SendNotification("RefreshUpHero",upHero)
+                end
+                local toMergeRewards = false
+                ShowRewardReceivedTip(self,resp.rewardItems,confirmCbk, toMergeRewards)
+            end)
+        end
+    end)
+end
+
+function OnCommand_ShowUpHeroTip(objs)
+    ShowTip(self, upHero.typeId, upHero.id)
+end
+
+function OnCommand_ShowTip(objs)
+    local data = objs[0]
+    ShowTip(self, data.typeId, data.id)
+end
+
+function OnCommand_AddRefreshItem(objs)
+    ShowBuyView(self, topRes.typeId, topRes.id, nil, topRes.price.id, topRes.price.count, function()
+        UpdateTopResData()
+        self:SendNotification("RefreshTopView",topRes)
+        self:SendNotification("RefreshConsumeBtnState", consumes)
+    end)
+end
+
+function DoOnExit()
+    ACTIVITY_TYPE_UP_LOTTERY = nil
+    curActivityId = nil
+
+    activityTitle = nil
+    upHero = nil
+    heroPool = nil
+    consumes = nil
+    refreshItem = nil
+
+    topRes = nil
+
+    UP_LOTTERY_ONCE = nil
+    UP_LOTTERY_TENTH = nil
+end

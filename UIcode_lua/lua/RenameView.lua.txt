@@ -1,0 +1,128 @@
+local nameInput, priceTxt, priceImg
+local onBackAction
+local defaultName
+local forbidEmptyInput = false
+
+function SetParamDataList(obj)	
+	onBackAction = obj[0]
+	if obj.Length > 1 then
+		defaultName = obj[1]
+		self:SendCommand("GetUniqueName")
+	end
+	if obj.Length > 2 then
+		forbidEmptyInput = obj[2]
+	end
+end
+
+function DoInit()
+	self.Shadow = 1
+	InitUI()
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+
+	local path = "Center/NameInput"
+	nameInput = CsBridge.GetInputFromView(self, path)
+
+	path = "Buttons/ConfirmBtn/priceTxt"
+	priceTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Buttons/ConfirmBtn/priceImg"
+	priceImg = selfTrans:GetGameObjectAtPath(path)
+end
+
+function OnAnimationFinished()
+	TryGetViewData()
+end 
+
+function TryGetViewData()
+	self:SendCommand("GetRenameViewData")
+end
+
+function OnNotification_RefreshRenameView(objs)
+	local viewData = objs[0]
+	RefeshView(viewData)
+end
+
+function OnNotification_GetRandomName(objs)
+	local name = objs[0]
+	nameInput.text = name
+end
+
+function OnNotification_RenameFinished(objs)
+	CsBridge.hintUILayer:ShowHintBox(Language:getStr("renameFinished"))
+	DoClose()
+end
+
+function OnNotification_SetUniqueName(objs)
+	local uniqueName = objs[0]
+	defaultName = uniqueName
+	nameInput.text = uniqueName
+end
+
+function RefeshView(viewData)
+	if not defaultName then
+		nameInput.text = viewData.newName
+	else
+		nameInput.text = defaultName
+	end
+
+	ShowOneConsume(priceImg,priceTxt,viewData.consume)
+	SetFontColor(priceTxt, viewData.priceColor)
+end
+
+function OnRandomBtnClick(sender)
+	self:SendCommand("GetRandomName")
+end
+
+function OnConfirmBtnClick(sender)
+	if IsEmptyInput() then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("emptyNickWarning"))
+	else
+		local minLen = GetConstValue("NameCharCountMin")
+		local maxLen = GetConstValue("NameCharCountMax")
+		local text = nameInput.text
+		if string.utf8len(text) > maxLen or string.utf8len(text) < minLen then
+			CsBridge.hintUILayer:ShowHintBox(Language:getStr("nickTooLong"))
+		else
+			self:SendCommand("Rename", nameInput.text)
+		end
+	end
+end
+
+function IsEmptyInput()
+	local newName = nameInput.text
+	newName = string.gsub(newName, " ", "")
+	return newName == nil or newName == "" 
+end
+
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end 
+
+function Close() 
+	if not forbidEmptyInput then
+		DoClose()
+	end	
+end
+
+function DoClose()
+	if onBackAction then
+        onBackAction()
+    end
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	nameInput = nil 
+	priceTxt = nil 
+	priceImg = nil
+	onBackAction = nil
+	defaultName = nil
+	forbidEmptyInput  = nil
+end

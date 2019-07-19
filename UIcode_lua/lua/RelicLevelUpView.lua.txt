@@ -1,0 +1,237 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-05-22 16:15:04
+
+ 
+local tweenUtils=CsBridge.TweenUtils
+
+local centerObj 
+local bottomObj
+
+local oldRelicItemBase
+local newRelicItemBase
+
+local sliderObj
+local sliderNumTxt
+local slider 
+local sliderFillImgObj
+local sliderOverImg
+local sliderOverRectTrans
+local sliderWidth
+
+local curMaterialRelicGrid
+local allMaterialRelicGrid
+
+local levelUpBtn
+
+local t
+
+local allProgress = 0
+
+local effectObj
+
+local isInit = false
+
+function DoInit()
+    self.Shadow = 1
+end
+
+function InitUI()
+    centerObj = self:GetGameObjectAtPath("Center")
+    bottomObj = self:GetGameObjectAtPath("Bottom")
+
+    local centerTrans = centerObj.transform
+    oldRelicItemBase = centerTrans:GetComponentAtPath("OldRelic/OldRelicItemBase",CLS_RECTTRANSFORM)
+    newRelicItemBase = centerTrans:GetComponentAtPath("NewRelic/NewRelicItemBase",CLS_RECTTRANSFORM)
+    sliderObj = centerTrans:GetGameObjectAtPath("ExpSlider")
+    sliderNumTxt = centerTrans:GetComponentAtPath("ExpSlider/NumTxt",CLS_TEXT)
+    slider = centerTrans:GetComponentAtPath("ExpSlider/Slider",CLS_SLIDER)
+    local sliderTrans = slider.transform
+    sliderFillImgObj = sliderTrans:GetComponentAtPath("FillImg",CLS_IMAGE)
+    sliderOverRectTrans = sliderTrans:GetComponentAtPath("OverImg",CLS_RECTTRANSFORM)
+    sliderOverImg = sliderOverRectTrans:GetComponent(CLS_IMAGE)
+    sliderWidth = sliderOverRectTrans.sizeDelta.x
+
+    levelUpBtn = centerTrans:GetComponentAtPath("LevelUpBtn",CLS_BUTTON_ARCHLY)
+
+    curMaterialRelicGrid = centerTrans:GetComponentAtPath("MaterialGrid",CLS_UI_ITEM_GRID)
+    allMaterialRelicGrid = bottomObj.transform:GetComponentAtPath("RelicSV/ScrollRect/Viewport/RelicGrid",CLS_UI_ITEM_GRID)
+
+    effectObj = self:GetGameObjectAtPath("Effect")
+end
+
+function SetParamDataList(objs)
+    local hero = objs[0]
+    self:SendCommand("InitData", hero)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitRelicLevelUpData")
+end
+
+function DoExit()
+    tweenUtils = nil
+    centerObj = nil
+    bottomObj = nil
+
+    oldRelicItemBase = nil
+    newRelicItemBase = nil
+
+    sliderObj = nil
+    sliderNumTxt = nil
+    slider  = nil
+    sliderFillImgObj = nil
+    sliderOverImg = nil
+    sliderOverRectTrans = nil
+    sliderWidth = nil
+
+    curMaterialRelicGrid = nil
+    allMaterialRelicGrid = nil
+
+    levelUpBtn = nil
+
+    t = nil
+
+    allProgress = nil
+
+    effectObj = nil
+
+    isInit = nil
+end
+
+function OnNotification_RefreshRelicLevelUpView(objs)
+    centerObj:SetSelfActive(true)
+    bottomObj:SetSelfActive(true)
+
+    local oldRelic = objs[0]
+    local newRelic = objs[1]
+    BindItemBaseValue(oldRelicItemBase,oldRelic)
+    BindItemBaseValue(newRelicItemBase,newRelic)
+
+    if  not oldRelic.hasMaxLevel then
+        levelUpBtn.Gray = false
+        sliderObj:SetSelfActive(true)
+        RefreshExpSlider(oldRelic.exp,oldRelic.levelUpExp)
+    else
+        levelUpBtn.Gray = true
+        sliderObj:SetSelfActive(false)
+    end
+
+    curMaterialRelicGrid:RefreshItemSlots(objs[2],self.gameObject,"ItemSlot")
+    allMaterialRelicGrid:RefreshItemSlots(objs[3],self.gameObject,"ItemSlot")
+end
+
+function OnNotification_ShowRelicLevelUpEffect(objs)
+    local exp = objs[0]
+    local upLv = objs[1]
+    local callback = objs[2]
+    effectObj:SetSelfActive(true)
+    sliderOverRectTrans.gameObject:SetSelfActive(false)
+
+    DoSliderEffect(upLv+exp,callback)
+end
+
+function DoSliderEffect(value,callback)
+    if value <= 0 then
+        if callback ~= nil then
+            callback()
+            effectObj:SetSelfActive(false)
+        end
+    elseif value < 1 then
+        tweenUtils.DOSliderValue(slider,value,0.3,function()
+            if callback ~= nil then
+                callback()
+                effectObj:SetSelfActive(false)
+            end
+        end)
+    else
+        tweenUtils.DOSliderValue(slider,1,0.3,function()
+            if value-1 > 0 then
+                slider.value = 0
+            end
+            DoSliderEffect(value-1,callback)
+        end)
+    end
+end
+
+function OnNotification_UpdateRelicMaterial(objs)
+    curMaterialRelicGrid:SingleRefreshSlot(objs[0])
+    allMaterialRelicGrid:RefreshItemSlots(objs[1],self.gameObject,"ItemSlot")
+    RefreshExpSlider(objs[3],objs[2],true)
+    BindItemBaseValue(newRelicItemBase,objs[4])
+end
+
+function OnNotification_UpdateSingleRelicMaterial(objs)
+    curMaterialRelicGrid:SingleRefreshSlot(objs[0])
+    allMaterialRelicGrid:SingleRefreshSlot(objs[1])
+    RefreshExpSlider(objs[3],objs[2],true)
+    BindItemBaseValue(newRelicItemBase,objs[4])
+end
+
+function RefreshExpSlider(supplyExp, needExp, updateMat)
+    allProgress = supplyExp/needExp
+    local progress = math.min(allProgress,1)
+
+    if updateMat then
+        UpdateExpSlider(progress)
+    else
+        slider.value = progress
+    end
+    sliderNumTxt:SetText(supplyExp.."/"..needExp)
+end
+
+function UpdateExpSlider(progress)
+    if t then
+        t:DoKill(true)
+    end
+    if progress <= 0 then
+        sliderOverRectTrans.gameObject:SetSelfActive(false)
+    else
+        sliderOverRectTrans.gameObject:SetSelfActive(true)
+        CsBridge.UnityHelper.SetUISizeDelta(sliderOverRectTrans, sliderWidth*progress,sliderOverRectTrans.sizeDelta.y)
+        t = tweenUtils.DoImageFadeInAndOut(sliderOverImg, 0.6)    
+    end
+end
+
+function OnOldRelicItemBaseClick(sender)
+   self:SendCommand("ShowOldRelicTip") 
+end
+
+function OnNewRelicItemBaseClick(sender)
+    self:SendCommand("ShowNewRelicTip") 
+end
+
+function OnRelicGridItemSlotClick(obj)
+    self:SendCommand("OpenMaterialSelectView",obj.m_data,obj.m_index)
+end
+
+function OnMaterialGridItemSlotClick(obj)
+    self:SendCommand("CancelSelectRelicMaterial",obj.m_index)
+end
+
+function OnLevelUpBtnClick(sender)
+    self:SendCommand("RelicLevelUp")
+end
+
+function OnClose() 
+    allMaterialRelicGrid:ClearItems()
+    centerObj:SetSelfActive(false)
+    bottomObj:SetSelfActive(false)
+    sliderOverRectTrans.gameObject:SetSelfActive(false)
+    slider.value = 0
+    allProgress = 0
+    self:SendCommand("OnClose")
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function OnMaskClick(sender)
+    self:HideView(self.gameObject.name)
+end

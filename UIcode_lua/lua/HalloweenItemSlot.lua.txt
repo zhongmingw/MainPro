@@ -1,0 +1,19 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2018-10-29 19:41:03
+]]
+
+function OnHalloweenItemSlotBindValue(slot,data)
+    local levelTxt = slot:GetComponentAtPath("LevelTxt",CLS_TEXT)
+    local ItemImg = slot:GetGameObjectAtPath("ItemImg")
+    local numTxt = slot:GetComponentAtPath("NumTxt",CLS_TEXT)
+    local heroImg = slot:GetGameObjectAtPath("heroImg")
+    local rewardGrid = slot:GetComponentAtPath("RewardGrid",CLS_UI_ITEM_GRID)
+
+    levelTxt.text = Language:getStr("HalloweenActivity_Level_"..data.level)
+    ShowOneConsume(ItemImg,numTxt,data.consume)
+    CsBridge.IconData.SetIconByName(heroImg,"new_com_halloween0"..(data.level+3))
+    rewardGrid:RefreshItemSlots(data.reward,slot.m_grid.viewBase.gameObject,"ItemSlot")
+end

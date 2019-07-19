@@ -1,0 +1,74 @@
+--[[
+	file: RankRewardView.lua
+	author: hangang
+	description:������ʾ�����еĽ����б�
+]]
+
+require "APArenaRewardItemSlot"
+require "RewardItemSlot"
+
+local rulesTxt
+local rewardGrid
+
+local descContent
+local rewardList
+
+function DoInit()
+	self.Shadow = CS.Client.Library.ShadowType.None
+	InitUI()
+end 
+
+function InitUI()
+	local path = "Content/Description/descTxt"
+	rulesTxt = self:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Content/rewardSV/ScrollRect/Viewport/Grid"
+	rewardGrid = self:GetComponentAtPath(path ,CLS_UI_ITEM_GRID)
+end
+
+function SetParamDataList(obj)
+	descContent = obj[0] or ""
+	rewardList = obj[1]
+end
+
+function OnAnimationFinished()
+	RefreshView()
+end
+
+function RefreshView()
+	rulesTxt.text = descContent
+	if rewardList then
+		rewardGrid:RefreshItemSlots(rewardList, self.gameObject,"APArenaRewardItemSlot")
+	end
+end
+
+function OnRewardGridItemSlotClick(obj)
+	local data = obj.m_data
+	local itemType = data.typeId
+	if itemType == ItemTypeEnum.Hero then
+		ShowHeroTip(self, data.id, 1, 1)
+	else
+		ShowTip(self, itemType, data.id)
+	end
+end
+
+function OnGridItemSlotClick(obj)
+	local data = obj.m_data
+	local itemType = data.typeId
+	if itemType == ItemTypeEnum.Hero then
+		ShowHeroTip(self, data.id, 1, 1)
+	else
+		ShowTip(self, itemType, data.id)
+	end
+end
+
+function OnCloseBtnClick(sender)
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	rulesTxt = nil
+	rewardGrid = nil
+	descContent = nil
+	rewardList = nil
+end

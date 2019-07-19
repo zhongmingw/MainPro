@@ -1,0 +1,403 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-11-10 15:15:13
+
+local hint=CsBridge.hintUILayer
+local messsage=CsBridge.messageManager
+
+require "RewardUtils"
+local ScreenUtils = require "ScreenUtils"
+
+local allRelicArr
+local curRelicArr
+local curSelectRelicArr
+
+local MAX_SELECT_COUNT = 10
+local curSelectCount = 0
+
+local MinRelicQuality
+local relicDecomposeDataFromTbl
+
+local SelectOption = {
+    Add = 1,
+    Remove = 2
+}
+
+local relicTbl
+local RelicDecompose = {
+    tblName = "RelicDecompose",
+    quality = "quality",
+    reward = "reward"
+}
+
+function DoInit()
+    relicTbl = ResTblContainer:GetTable(RelicDecompose.tblName)
+    relicDecomposeDataFromTbl = GetRelicDecomposeDataFromTbl()
+end
+
+function DoOnExit()
+    hint = nil
+    messsage = nil
+
+    ScreenUtils = nil
+
+    allRelicArr = nil
+    curRelicArr = nil
+    curSelectRelicArr = nil
+
+    MAX_SELECT_COUNT = nil
+    curSelectCount = nil
+
+    MinRelicQuality = nil
+    relicDecomposeDataFromTbl = nil
+
+    SelectOption  = nil
+
+    relicTbl = nil
+    RelicDecompose = nil
+end
+
+function InitProperties()
+end
+
+function OnCommand_RebindScreen(objs)
+    ScreenUtils.BindSortFunc(ScreenRelic)
+end
+
+function OnCommand_InitRelicDecomposeData(objs)
+    UpdateAllRelicArr()
+    UpdateSelectRelicArr()
+    ScreenUtils.InitScreen(ScreenDecomposeRelic)
+    curRelicArr = allRelicArr
+    self:SendNotification("RefreshRelicDecomposeView",curRelicArr)
+    self:SendNotification("RefreshSelectRelic",curSelectRelicArr)
+    self:SendNotification("RefreshPreviewBtn",true)
+end
+
+function OnCommand_UpdateRelic(objs)
+    local relic = objs[0]
+    if relic.selected then
+        CancelSelectRelic(relic)
+    else
+        SelectRelicEffect(relic,objs[1])
+    end
+end
+
+function OnCommand_DownSelectRelic(objs)
+    local relic = objs[0]
+    if relic.id == 0 then
+        return
+    end
+    CancelSelectRelic(GetRelicByRelic(relic),objs[1]+1)
+end
+
+function OnCommand_QuickOperation(objs)
+    if curSelectCount >= MAX_SELECT_COUNT then
+        QuickCancelSelectRelic()
+    else
+        QuickSelectRelic()
+    end
+end
+
+function OnCommand_OpenDecomposePreview(objs)
+    if curSelectCount==0 then
+        hint:ShowHintBox(Language:getStr("RelicDecomposition_NoPreview"))
+        return
+    end
+    CsBridge.CacheAssetsByModule(self.Module,
+	function()
+        self:OpenView("HeroDecompositionDetailsView","RelicDecomposeModel")
+	end, "HeroDecompositionDetailsView","ItemSlot")
+end
+
+function OnCommand_Decompose(objs)
+    if curSelectCount==0 then
+        hint:ShowHintBox(Language:getStr("RelicDecomposition_NoPreview"))
+        return
+    end
+    if CheckHasEquipRelic() then
+        messsage:PopMsgBox(Language:getStr("local_confirm"),
+        Language:getStr("RelicDecomposeHasEquip_Confirm"),
+        Language:getStr("local_cancel"),nil,
+        Language:getStr("local_confirm"),function()
+            DoCompose()
+        end)
+    else
+        messsage:PopMsgBox(Language:getStr("local_confirm"),
+        Language:getStr("RelicDecompose_Confirm"),
+        Language:getStr("local_cancel"),nil,
+        Language:getStr("local_confirm"),function()
+            DoCompose()
+        end)
+    end
+end
+
+function DoCompose()
+    local relicUids = {}
+    for i=1,curSelectCount do
+        table.insert(relicUids, curSelectRelicArr[i].uid)
+    end
+    local req = {
+        relicUids = relicUids
+    }
+    HttpRequest("decomposeRelic","RelicDecomposeReq","RelicDecomposeResp",req,function(resp)
+        local count = curSelectCount
+        UpdateAllRelicArr()
+        ClearSelectRelicArr()
+        self:SendNotification("RefreshSelectRelic",curSelectRelicArr)
+        self:SendNotification("ShowDecomposeEffect",count,function()
+            local confirmCbk = function()
+                ScreenUtils.UpdateScreen()
+                self:SendNotification("RefreshPreviewBtn",true)
+            end
+            ShowRewardReceivedTip(self,resp.results, confirmCbk)
+        end)
+    end)
+end
+
+function SelectRelicEffect(relic,pos)
+    if curSelectCount >= MAX_SELECT_COUNT then
+        hint:ShowHintBox(Language:getStr("RelicDecompose_MaxSelect"),2)
+        return
+    end
+    self:SendNotification("ShowSelectRelicEffect",relic,pos,curSelectCount+1,function()
+        SelectRelic(relic)
+    end)
+end
+
+function SelectRelic(relic)
+    if curSelectCount == 0 then
+        self:SendNotification("RefreshPreviewBtn",false)
+    end
+    UpdateRelic(relic,nil,true,SelectOption.Add)
+    if curSelectCount >= MAX_SELECT_COUNT then
+        self:SendNotification("RefreshQuickBtn",Language:getStr("HeroDecomposition_PutOffAll"))
+    end
+end
+
+function CancelSelectRelic(relic,idx)
+    UpdateRelic(relic,idx,false,SelectOption.Remove)
+    if curSelectCount == 0 then
+        self:SendNotification("RefreshPreviewBtn",true)
+    end
+    if curSelectCount < MAX_SELECT_COUNT then
+        self:SendNotification("RefreshQuickBtn",Language:getStr("HeroDecomposition_PutOnAll"))
+    end
+end
+
+function QuickSelectRelic()
+    if curSelectCount >= MAX_SELECT_COUNT then
+        hint:ShowHintBox(Language:getStr("RelicDecompose_MaxSelect"),2)
+        return
+    end
+    local emptyNum = MAX_SELECT_COUNT-curSelectCount
+    for i=1,#curRelicArr do
+        if emptyNum <= 0 then
+            return
+        end
+        local relic = curRelicArr[i]
+        if not relic.selected then
+            SelectRelic(relic)
+            emptyNum = emptyNum-1
+        end
+    end
+end
+
+function QuickCancelSelectRelic()
+    for i=curSelectCount,1,-1 do
+        CancelSelectRelic(GetRelicByRelic(curSelectRelicArr[i]),i)
+    end
+end
+
+function UpdateRelic(relic, idx, selected, option)
+    UpdateSelectRelicArr(relic,idx,option)
+    if relic then
+        relic.selected = selected
+        self:SendNotification("UpdateSingleRelic",relic)
+    end
+end
+
+function ScreenDecomposeRelic(quality)
+    curRelicArr = {}
+    for i,relic in ipairs(allRelicArr) do
+        if quality == 1 then
+            table.insert(curRelicArr,relic)
+        elseif relic.quality == MinRelicQuality+quality-2 then
+            table.insert(curRelicArr,relic)
+        end
+    end
+    self:SendNotification("RefreshRelicDecomposeView",curRelicArr)
+end
+
+function UpdateAllRelicArr()
+    allRelicArr = {}
+    local relicPbs = appData:checkAllItems("RelicItem")
+    if relicPbs ~= nil then
+        local tbl = ResTblContainer:GetTable(Relic.tblName)
+        for i=0, relicPbs.Length-1 do 
+            local quality = tbl:GetInt(relicPbs[i].id, Relic.quality)
+            if relicDecomposeDataFromTbl[quality] ~= nil then
+                local relic = {
+                    uid = relicPbs[i].uid,
+                    id = relicPbs[i].id,
+                    level = relicPbs[i].level,
+                    isEquip = relicPbs[i].owner ~= nil and relicPbs[i].owner ~= 0,
+                    typeId = ItemTypeEnum.Relic,
+                    count = 1
+                }
+                relic.quality = quality
+                table.insert(allRelicArr, relic)
+            end
+        end
+        table.sort(allRelicArr,function(a,b)
+            if a.isEquip ~= b.isEquip then
+                return b.isEquip
+            end
+            if a.quality ~= b.quality then
+                return a.quality < b.quality
+            end
+            return a.id < b.id
+        end)
+    end
+end
+
+function UpdateSelectRelicArr(updateRelic,updateIndex,option)
+    if curSelectRelicArr == nil then
+        curSelectRelicArr = {}
+        for i = 1,MAX_SELECT_COUNT do
+            table.insert(curSelectRelicArr,{
+                uid = 0,
+                id = 0,
+                level = 0,
+                quality = 0,
+                ieEquip = false,
+                typeId = ItemTypeEnum.Relic,
+                count = 1
+            })
+        end
+    end
+    if updateRelic then
+        if option == SelectOption.Add then
+            curSelectCount = curSelectCount+1
+            local newSelcectRelic = curSelectRelicArr[curSelectCount]
+            newSelcectRelic.uid = updateRelic.uid
+            newSelcectRelic.id = updateRelic.id
+            newSelcectRelic.level = updateRelic.level
+            newSelcectRelic.isEquip = updateRelic.isEquip
+            newSelcectRelic.quality = updateRelic.quality
+            newSelcectRelic.anim = true
+            self:SendNotification("UpdateSingleSelectRelic",newSelcectRelic)
+        elseif option == SelectOption.Remove then
+            local index = updateIndex or GetSelectRelicIndexByRelic(updateRelic)
+            for i=index,curSelectCount-1 do
+                curSelectRelicArr[i].uid = curSelectRelicArr[i+1].uid
+                curSelectRelicArr[i].id = curSelectRelicArr[i+1].id
+                curSelectRelicArr[i].level = curSelectRelicArr[i+1].level
+                curSelectRelicArr[i].isEquip = curSelectRelicArr[i+1].isEquip
+                curSelectRelicArr[i].quality = curSelectRelicArr[i+1].quality
+                curSelectRelicArr[i].anim = false
+                self:SendNotification("UpdateSingleSelectRelic",curSelectRelicArr[i])
+            end
+            curSelectRelicArr[curSelectCount].uid = 0
+            curSelectRelicArr[curSelectCount].id = 0
+            curSelectRelicArr[curSelectCount].anim = false
+            curSelectRelicArr[curSelectCount].level = 0
+            curSelectRelicArr[curSelectCount].isEquip = false
+            curSelectRelicArr[curSelectCount].quality = 0
+            self:SendNotification("UpdateSingleSelectRelic",curSelectRelicArr[curSelectCount])
+            curSelectCount = curSelectCount-1
+        end
+    end
+end
+
+function ClearSelectRelicArr()
+    for i=curSelectCount,1,-1 do
+        curSelectRelicArr[i].uid = 0
+        curSelectRelicArr[i].id = 0
+        curSelectRelicArr[i].level = 0
+        curSelectRelicArr[i].isEquip = false
+        curSelectRelicArr[i].quality = 0
+        curSelectRelicArr[i].anim = false
+    end
+    curSelectCount = 0
+end
+
+function CheckHasEquipRelic()
+    for i=1,curSelectCount do
+        if curSelectRelicArr[i].isEquip then
+            return true
+        end
+    end
+    return false
+end
+
+function GetSelectRelicIndexByRelic(relic)
+    for i,v in ipairs(curSelectRelicArr) do
+        if v.uid == relic.uid then
+            return i
+        end
+    end
+    return 0
+end
+
+function GetCurRelicByRelic(relic)
+    for i,v in ipairs(curRelicArr) do
+        if v.uid == relic.uid then
+            return v
+        end
+    end
+    return nil
+end
+
+function GetRelicByRelic(relic)
+    for i,v in ipairs(allRelicArr) do
+        if v.uid == relic.uid then
+            return v
+        end
+    end
+    return nil
+end
+
+function GetRelicDecomposeDataFromTbl()
+    local data = {}
+    local tbl = ResTblContainer:GetTable(RelicDecompose.tblName)
+    local qualities = tbl:GetCol(RelicDecompose.quality)
+    for i=0,qualities.Length-1 do
+        local quality = tonumber(qualities[i])
+        if MinRelicQuality == nil or quality < MinRelicQuality then
+            MinRelicQuality = quality
+        end
+        local rewards = GetRewardFromTbl(tbl:Get(quality,RelicDecompose.reward))
+        data[quality] = {
+            rewards = rewards
+        }
+    end
+    return data
+end
+
+------preview logic---------------------------------------
+local previewRewards
+
+function OnCommand_InitPreviewData(objs)
+    UpdatePreviewData()
+    self:SendNotification("RefreshPreviewView",previewRewards)
+end
+
+function UpdatePreviewData()
+    previewRewards = {}
+    for i=1,curSelectCount do
+        local relic = curSelectRelicArr[i]
+        if relic.id ~= 0 then
+            local rewards = relicDecomposeDataFromTbl[relic.quality].rewards
+            for k,reward in ipairs(rewards) do
+                table.insert(previewRewards,{
+                    typeId = reward.typeId,
+                    id = reward.id,
+                    count = reward.count
+                })
+            end
+        end
+    end
+    previewRewards = MergeRewards(previewRewards)
+end

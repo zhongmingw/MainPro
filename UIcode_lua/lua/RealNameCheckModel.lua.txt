@@ -1,0 +1,42 @@
+local realNameCheckUtils = require "RealNameCheckUtils"
+
+function DoInit()
+
+end
+
+---初始化界面
+function OnCommand_InitRealNameCheckView()
+    local viewData = realNameCheckUtils.InitRealNameCheckViewData()
+    self:SendNotification("InitRealNameCheckView", viewData)
+end
+
+---显示提示
+function OnCommand_ShowItemTip(objs)
+    local data = objs[0]
+    local itemType = data.typeId
+    if itemType == ItemTypeEnum.Hero then
+        ShowHeroTip(self, data.id, 1, 1)
+    else
+        ShowTip(self, itemType, data.id)
+    end
+end
+
+---实名认证
+function OnCommand_SubmitRealNameCheck(objs)
+    local realNameStr = objs[0]
+    local idCardStr = objs[1]
+    if not realNameCheckUtils.CheckRealNameInfo(realNameStr, idCardStr) then
+        return
+    end
+    realNameCheckUtils.FinishRealNameCheck(realNameStr, idCardStr, function(resp)
+        local callback = function()
+            MsgCenter:Broadcast(Notify_RealNameChecked)
+            self:ReturnBack()
+        end
+        ShowRewardReceivedTip(self, resp.rewardItem, callback, true)
+    end)
+end
+
+function DoOnExit()
+    realNameCheckUtils = nil
+end

@@ -1,0 +1,19 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-09-10 16:21:33
+
+function DoInit()
+end
+
+function AssetNames(objs)
+    local arr = {"GloryRoadView","GloryRoadStageItemSlot", "ItemSlot"}
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    self:OpenView("GloryRoadView", "GloryRoadModel")
+    if(onFinished ~= nil) then
+        onFinished()
+    end
+end

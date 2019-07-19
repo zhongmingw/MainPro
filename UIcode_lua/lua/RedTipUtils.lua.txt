@@ -1,0 +1,1487 @@
+local heroBreakDataFromTbl
+
+local function MergeTables(arr, func)
+    local length = #arr
+    if length == 1 then
+        return arr
+    end
+    local mergedData = {}
+    for i = 1, length do
+        local curItem = arr[i]
+        local mergedCount = curItem.count or 0
+        if not curItem.merged then
+            for j = i + 1, length do
+                local otherItem = arr[j]
+                if not otherItem.merged and func(curItem, otherItem) then
+                    mergedCount = mergedCount + 1
+                    otherItem.merged = true
+                end
+            end
+            curItem.count = mergedCount
+            table.insert(mergedData,curItem)
+        end
+    end
+    for k, item in pairs(arr) do
+        item.merged = nil
+	end
+	
+	return mergedData
+end
+
+local function CheckOwnJewelMatWithFixedAll(ownMats,jewel)
+    for i,v in ipairs(ownMats) do
+        if v.id == jewel.id and v.quality == jewel.quality and v.star == jewel.star and v.count >= 0 then
+            local lastCount = math.max(jewel.count - v.count,0)
+            v.count = math.max(v.count-jewel.count,0)
+            jewel.count = lastCount
+            if jewel.count <= 0 then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function CheckOwnJewelMatWithQulityAndRaceId(ownMats,quality,star,count)
+    --print("特殊材料品质为"..quality.."阵营为"..raceId)
+    for i,v in ipairs(ownMats) do
+        --print("品质为"..v.quality.."阵营为"..v.raceId.."的数量为"..v.count)
+        if v.quality == quality and v.star == star and v.count >=0 then
+            local lastCount = math.max(count - v.count,0)
+            v.count = math.max(v.count-count,0)
+            count = lastCount
+            if count <= 0 then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function CheckHeroBreakHasMaxLevel(quality, breakLevel)
+    if quality <= DISTILL_QUALITY then
+        return true
+    end
+    return breakLevel >= table.count(heroBreakDataFromTbl[quality])
+end
+
+local function GetBreakConsume(quality, level)
+    if CheckHeroBreakHasMaxLevel(quality, level) then
+        return -1, -1
+    end
+    local data = heroBreakDataFromTbl[quality][level]
+    return data.coin, data.soulCoin
+end
+
+local function GetHeroBreakDataFromTbl()
+    local data = {}
+    local tbl = ResTblContainer:GetTable(HeroBreakLevel.tblName)
+    local ids = tbl:GetCol(HeroBreakLevel.id)
+    for i=0, ids.Length-1 do
+        local id = ids[i]
+        local infos = tbl:GetRow(id,HeroBreakLevel.grade,HeroBreakLevel.level,HeroBreakLevel.soulCoin,HeroBreakLevel.coin)
+        local grade = tonumber(infos[0])
+        if data[grade] == nil then
+            data[grade] = {}
+        end
+        data[grade][tonumber(infos[1])] = {
+            soulCoin = tonumber(infos[2]),
+            coin = tonumber(infos[3])
+        }
+    end
+    return data
+end
+
+local function CheckJewelEquipGreater(heroInfo, ljewel, rjewel)
+    if rjewel == nil or rjewel.id == 0 then
+        return true
+    end
+    if ljewel.id == rjewel.id then
+        return false
+    end
+    local tbl = ResTblContainer:GetTable(Jewel.tblName)
+    if tbl:GetInt(ljewel.id, Jewel.type) == JewelType.Common then
+        return false
+    end
+    local ljewelEffectType5 = tbl:GetInt(ljewel.id, Jewel.effectType5)
+    local rjewelEffectType5 = tbl:GetInt(rjewel.id, Jewel.effectType5)
+    local ljewelEffect5Conds = JewelUtils.GetJewelCondsFromTblStr(tbl:Get(ljewel.id, Jewel.restriction5))
+    local rjewelEffect5Conds = JewelUtils.GetJewelCondsFromTblStr(tbl:Get(rjewel.id, Jewel.restriction5))
+    local ljewelPoint = 0
+    local rjewelPoint = 0
+    if ljewelEffectType5 ~= 0 and JewelUtils.CheckJewelEffectCondsActive(heroInfo, ljewelEffect5Conds) then
+        ljewelPoint = ljewelPoint+1
+    end
+    if rjewelEffectType5 ~= 0 and JewelUtils.CheckJewelEffectCondsActive(heroInfo, rjewelEffect5Conds) then
+        rjewelPoint = rjewelPoint+1
+    end
+    if tbl:GetInt(ljewel.id, Jewel.effectType4) ~= 0 then
+        ljewelPoint = ljewelPoint+1
+    end
+    if tbl:GetInt(rjewel.id, Jewel.effectType4) ~= 0 then
+        rjewelPoint = rjewelPoint+1
+    end
+    if ljewelPoint ~= rjewelPoint then
+        return ljewelPoint > rjewelPoint
+    end
+    local lquality = tbl:GetInt(ljewel.id, Jewel.quality)
+    local rquality = tbl:GetInt(rjewel.id, Jewel.quality)
+    if lquality ~= rquality then
+        return lquality > rquality
+    end
+    local lstar = tbl:GetInt(ljewel.id, Jewel.star)
+    local rstar = tbl:GetInt(rjewel.id, Jewel.star)
+    if lstar ~= rstar then
+        return lstar > rstar
+    end
+    local ltype = tbl:GetInt(ljewel.id, Jewel.type)
+    local rtype = tbl:GetInt(rjewel.id, Jewel.type)
+    if ltype ~= rtype then
+        return ltype < rtype
+    end
+    return ljewel.id < rjewel.id
+end
+
+
+local function GetQualityByStar(star)
+    for tempQuality = DISTILL_QUALITY, BREAK_QUALITY do
+        local maxStar = tempQuality + GetHeroMaxDistillationStar(tempQuality)
+        if star <= maxStar then
+            return tempQuality
+        end
+    end
+end
+
+local function GetCostConsumeFromTblInfo(infos)
+    return tonumber(infos[2]) or 0, tonumber(infos[3]) or 0
+end
+
+local function GetCostConsumeTable(soulConsume, coinConsume)
+    local cost = {}
+    cost.soulConsume = tonumber(soulConsume) or 0
+    cost.coinConsume = tonumber(coinConsume) or 0
+    return cost
+end
+
+---获取突破表中的消耗
+local function GetBreakLevelTblConsume(consumeArr, star, curLevel)
+    local breakQuality = GetQualityByStar(star)
+    local breakLevelIds = GetIds(HeroBreakLevel.tblName)
+    for k = 0, breakLevelIds.Length - 1 do
+        local breakLevelId = tonumber(breakLevelIds[k])
+        local infos = ResTblContainer:GetRowFromTbl(HeroBreakLevel.tblName, tostring(breakLevelId), HeroBreakLevel.grade, HeroBreakLevel.level, HeroBreakLevel.soulCoin, HeroBreakLevel.coin)
+        local breakTblQuality = tonumber(infos[0])
+        if breakQuality == breakTblQuality then
+            local soulConsume, coinConsume = GetCostConsumeFromTblInfo(infos)
+            consumeArr[curLevel] = GetCostConsumeTable(soulConsume, coinConsume)
+            curLevel = curLevel + 1
+        end
+    end
+    return curLevel
+end
+
+---获取当前英雄升级需要的消耗数组
+function GetHeroLevelUpConsumeArr()
+    local consumeArr = {}
+    local levelUpIds = GetIds(HeroLevelUp.actorTbl)
+    local curLevel = 1
+    for i = 0, levelUpIds.Length - 1 do
+        local id = tonumber(levelUpIds[i])
+        local infos = ResTblContainer:GetRowFromTbl(HeroLevelUp.actorTbl, tostring(id), HeroLevelUp.grade, HeroLevelUp.level, HeroLevelUp.soulCoin, HeroLevelUp.coin)
+        local grade = tonumber(infos[0])
+        local soulConsume, coinConsume = GetCostConsumeFromTblInfo(infos)
+        if coinConsume <=0 or soulConsume <=0 then
+            coinConsume = ResTblContainer:GetPropToInt(grade + 1, HeroEvelution.coin, HeroEvelution.actorTbl)
+            soulConsume = ResTblContainer:GetPropToInt(grade + 1, HeroEvelution.stepStoneCoin, HeroEvelution.actorTbl)
+        end
+        consumeArr[curLevel] = GetCostConsumeTable(soulConsume, coinConsume)
+        curLevel = curLevel + 1
+    end
+    local lastStar = DISTILL_QUALITY + 1
+    local disLevelIds = GetIds(HeroDistillationLevel.tblName)
+    for i = 0, disLevelIds.Length - 1 do
+        local disLevelId = tonumber(disLevelIds[i])
+        local infos = ResTblContainer:GetRowFromTbl(HeroDistillationLevel.tblName, tostring(disLevelId), HeroDistillationLevel.grade, HeroDistillationLevel.level, HeroDistillationLevel.soulCoin, HeroDistillationLevel.coin)
+        local star = tonumber(infos[0])
+        local soulConsume, coinConsume = GetCostConsumeFromTblInfo(infos)
+        if star - lastStar > 1 then
+            curLevel = GetBreakLevelTblConsume(consumeArr, star, curLevel)
+        end
+        consumeArr[curLevel] = GetCostConsumeTable(soulConsume, coinConsume)
+        curLevel = curLevel + 1
+        lastStar = star
+    end
+    local maxStar = BREAK_QUALITY + GetHeroMinDistillationStar(BREAK_QUALITY)
+    curLevel = GetBreakLevelTblConsume(consumeArr, maxStar, curLevel)
+    return consumeArr
+end
+
+--can level or grade in formation hero
+function CheckHeroUpLevelOrUpGradeRedFlag(pb)
+    local consumeArr = GetHeroLevelUpConsumeArr()
+    if heroBreakDataFromTbl == nil then
+        heroBreakDataFromTbl = GetHeroBreakDataFromTbl()
+    end
+    local result = {}
+    result.redFlag = false
+    local allCheckHeros = GetCheckHeroes()
+    if allCheckHeros ~= nil then
+        local playerInfo= pb or appData:checkData("PlayerInfo")
+        for i,heroInfo in ipairs(allCheckHeros) do
+            heroInfo.quality = heroInfo.quality or ResTblContainer:GetPropToInt(heroInfo.heroId, HeroBase.quality, HeroBase.actorTbl)
+            local heroAllLevel = GetHeroAllLevel(heroInfo.grade, heroInfo.level, heroInfo.distillationLevel, heroInfo.breakLevel)
+            local heroMaxLevel = GetHeroAllMaxLevel(heroInfo.grade, heroInfo.distillationStar, heroInfo.quality)
+            local nextLevel = heroAllLevel + 1
+            if not CheckHasMaxLevelAndGrade(heroInfo) then
+                local id = GetLevelUpId(heroInfo.grade,heroInfo.level)+1
+                if CheckCost(id, playerInfo,heroInfo) then
+                    result[heroInfo.uid] = true
+                    result.redFlag = true
+                end
+            elseif  heroAllLevel < heroMaxLevel and consumeArr[nextLevel] then
+                local consumeData = consumeArr[nextLevel]
+                local costArr = {
+                    {
+                        id = ResourceEnum.Coin,
+                        count = consumeData.coinConsume
+                    },
+                    {
+                        id = ResourceEnum.BattleSoul,
+                        count = consumeData.soulConsume
+                    }
+                }
+                if #CheckMulResEnough(costArr) == 0 then
+                    result[heroInfo.uid] = true
+                    result.redFlag = true
+                end
+            end
+        end
+    end
+    return result
+end
+
+function CheckHeroGreatLevelRedFlag(heroInfo)
+    local consumeArr = GetHeroLevelUpConsumeArr()
+    if heroBreakDataFromTbl == nil then
+        heroBreakDataFromTbl = GetHeroBreakDataFromTbl()
+    end
+    local heroAllLevel = GetHeroAllLevel(heroInfo.grade, heroInfo.level, heroInfo.distillationLevel, heroInfo.breakLevel)
+    local heroMaxLevel = GetHeroAllMaxLevel(heroInfo.grade, heroInfo.distillationStar, heroInfo.quality)
+    local nextLevel = heroAllLevel + 1
+    local playerInfo=appData:checkData("PlayerInfo")
+    if not CheckHasMaxLevelAndGrade(heroInfo) then
+        local id = GetLevelUpId(heroInfo.grade,heroInfo.level)+1
+        if CheckCost(id,playerInfo,heroInfo) then
+            return true
+        end
+    elseif  heroAllLevel < heroMaxLevel and consumeArr[nextLevel] then
+        local consumeData = consumeArr[nextLevel]
+        local costArr = {
+            {
+                id = ResourceEnum.Coin,
+                count = consumeData.coinConsume
+            },
+            {
+                id = ResourceEnum.BattleSoul,
+                count = consumeData.soulConsume
+            }
+        }
+        return #CheckMulResEnough(costArr) == 0
+    end
+    return false
+end
+
+function CheckDistillHasMaxLevel(hero)
+    return hero.distillationLevel >= GetDistillMaxLevel(hero.quality + hero.distillationStar)
+end
+
+function CheckHeroCanDistillationRedFlag(comp)
+    local result = {}
+    result.redFlag = false
+    local allCheckHeros = GetCheckHeroes()
+    if allCheckHeros ~= nil then
+        local playerInfo = appData:checkData("PlayerInfo")
+        for i,hero in ipairs(allCheckHeros) do
+            if CheckHeroDistillationRedFlag(appData:checkItem("HeroItem",hero.uid)) then
+                result[hero.heroId] = true
+                result.redFlag = true
+                if not comp or comp == nil then
+                    return result
+                end
+            end
+        end
+    end
+    return result
+end
+
+function CheckHeroDistillationRedFlag(hero)
+    local heroDistill = GetHeroDistillation(hero)
+    if heroDistill == nil or heroDistill.hasMax or not CheckResEnough(heroDistill.consume.id,heroDistill.consume.count,false) then
+        return false
+    end
+
+    local ownMats = {}
+
+    local pbs = appData:checkAllItems("HeroItem")
+    if pbs ~= nil then
+        for i=0,pbs.Length-1 do
+            local pb = pbs[i]
+            if pb.uid ~= hero.uid and pb.distillationStar == 0 then
+                local mat = {
+                    heroId = pb.heroId,
+                    raceId = global_heroBaseArr[pb.heroId].group,
+                    quality = global_heroBaseArr[pb.heroId].quality,
+                    distillationStar = 0,
+                    count = 1
+                }
+                table.insert(ownMats, mat)
+            end
+        end
+        ownMats = MergeTables(ownMats,function(cur,other)
+            return cur.heroId == other.heroId 
+            and (cur.quality + cur.distillationStar == other.quality + other.distillationStar)
+        end)
+    else
+        return false
+    end
+    --add hero card
+    local tbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    local ids = tbl:GetCol(HeroBase.id)
+    for i=0, ids.Length-1 do
+        local id = tonumber(ids[i])
+        local itemId = tbl:GetInt(id,HeroBase.item)
+        if itemId ~= 0 then
+            local item = appData:checkItem("PackItem",itemId)
+            if item and item.count ~= 0 then
+                local mat = {
+                    heroId = id,
+                    raceId = tbl:GetInt(id, HeroBase.group),
+                    quality = tbl:GetInt(id, HeroBase.quality),
+                    distillationStar = 0,
+                    count = item.count
+                }
+                table.insert(ownMats, mat)
+            end        
+        end
+    end
+
+    for i,v in ipairs(heroDistill.heroMatArr) do
+        if v.type == HeroMatType.FixedQualityAndRace then
+            if not CheckOwnHeroWithQulityAndRaceId(ownMats,v.quality,v.distillationStar,v.raceId,v.count) then
+                return false
+            end
+        elseif v.type == HeroMatType.FixedAll then
+            if not CheckOwnHeroWithFixedAll(ownMats, v) then
+                return false
+            end
+            -- if ownMats[v.heroId] ~= nil and (ownMats[v.heroId].quality + ownMats[v.heroId].distillationStar == v.quality + v.distillationStar) and ownMats[v.heroId].raceId == v.raceId then
+            --     if ownMats[v.heroId].count >= v.count then
+            --         ownMats[v.heroId].count = ownMats[v.heroId].count-v.count
+            --     else
+            --         return false
+            --     end
+            -- else
+            --     return false
+            -- end
+        end
+    end
+    return true
+    --end
+end 
+
+function CheckHeroCanElementFusionRedFlag()
+    local result = {}
+    result.redFlag = false
+    result.redRaceArr = {}
+    result.redHeroArr = {}
+    local allCheckHeros = GetCheckHeroes()
+    if allCheckHeros ~= nil then
+        local tbl=ResTblContainer:GetTable(HeroBase.actorTbl)
+        for i,hero in ipairs(allCheckHeros) do
+            if CheckHeroElementFusionRedFlag(hero) then
+                result.redRaceArr[hero.raceId or tbl:GetInt(hero.heroId,HeroBase.group)] = true
+                result.redHeroArr[CheckHeroRelationId(hero.heroId)] = true
+                result.redFlag = true
+            end
+        end
+    end
+    return result
+end
+
+function CheckHeroElementFusionRedFlag(hero)
+    local elementLevel,elementExp,raceId = hero.elementLevel,hero.elementExp,hero.raceId or ResTblContainer:GetPropToInt(hero.heroId,HeroBase.group,HeroBase.actorTbl)
+    if elementLevel == nil or elementLevel == 0 then
+        local pb = appData:checkItem("HeroCrystalInfo",CheckHeroRelationId(hero.heroId))
+        elementLevel = pb and pb.level or 0
+        elementExp = pb and pb.exp or 0
+    end
+    local hasMax = global_elementFusionDic[elementLevel+1] == nil
+    if hasMax then
+        return false
+    end
+    local levelUpNeedExp = global_elementFusionDic[elementLevel+1].exp - elementExp
+    local allExp = 0
+    for id,crystal in pairs(global_elementCrystalDic[raceId]) do
+        local itemPb = appData:checkItem("PackItem",id)
+        local count = itemPb and itemPb.count or 0
+        allExp = allExp+count*crystal.exp
+        if allExp >= levelUpNeedExp then
+            return true
+        end
+    end
+    return false
+end
+
+--has equip or greater equip
+function CheckHeroEquipRedFlag(packPb, relicPb)
+    local result = {}
+    result.redFlag = false
+    local allCheckHeros = GetCheckHeroes()
+    if allCheckHeros ~= nil then
+        local pack= packPb or appData:checkAllItems("PackItem")
+        local relic= relicPb or appData:checkAllItems("RelicItem")
+        if pack ~= nil or relic ~= nil then
+            for i,heroInfo in ipairs(allCheckHeros) do
+                if CheckGreatEquip(heroInfo,pack,relic) or CheckRuneOrRuneLevelUp(heroInfo) then 
+                    result[heroInfo.uid] = true
+                    result.redFlag = true
+                    --table.insert(result, heroInfo.uid)
+                end
+            end
+        end
+    end
+    return result
+end
+
+function CheckHeroGreatEquipRedFlag(heroInfo)
+    local result = {}
+    local pack=appData:checkAllItems("PackItem")
+    local relic=appData:checkAllItems("RelicItem")
+    if pack ~= nil or relic ~= nil then
+        CheckGreatEquip(heroInfo,pack,relic,result)
+    end
+    return result
+end
+
+function CheckHeroesJewelEquipRedFlag()
+    local result = {}
+    result.redFlag = false
+    local allCheckHeros = GetCheckHeroes()
+    if allCheckHeros ~= nil then
+        local jewelPb = appData:checkAllItems("JewelItem")
+        if jewelPb then
+            for i,heroInfo in ipairs(allCheckHeros) do
+                if CheckHeroJewelEquipRedFlag(heroInfo,jewelPb) then 
+                    result[heroInfo.uid] = true
+                    result.redFlag = true
+                    --table.insert(result, heroInfo.uid)
+                end
+            end
+        end
+    end
+    return result
+end
+
+function CheckHeroJewelEquipRedFlag(heroInfo, pb)
+    local jewels = appData:checkItem("HeroItem",heroInfo.uid).jewelIds or {0, 0}
+    return CheckHeroSingleJewelEquipRedFlag(heroInfo, pb, appData:checkItem("JewelItem",jewels[1]), appData:checkItem("JewelItem",jewels[2])) or
+        CheckHeroSingleJewelEquipRedFlag(heroInfo, pb, appData:checkItem("JewelItem",jewels[2]), appData:checkItem("JewelItem",jewels[1]))
+end
+
+function CheckHeroSingleJewelEquipRedFlag(heroInfo, pb, jewel, exceptJewel)
+    local jewelPb = pb or appData:checkAllItems("JewelItem")
+    if jewelPb == nil or jewelPb.Length == 0 then
+        return false
+    end
+    for i=0,jewelPb.Length-1 do
+        if jewelPb[i].owner == 0 then
+            if exceptJewel then
+                if ResTblContainer:GetPropToInt(jewelPb[i].id,Jewel.type,Jewel.tblName) ~= ResTblContainer:GetPropToInt(exceptJewel.id,Jewel.type,Jewel.tblName) then
+                    if CheckJewelEquipGreater(heroInfo, jewelPb[i], jewel) then
+                        return true
+                    end
+                end
+            else
+                if CheckJewelEquipGreater(heroInfo, jewelPb[i], jewel) then
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+local function GetOwnUpStarJewelMatArr()
+    local arr = {}
+    local qualityStarDic = {}
+    local idQualityStarDic = {}
+    local pbs = appData:checkAllItems("JewelItem")
+    if pbs then
+        for i=0, pbs.Length-1 do
+            local pb = pbs[i]
+            local jewel = {
+                uid = pb.uid,
+                id = pb.id,
+                owner = pb.owner,
+                quality = ResTblContainer:GetPropToInt(pb.id,Jewel.quality,Jewel.tblName),
+                star = ResTblContainer:GetPropToInt(pb.id,Jewel.star,Jewel.tblName),
+                count = 1
+            }
+            local id = pb.id
+            local quality = ResTblContainer:GetPropToInt(pb.id,Jewel.quality,Jewel.tblName)
+            local star = ResTblContainer:GetPropToInt(pb.id,Jewel.star,Jewel.tblName)
+            if qualityStarDic[quality] == nil then
+                qualityStarDic[quality] = {}
+            end
+            local tmpDic = qualityStarDic[quality]
+            local count = tmpDic[star] or 0
+            tmpDic[star] = count + 1
+
+            if idQualityStarDic[id] == nil then
+                idQualityStarDic[id] = {}
+            end
+            if idQualityStarDic[id][quality] == nil then
+                idQualityStarDic[id][quality] = {}
+            end
+            tmpDic = idQualityStarDic[id][quality]
+            count = tmpDic[star] or 0
+            tmpDic[star] = count + 1
+        end
+    end
+    return qualityStarDic,idQualityStarDic
+end
+
+local function GetCanUpStarJewelArr(indexTbl, singleJewel)
+    local arr = {}
+    if singleJewel then
+        local pb = appData:checkItem("JewelItem",singleJewel.uid)
+        local nextId = JewelUtils.GetJewelNextStarIdById(pb.id,indexTbl)
+        if pb and nextId then
+            local jewel = {
+                uid = pb.uid,
+                id = pb.id,
+                owner = pb.owner,
+                nextId = nextId,
+                quality = ResTblContainer:GetPropToInt(pb.id,Jewel.quality,Jewel.tblName),
+                star = ResTblContainer:GetPropToInt(pb.id,Jewel.star,Jewel.tblName)
+            }
+            table.insert(arr, jewel)
+        end
+        return arr
+    end
+    local pbs = appData:checkAllItems("JewelItem")
+    if pbs then
+        for i=0, pbs.Length-1 do
+            local pb = pbs[i]
+            local nextId = JewelUtils.GetJewelNextStarIdById(pb.id,indexTbl)
+            if nextId then
+                local jewel = {
+                    uid = pb.uid,
+                    id = pb.id,
+                    owner = pb.owner,
+                    nextId = nextId,
+                    quality = ResTblContainer:GetPropToInt(pb.id,Jewel.quality,Jewel.tblName),
+                    star = ResTblContainer:GetPropToInt(pb.id,Jewel.star,Jewel.tblName)
+                }
+                table.insert(arr, jewel)
+            end
+        end
+    end
+    return arr
+end
+
+local function GetJewelUpStarMatData(jewel,refineTbl)
+    local matData = {
+        matArr = {},
+        consumeArr = {}
+    }
+    local nextId = jewel.nextId
+    local matArr = table.copy(refineTbl[nextId].matArr)
+    matData.matArr = MergeTables(matArr,function(cur,other)
+        return cur.id == other.id
+    end)
+    matData.consumeArr = refineTbl[nextId].consumeArr
+    return matData
+end
+
+function CheckHeroSingleJewelUpStarRedFlag(jewel,indexTbl,refineTbl)
+    if jewel.id == 0 then
+        return CheckHeroJewelUpStarRedFlag(false,nil,indexTbl,refineTbl)
+    else
+        return CheckHeroJewelUpStarRedFlag(true,jewel,indexTbl,refineTbl)
+    end
+end
+
+function CheckHeroJewelUpStarRedFlag(complete, jewel, indexTbl, refineTbl)
+    local result = {}
+    result.redFlag = false
+    local jewelIndexTbl = indexTbl or JewelUtils.GetJewelIdIndexByQuliatyAndTypeData()
+    local qualityStarDic,idQualityStarDic = GetOwnUpStarJewelMatArr()
+    local canUpStarJewelArr = GetCanUpStarJewelArr(jewelIndexTbl,jewel)
+    if #canUpStarJewelArr == 0 then
+        return result
+    end
+    local isComplete = complete or false
+    local jewelWithMatArr = {}
+    
+    refineTbl = refineTbl or JewelUtils.GetJewelRefineTbl()
+
+    for i,canUpStarJewel in ipairs(canUpStarJewelArr) do
+        local jewelWithMat = {
+            id = canUpStarJewel.id,
+            matData = GetJewelUpStarMatData(canUpStarJewel,refineTbl)
+        }
+        table.insert(jewelWithMatArr, jewelWithMat)
+    end
+    
+    for i,jewelWithMat in ipairs(jewelWithMatArr) do
+        local ret = false
+        if jewelWithMat.matData.consumeArr then
+            for i,v in ipairs(jewelWithMat.matData.consumeArr) do
+                ret = CheckItemEnough(v.id,v.typeId,v.count,false)
+                if not ret then
+                    break
+                end
+                ret = true
+            end
+        else
+            ret = true
+        end
+        if not ret then
+            if not isComplete then
+                return result
+            else
+                break
+            end
+        end
+        for i,v in ipairs(jewelWithMat.matData.matArr) do
+            if v.type == JewelMatType.FixedQualityAndStar then
+                local tmp = qualityStarDic[v.quality]
+                tmp = tmp and tmp[v.star] or nil
+                ret = tmp and tmp >= v.count or false
+            elseif v.type == JewelMatType.FiexedAll then
+                local tmp = idQualityStarDic[v.id]
+                tmp = tmp and tmp[v.quality] or nil
+                tmp = tmp and tmp[v.star] or nil
+                ret = tmp and tmp >= v.count or false
+            end
+            if not ret then
+                break
+            end
+        end
+        if ret then
+            result[jewelWithMat.id] = true
+            result.redFlag = true
+            if not isComplete then
+                return result
+            end
+        end
+    end
+    return result
+end
+
+local function UpdateCurOwnUpJewelArr()
+    local curOwnUpJewelArr = {}
+    local pbs = appData:checkAllItems("JewelItem")
+    if pbs then
+        for i=0, pbs.Length-1 do
+            local pb = pbs[i]
+            local jewel = {
+                uid = pb.uid,
+                id = pb.id,
+                owner = pb.owner,
+                quality = ResTblContainer:GetPropToInt(pb.id,Jewel.quality,Jewel.tblName),
+                isEquip = pb.owner ~= 0,
+                typeId = ItemTypeEnum.Jewel,
+            }
+            table.insert(curOwnUpJewelArr, jewel)
+        end
+    end
+    return curOwnUpJewelArr
+end
+
+local function GetComposeIds()
+    local mainIds = ResTblContainer:GetIds(JewelComposeTbl.tblName)
+    local JewelTbl = ResTblContainer:GetTable(Jewel.tblName)
+    local composeTbl = ResTblContainer:GetTable(JewelComposeTbl.tblName)
+    local composeIds = {}
+    local ids = ResTblContainer:GetIds(Jewel.tblName)
+    for i=0,mainIds.Length-1 do
+        local mainId = tonumber(mainIds[i])
+        local mainInfos = composeTbl:GetRow(mainId, JewelComposeTbl.quality, JewelComposeTbl.type, JewelComposeTbl.subType)
+        for j=0,ids.Length-1 do
+            local id = tonumber(ids[j])
+            local idInfos = JewelTbl:GetRow(id, Jewel.quality, Jewel.type, Jewel.subType)
+            if idInfos[0] == mainInfos[0] and idInfos[1] == mainInfos[1] and idInfos[2] == mainInfos[2] then
+                table.insert(composeIds,{id = id,mainId = mainId})
+            end
+        end
+    end
+
+    return composeIds
+end
+
+local function GetSelectComposeJewelMatsData()
+    local curOwnUpJewelArr = UpdateCurOwnUpJewelArr()
+    local arr = {}
+    local composeIds = GetComposeIds()
+    local ids = ResTblContainer:GetIds(JewelComposeTbl.tblName)
+    for _,ids in pairs(composeIds) do
+        for k,v in pairs(curOwnUpJewelArr) do
+            if tonumber(v.id) == tonumber(ids.id) then
+                v.mainId = ids.mainId
+                table.insert(arr,v)
+            end
+        end
+    end
+    return arr
+end
+
+function CheckJewelComposeRedFlag()
+    local arr = GetSelectComposeJewelMatsData()
+    local tempTb = {}
+    for k,v in pairs(arr) do
+        if tempTb[v.mainId] then
+            if not v.isEquip then
+                tempTb[v.mainId].count = tempTb[v.mainId].count + 1
+                table.insert(tempTb[v.mainId].uids,v.uid)
+            end
+        else
+            if not v.isEquip then
+                tempTb[v.mainId] = v
+                tempTb[v.mainId].uids = {}
+                table.insert(tempTb[v.mainId].uids,v.uid)
+                tempTb[v.mainId].count = 1
+            end
+        end
+    end
+    local canComposeTab = {}
+    local composeCount = GetConstValue("JewelComposeCount")
+    for k,v in pairs(tempTb) do
+        local extraStr = ResTblContainer:GetPropToStr(v.mainId,JewelComposeTbl.extra,JewelComposeTbl.tblName)
+        local infos = string.split(extraStr, ",")
+        local typeId = infos[0]
+        local id = tonumber(infos[1])
+        local num = tonumber(infos[2])
+        if v.count >= composeCount and CheckResEnough(id,num,false) then
+            table.insert(canComposeTab,v)
+        end
+    end
+    if #canComposeTab > 0 then
+        return true
+    else
+        return false
+    end
+
+end
+
+--can compose equipment
+function CheckRedTipEquipmentCompose(equipments, packPb, playerPb)
+    local result = {}
+    local pack=packPb or appData:checkAllItems("PackItem")
+    local playerInfo=playerPb or appData:checkData("PlayerInfo") 
+    result.redEquipArr = {}
+    result.redEquipTypeArr = {} 
+    if pack ~= nil then
+        local equipmentsData = {}
+        equipmentsData = equipments or GetEquipmentData(equipmentsData)
+        for i,composeEquip in ipairs(equipmentsData) do
+            local consumeEquip = appData:checkItem("PackItem",composeEquip.consumeEquip.id)
+            if consumeEquip~=nil and consumeEquip.count>=3 and playerInfo.coin>=composeEquip.consumeCoin.count then
+                result.redEquipArr[composeEquip.id] = true
+                AddNoRepeatItem(result.redEquipTypeArr,composeEquip.equipType)
+            end
+        end
+    end
+    if result.redEquipTypeArr~=nil and #result.redEquipTypeArr ~= 0 then
+        result.redFlag = true
+    else
+        result.redFlag = false
+    end
+    return result
+end
+
+local function MergeTable(tbl, func)
+    local mergeTbl = {}
+    for k,v in pairs(tbl) do
+        if not ContainItem(mergeTbl, v) then
+            table.insert(mergeTbl, v)
+        else
+            for x,y in pairs(mergeTbl) do
+                if func(y, v) then
+                    y.count = y.count + v.count
+                end
+            end
+        end
+    end
+end
+
+--can compose hero
+function CheckRedTipHeroCompose(heroArr,heroRefineData,complete,heroPb)
+    local ownMats = {}
+    local result = {}
+    result.redFlag = false
+
+    local pbs = heroPb or appData:checkAllItems("HeroItem")
+    if pbs ~= nil then
+        for i=0,pbs.Length-1 do
+            local pb = pbs[i]
+            local mat = {
+                heroId = pb.heroId,
+                raceId = global_heroBaseArr[pb.heroId].group,
+                quality = global_heroBaseArr[pb.heroId].quality,
+                distillationStar = pb.distillationStar,
+                distillationLevel = pb.distillationLevel,
+                breakLevel = pb.breakLevel,
+                count = 1
+            }
+            table.insert(ownMats, mat)
+        end
+        ownMats = MergeTables(ownMats,function(cur,other)
+            return cur.heroId == other.heroId 
+            and (cur.quality + cur.distillationStar == other.quality + other.distillationStar)
+        end)
+    else
+        return result
+    end
+
+    --add hero card
+    local tbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    local ids = tbl:GetCol(HeroBase.id)
+    for i=0, ids.Length-1 do
+        local id = tonumber(ids[i])
+        local itemId = tbl:GetInt(id,HeroBase.item)
+        if itemId ~= 0 then
+            local item = appData:checkItem("PackItem",itemId)
+            if item and item.count ~= 0 then
+                local mat = {
+                    heroId = id,
+                    raceId = tbl:GetInt(id, HeroBase.group),
+                    quality = tbl:GetInt(id, HeroBase.quality),
+                    distillationStar = 0,
+                    distillationLevel = 0,
+                    breakLevel = 0,
+                    count = item.count
+                }
+                table.insert(ownMats,mat)
+            end        
+        end
+    end
+
+    local heroRefineDataFromTbl = heroRefineData or GetHeroRefineData()
+    local curHeroArr = heroArr or GetComposeHero(heroRefineDataFromTbl)
+    local isComplete = complete or false
+    local heroWithMats = {}
+    local tbl=ResTblContainer:GetTable(HeroBase.actorTbl)
+    for k,hero in ipairs(curHeroArr) do
+        local heroWithMat = {
+            heroId = hero.heroId,
+            mat = {},
+            consumes = heroRefineDataFromTbl[hero.heroId].consumes
+        }
+        for i=1,4 do
+            local heroId = heroRefineDataFromTbl[hero.heroId][i].id
+            local count = heroRefineDataFromTbl[hero.heroId][i].count
+            local distillationStar = heroRefineDataFromTbl[hero.heroId][i].distillationStar
+            local mat = GetHeroMatData(heroId, count, distillationStar)
+            table.insert(heroWithMat.mat, mat)
+            -- if i == 4 then
+            --     table.insert(heroWithMat.mat, {
+            --         quality = tbl:GetInt(heroId,HeroBase.quality),
+            --         raceId = tbl:GetInt(heroId,HeroBase.group),
+            --         count = count
+            --     })
+            -- else
+            --     table.insert(heroWithMat.mat, {heroId = heroId, count = count})
+            -- end
+        end
+        table.insert(heroWithMats, heroWithMat)
+    end
+
+    for i,hero in ipairs(heroWithMats) do
+        local tmpOwnMats = {}
+        for i,v in ipairs(ownMats) do
+            table.insert(tmpOwnMats, table.copy(v))
+        end
+        local ret = false
+        if hero.consumes then
+            for i,v in ipairs(hero.consumes) do
+                ret = CheckItemEnough(v.id,v.typeId,v.count,false)
+                if not ret then
+                    break
+                end
+                ret = true
+            end
+        else
+            ret = true
+        end
+        if not ret then
+            if not isComplete then
+                return result
+            else
+                break
+            end
+        end
+        for i,v in ipairs(hero.mat) do
+            if v.type == HeroMatType.FixedQualityAndRace then
+                ret = CheckOwnHeroWithQulityAndRaceId(tmpOwnMats,v.quality,v.distillationStar,v.raceId,v.count)
+            elseif v.type == HeroMatType.FixedAll then
+                -- if hero.heroId == 36 then
+                --     for i,j in ipairs(tmpOwnMats) do
+                --         if j.heroId == 29 then
+                --             print(table.dump(j))
+                --         end
+                --     end
+                --     print(table.dump(v))
+                -- end
+                ret = CheckOwnHeroWithFixedAll(tmpOwnMats, v)
+                -- if hero.heroId == 36 then
+                --     print(ret)
+                -- end
+                -- if tmpOwnMats[v.heroId] ~= nil and (tmpOwnMats[v.heroId].quality + tmpOwnMats[v.heroId].distillationStar == v.quality + v.distillationStar) and tmpOwnMats[v.heroId].raceId == v.raceId then
+                --     if tmpOwnMats[v.heroId].count >= v.count then
+                --         tmpOwnMats[v.heroId].count = tmpOwnMats[v.heroId].count-v.count
+                --         ret = true
+                --     else
+                --         ret = false
+                --     end
+                -- else
+                --     ret = false
+                -- end
+            end
+            if not ret then
+                break
+            end
+        end
+        if ret then
+            result[hero.heroId] = true
+            result.redFlag = true
+            if not isComplete then
+                return result
+            end
+        end
+    end
+    return result
+end
+
+-- can use box or compose hero pieces
+function CheckBagItem(isComplete,pb)
+    local result = {}
+    result.redFlag = false
+    result.boxArr = {}
+    result.piecesArr = {}
+    isComplete = isComplete or false
+    local pack = pb or appData:checkAllItems("PackItem")
+    if pack ~= nil then
+        local tbl=ResTblContainer:GetTable(ItemBase.actorTbl)
+        for i = 0, pack.Length-1 do
+            local id = pack[i].itemId
+            local type = tbl:GetInt(id,ItemBase.type)
+            if type == 3 then --英雄碎片
+                if CheckBagHeroPieces(pack[i]) then
+                    result.redFlag = true
+                    if not isComplete then
+                        return result
+                    end
+                    result.piecesArr[pack[i].itemId] = true
+                    --table.insert(result, pack[i].itemId)
+                end
+            elseif type == 4 then
+                if CheckBagBox(pack[i]) then
+                    result.redFlag = true
+                    if not isComplete then
+                        return result
+                    end
+                    result.boxArr[pack[i].itemId] = true
+                end
+            end
+        end
+    end
+    return result
+end
+
+function CheckBagHeroPieces(piece)
+    local val = ResTblContainer:GetPropToInt(piece.itemId,PiecesComposition.count,PiecesComposition.actorTbl)
+    if piece.count >= val then
+        return true
+    end
+    return false
+end
+
+function CheckBagBox(box)
+    return box.count >= 1
+end
+
+--can element summon hero
+function CheckElemetnSummon()
+    local result = {}
+    result.redFlag = false
+    local item = appData:checkItem("PackItem", 1018)
+    if item ~= nil and item.count>=1 then
+        result.redFlag = true
+    end
+    return result
+end 
+
+
+
+function CheckResHookProfit(go, finished)
+    local myHook = appData:checkData("OnHookStageItem")
+    local canGetTime = GetConstValue("autoRewardRemindTime")
+    if myHook.stage ~= 0 then
+        if myHook.preResourceRewards ~= nil then
+            finished(myHook.chapter, myHook.difficulty)
+        else
+            CsBridge.timeManager:FixedIntervalTimer(go,nil,function()
+                finished(myHook.chapter, myHook.difficulty)
+            end,myHook.lastSwitchTime,tonumber(canGetTime)*1000)
+        end     
+    end
+end
+
+
+--new reward get
+function CheckDailyReward()
+    local dailyRewardInfo = appData:checkData("DailyRewardInfo")
+    local takenIds = dailyRewardInfo.takenIds
+    return takenIds==nil or not GetCurDailyRewardSign(takenIds, dailyRewardInfo.maxAvaliableId)
+end
+--- check red function end-------------------------------------------
+
+
+
+function GetCheckHeroes()
+    local pveFormationHeros=appData:checkItem("Formation",FormationTypeEnum.FormationType_PVE)
+    if pveFormationHeros == nil then
+        return
+    end
+
+    local allCheckHerosIds = pveFormationHeros.heroIds
+
+    -- local pvpFormationHeros=appData:checkItem("Formation",2)
+    -- if pvpFormationHeros == nil and pveFormationHeros == nil then
+    --     return
+    -- end
+
+    -- local allCheckHerosIds = {}
+    -- if pveFormationHeros == nil then
+    --     allCheckHerosIds=pvpFormationHeros.heroIds
+    -- elseif pvpFormationHeros == nil then
+    --     allCheckHerosIds=pveFormationHeros.heroIds
+    -- else
+    --     allCheckHerosIds=pveFormationHeros.heroIds
+    --     GetNoRepeatArr(pvpFormationHeros.heroIds,allCheckHerosIds)
+    -- end
+    
+    local allCheckHeros = {}
+    for i,data in ipairs(allCheckHerosIds) do
+        table.insert(allCheckHeros,GetHeroDataById(data.uid))
+    end
+    return allCheckHeros
+end
+
+function GetNoRepeatArr(arr1, arr2)
+    local noRepeat = {}
+    for i,v in ipairs(arr1) do
+        local ret = false
+        for j,k in ipairs(arr2) do
+            if v.uid == k.uid then
+                ret = true
+                break
+            end          
+        end
+        if ret == false then
+            table.insert(noRepeat, v)
+        end
+    end
+    for i,v in ipairs(noRepeat) do
+        table.insert(arr2,v)
+    end
+end
+
+function GetHeroDataById(uid)
+    local pb = appData:checkAllItems("HeroItem")
+    if pb == nil then
+        return 
+    end
+
+    for i = 0,pb.Length-1 do 
+        if uid == pb[i].uid then
+            return pb[i]
+        end
+    end
+end
+
+function CheckHasMaxLevelAndGrade(heroInfo)
+    local quality=ResTblContainer:GetPropToInt(heroInfo.heroId,HeroBase.quality,HeroBase.actorTbl)
+	local maxGrade=ResTblContainer:GetPropToInt(quality,HeroQuality.maxGrade,HeroQuality.actorTbl)
+
+    local maxLevel = GetHeroMaxLevel(heroInfo.grade)
+    if heroInfo.level >= maxLevel and heroInfo.grade >= maxGrade then
+        return true
+    else 
+        return false
+    end
+end
+
+function CheckCost(id, playerInfo, heroInfo)
+    local maxLevel = GetHeroMaxLevel(heroInfo.grade)
+    if heroInfo.level < maxLevel then
+        local coinCost=ResTblContainer:GetPropToInt(id,HeroLevelUp.coin,HeroLevelUp.actorTbl)
+        local soulCost=ResTblContainer:GetPropToInt(id,HeroLevelUp.soulCoin,HeroLevelUp.actorTbl)
+        return playerInfo.coin>=coinCost and playerInfo.soulCoin>=soulCost
+    else
+        local coinCost = ResTblContainer:GetPropToInt(heroInfo.grade+1,HeroEvelution.coin,HeroEvelution.actorTbl)
+        local stepCoin = ResTblContainer:GetPropToInt(heroInfo.grade+1,HeroEvelution.stepStoneCoin,HeroEvelution.actorTbl)
+        return playerInfo.coin>=coinCost and playerInfo.stepStoneCoin>=stepCoin
+    end
+end
+
+function CheckGreatEquip(heroInfo, pack, relic, greatEquipTb)
+    local ret = false
+    if pack~= nil then
+        local itemTbl=ResTblContainer:GetTable(ItemBase.actorTbl)
+        local equipTbl=ResTblContainer:GetTable(Equipment.actorTbl)
+        for i = 0, pack.Length-1 do 
+            local pb = pack[i]
+            if pb.count~=0 then
+                local itemType = itemTbl:GetInt(pb.itemId,ItemBase.type)
+                if itemType == 1 then
+                    local pos = equipTbl:GetInt(pb.itemId,Equipment.type)
+                    if greatEquipTb == nil or (greatEquipTb ~= nil and greatEquipTb[pos] == nil) then
+                        if pos == 1 then
+                            if HasGreatEquip(pb,heroInfo.weaponId) then
+                                if greatEquipTb ~= nil then
+                                    greatEquipTb[pos] = true
+                                    greatEquipTb.redFlag = true
+                                    --AddNoRepeatItem(greatEquipTb,pos)
+                                else
+                                    ret = true
+                                    break
+                                end
+                            end
+                        elseif pos == 2 then
+                            if HasGreatEquip(pb,heroInfo.hatId) then
+                                if greatEquipTb ~= nil then
+                                    greatEquipTb[pos] = true
+                                    greatEquipTb.redFlag = true
+                                    --AddNoRepeatItem(greatEquipTb,pos)
+                                else
+                                    ret = true
+                                    break
+                                end
+                            end
+                        elseif pos == 3 then
+                            if HasGreatEquip(pb,heroInfo.clothId) then
+                                if greatEquipTb ~= nil then
+                                    greatEquipTb[pos] = true
+                                    greatEquipTb.redFlag = true
+                                    --AddNoRepeatItem(greatEquipTb,pos)
+                                else
+                                    ret = true
+                                    break
+                                end
+                            end
+                        elseif pos == 4 then
+                            if HasGreatEquip(pb,heroInfo.shoesId) then
+                                if greatEquipTb ~= nil then
+                                    greatEquipTb[pos] = true
+                                    greatEquipTb.redFlag = true
+                                    --AddNoRepeatItem(greatEquipTb,pos)
+                                else
+                                    ret = true
+                                    break
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end 
+    end
+
+    local relicId = 0
+    local ownQuality = 0
+    if heroInfo.relicId ~= nil and heroInfo.relicId ~= 0 then
+        relicId = appData:checkItem("RelicItem",heroInfo.relicId).id
+        ownQuality = ResTblContainer:GetPropToInt(relicId,Relic.quality,Relic.tblName)
+    elseif heroInfo.relicId == nil and heroInfo.relic ~= nil and heroInfo.relic.id ~= nil and heroInfo.relic.id ~= 0 then
+        relicId = heroInfo.relic.id
+        ownQuality = ResTblContainer:GetPropToInt(relicId,Relic.quality,Relic.tblName)
+    end
+    if relic ~= nil then
+        local tbl=ResTblContainer:GetTable(Relic.tblName)
+        for i = 0, relic.Length-1 do
+            local pb = relic[i]
+            if pb.owner == nil or pb.owner == 0 then
+                if greatEquipTb == nil or (greatEquipTb ~= nil and greatEquipTb[5] == nil) then
+                    local pbQuality = tbl:GetInt(pb.id,Relic.quality)
+                    if pbQuality > ownQuality then
+                        if greatEquipTb ~= nil then
+                            greatEquipTb[6] = true
+                            greatEquipTb.redFlag = true
+                        else
+                            ret = true
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return ret
+end
+
+function CheckRuneOrRuneLevelUp(heroInfo)
+    local runeOpenLevel = GetConstValue("runeOpen")
+    local heroAllLevel = GetHeroAllLevel(heroInfo.grade,heroInfo.level)
+
+    local utils = require "HeroBagUtils"
+    local runeData = heroInfo.runeData or heroInfo.rune
+    local rune = utils.GetHeroRune(runeData)
+    return CheckHasRune(heroAllLevel,runeOpenLevel,rune) or rune and CheckRuneLevelUp(rune)
+end
+
+function CheckHasRune(allLevel,openLevel,rune)
+    -- local runeOpenLevel = GetConstValue("runeOpen")
+    --return GetHeroAllLevel(heroInfo.grade,heroInfo.level) >= runeOpenLevel and heroInfo.rune == nil
+    return allLevel >= openLevel and rune == nil 
+end
+
+function CheckRuneLevelUp(rune,maxRuneLevel,upgradeConsumption)
+    local tbl=ResTblContainer:GetTable(Rune.tblName)
+    maxRuneLevel = maxRuneLevel or tbl:GetCol(Rune.level).Length
+    local runeLevel = rune.level or rune[1]
+    upgradeConsumption = upgradeConsumption or GetRewardFromTbl(ResTblContainer:GetPropToStr(runeLevel,Rune.upgradeConsumption,Rune.tblName))
+    local costArr = {}
+    for i,v in ipairs(upgradeConsumption) do
+        table.insert(costArr, v)
+    end
+    return runeLevel < maxRuneLevel and #CheckMulResEnough(costArr) == 0
+end
+
+function HasGreatEquip(pb, heroEquipId)
+    if heroEquipId == 0 then
+        return true
+    else
+        local packInfos = ResTblContainer:GetRowFromTbl(Equipment.actorTbl, tostring(pb.itemId), Equipment.quality, Equipment.order)
+        local ownInfos = ResTblContainer:GetRowFromTbl(Equipment.actorTbl, tostring(heroEquipId), Equipment.quality, Equipment.order)
+        local packQuality = tonumber(packInfos[0])
+        local packOrder = tonumber(packInfos[1])
+        local ownQuality = tonumber(ownInfos[0])
+        local ownOrder = tonumber(ownInfos[1])
+
+        if packQuality ~= ownQuality then
+            return packQuality > ownQuality
+        end
+
+        return packOrder > ownOrder
+    end
+    return false
+end
+
+function GetEquipmentData()
+    local equipmentsData = {}
+    local itemIds =GetIds(Equipment.actorTbl)
+    local equipTbl=ResTblContainer:GetTable(Equipment.actorTbl)
+    local itemTbl=ResTblContainer:GetTable(ItemBase.actorTbl)
+    for i=0,itemIds.Length-1 do
+		local infos = equipTbl:GetRow(itemIds[i],Equipment.type,Equipment.quality,Equipment.order,Equipment.composeCost)
+        local equipmentData = {}
+        local open = itemTbl:GetInt(itemIds[i],ItemBase.open)
+        local composeCost = infos[3]
+        if open and composeCost ~= "" then
+            equipmentData.id = tonumber(itemIds[i])
+            equipmentData.equipType = tonumber(infos[0])
+            equipmentData.consumeCoin = GetRewardFromTbl(composeCost)[1]
+            equipmentData.consumeEquip =  {
+                id = equipTbl:Get(equipmentData.id,Equipment.upgradeMaterialId)
+            }
+            table.insert(equipmentsData,equipmentData)
+        end
+    end
+    return equipmentsData
+end
+
+function GetComposeHero(heroRefineData)
+    local composeHero = {}
+    for i,id in ipairs(heroRefineData.ids) do
+        if CheckHeroOpen(global_heroBaseArr[id].id) then
+            table.insert(composeHero,{heroId = global_heroBaseArr[id].id})
+        end
+    end
+    return composeHero
+end
+
+function GetHeroRefineData() 
+    local data = {}
+    data.ids = {}
+    local ids = GetIds(HeroRefine.tblName)
+    local tbl=ResTblContainer:GetTable(HeroRefine.tblName)
+    for i=0,ids.Length-1 do
+        local id = tonumber(ids[i])
+        local isOpen = (tbl:GetInt(id,HeroRefine.isOpen) == 1) and CheckHeroOpen(id)
+        if isOpen then
+            table.insert(data.ids,id)
+            data[id] = {}
+            local infos = tbl:GetRow(tostring(id),HeroRefine.mainId,HeroRefine.subId1,HeroRefine.subId2,HeroRefine.subId3)
+            local mainMat = {
+                id = tonumber(infos[0]),
+                typeId = 3,
+                count = 1,
+                distillationStar = 0
+            }
+            table.insert(data[id], mainMat)
+            local sub1Str = SplitString(infos[1],",")
+            local subMat1 = {
+                id = tonumber(sub1Str[0]),
+                typeId = 3,
+                count = tonumber(sub1Str[1]),
+                distillationStar = 0
+            }
+            table.insert(data[id], subMat1)
+            local sub2Str = SplitString(infos[2],",")
+            local subMat2 = {
+                id = tonumber(sub2Str[0]),
+                typeId = 3,
+                count = tonumber(sub2Str[1]),
+                distillationStar = 0
+            }
+            table.insert(data[id], subMat2)
+            local sub3Str = SplitString(infos[3],",")
+            local subMat3 = {
+                id = tonumber(sub3Str[0]),
+                typeId = 2,
+                count = tonumber(sub3Str[1]),
+                distillationStar = 0
+            }
+            table.insert(data[id], subMat3)
+        end
+    end
+    tbl = ResTblContainer:GetTable(HeroBreak.tblName)
+    ids = tbl:GetCol(HeroBreak.id)
+    for i=0,ids.Length-1 do
+        local id = tonumber(ids[i])
+        local isOpen = (tbl:GetInt(id,HeroBreak.isOpen) == 1) and CheckHeroOpen(id)
+        if isOpen then
+            table.insert(data.ids,id)
+            data[id] = {}
+            local infos = tbl:GetRow(tostring(id),HeroBreak.main,HeroBreak.material1,HeroBreak.material2,HeroBreak.material3,HeroBreak.other)
+            local mainStr = SplitString(infos[0],",")
+            local mainMat = {
+                id = tonumber(mainStr[0]),
+                typeId = 3,
+                count = tonumber(mainStr[2]),
+                distillationStar = tonumber(mainStr[1])
+            }
+            table.insert(data[id], mainMat)
+            local sub1Str = SplitString(infos[1],",")
+            local subMat1 = {
+                id = tonumber(sub1Str[0]),
+                typeId = 3,
+                count = tonumber(sub1Str[2]),
+                distillationStar = tonumber(sub1Str[1])
+            }
+            table.insert(data[id], subMat1)
+            local sub2Str = SplitString(infos[2],",")
+            local subMat2 = {
+                id = tonumber(sub2Str[0]),
+                typeId = 3,
+                count = tonumber(sub2Str[2]),
+                distillationStar = tonumber(sub2Str[1])
+            }
+            table.insert(data[id], subMat2)
+            local sub3Str = SplitString(infos[3],",")
+            local subMat3 = {
+                id = tonumber(sub3Str[0]),
+                typeId = 2,
+                count = tonumber(sub3Str[2]),
+                distillationStar = tonumber(sub3Str[1])
+            }
+            table.insert(data[id], subMat3)
+            data[id].consumes = GetRewardFromTbl(infos[4])
+        end
+    end
+    return data
+end
+
+function CheckOwnHeroWithFixedAll(ownMats,hero)
+    for i,v in ipairs(ownMats) do
+        -- if k == 29 or k == 22 then
+        --     print(v.quality,v.distillationStar,hero.quality,hero.distillationStar)
+        -- end
+        if v.heroId == hero.heroId and (v.quality+v.distillationStar == hero.quality+hero.distillationStar) and v.raceId == hero.raceId and v.count >= 0 then
+            local lastCount = math.max(hero.count - v.count,0)
+            v.count = math.max(v.count-hero.count,0)
+            hero.count = lastCount
+            if hero.count <= 0 then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+function CheckOwnHeroWithQulityAndRaceId(ownMats,quality,distillationStar,raceId,count)
+    --print("特殊材料品质为"..quality.."阵营为"..raceId)
+    for i,v in ipairs(ownMats) do
+        --print("品质为"..v.quality.."阵营为"..v.raceId.."的数量为"..v.count)
+        if (v.quality+v.distillationStar == quality+distillationStar) and v.raceId == raceId and v.count >=0 then
+            local lastCount = math.max(count - v.count,0)
+            v.count = math.max(v.count-count,0)
+            count = lastCount
+            if count <= 0 then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+-- function SortEquipment(a,b)
+--     --return a.type >= b.type and a.quality>=b.quality and a.order>b.order
+--     if a.type ~= b.type then
+--         return a.type > b.type
+--     end
+--     if a.quality ~= b.quality then
+--         return a.quality > b.quality
+--     end
+--     if a.order ~= b.order then
+--         return a.order > b.order
+--     end
+--     return a.id < b.id
+-- end
+
+function GetEquipHighId(id, equipmentsData)
+    --print(id)
+    for i=1,#equipmentsData-1 do
+        if id==equipmentsData[i].id then
+            -- print(equipmentsData[i+1].id, equipmentsData[i].id)
+            -- print(equipmentsData[i+1].type, equipmentsData[i].type)
+            if equipmentsData[i+1].type ~= equipmentsData[i].type then
+                return 0
+            end
+			return equipmentsData[i+1].id
+		end
+    end
+	return 0
+end
+
+function GetCurDailyRewardSign(ids, id)
+    return ContainItem(ids,id)
+end
+
+function AddNoRepeatItem(tb, item)
+    -- local canAdd = true
+    -- if (#tb) ~= 0 then    
+    --     for i,data in ipairs(tb) do
+    --         if data == item then
+    --             canAdd = false
+    --             break
+    --         end
+    --     end
+    -- end
+    if not ContainItem(tb, item) then 
+        table.insert(tb, item)
+    end 
+end

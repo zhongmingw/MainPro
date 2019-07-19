@@ -1,0 +1,16 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-04-25 11:23:20
+
+function AssetNames(objs)
+    local arr = {"MazeEntryView", "ItemSlot", "MazeBuffItemSlot"}
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    self:OpenView("MazeEntryView", "MazeEntryModel")
+    if(onFinished ~= nil) then
+        onFinished()
+    end
+end

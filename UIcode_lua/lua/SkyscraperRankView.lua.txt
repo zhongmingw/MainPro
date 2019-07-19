@@ -1,0 +1,89 @@
+local loadedSkyscraperRankItemSlot=require "SkyscraperRankItemSlot"
+
+
+local selfRank_Lab
+local selfCount_Lab
+local selfLv_Lab
+
+local selfIcon_Sprite
+local none_GO 
+
+local skyscraperRankGrid
+
+
+function DoInit()
+	self.Shadow = 1
+	selfRank_Lab=self:GetComponentAtPath("Center/SelfRankTxt" ,CLS_TEXT)
+	selfCount_Lab=self:GetComponentAtPath("Center/SelfCountTxt" ,CLS_TEXT)
+	selfLv_Lab=self:GetComponentAtPath("Center/SelfLvTxt" ,CLS_TEXT)
+
+	selfIcon_Sprite=self:GetComponentAtPath("Center/SelfIconSprite" ,"UnityEngine.UI.Image")
+	none_GO=self:GetGameObjectAtPath("Center/None")
+	skyscraperRankGrid=self:GetComponentAtPath("Center/ScrollRect/Viewport/SkyscraperRankGrid" ,"UIItemGrid")
+end
+
+function OnNotification_SkyscraperRank(objs)
+	local viewData = objs[0]
+	RefreshView(viewData)
+end
+
+function OnNotification_RefreshDestructionRankView(objs)	
+	local viewData = objs[0]
+	RefreshView(viewData)
+end
+
+function RefreshView(viewData)
+	local resp = viewData
+	LoadSelfRank(resp.selfRankInfo)
+	none_GO:SetSelfActive(resp.rankInfos==nil)
+	skyscraperRankGrid:RefreshItemSlots(resp.rankInfos,self.gameObject,"SkyscraperRankItemSlot")
+end
+
+function LoadSelfRank(skyTowerRankInfoItem)
+	if skyTowerRankInfoItem.rank==-1 then
+		selfRank_Lab.text="-"
+	else
+		selfRank_Lab.text=tostring(skyTowerRankInfoItem.rank)
+	end
+
+	selfCount_Lab.text=tostring(skyTowerRankInfoItem.score)
+    selfLv_Lab.text=tostring(skyTowerRankInfoItem.playerBaseInfo.level)
+
+	SetIconByHeadId(selfIcon_Sprite.gameObject,skyTowerRankInfoItem.playerBaseInfo.icon)
+end
+
+function OnOpen()
+
+end
+
+function OnSkyscraperRankGridPlayerBaseClick(obj)
+	local data = obj.m_data
+	CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			local view = CsBridge.OpenView("PlayerInfoView", "PlayerInfoModel")
+			view.transform.parent:SetAsLastSibling()
+			local isLocal = false
+			local uid = data.playerBaseInfo.userId
+			local zone = data.playerBaseInfo.zone
+			view:SetParamDataList(isLocal, uid, zone)
+		end, "PlayerInfoView","AchievementItemSlot")
+end
+
+function OnCloseBtnClick(sender)
+	self:HideView(self.gameObject.name)
+end
+
+function OnMaskClick(sender)
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	selfRank_Lab = nil
+	selfCount_Lab = nil
+	selfLv_Lab = nil
+
+	selfIcon_Sprite = nil
+	none_GO  = nil
+
+	skyscraperRankGrid = nil
+end

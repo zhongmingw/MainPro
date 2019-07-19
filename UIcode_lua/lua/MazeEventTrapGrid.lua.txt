@@ -1,0 +1,76 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-05-07 10:34:50
+]]
+
+local MazeDef = require "MazeDef"
+local MazeUtils = require "MazeUtils"
+local MazeItem = MazeDef.MazeItem
+
+local MazeEventGrid = require "MazeEventGrid"
+
+local MazeEventTrapGrid = class("MazeEventTrapGrid",MazeEventGrid)
+
+function MazeEventTrapGrid:Ctor(row, col, state, type, data)
+    super(self,row,col,state,type,data)
+end
+
+function MazeEventTrapGrid:ShowTrapEffect(trans, onFinished)
+    local effectTrans = trans:GetComponentAtPath("Effect",CLS_RECTTRANSFORM)
+    local spineName = "MazeTrapSpine"
+    local animName = "roadblock"
+    local cacheAssets = ""
+    local onCacheFinished = nil
+    local onSpineAnimFinished = nil
+    if self.trigger then
+        local itemId = GetConstValue("MazeTrapItemId")
+        local iconName = ResTblContainer:GetPropToStr(itemId,MazeItem.itemIcon,MazeItem.tblName)
+        local assetName = "MazeItemEffect"
+        cacheAssets = assetName,iconName
+        local obj = nil
+        onCacheFinished = function()
+            obj = CsBridge.objectCache:CreateObject(assetName,true,effectTrans)
+            local iconImg = obj.transform:GetGameObjectAtPath("IconImg")
+            SetSpriteByModule(iconImg,iconName)
+        end
+        onSpineAnimFinished = function()
+            CsBridge.GameObject.Destroy(obj)
+        end
+    end
+    CsBridge.CacheAssetsByGroup(MazeDef.MazeModuleName,function()
+        if onCacheFinished then onCacheFinished() end
+        local spine = CsBridge.objectCache:CreateObject(spineName,true,effectTrans)
+        spine:GetComponent(CLS_SKELETONGRAPHIC):PlayAnimation(animName,false,function()
+            if onSpineAnimFinished then onSpineAnimFinished() end
+            CsBridge.GameObject.Destroy(spine)
+            if onFinished then onFinished() end
+        end)
+    end,spineName,cacheAssets)
+end
+
+function MazeEventTrapGrid:TriggerEvent(curPlayer)
+    local itemId = GetConstValue("MazeTrapItemId")
+    local hasItem = MazeUtils.CheckPlayerHasMazeItem(curPlayer,itemId)
+    self.trigger = false
+    local function _TriggerEvent()
+        MsgCenter:Broadcast(Notify_MazeGridTriggerEvent,self)
+    end
+    if hasItem then
+        local hasCount = MazeUtils.CheckPlayerMazeItem(curPlayer,itemId)
+        local desp = string.format(Language:getStr("MazeUseReplaceWaWa"),"\n",hasCount)
+        MazeUtils.ShowMsgBox(desp,
+        function()
+            self.trigger = true
+            _TriggerEvent()
+        end,
+        function()
+            _TriggerEvent()
+        end)
+    else
+        _TriggerEvent()
+    end
+end
+
+return MazeEventTrapGrid

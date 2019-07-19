@@ -1,0 +1,71 @@
+local pb = require "pb"
+
+appData={}
+local vals={}
+
+local function decode(msg,val)  
+  local pbMsg=checkProtoMessage(msg)
+  local data=pb.decode(pbMsg, val)
+  return data
+end
+
+function appData:updateValue(data)
+    if(data == nil or data.key==nil or data.key=="") then
+	    return
+	end
+    local key = string.split(data.key, ".")
+    if(data.opType == CsBridge.OpType.opType_Remove) then
+	    if (key.Length > 1) then
+		    local cls = vals[key[0]]
+			if(cls ~= nil) then
+			    cls[key[1]] = nil
+			end
+		else
+		    vals[data.key] = nil
+		end
+	else
+		if(key.Length > 1) then
+			local cls=vals[key[0]]
+			if(cls == nil) then
+			    cls={}
+				vals[key[0]]=cls
+			end
+			cls[key[1]] = decode(key[0], data.val)
+			MsgCenter:Broadcast(CsBridge.SysMsgDef.Notify_ItemDataChanged,key)
+		else
+		    vals[data.key] = decode(data.key, data.val)
+			MsgCenter:Broadcast(CsBridge.SysMsgDef.Notify_SingleDataChanged, data.key)
+		end
+	end
+end
+
+function appData:clear()
+    vals={}
+end
+
+function appData:checkData(clsName)
+    return vals[clsName]
+end
+
+function appData:checkAllItems(clsName)
+    local result={}
+	local idx=0
+	local cls=vals[clsName]
+	if(cls ~= nil) then
+	    for key,val in pairs(cls) do
+	        result[idx]=val
+		    idx=idx+1
+	    end
+	end
+	result.Length=idx
+	return result
+end
+
+function appData:checkItem(clsName,itemId)
+	local cls = vals[clsName]
+	if(cls == nil) then
+	    return nil
+	else
+        return cls[tostring(itemId)]
+	end
+end

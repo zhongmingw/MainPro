@@ -1,0 +1,201 @@
+local searchTimeHintTxt
+local searchTimeTxt
+local strengthTxt
+local bossTimeHintTxt
+local bossTimeTxt
+local bossHero
+local bossSlider
+local bossSliderTxt
+
+local empty
+local boss
+local searchBtn
+local warBtn
+local monsterData
+
+local TICKER_REFRESHVIEW = "ticker_RefreshView_FriendBossView"
+local TICKER_REFRESHBOSS = "ticker_RefreshBoss_FriendBossView"
+
+function DoInit()
+    self.Anim = 0
+    self.Shadow=0
+    empty = self:GetGameObjectAtPath("other/empty")
+    boss = self:GetGameObjectAtPath("other/boss")
+    searchBtn = self:GetComponentAtPath("other/Btns/searchBtn" ,CLS_BUTTON_ARCHLY)
+    warBtn = self:GetComponentAtPath("other/Btns/WarBtn" ,CLS_BUTTON_ARCHLY)
+    strengthTxt = self:GetComponentAtPath("other/number01Txt" ,CLS_TEXT)
+    searchTimeHintTxt = self:GetComponentAtPath("other/timeHintTxt" ,CLS_TEXT)
+    searchTimeTxt = self:GetComponentAtPath("other/timeTxt" ,CLS_TEXT)
+    bossHero = self:GetGameObjectAtPath("other/boss/HeroBase")
+    bossSlider = self:GetComponentAtPath("other/boss/slider" ,CLS_SLIDER)
+    bossSliderTxt = self:GetComponentAtPath("other/boss/slider/number01Txt" ,CLS_TEXT)
+end
+
+function IsSetAnchor()
+    return true
+end
+
+function BeoforeReturnBack()
+    self.gameObject:SetSelfActive(false)
+end
+
+function OnAnimationFinished()
+    self:SendCommand("InitFriendBoss")
+end
+
+function OnNotification_InitFriendBoss(objs)
+    monsterData=objs[0]
+    RefreshView(monsterData)
+end
+
+function RefreshView(monsterData)
+    strengthTxt.text=tostring(monsterData.power)
+    if monsterData.monster ~= nil and monsterData.monster.monsterFaceId > 0 then
+        RefreshBoss(monsterData)
+    else
+        RefreshSearch(monsterData)
+    end
+    if(monsterData.canSearch) then
+        searchTimeHintTxt.gameObject:SetSelfActive(false)
+        searchTimeTxt.gameObject:SetSelfActive(false)
+        searchBtn.Gray=false
+    else
+        searchTimeHintTxt.gameObject:SetSelfActive(true)
+        searchTimeTxt.gameObject:SetSelfActive(true)
+        searchBtn.Gray=true
+        Timer:AddTicker(TICKER_REFRESHVIEW,monsterData.nextSearchTime,function (target)
+            if self == nil or self.Module == nil then
+                return
+            end
+            searchTimeTxt:SetText(CheckTimeRemain(target,false))
+        end,function ()
+            monsterData.canSearch=true
+            RefreshSearch(monsterData)
+            searchTimeHintTxt.gameObject:SetSelfActive(false)
+            searchTimeTxt.gameObject:SetSelfActive(false)
+            searchBtn.Gray = false
+        end,nil)
+    end
+end
+
+function RefreshSearch(monsterData)
+    empty:SetSelfActive(true)
+    boss:SetSelfActive(false)
+    warBtn.gameObject:SetSelfActive(false)
+end
+
+function OnsearchBtnClick(sender)
+	if not UIOpen(UI_OPEN_TYPE_LIMIT_FRIENDHELP,true) then
+		return
+    end
+    if not monsterData.canSearch then
+        return 
+    end
+    if monsterData.monster ~= nil and monsterData.monster.monsterFaceId > 0 then
+        CsBridge.messageManager:PopMsgBox("",Language:getStr("Confirm_ReSearchBoss"),Language:getStr("local_cancel"),nil,Language:getStr("local_confirm"),
+        function()
+            self:SendCommand("SearchBoss")
+        end);
+    else
+        self:SendCommand("SearchBoss")
+    end
+end
+
+function OnNotification_SearchBoss(objs)
+    local data = objs[0]
+    local confirmCbk = function()
+        RefreshView(data.monsterData)
+    end
+    if #data.rewardItems > 0 then
+        ShowRewardReceivedTip(self,data.rewardItems, confirmCbk)
+    else
+        confirmCbk()
+    end
+end
+
+function RefreshBoss(monsterData)
+    empty:SetSelfActive(false)
+    boss:SetSelfActive(true)
+    warBtn.gameObject:SetSelfActive(true)
+    BindHeroBaseValue(bossHero,monsterData.monsterInfo)
+    bossSliderTxt.text=tostring(monsterData.monster.monsterCurHp).."/"..tostring(monsterData.monster.monsterMaxHp)
+    bossSlider.value=monsterData.monster.monsterCurHp/monsterData.monster.monsterMaxHp
+    if monsterData.power > 0 or monsterData.recovered then
+        warBtn.Gray=false
+    else
+        warBtn.Gray=true
+        Timer:AddTicker(TICKER_REFRESHBOSS, monsterData.nextSearchTime,function (target)
+            if self == nil or self.Module == nil then
+                return
+            end
+        end,function ()
+            monsterData.recovered = true
+            RefreshBoss(monsterData)
+        end,nil)
+    end
+end
+
+function OnWarBtnClick(sender)
+	if not UIOpen(UI_OPEN_TYPE_LIMIT_FRIENDHELP,true) then
+		return
+	elseif monsterData.power <= 0 then
+	    CsBridge.hintUILayer:ShowHintBox(Language:getStr("NoPower"),2)
+	    return
+	end
+    self:SendCommand("ChallengeSelfBoss")
+end
+
+function OnDoUnhide()
+    self:SendCommand("InitFriendBoss")
+end
+
+function OnrankBtnClick(sender)
+	if not UIOpen(UI_OPEN_TYPE_LIMIT_FRIENDHELP,true) then
+		return
+	end
+    CsBridge.CacheAssetsByModule(self.Module,function()
+		local view=CsBridge.OpenView("FriendRankView","FriendModel", true, true)
+	end, "FriendRankView","FriendRankItemSlot")       
+end
+
+function OnrewardBtnClick(sender)
+	if not UIOpen(UI_OPEN_TYPE_LIMIT_FRIENDHELP,true) then
+		return
+	end
+    CsBridge.CacheAssetsByModule(self.Module,function()
+		local view=CsBridge.OpenView("FriendRewardView","FriendModel", true, true)
+	end, "FriendRewardView","FriendRewardItemSlot")   
+end
+
+function OnruleBtnClick(sender)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("HelpView","FriendModel",false,true)
+        view:SetData(INSTRUCTION_HELPFRIEND)
+	end, "HelpView")  
+end
+
+function OnClose()
+    Timer:StopTicker(TICKER_REFRESHVIEW)
+    Timer:StopTicker(TICKER_REFRESHBOSS)
+end
+
+function DoExit()
+	self.Module=nil
+    Timer:StopTicker(TICKER_REFRESHVIEW)
+    Timer:StopTicker(TICKER_REFRESHBOSS)
+    searchTimeHintTxt = nil
+    searchTimeTxt = nil
+    strengthTxt = nil
+    bossTimeHintTxt = nil
+    bossTimeTxt = nil
+    bossHero = nil
+    bossSlider = nil
+    bossSliderTxt = nil
+    empty = nil
+    boss = nil
+    searchBtn = nil
+    warBtn = nil
+    monsterData = nil
+    TICKER_REFRESHVIEW = nil
+    TICKER_REFRESHBOSS = nil
+end

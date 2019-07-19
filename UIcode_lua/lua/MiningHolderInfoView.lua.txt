@@ -1,0 +1,256 @@
+require "ItemSlot"
+require "HeroItemSlot"
+require "MiningRobHeroItemSlot"
+
+---@type UnityEngine.TextMesh 标题
+local titleTxt
+---@type UnityEngine.TextMesh  战力
+local fightNumTxt
+---@type UnityEngine.TextMesh 玩家名称
+local holdUserNameTxt
+---@type Client.Library.UIItemGrid 产出itemGrid
+local caveGetItemGrid
+---@type UnityEngine.TextMesh 产出描述
+local willGetContentTxt
+---@type UnityEngine.Transform 用户头像
+local userBaseTrans
+
+---@type UnityEngine.GameObject 光环图片
+local aureoleIconObj
+---@type Client.Library.UIItemGrid 整容
+local heroGrid
+---@type UnityEngine.GameObject
+local protectTipObj
+---@type UnityEngine.TextMesh 保护时间倒计时
+local protectTimeTxt
+---@type Client.Library.ButtonArchly 购买保护时间按钮
+local buyProtectBtn
+---@type UnityEngine.GameObject
+local buyProtectBtnObj
+---@type UnityEngine.UI.Image 购买保护时间的资源图表
+local resIconImg
+---@type UnityEngine.TextMesh 购买保护时间的资源数量
+local resNumberTxt
+---@type UnityEngine.GameObject
+local exitBtnObj
+---@type Client.Library.ButtonArchly
+local fightBtn
+---@type UnityEngine.GameObject
+local fightBtnObj
+---@type UnityEngine.GameObject
+local defendFormationBtnObj
+
+---@type Client.Library.ViewBase
+local selfViewBase
+---@type UnityEngine.Transform
+local selfTrans
+
+---@type table 矿点信息
+local caveInfo
+---@type table 当前光环
+local curAura
+---@type table 阵容
+local upHeroInfoArr
+
+function DoInit()
+    selfViewBase = self
+    selfViewBase.Shadow = 1
+    selfTrans = selfViewBase.transform
+    titleTxt = selfViewBase:GetComponentAtPath("BGS/tiaoImg/TitleTxt", CLS_TEXT)
+    fightNumTxt = selfViewBase:GetComponentAtPath("CaveInfo/FightNumTxt", CLS_TEXT)
+    holdUserNameTxt = selfViewBase:GetComponentAtPath("CaveInfo/HoldUserNameTxt", CLS_TEXT)
+    caveGetItemGrid = selfViewBase:GetComponentAtPath("CaveInfo/WillGet/ScrollRect/Viewport/CaveGetItemGrid", CLS_UI_ITEM_GRID)
+    willGetContentTxt = selfViewBase:GetComponentAtPath("CaveInfo/WillGetDes/WillGetContentTxt", CLS_TEXT)
+    userBaseTrans = selfViewBase.transform:Find("CaveInfo/PlayerBase")
+    aureoleIconObj = selfViewBase:GetGameObjectAtPath("Formation/AureoleBtn/icon01Img")
+    heroGrid = selfViewBase:GetComponentAtPath("Formation/HeroGrid", CLS_UI_ITEM_GRID)
+    protectTipObj = selfViewBase:GetGameObjectAtPath("ProtectTimeTipTxt")
+    protectTimeTxt = selfViewBase:GetComponentAtPath("ProtectTimeTxt", CLS_TEXT)
+    buyProtectBtn = selfViewBase:GetComponentAtPath("BottomBtns/BtnGrid/BuyProtectBtn", CLS_BUTTON_ARCHLY)
+    buyProtectBtnObj = buyProtectBtn.gameObject
+    resIconImg = selfViewBase:GetComponentAtPath("BottomBtns/BtnGrid/BuyProtectBtn/resIconImg", CLS_IMAGE)
+    resNumberTxt = selfViewBase:GetComponentAtPath("BottomBtns/BtnGrid/BuyProtectBtn/resNumberTxt", CLS_TEXT)
+    exitBtnObj = selfViewBase:GetGameObjectAtPath("BottomBtns/BtnGrid/ExitBtn")
+    fightBtn = selfViewBase:GetComponentAtPath("BottomBtns/BtnGrid/FightBtn", CLS_BUTTON_ARCHLY)
+    fightBtnObj = selfViewBase:GetGameObjectAtPath("BottomBtns/BtnGrid/FightBtn")
+    defendFormationBtnObj = selfViewBase:GetGameObjectAtPath("BottomBtns/BtnGrid/DefendFormationBtn")
+end
+
+---显示对应的光环
+local function ShowAura()
+    if (curAura == nil) then
+        CsBridge.IconData.SetIconByName(aureoleIconObj, "new_com_guanghuan11")
+    else
+        CsBridge.IconData.SetIconByName(aureoleIconObj, curAura.icon)
+    end
+end
+
+---刷新界面
+local function RefreshCaveInfo()
+    if caveInfo then
+        titleTxt.text = caveInfo.name
+        holdUserNameTxt.text = caveInfo.host.name
+        willGetContentTxt.text = caveInfo.outputDescribe
+        caveGetItemGrid:RefreshItemSlots(caveInfo.outPutItemArr, selfViewBase.gameObject, "ItemSlot")
+        BindPlayerBaseInfoValue(userBaseTrans, caveInfo.host)
+    else
+        caveGetItemGrid:ClearItems()
+        willGetContentTxt.text = ""
+    end
+end
+
+---显示阵容
+local function ShowFormation()
+    ShowAura()
+    heroGrid:RefreshItemSlots(upHeroInfoArr, selfViewBase.gameObject, "MiningRobHeroItemSlot")
+end
+
+---显示按钮
+local function ShowBtns(btnStates)
+    fightBtnObj:SetActive(btnStates.showRobBtn)
+    buyProtectBtnObj:SetActive(btnStates.showBuyProtectBtn)
+    exitBtnObj:SetActive(btnStates.showExitBtn)
+    defendFormationBtnObj:SetActive(btnStates.showChangeFormationBtn)
+    if btnStates.showBuyProtectBtn then
+        ShowOneConsume(resIconImg, resNumberTxt, btnStates.buyCostConsume)
+        SetFontColorWithEnough(resNumberTxt, function()
+            return btnStates.selfCostConsume.count >= btnStates.buyCostConsume.count
+        end, color2)
+    end
+    fightBtn.Gray = btnStates.robBtnGray
+    buyProtectBtn.Gray = btnStates.buyProtectBtnGray
+end
+
+---更新战斗力
+local function UpdateFightValue(fightValue)
+    fightNumTxt.text = tostring(fightValue)
+end
+
+---设置界面数据
+function SetParamDataList(objs)
+    caveInfo = objs[0]
+    RefreshCaveInfo()
+end
+
+function OnAnimationFinished()
+    self:SendCommand("GetMiningHolderInfo", caveInfo)
+    self:SendCommand("GetBuy")
+end
+
+function Active()
+    self:SendCommand("GetMiningHolderInfo", caveInfo)
+end
+
+---获取到了界面数据
+function OnNotification_GetMiningHolderInfo(objs)
+    upHeroInfoArr = objs[0]
+    curAura = objs[1]
+    local btnState = objs[2]
+    local fightValue = objs[3]
+    ShowFormation()
+    ShowBtns(btnState)
+    UpdateFightValue(fightValue)
+    RefreshCaveInfo()
+end
+
+---更新矿点信息
+function OnNotification_UpdateCaveInfo(objs)
+    caveInfo = objs[0]
+    RefreshCaveInfo()
+end
+
+---更新倒计时显示
+function OnNotification_UpdateProtectTimeStr(objs)
+    local valueStr = objs[0]
+    local showTip = objs[1]
+    protectTimeTxt.text = valueStr
+    protectTipObj:SetActive(showTip)
+end
+
+---更新按钮
+function OnNotification_RefreshBtnState(objs)
+    local btnStates = objs[0]
+    ShowBtns(btnStates)
+end
+
+---产出点击
+function OnCaveGetItemGridItemSlotClick(obj)
+    local data = obj.m_data
+    selfViewBase:SendCommand("ShowItemTip", data)
+end
+
+---帮助按钮点击
+function OnHelpBtnClick()
+    self:SendCommand("ShowHelpView")
+end
+
+---上阵的英雄点击
+function OnHeroGridMiningRobHeroItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("ShowSimpleHeroInfoView", data)
+end
+
+---光环点击
+function OnAureoleBtnClick()
+    self:SendCommand("ShowAureoleView")
+end
+
+---购买保护时间按钮点击
+function OnBuyProtectBtnClick()
+    self:SendCommand("BuyProtectTime")
+end
+
+---撤出矿点按钮点击
+function OnExitBtnClick()
+    self:SendCommand("ExitCave")
+end
+
+---掠夺按钮点击
+function OnFightBtnClick()
+    self:SendCommand("StartFightForRob")
+end
+
+---切换防守整容
+function OnDefendFormationBtnClick()
+    self:SendCommand("ChangeDefendFormation")
+end
+
+---遮罩点击
+function OnMaskClick()
+    selfViewBase:HideView(selfViewBase.gameObject.name)
+end
+
+---关闭按钮点击
+function OnCloseBtnClick()
+    selfViewBase:HideView(selfViewBase.gameObject.name)
+end
+
+function OnClose()
+    selfViewBase:SendCommand("StopTicker")
+end
+
+function OnExit()
+    titleTxt = nil
+    fightNumTxt = nil
+    holdUserNameTxt = nil
+    caveGetItemGrid = nil
+    willGetContentTxt = nil
+    userBaseTrans = nil
+    aureoleIconObj = nil
+    heroGrid = nil
+    protectTipObj = nil
+    protectTimeTxt = nil
+    buyProtectBtn = nil
+    buyProtectBtnObj = nil
+    resIconImg = nil
+    resNumberTxt = nil
+    exitBtnObj = nil
+    fightBtn = nil
+    fightBtnObj = nil
+    defendFormationBtnObj = nil
+    selfViewBase = nil
+    selfTrans = nil
+    caveInfo = nil
+    curAura = nil
+    upHeroInfoArr = nil
+end

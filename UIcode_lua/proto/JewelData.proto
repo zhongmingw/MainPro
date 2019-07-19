@@ -1,0 +1,118 @@
+import "stage.proto";
+package JewelData;
+
+message JewelItem
+{
+    required int32 uid = 1;
+    required int32 id = 2;//通过id查配置表可以获取晶石的各种信息
+    required int32 owner = 3;//佩戴该晶石的英雄uid
+}
+
+message PutOnJewelReq 
+{
+    required int32 heroUid = 1;//要佩戴石头的英雄uid
+    required int32 jewelId = 2;//要佩戴的石头id
+    required int32 jewelPos = 3;//石头佩戴位置（从0开始）
+}
+
+message PutOnJewelResp 
+{
+    required int32 status = 1;
+}
+
+message TakeOffJewelReq 
+{
+    required int32 heroUid = 1;//要取下石头的英雄uid
+    required int32 jewelPos = 2;//要取下的石头位置（从0开始）
+}
+
+message TakeOffJewelResp 
+{
+    required int32 status = 1;
+}
+
+message JewelRefineReq 
+{
+    required int32 id = 1;//要合成的目标晶石的id
+    repeated int32 mainIds = 2;//主材料id列表
+    repeated int32 subIds1 = 3;
+    repeated int32 subIds2 = 4;
+    repeated int32 subIds3 = 5;
+}
+
+message JewelRefineResp 
+{
+    required int32 status = 1;
+}
+
+message JewelDecomposeReq 
+{
+    repeated int32 jewelIds = 1;//要分解的晶石列表
+}
+
+message JewelDecomposeResp 
+{
+    repeated stage.RewardItem result = 1;
+}
+
+message DrawJewelReq 
+{
+    required int32 count = 1;
+}
+
+message DrawJewelResp 
+{
+    repeated stage.RewardItem result = 1;
+}
+
+message GetJewelBonusReq 
+{
+    required int32 useless = 1;
+}
+
+message GetJewelBonusResp 
+{
+    repeated stage.RewardItem jewel = 1;
+}
+
+message TakeOffAllJewelReq 
+{
+    required int32 heroUid = 1;
+}
+
+message TakeOffAllJewelResp 
+{
+    required int32 status = 1;
+}
+
+message PutOnAllJewelReq 
+{
+    required int32 heroUid = 1;
+}
+
+message PutOnAllJewelResp 
+{
+    required int32 status = 1;
+}
+
+message GmGetJewelReq 
+{
+    required int32 jewelId = 1;
+    required int32 count = 2;
+}
+
+message GmGetJewelResp 
+{
+    required int32 status = 1;
+}
+
+message JewelComposeReq
+{
+    repeated int32 jewelUids = 1;
+    required int32 mainId = 2;
+}
+
+message JewelComposeResp
+{
+    repeated stage.RewardItem jewelItems = 1;//url jewelCompose
+}

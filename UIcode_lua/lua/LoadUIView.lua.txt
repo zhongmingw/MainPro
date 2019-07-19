@@ -1,0 +1,311 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-05-31 16:54:01
+
+require "SkillItemSlot"
+
+local raceBgArr
+
+local canvasGroup
+local t 
+
+local floorSpineObj
+local floorSpine
+local modelRoot 
+local heroModel 
+local nameTxt 
+local raceObj 
+local raceImg 
+local starRoot 
+local skillGrid 
+
+local desTxt 
+
+local processTxt
+local processSlider
+local verTxt
+local tip_Lab
+
+local tipArr = {}
+local totalweight = 0
+local randomInterval = {}
+
+local LoadUIViewGroupName = "loadingBattle"
+
+local loadTxt
+
+local co
+
+local yield_return = (require 'cs_coroutine').yield_return
+
+function DoInit()	
+    raceBgArr = {}
+    local bgs = self.transform:Find("BGS")
+    for i=0,5 do
+        table.insert(raceBgArr,bgs:GetChild(i).gameObject)
+    end
+    local viewTrans = self.transform
+    floorSpineObj = viewTrans:Find("Center/Hero/FloorSpine")
+    modelRoot = viewTrans:Find("Center/Hero/ModelRoot")
+    nameTxt = viewTrans:GetComponentAtPath("Center/Hero/NameTxt" ,CLS_TEXT)
+    raceObj = viewTrans:GetGameObjectAtPath("Center/Hero/NameTxt/Race")
+    raceImg = raceObj.transform:GetGameObjectAtPath("RaceImg")
+    starRoot = viewTrans:Find("Center/Hero/StarRoot")
+    skillGrid = viewTrans:GetComponentAtPath("Center/Hero/SkillGrid" ,CLS_UI_ITEM_GRID)
+
+    desTxt = viewTrans:GetComponentAtPath("Center/Des/DesTxt" ,CLS_TEXT)
+
+    processSlider = viewTrans:GetComponentAtPath("Bottom/Slider" ,CLS_SLIDER)
+    processTxt = viewTrans:GetComponentAtPath("Bottom/Text_Info" ,CLS_TEXT)
+    verTxt = viewTrans:GetComponentAtPath("Bottom/VerTxt" ,CLS_TEXT)
+    tip_Lab = viewTrans:GetComponentAtPath("Bottom/TipTxt" ,CLS_TEXT)
+
+    canvasGroup = viewTrans:GetComponent(CLS_CANVAS_GROUP)
+
+    
+    if _G.ShowLoadResCount then
+        loadTxt = viewTrans:GetComponentAtPath("Bottom/LoadTxt",CLS_TEXT)
+    else
+        InitTipsArr()
+    end
+end
+
+function OnOpen(obj,onFinished)
+    ShowUIWithFade(0,1)
+    ShowLoadingHeroInfo(GetRandomHeroData(), onFinished)
+    if _G.ShowLoadResCount then
+        loadTxt.text = string.format(Language:getStr("Load_Confirm_Progress"),_G.LoadResCount)
+    else
+        SetTipTxt()
+    end
+end
+
+function ShowUIWithFade(from, to, delay, onFnished)
+    if t then
+        t:DoKill()
+    end
+
+    canvasGroup.alpha = from
+    t = CsBridge.TweenUtils.FadeTo(canvasGroup.transform,to,0.3,onFnished)
+    if delay then
+        t:DoDelay(delay)
+    end
+    t:DoPlay()
+    -- body
+end
+
+function HideModelWithFade(delay)
+    if heroModel then
+        local modelT = CsBridge.TweenUtils.SpineFadeTo(heroModel.transform:GetChild(0):GetComponent("Spine.Unity.SkeletonGraphic"),0,0.3)
+        if delay then
+            modelT:DoDelay(delay)
+        end
+        modelT:DoPlay()
+    end
+end
+
+function HideFloorWithFade(delay)
+    if floorSpine then
+        local modelT = CsBridge.TweenUtils.SpineFadeTo(floorSpine:GetComponent("Spine.Unity.SkeletonGraphic"),0,0.3)
+        if delay then
+            modelT:DoDelay(delay)
+        end
+        modelT:DoPlay()
+    end
+end
+
+function OnUpdateProcess(process)
+    process = math.min(process,1)
+    processSlider.value = process
+    processTxt:SetText(CsBridge.UnityHelper.FloorToInt(process * 100).."%");
+end
+
+function OnHide(obj,onFinished)
+    CsBridge.objectCache:ForceGC()
+
+    HideModelWithFade(0.4)
+    HideFloorWithFade(0.4)
+    ShowUIWithFade(1,0,0.5,function()
+        processSlider.value = 0;
+        processTxt:SetText("0%")
+    
+        if heroModel ~= nil then
+            local name = heroModel.name
+            CS.UnityEngine.GameObject.Destroy(heroModel)	   
+            heroModel = nil
+        end
+        if floorSpine ~= nil then
+            --DestroyModel(floorSpine.gameObject)
+            local name = floorSpine.name
+            CS.UnityEngine.GameObject.Destroy(floorSpine)	 
+            floorSpine = nil
+        end
+        skillGrid:ClearItems()
+        CsBridge.objectCache:ClearGroup(LoadUIViewGroupName, true)
+        if onFinished~= nil then
+            onFinished()
+        end
+    end)
+end
+
+function ShowLoadingHeroInfo(loadingInfo, onFinished)
+    if loadingInfo ~= nil then
+        local hero = loadingInfo.hero
+        --nameTxt:SetText(hero.name)
+        for i,v in ipairs(raceBgArr) do
+            v:SetSelfActive(i==hero.group)
+        end
+        nameTxt:SetTextWithSizeChange(hero.name)
+        SetIconByRaceId(raceImg,hero.group)
+        SetHeroStar(hero.quality,starRoot)
+        desTxt:SetText(loadingInfo.desp)
+        CsBridge.objectCache:CacheAssets(false,LoadUIViewGroupName,nil,function()
+            ShowSkill(hero.skill)
+            CreateFloorSpine(GetPlatformAnim(hero.group),floorSpineObj)
+            CreateModel(hero.model,modelRoot,onFinished)
+        end,hero.model,"HeroFloorSpine","SkillItemSlot",hero.skill[1].icon,hero.skill[2].icon,hero.skill[3].icon,hero.skill[4].icon)
+    end
+end
+
+function ShowSkill(skill)
+    for i,v in ipairs(skill) do
+        v.noCache = true
+    end
+	skillGrid:RefreshItemSlots(skill,self.gameObject,"SkillItemSlot")
+end
+
+function GetRandomHeroData()
+    local tbl=ResTblContainer:GetTable(Loading.tblName)
+    local heroTbl=ResTblContainer:GetTable(HeroQuality.actorTbl)
+    local heroIds = tbl:GetCol(Loading.hero)
+    while true do
+        local i = CsBridge.UnityHelper.GetRandomInt(0, heroIds.Length - 1)
+        local heroId = tonumber(heroIds[i])
+    
+        local unlockedFlag = 1
+        local unlocked = tonumber(tbl:Get(heroId,Loading.open)) == unlockedFlag
+        if unlocked then
+            local hero = {}
+            hero.heroId = heroId
+            if heroId ~= 0 then
+                hero.name = global_heroBaseArr[heroId].title
+                hero.quality = global_heroBaseArr[heroId].quality
+                hero.group = global_heroBaseArr[heroId].group
+                hero.model = global_heroBaseArr[heroId].model
+                hero.grade = heroTbl:GetInt(hero.quality,HeroQuality.maxGrade)
+                hero.level = GetHeroMaxLevel(hero.grade)
+                hero.skill = GetHeroSkillArr(hero)
+            end
+            local desp = tbl:Get(heroId,Loading.desp)
+            
+            return {hero = hero, desp = desp}
+        end
+    end
+end
+
+function InitTipsArr()
+   tipArr = {}
+   local ids = ResTblContainer:GetIds(tips.tblName)
+   local tbl=ResTblContainer:GetTable(tips.tblName)
+   for i=0,ids.Length-1 do
+       local data = {}
+       local id = tonumber(ids[i])
+       data.id = id
+       data.weight = tbl:GetInt(id,tips.weight)
+       data.text = tbl:Get(id,tips.text)
+       table.insert(tipArr,data)
+   end
+   totalweight = 0
+   randomInterval = {}
+   for i,data in ipairs(tipArr) do
+       totalweight = totalweight + data.weight
+       table.insert(randomInterval,totalweight)
+   end
+end
+
+function SetTipTxt()
+    local random = CsBridge.UnityHelper.GetRandomInt(1,totalweight)
+    local id = 0
+    for i,weight in ipairs(randomInterval) do
+        if random<=randomInterval[1] then
+            id = 1 
+            break
+        end
+        if random>randomInterval[#randomInterval] then
+            id = #randomInterval
+            break
+        end
+        if random>randomInterval[i] and random<=randomInterval[i+1] then
+            id = i
+            break
+        end
+    end
+    tip_Lab.text = tostring(tipArr[id].text)
+end
+
+function CreateModel(name, root,onFinished)
+        local model = CsBridge.objectCache:CreateObject(name, true)
+        model.transform:SetParent(root, false)
+        CsBridge.UnityHelper.SetAnchoredPosition(model.gameObject,0,0)
+		CsBridge.UnityHelper.SetlocalScale(model.gameObject,-1,1,1)
+        local heroModelSkeleton = model.transform:GetChild(0):GetComponent("Spine.Unity.SkeletonGraphic")
+        heroModelSkeleton:PlayAnimation("stand", true)
+        heroModelSkeleton.freeze = true
+        heroModel = model
+        if onFinished ~= nil then
+            co = coroutine.create(function()
+                yield_return(1)
+                onFinished()
+            end)
+            assert(coroutine.resume(co))
+        end
+	--end, name)
+end
+
+function CreateFloorSpine(anim,root)
+    local model = CsBridge.objectCache:CreateObject("HeroFloorSpine", true)
+    model.transform:SetParent(root, false)
+    CsBridge.UnityHelper.SetAnchoredPosition(model.gameObject,0,0)
+    CsBridge.UnityHelper.SetlocalScale(model.gameObject,-0.38,0.38,1)
+    floorSpine = model:GetComponent("Spine.Unity.SkeletonGraphic")
+    floorSpine:PlayAnimation(anim, true)
+    floorSpine.freeze = true
+end
+
+function DoExit()
+
+    raceBgArr = nil
+
+    canvasGroup = nil
+    t  = nil
+
+    floorSpineObj = nil
+    floorSpine = nil
+    modelRoot  = nil
+    heroModel  = nil
+    nameTxt  = nil
+    raceObj  = nil
+    raceImg  = nil
+    starRoot  = nil
+    skillGrid  = nil
+
+    desTxt  = nil
+
+    processTxt = nil
+    processSlider = nil
+    verTxt = nil
+    tip_Lab = nil
+
+    tipArr  = nil
+    totalweight = nil
+    randomInterval  = nil
+
+    LoadUIViewGroupName = nil
+
+    loadTxt = nil
+
+    co = nil
+
+    yield_return  = nil
+end

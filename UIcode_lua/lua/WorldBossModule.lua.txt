@@ -1,0 +1,19 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-03-13 20:07:29
+
+function DoInit()
+end
+
+function AssetNames(objs)
+    local arr = {"WorldBossView"}
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    self:OpenView("WorldBossView", "WorldBossModel")
+    if(onFinished ~= nil) then
+        onFinished()
+    end
+end

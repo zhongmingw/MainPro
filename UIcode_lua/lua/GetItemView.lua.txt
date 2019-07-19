@@ -1,0 +1,49 @@
+
+local DropItemSlot=require "DropItemSlot"
+
+
+local itemGrid
+local itemArr={}
+
+
+function DoInit()
+	itemGrid= self.transform:Find("itemSV/ScrollRect/Viewport/ItemGrid"):GetComponent("UIItemGrid")
+end
+
+function SetParamDataList(obj)
+	itemArr=obj[0]
+	OnReset()
+end
+
+function  OnReset()
+	CsBridge.CacheAssetsByModule(self.Module,function()
+		itemGrid:RefreshItemSlots(itemArr,self.gameObject,"DropItemSlot")
+	end, "DropItemSlot")
+end
+
+function OnItemGridItemBtnClick(obj)
+	CsBridge.CacheAssetsByModule(self.Module,function()
+		local data=obj:GetItemData().data
+		local item = {
+			id = data.id,
+			typeId = data.typeId,
+			count = 1
+		}
+		if item.typeId == 3 then
+			return
+		end
+		local view = CsBridge.OpenView("ItemTipView", "ItemTipModel",false,false)
+		view:SetParamDataList(item,itemBaseIndex+itemDespIndex)
+		view:SendCommand("InitItemData")
+	end, "ItemTipView")
+end
+
+
+function OnCloseBtnClick(sender)
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	itemGrid = nil
+	itemArr = nil
+end

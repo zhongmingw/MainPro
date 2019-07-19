@@ -1,0 +1,455 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-04-17 16:00:22
+local MazeDef = require "MazeDef"
+local MazeUtils = require "MazeUtils"
+local MazeFactory = require "MazeFactory"
+local GridType = MazeDef.GridType
+local GridState = MazeDef.GridState
+local EventType = MazeDef.EventType
+local EventParamType = MazeDef.EventParamType
+local MazeEvent = MazeDef.MazeEvent
+local MAX_COL = 5
+local GRID_WIDTH = 113
+
+local svrData
+
+local function DieMazeStage()
+    MazeUtils.ShowConfirmMsgBox(Language:getStr("MazePlayerDie"),function()
+        self:SendNotification("HideView")
+    end)
+end
+
+local function OverMazeStage()
+    MazeUtils.ShowConfirmMsgBox(Language:getStr("Maze_Over"),function()
+        self:SendNotification("HideView")
+    end)
+end
+
+local function GetPosByData(data)
+    return {
+        row = data.row or 0,
+        col = data.col or 0
+    }
+end
+
+local function GetIndexByRowCol(row, col)
+    return MAX_COL*row + col
+end
+
+local function UpdateSingleGrids(data)
+    local updateGrids = {}
+    for _,v in ipairs(data) do
+        local grid = MazeFactory.CreateMazeGridBySvrData(v)
+        local updateGrid = {
+            grid = grid,
+            index = GetIndexByRowCol(grid.row,grid.col)
+        }
+        table.insert(updateGrids, updateGrid)
+    end
+    self:SendNotification("RefreshSingleGrids",updateGrids)
+end
+
+local function GetAllGridsBySvrData(svrData)
+    local grids = {}
+    for _,v in ipairs(svrData) do
+        local grid = MazeFactory.CreateMazeGridBySvrData(v)
+        table.insert(grids, grid)
+    end
+    return grids
+end
+
+local function GetPlayerBuffsBySvrData(data)
+    local buffs = {}
+    if data.buffs == nil then
+        return buffs
+    end
+    for i,buff in ipairs(data.buffs) do
+        local buff = MazeUtils.GetMazeBuffDataBySvrData(buff)
+        table.insert(buffs,buff)
+    end
+    return buffs
+end
+
+local function GetPlayerDataBySvrData(data)
+    local player = {
+        row = data.row,
+        col = data.col,
+        hp = data.hp,
+        maxHp = data.maxHp,
+        itemMap = data.itemMap,
+        icon = appData:checkData("PlayerInfo").icon,
+        buffs = GetPlayerBuffsBySvrData(data)
+    }
+    return player
+end
+
+local function CheckGridInPlayerPos(grid, player)
+    return grid.row == player.row and grid.col == player.col
+end
+
+local function CheckGridInPlayerTriggerArea(grid, player)
+    return (grid.row - player.row)^2 + (grid.col - player.col)^2 <= 1
+end
+
+local function GetMoveAnchoredPosByRowCol(row, col)
+    return {
+        x = col*GRID_WIDTH,
+        y = -row*GRID_WIDTH
+    }
+end
+
+local function GetMoveDir(oldPos, newPos)
+    local PlayerDir = MazeDef.PlayerDir
+    local row = newPos.row - oldPos.row
+    local col = newPos.col - oldPos.col
+    if row == 0 and col == 0 then
+        return PlayerDir.None
+    end
+    if row == 0 then
+        return col > 0 and PlayerDir.Right or PlayerDir.Left
+    else
+        return row > 0 and PlayerDir.Down or PlayerDir.Up
+    end
+end
+
+local function UpdateMazeStageBySvrData(data)
+    UpdateSingleGrids(data.grids)
+    local curPlayer = GetPlayerDataBySvrData(svrData)
+    local pos = GetMoveAnchoredPosByRowCol(svrData.row,svrData.col)
+    self:SendNotification("RefreshPlayer",curPlayer,pos)
+end
+
+local function OnMazeGridTriggerMonster(obj)
+    local grid = obj
+    local monsters = grid.formation
+    local onFinished = function()
+        local view = CsBridge.OpenView("MazeMonsterPreView","MazeMonsterPreModel")
+        local formationCallback = function(formationPos)
+            local data = {
+                row = grid.row,
+                col = grid.col,
+                formationPos = formationPos
+            }
+            local onFinished = function(resp)
+                local oldPos = GetPosByData(svrData)
+                svrData = MazeUtils.JsonDecode(resp.labyrinthResp)
+                local BATTLE_WIN = 1
+                local battleFail = resp.battleInfo.battleEndInfo.result ~= BATTLE_WIN
+                if not grid.upPos or battleFail then
+                    svrData.row = oldPos.row
+                    svrData.col = oldPos.col
+                end
+                ShowBattleModule(resp.battleInfo,self)
+            end 
+            MazeUtils.RequestMove(data,onFinished)
+        end
+        view:SetParamDataList(table.copy(monsters),formationCallback)
+    end
+    CsBridge.CacheAssetsByModule(self.Module,onFinished,"MazeMonsterPreView","HeroItemSlot")
+end
+
+local function OnMazeGridTriggerEnterNext(obj)
+    MazeUtils.ShowMsgBox(Language:getStr("MazeEnterNext"),function()
+        local onFinished = function(resp)
+            svrData = MazeUtils.JsonDecode(resp.labyrinthResp)
+            local curPlayer = GetPlayerDataBySvrData(svrData)
+            local grids = GetAllGridsBySvrData(svrData.grids)
+            local pos = GetMoveAnchoredPosByRowCol(svrData.row,svrData.col)
+            local data = {
+                grids = grids,
+                curPlayer = curPlayer,
+                pos = pos
+            }
+            self:SendNotification("RefreshMazeStageView",data)
+        end
+        MazeUtils.RequestEnterLabyrinth(true,onFinished)
+    end)
+end
+
+local function OnMazeGridTriggerBox(obj)
+    local grid = obj
+    local data = {
+        row = grid.row,
+        col = grid.col,
+        trigger = grid.trigger
+    }
+    local function onFinished(resp)
+        local oldPos = GetPosByData(svrData)
+        svrData = MazeUtils.JsonDecode(resp.labyrinthResp)
+        UpdateSingleGrids(svrData.grids)
+        local pos = GetMoveAnchoredPosByRowCol(svrData.row,svrData.col)
+        local viewData = {
+            index = GetIndexByRowCol(grid.row,grid.col),
+            pos = pos,
+            dir = GetMoveDir(oldPos,svrData),
+            rewardItems = MazeUtils.GetRewardItemsBySvrData(svrData.rewardItems),
+        }
+        viewData.mazeItems = MazeUtils.GetMazeItemsBySvrData(svrData.triggerParam)
+        self:SendNotification("ShowMazeBoxEffect",viewData)
+    end
+    MazeUtils.RequestMove(data,onFinished)
+end
+
+local function TriggerEventParamMazeItem(epData)
+    local grid = epData.grid
+    local pos = GetMoveAnchoredPosByRowCol(grid.row,grid.col)
+    local data = {
+        pos = pos,
+        dir = GetMoveDir(epData.oldPos,svrData),
+        data = epData.data
+    }
+    self:SendNotification("ShowTriggerEventParamMazeItemEffect",data)
+end
+
+local function TriggerEventParamChangeHp(epData)
+    local onFinished = nil
+    if MazeUtils.CheckPlayerDie(svrData) then
+        onFinished = function()
+            DieMazeStage()
+        end
+    end
+    self:SendNotification("ShowTriggerEventParamChangeHpEffect",epData,onFinished)
+end
+
+local function TriggerEventParamGetBuff(epData)
+    self:SendNotification("ShowTriggerEventParamGetBuff",epData)
+end
+
+local function TriggerMazeGridEventParam(data)
+    local grid = data.grid
+    for i,param in ipairs(grid.params) do
+        if param.type == EventParamType.Select then
+        elseif param.type == EventParamType.MazeItem then
+            local epData = {
+                grid = grid,
+                data = param.data,
+                oldPos = data.oldPos
+            }
+            TriggerEventParamMazeItem(epData)
+        elseif param.type == EventParamType.NormalItem then
+        elseif param.type == EventParamType.ChangeHp then
+            local epData = {
+                oldHp = data.oldHp,
+                newHp = data.newHp,
+                maxHp = data.maxHp,
+                data = param.data
+            }
+            local changeHp = epData.newHp - epData.oldHp
+            local absV = math.abs(changeHp)
+            epData.changeHp = changeHp == 0 and "" or 
+            (changeHp > 0 and "+"..absV or "-"..absV)
+            TriggerEventParamChangeHp(epData)
+        elseif param.type == EventParamType.GetBuff then
+            local epData = {
+                grid = grid,
+                buffs = GetPlayerBuffsBySvrData(svrData)
+            }
+            TriggerEventParamGetBuff(epData)
+        end
+    end
+end
+
+local function ExcuteMazeGridEventItem(grid, resp)
+    local oldPos = GetPosByData(svrData)
+    svrData = MazeUtils.JsonDecode(resp.labyrinthResp)
+    UpdateSingleGrids(svrData.grids)
+    local data = {
+        grid = grid,
+        oldPos = oldPos
+    }
+    TriggerMazeGridEventParam(data)
+end
+                                
+local function ExcuteMazeGridEventTrap(grid, resp)
+    local oldHp = svrData.hp
+    local oldPos = GetPosByData(svrData)
+    svrData = MazeUtils.JsonDecode(resp.labyrinthResp)
+    local data = {
+        grid = grid,
+        oldHp = oldHp,
+        maxHp = svrData.maxHp
+    }
+    data.newHp = svrData.hp
+    local onFinished = function()
+        UpdateSingleGrids(svrData.grids)
+        TriggerMazeGridEventParam(data)
+    end
+    local data = {
+        pos = GetMoveAnchoredPosByRowCol(grid.row,grid.col),
+        dir = GetMoveDir(oldPos,svrData),
+        index = GetIndexByRowCol(grid.row,grid.col),
+        onFinished = onFinished,
+        useItem = grid.trigger
+    }
+    self:SendNotification("ShowTrapEffect",data)
+end
+
+local function ExcuteMazeGridEvent(grid, resp)
+    local evtType = ResTblContainer:GetPropToInt(grid.triggerId,MazeEvent.eventType,MazeEvent.tblName)
+    if evtType == EventType.Select then
+
+    elseif evtType == EventType.Item then
+        ExcuteMazeGridEventItem(grid,resp)
+    elseif evtType == EventType.Trap then
+        ExcuteMazeGridEventTrap(grid,resp)
+    end
+end
+
+local function OnMazeGridTriggerEvent(obj)
+    local grid = obj
+    local data = {
+        row = grid.row,
+        col = grid.col,
+        trigger = grid.trigger
+    }
+    local onFinished = function(resp)
+        ExcuteMazeGridEvent(grid,resp)
+    end
+    MazeUtils.RequestMove(data,onFinished)
+end
+
+local function OnBattleEnd(obj)
+    local battleInfo = obj
+    local win = 1
+    UpdateMazeStageBySvrData(svrData)
+    if MazeUtils.CheckPlayerDie(svrData) then
+        DieMazeStage()
+    end
+    if MazeUtils.CheckMazeOver(svrData) then
+        OverMazeStage()
+    end
+end
+
+local function OnUpdateMazeData(obj)
+    svrData = obj
+end
+
+function DoInit()
+    MsgCenter:Subscribe(Notify_MazeGridTriggerMonster,OnMazeGridTriggerMonster)
+    MsgCenter:Subscribe(Notify_MazeGridTriggerEnterNext,OnMazeGridTriggerEnterNext)
+    MsgCenter:Subscribe(Notify_MazeGridTriggerBox,OnMazeGridTriggerBox)
+    MsgCenter:Subscribe(Notify_MazeGridTriggerEvent,OnMazeGridTriggerEvent)
+    MsgCenter:Subscribe(Notify_OnBattleEnd,OnBattleEnd)
+    MsgCenter:Subscribe(Notify_UpdateMazeData,OnUpdateMazeData)
+end
+
+function DoOnExit()
+    MsgCenter:Unsubscribe(Notify_MazeGridTriggerMonster,OnMazeGridTriggerMonster)
+    MsgCenter:Unsubscribe(Notify_MazeGridTriggerEnterNext,OnMazeGridTriggerEnterNext)
+    MsgCenter:Unsubscribe(Notify_MazeGridTriggerBox,OnMazeGridTriggerBox)
+    MsgCenter:Unsubscribe(Notify_MazeGridTriggerEvent,OnMazeGridTriggerEvent)
+    MsgCenter:Unsubscribe(Notify_OnBattleEnd,OnBattleEnd)
+    MsgCenter:Unsubscribe(Notify_UpdateMazeData,OnUpdateMazeData)
+    MazeDef = nil
+    MazeUtils = nil
+    MazeFactory = nil
+    GridType = nil
+    GridState = nil
+    EventType = nil
+    EventParamType = nil
+    MazeEvent = nil
+    MAX_COL = nil
+    GRID_WIDTH = nil
+    
+    svrData = nil
+end
+
+function OnCommand_InitData(objs)
+    svrData = objs[0]
+end
+
+function OnCommand_InitMazeStageData(objs)
+    local curPlayer = GetPlayerDataBySvrData(svrData)
+    local grids = GetAllGridsBySvrData(svrData.grids)
+    local pos = GetMoveAnchoredPosByRowCol(svrData.row,svrData.col)
+    local data = {
+        grids = grids,
+        curPlayer = curPlayer,
+        pos = pos
+    }
+    self:SendNotification("RefreshMazeStageView",data)
+end
+
+function OnCommand_UpdateMazeStageView(objs)
+    UpdateMazeStageBySvrData(svrData)
+end
+
+function OnCommand_SelectMazeGrid(objs)
+    local grid = objs[0]
+    if CheckGridInPlayerPos(grid,svrData) then
+        return
+    end
+    if not CheckGridInPlayerTriggerArea(grid,svrData) then
+        MazeUtils.ShowHintBox(Language:getStr("MazeOverPlayerArea"))
+        return
+    end
+    local openFinished = function(data)
+        local onFinished = function(resp)
+            local oldPos = GetPosByData(svrData)
+            svrData = MazeUtils.JsonDecode(resp.labyrinthResp)
+            UpdateSingleGrids(svrData.grids)
+            svrData.row = oldPos.row
+            svrData.col = oldPos.col
+            local index = GetIndexByRowCol(grid.row,grid.col)
+            local viewData = {
+                index = index
+            }
+            self:SendNotification("ShowGridOpenEffect",viewData)
+        end
+        MazeUtils.RequestMove(data,onFinished)
+    end
+    local clickFinished = function()
+        local oldPos = GetPosByData(svrData)
+        svrData.row = grid.row
+        svrData.col = grid.col
+        local pos = GetMoveAnchoredPosByRowCol(grid.row,grid.col)
+        local dir = GetMoveDir(oldPos,grid)
+        local viewData = {
+            pos = pos,
+            dir = dir
+        }
+        self:SendNotification("PlayerMove",viewData)
+    end
+    local blockFinished = function()
+        MazeUtils.ShowHintBox(Language:getStr("MazeBlock"))
+    end
+    local curPlayer = GetPlayerDataBySvrData(svrData)
+    local data = {
+        curPlayer = curPlayer,
+        openFinished = openFinished,
+        clickFinished = clickFinished,
+        blockFinished = blockFinished
+    }
+    grid:Trigger(data)
+end
+
+function OnCommand_OpenBagView(objs)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("MazeBagView","MazeBagModel",true,true)
+        local data = {
+            itemMap = svrData.itemMap,
+            col = svrData.col,
+            row = svrData.row
+        }
+        view:SetParamDataList(data)
+    end,"MazeBagView","MazeBagItemSlot")
+end
+
+function OnCommand_OpenRewardBagView(objs)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("MazeRewardBagView","MazeRewardBagModel",true,true)
+        local data = {
+            totalReward = svrData.totalReward,
+            col = svrData.col,
+            row = svrData.row
+        }
+        view:SetParamDataList(data)
+    end,"MazeRewardBagView","ItemSlot")
+end
+
+function OnCommand_ShowBuffTip(objs)
+    local buff = objs[0]
+    MazeUtils.ShowMazeBuffTip(self.Module,buff)
+end

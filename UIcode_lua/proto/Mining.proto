@@ -1,0 +1,217 @@
+import "stage.proto";
+import "BattleData.proto";
+import "playerData.proto";
+import "ArenaData.proto";
+package Mining;
+
+//矿点详情
+message MineDetail
+{
+    required string  id = 1;
+    required int32 state = 2;//0->free, 1->占领
+    required playerData.PlayerBaseInfo host = 3; //玩家基本信息
+    required int64 hostStartTime = 4;//开始占领时间
+    required int64 lastTakeMineTime = 5;//上次收资源时间
+    required int64 protectionEndTime = 6;//保护结束时间
+    required int32 type = 7;//矿点类型
+    required int32 protectionType = 8;////保护类型，1/系统保护，2/购买的保护
+    required int64 closeTime = 9; //关矿时间
+}
+
+//英雄信息
+message HeroInfo
+{
+    required int32 uid = 1;
+    required int64 curHp = 2;
+    required int64 hp = 3;
+    required int64 lastRecoverTime = 4;//上一次恢复时间
+}
+
+// 获取所有的矿
+// url = "checkAllMines"
+message CheckAllMinesReq
+{
+    required int32 useless = 1;
+}
+
+message CheckAllMinesResp
+{
+    repeated MineDetail mineDetails = 1;
+}
+
+// 占领矿产
+// url = "takeMine"
+message TakeMineReq
+{
+    required string mineId = 1;
+    repeated stage.FormationPos formationPos = 2; 
+}
+
+message TakeMineResp
+{
+    required int32 result = 1;//0表示成功, 1失败
+    required BattleData.BattleInfo battleInfo = 2;
+    required MineDetail mineDetail = 3;
+}
+
+//退出矿产
+// url = "quitMine"
+message QuitMineReq
+{
+    required string mineId = 1;
+}
+
+message QuitMineResp
+{
+    required int32 result = 1;//0表示成功
+}
+
+//收取资源
+// url = "getMineResource"
+message GetMineResourceReq
+{
+    required string mineId = 1;//矿的id, 为空就收取全部
+}
+
+message GetMineResourceResp
+{
+    repeated stage.RewardItem resource = 1;
+}
+
+// 搜索无人占领的矿
+// url= "searchFreeMine"
+message SearchFreeMineReq
+{
+    required int32 useless = 1;
+}
+
+message SearchFreeMineResp
+{
+    repeated MineDetail mineDetails = 1;
+}
+
+//购买回血
+// url = "recoverMineHero"
+message RecoverMineHeroReq
+{
+    required int32 useless = 1;
+}
+
+message RecoverMineHeroResp
+{
+    required int32 result = 1;//0表示成功
+}
+
+//  给保护费
+// buyMineProtection
+message BuyMineProtectionReq
+{
+    required string mineId = 1;
+}
+
+message BuyMineProtectionResp
+{
+    required int32 result = 1;
+}
+
+// 矿产科技
+//自动返回的pb
+message MineInfo
+{
+    repeated string upgradeIds = 1;//已升级的id
+    required int32 upgradeNum = 2;//总加成数值
+    required int32 grabTimes = 3;//攻击次数
+    required int32 grabWinTimes = 4;//成功的次数
+    required int64 totalTakenTime = 5;//总占矿时间(s)
+    required int64 totalGold = 6;//金币
+    required int64 totalSoul = 7;//战魂
+    required int64 totalStepCoin = 8;// 进阶石
+    required int32 recoverTimes = 9;//已使用的恢复次数
+    required int32 protectBuyTimes = 10;//已购买的保护次数
+    repeated string takeMineIds = 11;//自己已占领的矿产id数组
+}
+
+// 升级挖矿科技
+// url= "upgradeMineScience"
+message UpgradeMineScienceReq
+{
+    required int32 id = 1;
+}
+
+message UpgradeMineScienceResp
+{
+    required int32 result = 1;
+}
+
+// 更新矿的防守阵容
+// url = "updateMineDefFormation"
+message UpdateMineDefFormationReq
+{
+    required string mineId = 1;
+    repeated stage.FormationPos formationPos = 2;
+}
+
+message UpdateMineDefFormationResp
+{
+    required int32 result = 1;
+}
+
+//获取英雄的血量信息
+// url = "checkMineHeroInfo"
+message CheckMineHeroInfoReq
+{
+    required int32 useless = 1;
+}
+
+message CheckMineHeroInfoResp
+{
+    repeated HeroInfo heroInfos = 1;
+}
+
+// 拉取矿主的阵容和血量信息
+// url = "checkHostInfo"
+message checkHostInfoReq
+{
+    required string mineId = 1;
+}
+
+message CheckHostInfoResp
+{
+    repeated ArenaData.FormationPosAdv formationPos = 1;
+    repeated HeroInfo heroInfos = 2;
+    required int64 hostCombat = 3;
+}
+
+//获取所有的系统信息
+// url = "checkExploreEnter"
+message CheckExploreEnterReq
+{
+    required int32 useless = 1;
+}
+
+message ExploreEnterItem
+{
+    required int32 id = 1;
+    required string name =2;
+    required string tips = 3;
+    required string background = 4;
+    required int32 uiOpenId = 5;//UIOpenBase表里面的id
+    required bool open = 6;
+}
+
+message CheckExploreEnterResp
+{
+    repeated ExploreEnterItem items = 1;
+}
+
+// 从矿的防守阵容下阵某个英雄
+// url = "removeHeroFromMineDef"
+message RemoveHeroFromMineDefReq
+{
+    repeated int32 heroUidList = 1;
+}
+
+message RemoveHeroFromMineDefResp
+{
+    required int32 result = 1;
+}

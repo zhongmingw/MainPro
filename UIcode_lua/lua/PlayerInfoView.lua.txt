@@ -1,0 +1,387 @@
+require "AchievementItemSlot"
+require "ChatHelper"
+
+local FormationHeader = {
+	[FormationTypeEnum.FormationType_PVP] = Language:getStr("Global_18"),
+	[FormationTypeEnum.FormationType_BraveArena] = Language:getStr("LeagueFormation"),
+}
+
+local levelTxt, vipLevelTxt, vipTxt, nickNameTxt, idTxt, unionTxt, expTxt
+local player_TF
+local iconImg, unionImg, unionBtnObj
+local auraObj, renameBtnObj, formationBtnObj
+local makeFriendBtnObj, deleteFriendBtnObj, bottomPanelObj
+local blockFriendTxt, blockBtn
+local heroItems
+local expSlider
+local achievementGrid
+local formationHeaderTxt
+local mailBtnObj
+
+local isLocal = true
+local uid = 0
+local zone = 0
+local siblingIndex = -1
+local inited = false;
+local showUnionInfoBtn = true
+local formationType = FormationTypeEnum.FormationType_PVP
+local cachedFormationData
+
+local viewData
+
+function SetParamDataList(obj)
+	local localFlagIdx = 0
+	local uidIdx = 1
+	local zoneIdx = 2
+	local siblingIndex = 3
+	local unionBtnFlagIdx = 4
+	local formationTypeIdx = 5
+
+	isLocal = obj[localFlagIdx]
+	uid = obj[uidIdx] or "0"
+	zone = obj[zoneIdx] or "0"
+	if obj.Length > siblingIndex then
+		siblingIndex = obj[siblingIndex]
+	end
+	if obj.Length > unionBtnFlagIdx then
+		showUnionInfoBtn = obj[unionBtnFlagIdx]
+	end
+	if obj.Length > formationTypeIdx then
+		formationType = obj[formationTypeIdx]
+	end
+
+	if not isLocal then
+		local playerInfo = appData:checkData("PlayerInfo")
+		if playerInfo.userId == uid and playerInfo.zone == zone then
+			isLocal = true
+		end
+	end
+end
+
+function SetData(data)
+	if data then
+		for k, posDataAdv in pairs(data) do
+			if posDataAdv.formationPos == nil then
+				return
+			end
+		end
+	end
+	
+	cachedFormationData = data
+end
+
+function DoInit()
+	self.Shadow = 1
+end 
+
+function IsSetAnchor()
+	if siblingIndex > 0 then
+		self.transform.parent:SetSiblingIndex(siblingIndex)
+		return true
+	else
+		return false
+	end
+end
+
+function InitUI()
+	local selfTrans = self.transform
+
+	heroItems = {}
+	local path = "Top/Formation/Heros"
+	local formationRoot = selfTrans:Find(path)
+	for i = 0, formationRoot.childCount - 1 do
+		local childTrans = formationRoot:GetChild(i)
+		local heroItem = {}
+		heroItem.transform = childTrans
+		heroItems[i + 1] = heroItem
+	end
+
+	player_TF = selfTrans:Find("Top/PlayerBase")
+
+	path = "Top/nickNameTxt"
+	nickNameTxt = self:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Top/playerIDTxt"
+	idTxt = self:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Top/unionNameTxt"
+	unionTxt = self:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Top/ExpSlider/expTxt"
+	expTxt = self:GetComponentAtPath(path, CLS_TEXT)
+
+	-- path = "Top/Player/heroImg"
+	-- iconImg = self:GetComponentAtPath(path, CLS_IMAGE)
+
+	path = "Top/unionIconImg"
+	unionImg = self:GetComponentAtPath(path, CLS_IMAGE)
+
+	path = "Top/unionIconImg/UnionBtn"
+	unionBtnObj = self:GetGameObjectAtPath(path)
+
+	path = "Top/Formation/auraIconImg"
+	auraObj = self:GetGameObjectAtPath(path)
+
+	path = "Top/ExpSlider"
+	expSlider = self:GetComponentAtPath(path, CLS_SLIDER)
+
+	path = "Top/RenameBtn"
+	renameBtnObj = self:GetGameObjectAtPath(path)
+
+	path = "Top/FormationBtn"
+	formationBtnObj = self:GetGameObjectAtPath(path)
+
+	path = "Bottom"
+	local bottomPanelTrans = selfTrans:Find(path)
+	bottomPanelObj = self:GetGameObjectAtPath(path)
+
+	path = "MakeFriendBtn"
+	makeFriendBtnObj = bottomPanelTrans:GetGameObjectAtPath(path)
+
+	path = "DeleteFriendBtn"
+	deleteFriendBtnObj = bottomPanelTrans:GetGameObjectAtPath(path)
+
+	path = "MailBtn"
+	mailBtnObj = bottomPanelTrans:GetGameObjectAtPath(path)
+
+	path = "Center/Achievements/ScrollRect/Viewport/Grid"
+	achievementGrid = self:GetComponentAtPath(path, CLS_UI_ITEM_GRID)
+
+	path = "BlockBtn"
+	blockBtn = bottomPanelTrans:GetComponentAtPath(path, CLS_BUTTON_ARCHLY)
+
+	blockFriendTxt = bottomPanelTrans:GetComponentAtPath("BlockBtn/nameTxt", CLS_TEXT)
+	formationHeaderTxt = self:GetComponentAtPath("Top/arenaTxt", CLS_TEXT)
+end
+
+function OnAnimationFinished()
+    if (not inited) then
+	    InitUI()
+		inited = true
+	end
+
+	TryGetViewData(isLocal, uid, zone, formationType, cachedFormationData)
+end 
+
+function TryGetViewData(isLocal, uid, zone, formationType)
+	self:SendCommand("GetPlayerInfoViewData", isLocal, uid, zone, formationType, cachedFormationData)
+end
+
+function OnNotification_RefreshPlayerInfoView(objs)
+	viewData = objs[0]
+	RefeshView(viewData)
+end
+
+function OnNotification_RefreshAchievementsView(objs)
+	local viewData = objs[0]
+	achievementGrid:RefreshItemSlots(viewData, self.gameObject, "AchievementItemSlot")
+end
+
+function RefeshView(viewData)
+	BindPlayerBaseInfoValue(player_TF,viewData.playerInfo)
+	nickNameTxt.text = viewData.playerInfo.nick
+	idTxt.text = tostring(viewData.playerInfo.userId)
+	unionTxt.text = viewData.union
+	unionImg.gameObject:SetActive(viewData.showUnion)
+	if viewData.showUnion then
+		CsBridge.IconData.SetIconByName(unionImg.gameObject, viewData.unionIcon)
+	end
+	expTxt.text = viewData.expDesc
+	expSlider.value = viewData.levelUpProgress
+	ShowAura(viewData.aura)
+	ShowAchievements(viewData.achievements)
+	ShowFormation(viewData.formation)
+	unionBtnObj:SetActive(showUnionInfoBtn)
+	SetButtons(isLocal, viewData.isFriend, viewData.sameGroup)
+
+	formationHeaderTxt.text = FormationHeader[formationType] or ""
+end
+
+function ShowFormation(formation)
+	for k, heroData in pairs(formation) do
+		local posID = heroData.pos
+		local heroItem = heroItems[posID]
+		BindHeroBaseValue(heroItem.transform, heroData)
+	end
+end
+
+function ShowAchievements(achievements)
+	achievementGrid:RefreshItemSlots(achievements, self.gameObject,"AchievementItemSlot")
+end
+
+function ShowAura(auraData)
+    if not auraData then
+		CsBridge.IconData.SetIconByName(auraObj,"new_com_guanghuan11")
+    else
+        auraObj:SetActive(true)
+        CsBridge.IconData.SetIconByName(auraObj,auraData.icon)
+    end
+end
+
+function SetButtons(isLocal, isFriend, sameZone)
+	renameBtnObj:SetActive(isLocal)
+	formationBtnObj:SetActive(isLocal and formationType == FormationTypeEnum.FormationType_PVP)
+	bottomPanelObj:SetActive(not isLocal)
+
+	local makeFriendBtn = makeFriendBtnObj:GetComponent(CLS_BUTTON_ARCHLY)
+	local mailBtnObj = mailBtnObj:GetComponent(CLS_BUTTON_ARCHLY)
+	if sameZone then
+		makeFriendBtnObj:SetActive(not isFriend)
+		deleteFriendBtnObj:SetActive(isFriend)
+		makeFriendBtn.interactable = true
+		mailBtnObj.interactable = true
+	else
+		makeFriendBtnObj:SetActive(true)
+		makeFriendBtn.interactable = false
+		deleteFriendBtnObj:SetActive(false)
+		mailBtnObj.interactable = false
+	end
+
+	blockBtn.interactable = sameZone
+	if IsSheild(uid) then
+		blockFriendTxt:SetText(Language:getStr("unmaskFriend"))
+	else
+	    blockFriendTxt:SetText(Language:getStr("maskFriend"))
+	end
+
+	if not sameZone then
+		unionBtnObj:SetActive(false)
+	end
+end
+
+function OnNotification_BlockPlayer()
+	if IsSheild(uid) then
+		blockFriendTxt:SetText(Language:getStr("unmaskFriend"))
+	else
+	    blockFriendTxt:SetText(Language:getStr("maskFriend"))
+	end
+end
+
+function OnFormationBtnClick(sender)
+	self:SendCommand("OpenFormationView")
+end
+
+function OnRenameBtnClick(sender)
+	self:SendCommand("OpenRenameView")
+end
+
+function OnUnionBtnClick(sender)
+	self:SendCommand("OpenUnionView", viewData.unionID)
+end
+
+function OnBlockBtnClick(sender)
+	self:SendCommand("BlockPlayer")
+end
+
+function OnMailBtnClick(sender)
+	self:SendCommand("Mail")
+end
+
+function OnMakeFriendBtnClick(sender)
+	self:SendCommand("MakeFriend")
+end
+
+function OnDeleteFriendBtnClick(sender)
+	self:SendCommand("DeleteFriend")
+end
+
+function OnGridItemSlot1Click(obj)
+	local itemIndex = 1
+	OnGridItemClick(obj, itemIndex)
+end
+
+function OnGridItemSlot2Click(obj)
+	local itemIndex = 2
+	OnGridItemClick(obj, itemIndex)
+end
+
+function OnGridItemClick(obj, itemIndex)
+	local slotData = obj.m_data
+	local itemData = slotData.rewards[itemIndex]
+    self:SendCommand("OpenTipView", itemData)
+end
+
+function OnGridClaimBtnClick(obj)
+	local slotData = obj.m_data
+	local achievementID = slotData.id
+	self:SendCommand("ClaimReward", achievementID)
+end
+
+function OnHeroSlotClick(obj)
+	local trans = obj.transform
+	for posID, heroItem in pairs(heroItems) do
+		if heroItem.transform == trans then
+			self:SendCommand("OpenHeroTipView", posID,isLocal)
+		end
+	end
+end
+
+function OnauraIconImgClick(obj)
+	self:SendCommand("ShowAuraTips")
+end
+
+function OnPlayerBaseClick(obj)
+	if isLocal then
+		self:SendCommand("OpenHeadIconView")
+	end
+end
+
+function OnVIPBtnClick(obj)
+	if isLocal then
+		self:SendCommand("OpenVipView")
+	end
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function OnMaskClick(sender)
+	Close()
+end 
+
+function Close() 
+	if self.Module.ModuleName == "HeadModule" then
+		self:ReturnBack()
+	else
+		self:HideView("PlayerInfoView")
+	end
+end
+
+function DoExit()
+	self.Module=nil
+	FormationHeader = nil
+	levelTxt = nil
+	vipLevelTxt = nil
+	vipTxt = nil 
+	nickNameTxt = nil 
+	idTxt = nil 
+	unionTxt = nil 
+	expTxt = nil
+	player_TF = nil
+	iconImg = nil 
+	unionImg = nil 
+	unionBtnObj = nil
+	auraObj = nil 
+	renameBtnObj = nil 
+	formationBtnObj = nil
+	makeFriendBtnObj = nil 
+	deleteFriendBtnObj = nil 
+	bottomPanelObj = nil
+	blockFriendTxt = nil 
+	blockBtn = nil
+	heroItems = nil
+	expSlider = nil
+	achievementGrid = nil
+	formationHeaderTxt = nil
+	mailBtnObj = nil
+	isLocal  = nil
+	uid  = nil
+	zone  = nil
+	siblingIndex  = nil
+	inited  = nil
+	showUnionInfoBtn  = nil
+	formationType  = nil
+	cachedFormationData = nil
+	viewData = nil
+end

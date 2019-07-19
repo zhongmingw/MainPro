@@ -1,0 +1,411 @@
+--[[
+	file: UnionTechModel.lua
+	author: hangang
+	description: Union technology logics
+]]
+
+require "UnionUtils"
+
+local unionTechCfg
+local currentTechID = -1
+local clickFlag = true
+
+
+------initialization-------
+function DoInit()
+	LoadUnionTechCfg()
+end
+
+function LoadUnionTechCfg()
+	unionTechCfg = {}
+	local tblName = GuildTech.tblName
+	local itemIds = GetIds(tblName)
+	local rowData
+	local tbl=ResTblContainer:GetTable(tblName)
+    for  i = 0, itemIds.Length - 1 do
+        local id = tonumber(itemIds[i])
+		rowData = {}
+		rowData.id = id
+		rowData.name = tbl:Get(id, GuildTech.name)
+		rowData.icon = tbl:Get(id, GuildTech.icon)
+		rowData.job = tbl:GetInt(id, GuildTech.job)
+		rowData.levelCount = tbl:GetInt(id, GuildTech.levelCount)
+		rowData.attribute = FormatAttribute(tbl:Get(id, GuildTech.attribute))
+		rowData.requiredTechID = tbl:GetInt(id, GuildTech.preconditionId)
+		rowData.requiredTechLevel = tbl:GetInt(id, GuildTech.preconditionlevel)
+		rowData.price = GetRewardFromTbl(tbl:Get(id, GuildTech.consumption))
+			
+		table.insert(unionTechCfg, rowData)
+    end
+end
+
+function FormatAttribute(attString)
+	local attStrings = SplitString(attString,",")
+	local IDX_ID, IDX_VALUE_TYPE, IDX_VALUE = 0, 1, 2
+	local attID = tonumber(attStrings[IDX_ID])
+	local attValueType = tonumber(attStrings[IDX_VALUE_TYPE])
+	local attValue = tonumber(attStrings[IDX_VALUE])
+
+	return { id = attID, valueType = attValueType, value = attValue}
+end
+
+------Union tech logics-------
+function UpgradeUnionTech(jobID, techID)
+	currentTechID = techID
+
+	local req = {}
+	req.job = jobID
+	req.id = techID
+	HttpRequest("unionTechUpgrade", "UnionTechUpgradeReq", "UnionTechUpgradeResp", req, OnUpgradeResp)
+end
+
+function OnUpgradeResp(resp)
+	if resp then	
+		clickFlag = true
+		local result = resp.status
+		local Enum = ServerEnum_OperationResult
+		if result == Enum.Succeeded then
+			self:SendNotification("LevelupSucceeded")
+			self:SendNotification("RefreshView", GetViewData(currentTechID))
+			self:SendNotification("RefreshItemView", GetTechViewData(currentTechID))
+		end
+	end
+end
+
+function GetPlayerTechData()
+	local unionPB = appData:checkData("PlayerUnionRecord")
+	return unionPB.unionTechs
+end
+
+function GetJobTechData(jobID)
+	local playerTechData = GetPlayerTechData()
+	if playerTechData then
+		for i = 1, #playerTechData do
+			local jobTech = playerTechData[i]
+			if jobTech.job == jobID then
+				return jobTech.techs
+			end
+		end
+	end
+	
+	return nil
+end
+
+function GetTechLevel(jobID, techID)
+	local level = 0
+	local jobTechData = GetJobTechData(jobID)
+	if jobTechData then
+		for i = 1, #jobTechData do
+			local techData = jobTechData[i]
+			if techData.id == techID then
+				level = techData.level
+			end
+		end
+	end
+
+	return level
+end
+
+function GetTechCfg(techID)
+	for k, techCfg in pairs(unionTechCfg) do
+		if techCfg.id == techID then
+			return techCfg
+		end
+	end
+end
+
+function CheckTechUnlocked(jobID, techID)
+	local techCfg = GetTechCfg(techID)
+	local requiredTechID = techCfg.requiredTechID
+	local unlocked = true
+	if requiredTechID > 0 then
+		local requiredTechLevel = GetTechLevel(jobID, requiredTechID)
+		unlocked = requiredTechLevel >= techCfg.requiredTechLevel
+	end
+
+	return unlocked
+end
+
+function GetTechBonusDesc(techID, level)
+	local techCfg = GetTechCfg(techID)
+	local attribute = techCfg.attribute
+	local value = attribute.value * level
+	desc = attribute.valueType == AttributeBonusType.Percent and ("+"..value/10 .. "%") or "+"..value
+
+	return desc
+end
+
+function GetUnionCoin()
+	local playerInfo = appData:checkData("PlayerInfo")
+	local balance = playerInfo.unionCoin
+
+	return balance
+end
+
+function ResetUnionTech()
+	local req = {}
+	req.useless = 0
+	HttpRequest("unionTechReset", "UnionTechResetReq", "UnionTechResetResp", req, OnResetUnionTechResp)
+end
+
+function OnResetUnionTechResp(resp)
+	CsBridge.hintUILayer:ShowHintBox(Language:getStr("ResetSucceeded"))
+	self:SendNotification("RefreshView", GetViewData(currentTechID))
+	self:SendNotification("RefreshItemView", GetTechViewData(currentTechID))
+end
+
+function GetUnionCoinSpent()
+	local techData = GetPlayerTechData()
+	local amount = 0
+	for k, techItem in pairs(unionTechCfg) do
+		local jobID = techItem.job
+		local techID = techItem.id
+		local unlocked = CheckTechUnlocked(jobID, techID)
+		if unlocked then
+			local level = GetTechLevel(jobID, techID)
+			amount = amount + level * GetItemGuildCoinPrice(techItem)
+		end		
+	end
+
+	return amount
+end
+
+function GetItemGuildCoinPrice(techItem)
+	local priceCfg = techItem.price
+	for k, priceItem in pairs(priceCfg) do
+		if priceItem.id == ID_UNION_COIN then
+			return priceItem.count
+		end
+	end
+
+	return 0
+end
+
+function GetResetPrice()
+	local unionPB = appData:checkData("PlayerUnionRecord")
+	if not unionPB.firstFreeResetUnionTechUsed then
+		return 0
+	end
+
+	local coinSpent = GetUnionCoinSpent()
+	local amountList = ResTblContainer:GetCol(GuildTechReset.tblName, GuildTechReset.consumption)
+	local resetPrice = 0
+	local amount = 0
+	local prevAmountStr
+	for k, amountStr in pairs(amountList) do
+		amount = tonumber(amountStr)
+		if coinSpent < amount then
+			resetPrice = ResTblContainer:GetPropToFloat(prevAmountStr, GuildTechReset.price, GuildTechReset.tblName)
+			break
+		end
+		prevAmountStr = amountStr
+	end
+
+	return resetPrice
+end
+
+
+------Commands-------
+function OnCommand_GetBaseViewData(objs)
+	self:SendNotification("RefreshView", GetViewData(currentTechID))
+end
+
+function OnCommand_GetItemViewData(objs)
+	local techID = objs[0]
+	currentTechID = techID
+	self:SendNotification("RefreshItemView", GetTechViewData(techID))
+end
+
+function OnCommand_OpenHelpView(objs)
+	local instuctionID = 37
+	local parentViewName = objs[0]
+	CsBridge.CacheAssetsByModule( self.Module,
+		function()
+			local view = CsBridge.OpenView("HelpView","UnionTechModel", false, true)
+			view:SetData(instuctionID)
+		end,
+		"HelpView")    
+end
+
+function OnCommand_UpgradeUnionTech(objs)
+	local techID = objs[0]
+	if not AssertUpgradeEnabled(techID) then
+		return
+	end
+	if clickFlag then
+		clickFlag = false
+		local cfg = GetTechCfg(techID)
+		UpgradeUnionTech(cfg.job, techID)
+	end
+end
+
+function AssertUpgradeEnabled(techID)
+	local techCfg = GetTechCfg(techID)
+	local jobID = techCfg.job
+	local techUnlocked = CheckTechUnlocked(jobID, techID)
+	if not techUnlocked then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionTechLocked"))
+		return false
+	end
+
+	local techLevel = GetTechLevel(jobID, techID)
+	if techLevel >= techCfg.levelCount then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionTechMaxLevel"))
+		return false
+	end
+
+	local priceCfg = techCfg.price
+	local tbl=ResTblContainer:GetTable(Resource.ResourceTbl)
+	for k, priceItem in pairs(priceCfg) do
+		local resID = priceItem.id
+		local price = priceItem.count
+		local balance = GetBalance(priceItem.id)
+		if balance < price then
+			local text = Language:getStr("ResNotEnough")
+			text = string.format(text, tbl:Get(resID, Resource.name))
+			CsBridge.hintUILayer:ShowHintBox(text)
+			return false
+		end		
+	end
+
+	return true
+end
+
+function OnCommand_ResetUnionTech(objs)
+	local amountSpent = GetUnionCoinSpent()
+	if amountSpent > 0 then
+		if AssertResetEnabled() then
+			local tips = Language:getStr("ResetUnionTechTips")
+			tips = string.format(tips, tostring(GetResetPrice()))
+			local title = Language:getStr("hint")
+			local cancelText = Language:getStr("local_cancel")
+			local confirmText = Language:getStr("local_confirm")
+			local cancelCbk = nil
+			local confirmCbk = ResetUnionTech
+			CsBridge.messageManager:showAlertView(title, tips, cancelText, cancelCbk, confirmText, confirmCbk)
+		end
+	end
+end
+
+function AssertResetEnabled()
+	local price = GetResetPrice()
+	local gemID = 2
+	local enabled = GetBalance(gemID) >= price
+	if not enabled then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("1001"))
+	end
+	return enabled
+end
+
+------View Controller-------
+function GetViewData(selectedTechID)
+	local viewData = {}
+	viewData.balanceText = tostring(GetUnionCoin())
+	viewData.upgradeBtnEnabled = false
+	viewData.priceText1 = "0"
+	viewData.priceText2 = "0"
+
+	local tbl=ResTblContainer:GetTable(Job.tblName)
+	local jobIDs = ResTblContainer:GetIds(Job.tblName)
+	local jobIcons = {}
+	local techTree = {}
+	viewData.jobIcons = jobIcons
+	viewData.techTree = techTree
+	for i = 0, jobIDs.Length - 1 do
+		local jobID = tonumber(jobIDs[i])
+
+		local icon = tbl:Get(jobID, Job.icon)
+		table.insert(jobIcons, icon)
+
+		local jobTree = {}
+		jobTree.jobID = jobID		
+		techTree[jobID] = jobTree
+	end
+
+	local techData = GetPlayerTechData()
+	for k, techItem in pairs(unionTechCfg) do
+		local jobID = techItem.job
+		local techID = techItem.id
+		local itemViewData = {}
+		itemViewData.id = techID
+		itemViewData.icon = techItem.icon
+		itemViewData.levelText = tostring(GetTechLevel(jobID, techID)) .. "/" .. tostring(techItem.levelCount)
+		itemViewData.unlocked = CheckTechUnlocked(jobID, techID)
+		itemViewData.selected = selectedTechID == techID
+		
+		table.insert(techTree[jobID], itemViewData)
+	end
+	
+	return viewData
+end
+
+function GetTechViewData(techID)
+	local viewData = {}
+
+	local techCfg = GetTechCfg(techID)
+	local jobID = techCfg.job
+	local techUnlocked = CheckTechUnlocked(jobID, techID)
+	local techLevel = GetTechLevel(jobID, techID)
+
+	viewData.name = techCfg.name
+	viewData.icon = techCfg.icon
+	viewData.levelText = tostring(techLevel) .. "/" .. tostring(techCfg.levelCount)
+	
+	local bonusDataList = {}
+	local attName, attDesc, levelupDesc = GetAttributeDesc(techCfg)
+	local bonusData = {}
+	bonusData.attributeName = attName
+	bonusData.attributeDesc = attDesc
+	bonusData.levelupDesc = levelupDesc
+	table.insert(bonusDataList, bonusData)
+	viewData.bonusDataList = bonusDataList
+
+	viewData.levelRequired = tostring(techCfg.requiredTechLevel)
+	viewData.levelFontColor = techUnlocked and color2_Rich or color26_Rich
+
+	local priceCfg = techCfg.price
+	local priceViewData = {}
+	viewData.priceViewData = priceViewData
+	local allEnough = true
+	for k, priceItem in pairs(priceCfg) do
+		local itemViewData = {}
+		itemViewData.resID = priceItem.id
+		local price = priceItem.count
+		itemViewData.price = tostring(GetValueAbbreviation(price))
+
+		local balance = GetBalance(priceItem.id)
+		local enoughBalance = balance >= price
+		itemViewData.fontColor = enoughBalance and color2 or color26
+
+		priceViewData[k] = itemViewData
+
+		allEnough = allEnough and enoughBalance
+	end
+
+	local notFinalLevel = techLevel < techCfg.levelCount
+	viewData.upgradeBtnEnabled = techUnlocked and allEnough and notFinalLevel 
+
+	return viewData
+end
+
+function GetAttributeDesc(techCfg)
+	local attribute = techCfg.attribute
+	local name = ResTblContainer:GetPropToStr(attribute.id, Attribute.name, Attribute.actorTbl)
+
+	local techID = techCfg.id
+	local level = GetTechLevel(techCfg.job, techID)
+	local desc = GetTechBonusDesc(techID, level)
+
+	local levelupDesc = desc
+	if level < techCfg.levelCount then
+		levelupDesc = GetTechBonusDesc(techID, level + 1)
+	end
+
+	return name, desc, levelupDesc
+end
+
+function DoOnExit()
+	self.Module = nil
+	unionTechCfg = nil
+	currentTechID = nil
+end

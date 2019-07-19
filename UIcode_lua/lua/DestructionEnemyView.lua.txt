@@ -1,0 +1,88 @@
+--[[
+	file: DestructionEnemyView.lua
+	author: hangang
+	description:������ʾ����ʱ�ջ��BossѪ��������Ϊ��ս��ɨ�������
+]]
+
+
+local ticketIconObj, ticketCountTxt
+local hpSlider, hpTxt
+local enemyGrid
+
+local viewData
+
+function DoInit()
+	self.Shadow = 1
+	InitUI()
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	local path = "Center/ticketIconImg"
+	ticketIconObj = self:GetGameObjectAtPath(path).gameObject
+
+	path = "Center/ticketCountTxt"
+	ticketCountTxt = self:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Center/progressTxt"
+	hpTxt = self:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Center/slider"
+	hpSlider = self:GetComponentAtPath(path ,CLS_SLIDER)
+
+	path = "Center/EnemyGrid"
+	enemyGrid = self:GetComponentAtPath(path ,CLS_UI_ITEM_GRID)
+end
+
+function SetParamDataList(obj)
+	viewData = obj[0]
+end
+
+function OnAnimationFinished()
+	RefreshView()
+end
+
+function RefreshView()
+	CsBridge.IconData.SetIconByName(ticketIconObj, viewData.ticketIcon)
+	ticketCountTxt.text = viewData.ticketCount
+	hpSlider.value = viewData.progress
+	hpTxt.text = viewData.progressText
+
+	local enemyList = viewData.enemyList
+	enemyGrid:RefreshItemSlots(enemyList, self.gameObject, "HeroItemSlot")
+end
+
+function OnNotification_RefreshDestructionEnemyView(obj)
+	viewData = obj[0]
+	RefreshView()
+end
+
+function OnEnemyGridItemBtnClick(obj)
+	local data = obj.m_data
+	ShowHeroTip(self, data.heroId, data.level, 1)
+end
+
+function OnFightBtnClick(sender)
+	local type = viewData.destructionType
+	local isRaid = false
+	self:SendCommand("OpenFormationView", type, isRaid)
+end
+
+function OnRaidBtnClick(sender)
+	local type = viewData.destructionType
+	local isRaid = true
+	self:SendCommand("OpenRaidCountView", type, isRaid)
+end
+
+function OnCloseBtnClick(sender)
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	ticketIconObj = nil
+	ticketCountTxt = nil
+	hpSlider = nil
+	hpTxt = nil
+	enemyGrid = nil
+	viewData = nil
+end

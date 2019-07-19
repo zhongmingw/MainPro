@@ -1,0 +1,195 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-05-21 14:06:13
+
+local ACTIVITY_TYPE_SEVEN_DAYS_LOGIN = 78
+local ShowDayList = {
+    [1] = "Day1",
+    [2] = "Day2",
+    [3] = "Day3",
+    [4] = "Day4",
+    [5] = "Day5",
+    [6] = "Day6",
+    [7] = "Day7",
+}
+local sevenLoginData
+
+local function ShowHintBox(desp, level)
+    local ERROR_LEVEL = 2
+    level = level or ERROR_LEVEL
+    CsBridge.hintUILayer:ShowHintBox(desp,level)
+end
+
+local function CheckActivityId(type, onFinished)
+    local req = {
+        types = {
+            type
+        }
+    }
+    HttpRequest("getActivity","GetActivityReq","GetActivityResp",req,function(resp)
+        if resp == nil or resp.activities == nil then
+            return
+        end
+        for i,activity in ipairs(resp.activities) do
+            if activity.type == type then
+                if onFinished then onFinished(activity.id) end
+                return
+            end
+        end
+    end)
+end
+
+local function RequestSevenDaysLogin(id, onFinished)
+    local req = {
+        acId = id
+    }
+    HttpRequest("sevenLoginActivity",
+        "SevenLoginActivityReq",
+        "SevenLoginActivityResp",
+        req,
+        onFinished
+    )
+end
+
+local function RequestSevenLoginReward(day, onFinished)
+    local req = {
+        day = day
+    }
+    HttpRequest("sevenLoginReward",
+        "SevenLoginRewardReq",
+        "SevenLoginRewardResp",
+        req,
+        onFinished
+    )
+end
+
+local function GetSevenDaysLoginViewData(data)
+    local viewData = {}
+    local sevenLoginInfo = data.svrData.sevenLoginRewards or {}
+    local hasReceiveDays = data.svrData.days or {}
+    local curDay = data.svrData.day
+    local curSelectDay = data.curSelectDay and data.curSelectDay.day or curDay
+    local UP_NUM = 4
+    viewData.upSevenDays = {}
+    viewData.downSevenDays = {}
+    for i,info in ipairs(sevenLoginInfo) do
+        local sevenDay = {
+            day = info.day,
+            showDay = Language:getStr(ShowDayList[info.day]),
+            rewardItems = info.rewardItems,
+            icon = info.icon,
+            background = info.background
+        }
+        if table.indexof(hasReceiveDays, sevenDay.day) then
+            sevenDay.hasGet = true
+        end
+        sevenDay.noGet = sevenDay.day > curDay
+        sevenDay.canGet = not sevenDay.hasGet and not sevenDay.noGet
+        if sevenDay.day == curSelectDay then
+            sevenDay.selected = true
+            viewData.background = sevenDay.background
+            viewData.showDay = sevenDay.showDay
+            viewData.rewardItems = sevenDay.rewardItems
+            viewData.hasGet = sevenDay.hasGet
+            viewData.canGet = sevenDay.canGet
+        end
+        if sevenDay.day <= UP_NUM then
+            sevenDay.isUp = true
+            table.insert(viewData.upSevenDays, sevenDay)
+        else
+            sevenDay.isUp = false
+            table.insert(viewData.downSevenDays, sevenDay)
+        end
+    end
+    table.sort(viewData.upSevenDays,function(a,b)
+        return a.day < b.day
+    end)
+    table.sort(viewData.downSevenDays,function(a,b)
+        return a.day < b.day
+    end)
+    return viewData
+end
+
+local function GetCurSelectDay(data)
+    for i,v in ipairs(data.upSevenDays) do
+        if v.selected then
+            return v
+        end
+    end
+    for i,v in ipairs(data.downSevenDays) do
+        if v.selected then
+            return v
+        end
+    end
+end
+
+function DoOnExit()
+    ACTIVITY_TYPE_SEVEN_DAYS_LOGIN = nil
+    ShowDayList = nil
+    sevenLoginData = nil
+end
+
+function OnCommand_InitSevenDaysLoginData(objs)
+    local function requestFinished(resp)
+        sevenLoginData.svrData = table.copy(resp)
+        local viewData = GetSevenDaysLoginViewData(sevenLoginData)
+        sevenLoginData.curSelectDay = GetCurSelectDay(viewData)
+        self:SendNotification("RefreshSevenDaysLoginView",viewData)
+    end
+    local function checkIdFinished(id)
+        sevenLoginData = {
+            curActivityId = id
+        }
+        RequestSevenDaysLogin(id,requestFinished)
+    end
+    CheckActivityId(ACTIVITY_TYPE_SEVEN_DAYS_LOGIN,checkIdFinished)
+end
+
+function OnCommand_SelectDay(objs)
+    local data = objs[0]
+    local curSelectDay = sevenLoginData.curSelectDay
+    if curSelectDay.day == data.day then
+        return
+    end
+    curSelectDay.selected = false
+    data.selected = true
+    sevenLoginData.curSelectDay = data
+    local viewData = {
+        old = curSelectDay,
+        new = data,
+    }
+    self:SendNotification("SingleRefreshSevenDaysLoginView",viewData)
+end
+
+function OnCommand_ShowItemTip(objs)
+    local data = objs[0]
+    ShowTip(self,data.typeId,data.id)
+end
+
+function OnCommand_ReceiveReward(objs)
+    local SelectDay = sevenLoginData.curSelectDay
+    if SelectDay.hasGet then
+        ShowHintBox(Language:getStr("GloryRoadActivity_HasGetReward"))
+        return
+    end
+    if SelectDay.noGet then
+        ShowHintBox(Language:getStr("SevenDaysLogin_NoCanGet"))
+        return
+    end
+    local function rewardFinished()
+        local function requestFinished(resp)
+            sevenLoginData.svrData = table.copy(resp)
+            local viewData = GetSevenDaysLoginViewData(sevenLoginData)
+            sevenLoginData.curSelectDay = GetCurSelectDay(viewData)
+            self:SendNotification("RefreshSevenDaysLoginView",viewData)
+        end
+        CsBridge.MoneyBanner.SetBannerVisible(false)
+        RequestSevenDaysLogin(sevenLoginData.curActivityId,requestFinished)
+    end
+    local function onFinished(resp)
+        CsBridge.MoneyBanner.SetBannerVisible(true)
+        ShowRewardReceivedTip(self,resp.rewardItems,rewardFinished)
+    end
+    RequestSevenLoginReward(SelectDay.day,onFinished)
+end

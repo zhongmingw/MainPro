@@ -1,0 +1,10 @@
+
+function DoInit()
+
+end
+
+function InitProperties()
+end
+
+function OnCommand_CreateRole()
+end

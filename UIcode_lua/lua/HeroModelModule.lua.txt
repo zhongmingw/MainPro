@@ -1,0 +1,21 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-04-19 14:48:38
+
+function DoInit()
+end
+
+function AssetNames(objs)
+    local arr = {"HeroModelView"}
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    local view = self:OpenView("HeroModelView", "HeroModelModel")
+    view:SetData(objs[0])
+
+    if(onFinished ~= nil) then
+        onFinished()
+    end
+end

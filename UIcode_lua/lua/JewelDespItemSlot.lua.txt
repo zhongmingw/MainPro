@@ -1,0 +1,42 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-02-14 14:14:20
+]]
+
+function OnJewelDespItemSlotBindValue(slot, data)
+    local bg = slot:GetComponentAtPath("Bg",CLS_RECTTRANSFORM)
+    local oldDesp = {
+        txt = slot:GetComponentAtPath("Desp/OldDespTxt",CLS_TEXT),
+        obj = slot:GetGameObjectAtPath("Desp/OldDespTxt")
+    }
+    local newDesp = {
+        txt = slot:GetComponentAtPath("Desp/NewDespTxt",CLS_TEXT),
+        obj = slot:GetGameObjectAtPath("Desp/NewDespTxt")
+    }
+
+    if data.oldDesp then
+        oldDesp.obj:SetSelfActive(true)
+        oldDesp.txt.text = data.oldDesp.desp
+        local delta = {
+            x = slot.transform:CheckSizeDelta().x,
+            y = math.max(45,oldDesp.txt.preferredHeight+20)
+        }
+        slot.transform:ResetSizeDelta(delta)
+        local color = data.oldDesp.active and color33 or color25
+        SetFontColor(oldDesp.txt, color)
+    else
+        oldDesp.obj:SetSelfActive(false)
+    end
+
+    if data.newDesp then
+        newDesp.obj:SetSelfActive(true)
+        newDesp.txt.text = data.newDesp.desp
+        local color = data.newDesp.active and color33 or color25
+        SetFontColor(newDesp.txt, color)
+    else
+        newDesp.obj:SetSelfActive(false)
+    end
+    bg.gameObject:SetSelfActive(data.showBg)
+end

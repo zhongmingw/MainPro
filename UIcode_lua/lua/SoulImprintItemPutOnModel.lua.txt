@@ -1,0 +1,264 @@
+local soulImprintItemBagUtils = require('SoulImprintItemBagUtils')
+local commonHeroBagUtils = require('CommonHeroBagUtils')
+local soulImprintItemPutOnUtils = require("SoulImprintItemPutOnUtils")
+
+---@type table 所有的灵魂纹章数组
+local allSoulImprintItemArr = nil
+---@type boolean 是否正在置换纹章
+local isExchangeSoulImprinting = false
+---@type table 当前英雄
+local curHero
+---@type number 筛选纹章最小的英雄等级
+local targetHeroMinStarLevel = 5
+
+----设置当前是从哪个英雄点出来的
+function OnCommand_SetCurHeroData(objs)
+    curHero = objs[0]
+end
+
+---从镶嵌界面打开纹章属性界面
+function OnCommand_ShowSoulImprintItemTipsFromPutOnView(objs)
+    if objs then
+        local result = objs[0]
+        result.showBtn.btnParentState = true
+        result.showBtn.unWearBtnState = true
+        result.showBtn.exchangeBtnState = true
+        result.showBtn.wearBtnState = false
+        CsBridge.CacheAssetsByModule(self.Module, function()
+            local view = CsBridge.OpenView("SoulImprintItemTipPutOnView", "SoulImprintItemPutOnModel", false, true)
+            view:SetParamDataList(result)
+        end, "SoulImprintItemTipPutOnView", "SoulItemTipsAttrItemSlot")
+    end
+end
+
+---打开背包界面
+local function OpenSoulImprintItemBag(isCanShowCompare)
+    isExchangeSoulImprinting = isCanShowCompare
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("SoulImprintItemBagPutOnView", "SoulImprintItemPutOnModel")
+        local playerInfo = appData:checkData("PlayerInfo")
+        local soulImprintItemRace = CsBridge.prefHelper:checkInt("SoulImprintItemRace" .. playerInfo.userId)
+        view:SetParamDataList(soulImprintItemRace or 0)
+    end, "SoulImprintItemBagPutOnView", "SoulImprintItemSlot")
+end
+
+---切换灵魂纹章
+local function ScreenSoulImprintItem(curRance)
+    if allSoulImprintItemArr == nil then
+        allSoulImprintItemArr = {}
+        soulImprintItemBagUtils.InitAllSoulImprintItem(allSoulImprintItemArr, function(star)
+            return star >= targetHeroMinStarLevel
+        end)
+    end
+    soulImprintItemBagUtils.ScreenSoulImprintItem(curRance, allSoulImprintItemArr)
+    local playerInfo = appData:checkData("PlayerInfo")
+    CsBridge.prefHelper:saveInt("SoulImprintItemRace" .. playerInfo.userId, curRance)
+    self:SendNotification("InitSoulImprintItem", allSoulImprintItemArr)
+end
+
+---打开纹章比较界面
+local function ShowSoulImprintItemCompareView(newInfo)
+    local owenItem = {}
+    soulImprintItemBagUtils.InitAllSoulImprintItem(owenItem, function(star, heroPb)
+        local pbHero = GetPbHero(curHero)
+        return heroPb.uid == pbHero.haveEmblemUid
+    end)
+    local oldViewData = soulImprintItemBagUtils.InitSoulItemTipsViewData(owenItem[1])
+    local newViewData = soulImprintItemBagUtils.InitSoulItemTipsViewData(newInfo)
+    newViewData.showBtn.btnParentState = true
+    newViewData.showBtn.unWearBtnState = false
+    newViewData.showBtn.exchangeBtnState = true
+    newViewData.showBtn.wearBtnState = false
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        self:HideView("SoulImprintItemTipPutOnView", nil, true)
+        self:HideView("SoulImprintItemBagPutOnView", nil, true)
+        local view = CsBridge.OpenView("SoulImprintItemCompareView", "SoulImprintItemPutOnModel")
+        view:SetParamDataList(oldViewData, newViewData)
+    end, "SoulImprintItemCompareView", "SoulItemTipsAttrItemSlot")
+end
+
+---打开带有镶嵌按钮的纹章提示界面
+local function ShowSoulImprintItemTipViewWithWearBtn(heroInfo)
+    local result = soulImprintItemBagUtils.InitSoulItemTipsViewData(heroInfo)
+    result.showBtn.btnParentState = true
+    result.showBtn.unWearBtnState = false
+    result.showBtn.exchangeBtnState = false
+    result.showBtn.wearBtnState = true
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("SoulImprintItemTipPutOnView", "SoulImprintItemPutOnModel")
+        view:SetParamDataList(result)
+    end, "SoulImprintItemTipPutOnView", "SoulItemTipsAttrItemSlot")
+end
+
+---脱下纹章
+local function PutOffSoulImprintItemFromHero(emblemOwnerUid, sendNotification, callback)
+    local pbHero = GetPbHero(curHero)
+    local soulImprintItem = soulImprintItemBagUtils.GetSoulImprintItemByEmblemUid(pbHero.haveEmblemUid)
+    soulImprintItemPutOnUtils.PutOffSoulImprintItemFromHero(emblemOwnerUid, function()
+        local playerInfo = appData:checkData("PlayerInfo")
+        local soulImprintItemRace = CsBridge.prefHelper:checkInt("SoulImprintItemRace" .. playerInfo.userId)
+        OnCommand_InitSoulImprintItem({ [0] = soulImprintItemRace })
+        if emblemOwnerUid == curHero.uid then
+            if sendNotification then
+                local showData = soulImprintItemBagUtils.InitSoulItemTipsViewData(soulImprintItem)
+                soulImprintItemBagUtils.ChangeSoulImprintAddOrSubAttr(showData, nil, false)
+                self:SendNotification("UnWearSoulImprintItem", showData)
+                MsgCenter:Broadcast(Notify_SoulImprintItemPutOnOrDown)
+            end
+        end
+        if callback then
+            callback()
+        end
+    end)
+end
+
+---佩戴纹章
+local function PutOnSoulImprintItemToHero(newSouItemInfo, oldSoulItemInfo, callback)
+    soulImprintItemPutOnUtils.PutOnSoulImprintItemToHero(curHero, newSouItemInfo, function(resp)
+        newSouItemInfo.itemInfo.emblemOwnerUid = curHero.uid
+        self:HideView("SoulImprintItemBagPutOnView")
+        soulImprintItemBagUtils.ChangeSoulImprintAddOrSubAttr(newSouItemInfo, oldSoulItemInfo, true)
+        self:SendNotification("WearSoulImprintItem", newSouItemInfo)
+        MsgCenter:Broadcast(Notify_SoulImprintItemPutOnOrDown)
+        if callback then
+            callback()
+        end
+    end)
+end
+
+---打开纹章背包界面
+function OnCommand_OpenSoulImprintItemBag(objs)
+    OpenSoulImprintItemBag(false)
+end
+
+---初始化灵魂纹章背包
+function OnCommand_InitSoulImprintItem(objs)
+    allSoulImprintItemArr = nil
+    allSoulImprintItemArr = {}
+    local newHero = GetPbHero(curHero)
+    soulImprintItemBagUtils.InitAllSoulImprintItem(allSoulImprintItemArr, function(star, heroPb)
+        if isExchangeSoulImprinting then
+            return star >= targetHeroMinStarLevel and heroPb.uid ~= newHero.haveEmblemUid and heroPb.emblemOwnerUid <= 0
+        else
+            return star >= targetHeroMinStarLevel
+        end
+    end)
+    ScreenSoulImprintItem(objs[0])
+end
+
+---切换灵魂纹章的类型
+function OnCommand_ScreenSoulImprintItem(objs)
+    if objs then
+        local curRace = objs[0]
+        ScreenSoulImprintItem(curRace)
+    end
+end
+
+---从纹章背包打开纹章属性界面
+function OnCommand_ShowSoulImprintItemTips(objs)
+    if objs then
+        if isExchangeSoulImprinting then
+            local newInfo = objs[0]
+            ShowSoulImprintItemCompareView(newInfo)
+        else
+            local heroInfo = objs[0]
+            ShowSoulImprintItemTipViewWithWearBtn(heroInfo)
+        end
+    end
+end
+
+---卸载纹章
+function OnCommand_UnWearSoulImprintItem(objs)
+    local soulImprintItemInfo = objs[0]
+    PutOffSoulImprintItemFromHero(soulImprintItemInfo.itemInfo.emblemOwnerUid, true)
+end
+
+---置换纹章
+function OnCommand_ExchangeSoulImprintItem(objs)
+    OpenSoulImprintItemBag(true)
+end
+
+---镶嵌纹章
+function OnCommand_WearSoulImprintItem(objs)
+    if objs then
+        local info = objs[0]
+        if info.itemInfo.emblemOwnerUid and info.itemInfo.emblemOwnerUid > 0 then
+            local owner = {}
+            commonHeroBagUtils.GetMyHeroList(owner, 1, function(heroPb)
+                return heroPb.uid == info.itemInfo.emblemOwnerUid
+            end)
+            local des = string.format(Language:getStr("WantToPutOffSoulImprintItemFromHero"), owner[1].name)
+            CsBridge.messageManager:PopMsgBox(Language:getStr("hint"), des, Language:getStr("Global_76"), nil, Language:getStr("Global_8"), function()
+                PutOffSoulImprintItemFromHero(info.itemInfo.emblemOwnerUid, true)
+            end)
+        else
+            PutOnSoulImprintItemToHero(info)
+        end
+    end
+end
+
+---快速镶嵌纹章
+function OnCommand_QuickPutOnSoulImprintItem(objs)
+    local items = {}
+    soulImprintItemBagUtils.InitAllSoulImprintItem(items, function(star, heroPb)
+        return star >= targetHeroMinStarLevel and heroPb.emblemOwnerUid == 0
+    end)
+    if #items > 0 then
+        soulImprintItemPutOnUtils.QuickPutOnSoulImprintItem(curHero, function(resp)
+            local emblemUid = resp.emblemUid
+            local newHero = GetPbHero(curHero)
+            if emblemUid > 0 then
+                local owenItem = soulImprintItemBagUtils.GetSoulImprintItemByHero(newHero)
+                local itemInfo = soulImprintItemBagUtils.InitSoulItemTipsViewData(owenItem)
+                soulImprintItemBagUtils.ChangeSoulImprintAddOrSubAttr(itemInfo, nil, true)
+                self:SendNotification("WearSoulImprintItem", itemInfo)
+                MsgCenter:Broadcast(Notify_SoulImprintItemPutOnOrDown)
+            else
+                CsBridge.hintUILayer:ShowHintBox(Language:getStr("NoSoulImprintItemForPutOnByNow"), 2)
+            end
+        end)
+    else
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("NoSoulImprintItemForPutOnByNow"), 2)
+    end
+end
+
+---从比较界面直接换上一个新的纹章
+function OnCommand_WearForExchangeNewSoulImprintItem(objs)
+    local newInfo = objs[0]
+    isExchangeSoulImprinting = false
+    local newHero = GetPbHero(curHero)
+    local oldSoulItemInfo = soulImprintItemBagUtils.GetSoulImprintItemByHero(newHero)
+    local oldViewData = soulImprintItemBagUtils.InitSoulItemTipsViewData(oldSoulItemInfo)
+    PutOffSoulImprintItemFromHero(curHero.uid, false, function()
+        PutOnSoulImprintItemToHero(newInfo, oldViewData, function()
+
+        end)
+    end)
+end
+
+---从比较界面替换新纹章
+function OnCommand_ExchangeForExchangeNewSoulImprintItem(objs)
+    OnCommand_WearForExchangeNewSoulImprintItem(objs)
+end
+
+---没有替换新的纹章，就关闭了比较界面
+function OnCommand_SoulImprintItemCompareViewClosedByMask()
+    OpenSoulImprintItemBag(true)
+end
+
+---打开规则介绍界面
+function OnCommand_OpenSoulImprintPutOnHelpInfo()
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("HelpView", "SoulImprintItemPutOnModel")
+        view:SetData(INSTRUCTION_PUT_ON_SOUL_IMPRINT)
+    end, "HelpView")
+end
+
+function DoOnExit()
+    soulImprintItemBagUtils = nil
+    commonHeroBagUtils = nil
+    allSoulImprintItemArr = nil
+    isExchangeSoulImprinting = nil
+    curHero = nil
+    targetHeroMinStarLevel = nil
+end

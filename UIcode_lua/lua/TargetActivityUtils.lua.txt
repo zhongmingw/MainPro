@@ -1,0 +1,69 @@
+---按id排序
+local function SortTaskList(a, b)
+    if a.receiveState ~= b.receiveState then
+        return a.receiveState < b.receiveState
+    else
+        return a.subId < b.subId
+    end
+end
+---重新排列数据
+local function ReSortTaskList(taskList)
+    local stateEnum = {
+        CAN_RECEIVE = 1,
+        NOT_FINISHED = 2,
+        RECEIVED = 3,
+    }
+    for i = 1, #taskList do
+        if taskList[i].active == true then
+            taskList[i].btnGray = false
+            taskList[i].curCount = taskList[i].count
+            taskList[i].showGot = false
+            taskList[i].receiveState = stateEnum.CAN_RECEIVE
+        end
+        if taskList[i].curCount < taskList[i].count then
+            taskList[i].btnGray = true
+            taskList[i].showGot = false
+            taskList[i].receiveState = stateEnum.NOT_FINISHED
+        end
+        if taskList[i].curCount >= taskList[i].count and taskList[i].active == false then
+            taskList[i].btnGray = true
+            taskList[i].showGot = true
+            taskList[i].receiveState = stateEnum.RECEIVED
+        end
+        taskList[i].canReceive = taskList[i].active
+        taskList[i].progressValue = taskList[i].curCount / taskList[i].count
+        taskList[i].progressValueStr = tostring(taskList[i].curCount) .. '/' .. tostring(taskList[i].count)
+    end
+    table.sort(taskList, SortTaskList)
+    return taskList
+end
+
+local function GetTargetItemsViewData(actData)
+	local targetList = actData.activityConfigs or {}
+	targetList = ReSortTaskList(targetList)
+	return targetList
+end
+
+-------------奖励领取----------------
+local ActRewardsUrl = {
+	[ActivityType.HeroLevelUpActivity] = {"getHeroLevelReward", "GetHeroLevelRewardReq", "GetHeroLevelRewardResp"},
+	[ActivityType.HeroStarUpActivity] = {"getHeroStarReward", "GetHeroStarRewardReq", "GetHeroStarRewardResp"},
+	[ActivityType.JewelQualityActivity] = {"getJewelQualityReward", "GetJewelQualityRewardReq", "GetJewelQualityRewardResp"},
+}
+-- 达标奖励
+local function GetTargetRewards(data, activityType, callback)
+    local req = {}
+    req.activityId = data.activityId
+    req.subId = data.subId
+    local urlTab = ActRewardsUrl[activityType]
+    HttpRequest(urlTab[1], urlTab[2], urlTab[3], req, function(resp)
+        if callback then
+            callback(resp)
+        end
+    end)
+end
+
+return {
+	GetTargetItemsViewData = GetTargetItemsViewData,
+	GetTargetRewards = GetTargetRewards,
+}

@@ -1,0 +1,90 @@
+require "ChatWorldData"
+
+local slotMap={}
+
+local playerInfo
+local playerId
+
+function OnChatWorldDetailsItemSlotBindValue(slot,data)
+    if(slotMap[slot] == nil) then
+        local slotData={}
+		local slotTrans = slot.transform
+        local otherMsg = slotTrans:GetGameObjectAtPath("other")
+        local selfMsg =slotTrans:GetGameObjectAtPath("self")
+        slotData.self = CheckMsgUI(selfMsg.transform)
+        slotData.other = CheckMsgUI(otherMsg.transform)
+        slotData.layout = slot:GetComponent("LayoutElement")
+        slotMap[slot] = slotData
+    end
+    slotMap[slot].data=data
+    playerInfo = appData:checkData("PlayerInfo")
+    playerId = playerInfo.userId
+    local slotData = slotMap[slot]
+    
+    if data.content.playerId == playerId
+        and data.content.zone == playerInfo.zone
+    then
+        slotData.self.parent:SetActive(true)
+        slotData.other.parent:SetActive(false)
+        BindValue(slotData.layout,slotData.self,data)
+    else
+        slotData.self.parent:SetActive(false)
+        slotData.other.parent:SetActive(true)
+        BindValue(slotData.layout,slotData.other,data)
+    end
+end
+
+function BindValue(layout, uiRoot, data)
+    local nick=data.content.playerBaseInfo.nick
+    local zone = data.content.zone
+    nick = FormatWorldPlayerName(nick, zone)
+    uiRoot.nameTxt.text = nick
+    uiRoot.timeTxt.text = CsBridge.timeManager:checkTimeSend(data.content.time)
+    local contentType = data.content.contentType
+    SetContentByChatType(contentType,data.content,uiRoot.contentTxt)
+
+    if contentType ~= ChatType.union_recruit then
+        local preferredHeight = uiRoot.contentTxt:GetPreferredValues().y
+        layout.preferredHeight = preferredHeight + 65
+        local trans = uiRoot.bgImg:GetComponent("RectTransform")
+        local sizeDelta = trans.sizeDelta
+        CsBridge.UnityHelper.SetUISizeDelta(trans,sizeDelta.x,preferredHeight + 20)
+    end
+
+    BindPlayerBaseInfoValue(uiRoot.player,data.content.playerBaseInfo)
+end
+
+function SetContentByChatType(type, data, txt)
+    if type == ChatType.chatType_msg then -- msg
+        txt:SetText(data.content)
+        SetFontColor(txt,color25)
+    elseif type == ChatType.chatType_hero then --hero
+        local heroId = tonumber(SplitString(data.content,",")[0])
+        txt:SetText("["..ResTblContainer:GetPropToStr(heroId, HeroBase.title, HeroBase.actorTbl).."]")
+        SetFontColor(txt,color13)
+    elseif type == ChatType.chatType_Equip then --equip
+
+    elseif type == ChatType.union_recruit then
+		local recruitData = UnserializeRcruitStr(data.content)
+		local recruitWordsIdx = 1
+		local recruitStrArray = SplitString(recruitData.data,"|")
+		local text = recruitStrArray.Length > 1 and recruitStrArray[recruitWordsIdx] or ""
+		txt:SetText(text)
+        SetFontColor(txt,color25)
+    end
+end
+
+function CheckMsgUI(parent)
+  local msgMap = {}
+  msgMap.parent = parent.gameObject
+  msgMap.contentTxt = parent:GetComponentAtPath("contentTxt" ,CLS_TEXT)
+  msgMap.timeTxt = parent:GetComponentAtPath("timeTxt" ,CLS_TEXT)
+  msgMap.nameTxt = parent:GetComponentAtPath("nameTxt" ,CLS_TEXT)
+  msgMap.player = parent:Find("Player")
+  msgMap.bgImg = parent:GetComponentAtPath("bgImg" ,CLS_IMAGE)
+  return msgMap
+end
+
+function OnChatRecruitItemSlotBindValue(slot,data)
+	OnChatWorldDetailsItemSlotBindValue(slot,data)
+end

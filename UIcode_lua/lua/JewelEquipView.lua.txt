@@ -1,0 +1,109 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-01-23 10:44:59
+
+-- local UnityHelper=CS.Client.Library.UnityHelper
+-- local cache=CS.Client.Library.ObjectCache.instance
+-- local tweenutils=CS.Client.Library.TweenUtils
+
+require "JewelItemSlot"
+
+local isInit = false
+
+local jewelEquipGrid
+
+local jewelRedFlag
+
+local function OnCloseHeroShowView(obj)
+    self:HideView(self.gameObject.name)
+end
+
+function DoInit()	
+    self.Anim = 0
+    MsgCenter:Subscribe(Notify_CloseHeroShowView, OnCloseHeroShowView)
+end
+
+function DoExit()
+    MsgCenter:Unsubscribe(Notify_CloseHeroShowView, OnCloseHeroShowView)
+    
+    isInit = nil
+
+    jewelEquipGrid = nil
+
+    jewelRedFlag = nil
+end
+
+function OnDoUnhide()
+    self:SendCommand("UpdateJewelEquipData")
+end
+
+function InitUI()
+    jewelEquipGrid = self:GetComponentAtPath("Center/JewelGrid",CLS_UI_ITEM_GRID)
+    jewelRedFlag = self:GetGameObjectAtPath("Center/JewelBtn/RedFlag")
+end
+
+function SetParamDataList(objs)
+	local data = objs[0]
+	self:SendCommand("InitData", data)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+end
+
+function OnClose()
+    self:SendCommand("OnClose")
+end
+
+local function RefreshJewelEquips(equipsData) 
+    jewelEquipGrid:RefreshItemSlots(equipsData, self.gameObject, "JewelItemSlot")
+end
+
+local function RefreshSingleJewelEquip(equipData)
+    jewelEquipGrid:SingleRefreshSlot(equipData)
+end
+
+function OnNotification_RefreshJewelEquipView(objs)
+    local curHero, equipsData = objs[0], objs[1]
+    --RefreshHero(curHero)
+    RefreshJewelEquips(equipsData)
+end
+
+function OnNotification_RefreshJewelEquips(objs)
+    local equipsData = objs[0]
+    RefreshJewelEquips(equipsData)
+end
+
+function OnNotification_RefreshSingleJewelEquip(objs)
+    local equipData = objs[0]
+    RefreshSingleJewelEquip(equipData)
+end
+
+function OnNotification_RefreshJewelRedFlag(objs)
+	jewelRedFlag:SetSelfActive(objs[0])
+end
+
+function OnJewelGridJewelItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("OpenJewel",data)
+end
+
+function OnPutAllOnBtnClick(sender)
+    self:SendCommand("PutOnAllEquip")
+end
+
+function OnTakeAllOffBtnClick(sender)
+    self:SendCommand("TakeOffAllEquip")
+end
+
+function OnJewelBtnClick(sender)
+    self:ShowModule("JewelModule",nil)
+end
+
+function OnHelpBtnClick(sender)
+    ShowHelpTip(self,INSTRUCTION_JEWEL_EQUIP)
+end

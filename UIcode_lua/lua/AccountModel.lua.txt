@@ -1,0 +1,31 @@
+local settingVersionUtils = require "SettingVersionUtils"
+local hasLogin = false
+
+function OnCommand_Account(objs)
+    if hasLogin then
+        return
+    end
+    settingVersionUtils.AccountLogin(objs, OnAccountResp)
+end
+
+function OnCommand_CheckAccountAndPwd(objs)
+    settingVersionUtils.CheckAccountAndPwd(objs, function(resp)
+        if resp.result == 0 then
+            self:SendNotification("CheckAccountAndPwd")
+        elseif resp.result == 1 then
+            CsBridge.hintUILayer:ShowHintBox(Language:getStr("Login_AccountOrPwdBad"), 2)
+        end
+    end)
+end
+
+function OnAccountResp(resp)
+    if not hasLogin then
+        hasLogin = true
+        self:SendNotification("AccountResp", resp)
+    end
+end
+
+function DoOnExit()
+    hasLogin = nil
+    settingVersionUtils = nil
+end

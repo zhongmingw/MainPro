@@ -1,0 +1,252 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-05-28 10:37:58
+local HeroAttrData = require "HeroAttrData"
+local curHero
+local emblemHero
+local heroData = {}
+
+function DoInit()
+end
+
+function InitProperties()
+end
+
+function OnCommand_InitSimpleInfoData(objs)
+    heroData = objs[0]
+end
+
+function OnCommand_UpdateSimpleInfoData(objs)
+    heroData = objs[0]
+end
+
+function OnCommand_GetHeroDetailData()
+    GetHeroDetailData(heroData)
+end
+
+function OnCommand_OpenDetailAttr(objs)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+		local view=CsBridge.OpenView("AttrDetailView","AttrDetailModel",false,true)
+		view:SetParamDataList(curHero)
+		AddTipCanvas(view)
+	end, "AttrDetailView","AttrItemSlot")
+end
+
+function GetAttrData()
+    local attrData = {}
+    local campAttr,heroArr = GetElementData()
+    attrData.curHero = curHero
+    attrData.curHeroEquipArr = GetEquipData()
+    attrData.campAttr = campAttr
+    attrData.heroArr = heroArr
+    attrData.curHeroRelicArr = GetRelicData()
+    attrData.curHeroRuneArr = GetRuneData()
+    attrData.curHeroJewelArr = GetJewelData()
+    attrData.emblemHero = emblemHero
+    return attrData
+end
+
+function GetHeroDetailData(hero)
+    if hero.zone and hero.userId then
+        local req = {}
+        req.userId = hero.userId
+        req.zone = hero.zone
+        req.heroUid = hero.uid
+        HttpRequest("getHeroDetail", "GetHeroDetailReq", "GetHeroDetailResp", req, OnHeroDetailResp)
+    else
+        UpdateHeroData(hero)
+        local attrData = GetAttrData()
+        self:SendNotification("RefreshSimpleInfoView",attrData)
+    end
+end
+
+local function GetHeroData(data)
+    local heroData = {}
+    local heroItem = data.heroItem
+    local elementCampInfo = data.campInfo or {}
+    local relicItem = data.relicItem or {}
+    local heroCrystalInfo = data.heroCrystalInfo or {}
+    local emblem = data.emblem
+    local jewelItems = data.jewelItems or {}
+    local unionTechs = data.unionTechs or {}
+    local jewelIds = {}
+    if jewelItems then
+        for k,v in pairs(jewelItems) do
+            table.insert(jewelIds,v.uid)
+        end
+    end
+    heroData.uid = heroItem.uid
+    heroData.other = true
+    heroData.heroId = heroItem.heroId
+    heroData.name = global_heroBaseArr[heroData.heroId].title
+    heroData.grade = heroItem.grade or 1
+    heroData.level = heroItem.level or 1
+    heroData.distillationStar = heroItem.distillationStar or 0
+    heroData.distillationLevel = heroItem.distillationLevel or 0
+    heroData.breakLevel = heroItem.breakLevel or 0
+    heroData.quality = global_heroBaseArr[heroData.heroId].quality
+    heroData.maxGrade = ResTblContainer:GetPropToInt(heroData.quality,HeroQuality.maxGrade,HeroQuality.actorTbl)
+    heroData.showBaseAttr = false
+    heroData.weaponId = heroItem.weaponId
+    heroData.hatId = heroItem.hatId 
+    heroData.clothId = heroItem.clothId
+    heroData.shoesId = heroItem.shoesId
+    heroData.rune = heroItem.rune
+    heroData.relicId = heroItem.relicId
+    heroData.elementCampInfo = elementCampInfo
+    heroData.relicItem = relicItem
+    heroData.heroCrystalInfo = heroCrystalInfo
+    -- heroData.emblem = emblem
+    heroData.jewelItems = jewelItems
+    heroData.jewelIds = jewelIds
+    heroData.unionTechs = unionTechs
+    return heroData
+end
+
+function OnHeroDetailResp(resp)
+    curHero = GetHeroData(resp)
+    emblemHero = nil
+    if resp.emblem then
+        emblemHero = GetHeroData(resp.emblem)
+        curHero.emblemHero = emblemHero
+    end
+    curHero.fight = HeroAttrData.GetHeroFightByHero(curHero)
+    local attrs = HeroAttrData.GetHeroAttrsByHero(curHero)
+    curHero.hp = attrs[HeroAttrEnum.HP].val
+    curHero.attack = attrs[HeroAttrEnum.ATK].val
+    curHero.def = attrs[HeroAttrEnum.DEF].val
+    curHero.speed = attrs[HeroAttrEnum.SPEED].val
+    curHero.skill = GetHeroSkillArr(curHero)
+
+    local attrData = GetAttrData()
+    self:SendNotification("RefreshSimpleInfoView",attrData)
+end
+
+function UpdateHeroData(hero)
+    curHero = {}
+    curHero.uid = hero.uid
+    curHero.heroId = hero.heroId or 0
+    if curHero.heroId ~= 0 then
+        curHero.name = hero.name or global_heroBaseArr[curHero.heroId].title
+        curHero.grade = hero.grade or 1
+        curHero.level = hero.level or 1
+        curHero.distillationStar = hero.distillationStar or 0
+        curHero.distillationLevel = hero.distillationLevel or 0
+        curHero.breakLevel = hero.breakLevel or 0
+        curHero.quality = hero.quality or global_heroBaseArr[curHero.heroId].quality
+        curHero.maxGrade = hero.maxGrade or ResTblContainer:GetPropToInt(curHero.quality,HeroQuality.maxGrade,HeroQuality.actorTbl)
+        curHero.showBaseAttr = hero.showBaseAttr
+        if curHero.uid ~= nil and curHero.uid ~= 0 then
+            local pb = appData:checkItem("HeroItem",curHero.uid)
+            if pb ~= nil then
+                curHero.weaponId = pb.weaponId
+                curHero.hatId = pb.hatId 
+                curHero.clothId = pb.clothId
+                curHero.shoesId = pb.shoesId
+                curHero.rune = pb.rune
+                curHero.relicId = pb.relicId
+            end
+        end
+        curHero.fight = hero.fight or HeroAttrData.GetHeroFightByHero(curHero)
+        local attrs = HeroAttrData.GetHeroAttrsByHero(curHero)
+        curHero.hp = hero.hp or attrs[HeroAttrEnum.HP].val
+        curHero.attack = hero.attack or attrs[HeroAttrEnum.ATK].val
+        curHero.def = hero.def or attrs[HeroAttrEnum.DEF].val
+        curHero.speed = hero.speed or attrs[HeroAttrEnum.SPEED].val
+        curHero.skill = hero.skill or GetHeroSkillArr(curHero)
+    end
+end
+
+function GetElementData()
+    local campInfo = curHero.elementCampInfo or {}
+    local heroCrystalInfo = curHero.heroCrystalInfo or {}
+    local campAttr = {}
+    local heroArr = {}
+    if next(campInfo) then
+        local data = global_campaignArr[campInfo.level]
+        campAttr = data.attrs
+    end
+    if next(heroCrystalInfo) then
+        local data = global_elementFusionDic[heroCrystalInfo.level]
+        heroArr = data.attrs
+    end
+    return campAttr,heroArr
+end
+
+function GetRuneData()
+    local curHeroRuneArr = {}
+    if curHero.rune then
+        local utils = require "HeroBagUtils"
+        local rune = utils.GetHeroRune(curHero.rune)
+        table.insert(curHeroRuneArr, {
+            id = rune.level,
+            count = 1,
+            typeId = 0,
+            runeLock = rune.level==0,
+            attrs = rune.attrs,
+            hasMaxLevel = false,
+        })
+    end
+    return curHeroRuneArr
+end
+
+function GetRelicData()
+    local curHeroRelicArr = {}
+    local relicItem = curHero.relicItem or {}
+    if next(relicItem) then
+        local tbl=ResTblContainer:GetTable(Relic.tblName)
+        local quality = tbl:GetInt(relicItem.id, Relic.quality)
+        table.insert(curHeroRelicArr, {
+            id = relicItem.id,
+            typeId = ItemTypeEnum.Relic,
+            level = relicItem.level,
+            quality = quality,
+        })
+    end
+    return curHeroRelicArr
+end
+
+function GetEquipData()
+    local curHeroEquipArr = {}
+    if curHero.weaponId and curHero.weaponId > 0 then
+        table.insert(curHeroEquipArr,{id = curHero.weaponId,typeId = ItemTypeEnum.Item})
+    end
+    if curHero.hatId and curHero.hatId > 0 then
+        table.insert(curHeroEquipArr,{id = curHero.hatId,typeId = ItemTypeEnum.Item})
+    end
+    if curHero.clothId and curHero.clothId > 0 then
+        table.insert(curHeroEquipArr,{id = curHero.clothId,typeId = ItemTypeEnum.Item})
+    end
+    if curHero.shoesId and curHero.shoesId > 0 then
+        table.insert(curHeroEquipArr,{id = curHero.shoesId,typeId = ItemTypeEnum.Item})
+    end
+    return curHeroEquipArr
+end
+
+function GetJewelData()
+    local curHeroJewelArr = {}
+    local jewelItems = curHero.jewelItems or {}
+    if next(jewelItems) then
+        local tbl = ResTblContainer:GetTable(Jewel.tblName)
+        for k,v in pairs(curHero.jewelItems) do
+            local infos = tbl:GetRow(v.id, Jewel.name, Jewel.icon, Jewel.quality, Jewel.star, Jewel.type)
+            local data = {
+                id = v.id,
+                typeId = ItemTypeEnum.Jewel,
+                name = infos[0],
+                icon = infos[1],
+                quality = tonumber(infos[2]),
+                star = tonumber(infos[3]),
+                type = tonumber(infos[4])
+            }
+            table.insert(curHeroJewelArr,data)
+        end
+    end
+    return curHeroJewelArr
+end
+
+function DoOnExit()
+    curHero = nil
+    HeroAttrData = nil
+end

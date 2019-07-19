@@ -1,0 +1,24 @@
+
+§
+SoulImprint.protoSoulImprint"#
+EmblemEngraveReq
+heroUid ("#
+EmblemEngraveResp
+status (""
+EmblemRenewReq
+heroUids ("!
+EmblemRenewResp
+status ("4
+PutOnEmblemReq
+heroUid (
+	emblemUid ("!
+PutOnEmblemResp
+status ("&
+QuickPutOnEmblemReq
+heroUid (")
+QuickPutOnEmblemResp
+	emblemUid ("#
+TakeOffEmblemReq
+heroUid ("#
+TakeOffEmblemResp
+status (

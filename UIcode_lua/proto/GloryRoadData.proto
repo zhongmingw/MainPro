@@ -1,0 +1,54 @@
+import "stage.proto";
+package GloryRoadData;
+
+message GloryRoadRecord
+{
+    required int32 id = 1;
+    required bool pass_1 = 2;
+    required bool pass_2 = 3;
+    required int32 remains = 4; //剩余挑战次数
+    required int32 payRemains = 5; //道具剩余挑战次数
+    required int64 lastRenewTime = 6; //上次自然恢复时间
+    required int32 payCount = 7; //道具购买次数
+    repeated int32 uids_1 = 8;
+    repeated int32 uids_2 = 9;
+}
+
+message TryGloryRoadReq
+{
+    required int32 type = 1;
+    repeated stage.FormationPos formationPos = 2; //阵容
+}
+
+message RaidGloryRoadReq 
+{
+    required int32 id = 1;   	
+}
+
+message RaidGloryRoadResp 
+{
+    repeated stage.RewardItem rewardItems = 1;
+}
+
+message GetPassGloryRoadPlayerReq 
+{
+    required int32 id = 1; //关卡id
+    required int32 type = 2; //子关卡
+}
+
+message GetPassGloryRoadVideoReq 
+{
+    required int32 id = 1; //关卡id
+    required int32 type = 2; //子关卡
+    required int32 index = 3; //第几个录像（1,2,3）
+}
+
+message ResetGloryRoadReq
+{
+    required int32 useless = 1;
+}
+
+message ResetGloryRoadResp
+{
+    required int32 status = 1;
+}

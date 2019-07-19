@@ -1,0 +1,74 @@
+
+function DoInit()
+
+end
+
+function InitProperties()
+end
+
+
+local userName
+local pwd
+
+
+function OnCommand_EnterGame(objs)
+	userName = objs[0]
+	pwd = objs[1]
+
+	TrySendAnonLoginReq();
+end
+
+
+function TrySendAnonLoginReq()
+	if(CsBridge.httpBehaviour.IsServerConnected)
+	then
+		DoSendAnonLoginReq()
+	else
+		CsBridge.httpBehaviour:ConnectServer(onConnectedResp)
+	end
+end
+function onConnectedResp(connected)
+	TrySendAnonLoginReq()
+end
+
+
+function DoSendAnonLoginReq()
+
+  	if(userName==nil or string.len(userName)==0)then
+		local req={
+			uid = CsBridge.httpBehaviour.udid,
+		}
+		HttpRequest("globalAnonLogin", "AnonLoginReq", "GlobalAnonLoginResp", req,OnGlobalAnonLoginResp)
+	else
+		local req={
+			userName = userName,
+			pwd = pwd
+		 }
+		HttpRequest("globalLogin", "UserLoginRequest", "GlobalLoginResp", req,OnAccountResp)
+	end
+
+end
+
+function OnAccountResp(resp)
+	self:SendNotification("OnAccountResp",resp)
+end
+
+function OnGlobalAnonLoginResp(resp)
+	self:SendNotification("OnGlobalAnonLoginResp",resp)
+end
+
+function OnCommand_GetLoginBroadcast(objs)
+	local req = {}
+	req.id=1
+	CsBridge.httpBehaviour.serverURL = CsBridge.configUtil:loadStrValue("server")
+	HttpRequest("getLoginBroadcast", "GetLoginBroadcastReq", "GetLoginBroadcastResp", req,OnGetLoginBroadcastResp)
+end
+
+function OnGetLoginBroadcastResp(resp)
+	self:SendNotification("GetLoginBroadcast",resp.info)
+end
+
+function DoOnExit()
+	userName = nil
+	pwd = nil
+end

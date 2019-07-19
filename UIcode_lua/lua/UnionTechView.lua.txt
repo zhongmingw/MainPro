@@ -1,0 +1,365 @@
+--[[
+	file: UnionTechView.lua
+	author: hangang
+	description: View for union technology operation
+]]
+
+local balanceTxt
+local levelupFxObj
+local selectionObj
+local jobImgList = {}
+local techItemColumns = {}
+local techDescPanel = {
+	nameTxt = nil,
+	levelTxt = nil,
+	iconImg = nil,
+	bonus1 = {
+		rootObj = nil,
+		nameTxt = nil,
+		curValueTxt = nil,
+		newValueTxt = nil,
+	},
+	bonus2 = {
+		rootObj = nil,
+		nameTxt = nil,
+		curValueTxt = nil,
+		newValueTxt = nil,
+	},
+	levelRequiredTxt = nil,
+}
+local upgradePanel = {
+	priceIconObj1 = nil,
+	priceTxt1 = nil,
+	priceIconObj2 = nil,
+	priceTxt2 = nil,
+	upgradeBtn = nil
+}
+
+local viewData
+local selectedItem
+local playingFx = false
+
+function DoInit()
+	self.Shadow = 1
+	InitUI()
+end 
+
+function IsSetAnchor()
+	return true
+end
+
+function InitUI()
+	local selfTrans = self.transform
+	local path = "Top/coinCountTxt"
+	balanceTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "LevelupFx"
+	levelupFxObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "Top/JobIcons"
+	local jobIconRoot = selfTrans:Find(path)
+	local iconPath = "iconImg"
+	for i = 0, jobIconRoot.childCount - 1 do
+		local childTrans = jobIconRoot:GetChild(i)
+		local img = childTrans:GetGameObjectAtPath(iconPath)
+		table.insert(jobImgList, img)
+	end
+
+	path = "TechSV/ScrollRect/Viewport/Tech/selectionImg"
+	selectionObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "TechSV/ScrollRect/Viewport/Tech/TechTree"
+	local techTreeRoot = selfTrans:Find(path)
+	local selectionPath = "selectionImg"
+	local skillIconPath = "SkillIcon/skillImg"
+	local skillLevelPath = "skillLevelTxt"
+	for i = 0, techTreeRoot.childCount - 1 do
+		local columnTrans = techTreeRoot:GetChild(i)
+		local techItemList = {}
+		table.insert(techItemColumns, techItemList)
+		local parentName = columnTrans.name
+		for j = 0, columnTrans.childCount - 1 do
+			local techTrans = columnTrans:GetChild(j)
+			local techItem = {}
+			table.insert(techItemList, techItem) 
+			techItem.name = techTrans.name
+			techItem.transform = techTrans
+			techItem.parentName = columnTrans.name
+			techItem.skillImgObj = techTrans:GetGameObjectAtPath(skillIconPath)
+			techItem.levelTxt = techTrans:GetComponentAtPath(skillLevelPath ,CLS_TEXT)
+		end
+	end
+
+	path = "Desc"
+	local descPanelRoot = selfTrans:Find(path)
+	local childPath = "skillNameTxt"
+	techDescPanel.nameTxt = descPanelRoot:GetComponentAtPath(childPath ,CLS_TEXT)
+	childPath = "SkillIcon/skillImg"
+	techDescPanel.iconImg = descPanelRoot:GetGameObjectAtPath(childPath)
+	childPath = "SkillIcon/levelTxt"
+	techDescPanel.levelTxt = descPanelRoot:GetComponentAtPath(childPath ,CLS_TEXT)
+
+	childPath = "TechBonus/Bonus1"
+	local bonus1 = {}
+	techDescPanel.bonus1 = bonus1
+	bonus1.rootObj = descPanelRoot:GetGameObjectAtPath(childPath)
+	childPath = "TechBonus/Bonus1/BonusDesc"
+	bonus1.nameTxt = descPanelRoot:GetComponentAtPath(childPath ,CLS_TEXT)
+	childPath = "TechBonus/Bonus1/CurValueTxt"
+	bonus1.curValueTxt = descPanelRoot:GetComponentAtPath(childPath ,CLS_TEXT)
+	childPath = "TechBonus/Bonus1/NewValueTxt"
+	bonus1.newValueTxt = descPanelRoot:GetComponentAtPath(childPath ,CLS_TEXT)
+
+	childPath = "TechBonus/Bonus2"
+	local bonus2 = {}
+	techDescPanel.bonus2 = bonus2
+	bonus2.rootObj = descPanelRoot:GetGameObjectAtPath(childPath)
+	childPath = "TechBonus/Bonus2/BonusDesc"
+	bonus2.nameTxt = descPanelRoot:GetComponentAtPath(childPath ,CLS_TEXT)
+	childPath = "TechBonus/Bonus2/CurValueTxt"
+	bonus2.curValueTxt = descPanelRoot:GetComponentAtPath(childPath ,CLS_TEXT)
+	childPath = "TechBonus/Bonus2/NewValueTxt"
+	bonus2.newValueTxt = descPanelRoot:GetComponentAtPath(childPath ,CLS_TEXT)
+
+	childPath = "requirementTxt"
+	techDescPanel.levelRequiredTxt = descPanelRoot:GetComponentAtPath(childPath ,CLS_TEXT)
+
+	path = "Bottom"
+	local upgradePanelRoot = selfTrans:Find(path)
+	local childPath = "price1Txt"
+	upgradePanel.priceTxt1 = upgradePanelRoot:GetComponentAtPath(childPath ,CLS_TEXT)
+	childPath = "price2Txt"
+	upgradePanel.priceTxt2 = upgradePanelRoot:GetComponentAtPath(childPath ,CLS_TEXT)
+	childPath = "price1Img"
+	upgradePanel.priceIconObj1 = upgradePanelRoot:GetGameObjectAtPath(childPath)
+	childPath = "price2Img"
+	upgradePanel.priceIconObj2 = upgradePanelRoot:GetGameObjectAtPath(childPath)
+	childPath = "UpgradeBtn"
+end
+
+function OnAnimationFinished()
+	ResetTechDesc()
+	GetBaseViewData()
+end 
+
+function GetBaseViewData()
+	self:SendCommand("GetBaseViewData")
+end
+
+function OnNotification_RefreshView(objs)
+	viewData = objs[0]
+	RefreshView(viewData)
+
+	if selectedItem == nil then
+		local item = techItemColumns[1][1]
+		GetItemViewData(item.itemData.id)
+		SelectTechItem(item)
+	end
+end
+
+function RefreshView(viewData)
+	balanceTxt.text = viewData.balanceText
+
+	local jobIconData = viewData.jobIcons
+	for i = 1, #jobImgList do
+		local img = jobImgList[i]
+		CsBridge.IconData.SetIconByName(img, jobIconData[i])
+	end
+	
+	selectionObj:SetActive(false)
+	selectedItem = nil
+	local treeData = viewData.techTree
+	for i = 1, #techItemColumns do
+		local columnData = treeData[i]
+		local column = techItemColumns[i]
+		for j = 1, #column do
+			local techItem = column[j]
+			local techData = columnData[j]
+			BindTechItemData(techItem, techData)
+		end
+	end	
+	
+	ResetTechDesc()
+end
+
+function ResetTechDesc()
+	local emptyString = "-"
+	techDescPanel.nameTxt.text = emptyString
+	techDescPanel.levelTxt.text = emptyString
+
+	techDescPanel.bonus2.rootObj:SetActive(false)
+	local bonusItemList = {techDescPanel.bonus1, techDescPanel.bonus2}
+	for i = 1, #bonusItemList do
+		local bonusItem = bonusItemList[i]
+		bonusItem.nameTxt.text = emptyString
+		bonusItem.curValueTxt.text = emptyString
+		bonusItem.newValueTxt.text = emptyString
+	end
+
+	techDescPanel.levelRequiredTxt.text = emptyString	
+	upgradePanel.priceTxt1.text = emptyString
+	upgradePanel.priceTxt2.text = emptyString
+
+end
+
+function BindTechItemData(techItem, techData)
+	techItem.itemData = techData
+
+	if techData.selected then
+		SelectTechItem(techItem)
+	end
+	CsBridge.IconData.SetIconByName(techItem.skillImgObj, techData.icon)
+	techItem.skillImgObj:SetSelfAndChildrenGray(not techData.unlocked)
+	techItem.levelTxt.text = techData.levelText
+end
+
+function GetItemViewData(itemID)
+	self:SendCommand("GetItemViewData", itemID)
+end
+
+function OnNotification_RefreshItemView(objs)
+	local itemViewData = objs[0]
+	RefreshItemView(itemViewData)
+end
+
+function RefreshItemView(itemViewData)
+	techDescPanel.nameTxt.text = itemViewData.name
+	techDescPanel.levelTxt.text = itemViewData.levelText
+	CsBridge.IconData.SetIconByName(techDescPanel.iconImg, itemViewData.icon)
+
+	local bonusDataList = itemViewData.bonusDataList
+	techDescPanel.bonus2.rootObj:SetActive(#bonusDataList == 2)
+	local bonusItemList = {techDescPanel.bonus1, techDescPanel.bonus2}
+	for i = 1, #bonusItemList do
+		local bonusItem = bonusItemList[i]
+		if i <= #bonusDataList then
+			local bonusData = bonusDataList[i]
+			bonusItem.nameTxt.text = bonusData.attributeName
+			bonusItem.curValueTxt.text = bonusData.attributeDesc
+			bonusItem.newValueTxt.text = bonusData.levelupDesc
+		end
+	end
+	local colorTxt = "<color=#"..itemViewData.levelFontColor..">"..itemViewData.levelRequired.."</color>"
+	techDescPanel.levelRequiredTxt.text = string.format(Language:getStr("UnionTech_RequireLevel"),colorTxt)
+	
+	local priceData = itemViewData.priceViewData[1]
+	SetIconByResourceId(upgradePanel.priceIconObj1, priceData.resID)
+	upgradePanel.priceTxt1.text = priceData.price
+	SetFontColor(upgradePanel.priceTxt1, priceData.fontColor)
+
+	priceData = itemViewData.priceViewData[2]
+	SetIconByResourceId(upgradePanel.priceIconObj2, priceData.resID)
+	upgradePanel.priceTxt2.text = priceData.price
+	SetFontColor(upgradePanel.priceTxt2, priceData.fontColor)
+
+end
+
+function SetFontColor(uiText, fontColor)
+	local IDX_R, IDX_G, IDX_B = 1, 2, 3
+	local r, g, b = fontColor[IDX_R], fontColor[IDX_G], fontColor[IDX_B]
+	CsBridge.UnityHelper.SetTextColor(uiText, r, g, b)
+end
+
+function OnSkillIconClick(sender)
+	local itemName = sender.transform.parent.name
+	local jobName = sender.transform.parent.parent.name
+	local techItem = GetTechItem(itemName, jobName)
+	GetItemViewData(techItem.itemData.id)
+
+	SelectTechItem(techItem)
+end
+
+function SelectTechItem(techItem)
+	selectedItem = techItem
+
+	local pos = techItem.transform.position
+	selectionObj:SetGlobalPosition(pos.x, pos.y)
+	selectionObj:SetActive(true)
+end
+
+function GetTechItem(itemName, jobName)
+	for i = 1, #techItemColumns do
+		local column = techItemColumns[i]
+		for j = 1, #column do
+			local item = column[j]
+			if item.name == itemName and item.parentName == jobName then
+				return item
+			end
+		end
+	end
+end
+
+function OnNotification_LevelupSucceeded(objs)
+	ShowLevelupFx()
+end
+
+function ShowLevelupFx()
+	if playingFx then
+		return
+	end
+	playingFx = true
+
+	levelupFxObj:SetSelfActive(true)
+	CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			local model = CsBridge.objectCache:CreateObject("CommonLight",true)
+			model.transform:SetParent(levelupFxObj.transform, false)
+			CsBridge.UnityHelper.SetAnchoredPosition(model.gameObject, 0, 0)
+			model:GetComponent("Spine.Unity.SkeletonGraphic"):PlayAnimation(
+				"born",
+				false,
+				function()
+					levelupFxObj:SetSelfActive(false)
+					playingFx = false
+				end)
+		end,
+		"CommonLight")
+end
+
+function OnUpgradeBtnClick(sender)
+	if not selectedItem then
+		return
+	end
+
+	local itemData = selectedItem.itemData
+	local itemID = itemData.id
+	self:SendCommand("UpgradeUnionTech", itemID)
+end
+
+function OnResetBtnClick(sender)
+	self:SendCommand("ResetUnionTech")
+end
+
+function OnHelpBtnClick(sender)
+	self:SendCommand("OpenHelpView", self.gameObject.name)
+end
+
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close() 
+	selectedItem = nil
+	self:ReturnBack()
+end
+
+function DoExit()
+	balanceTxt = nil
+	levelupFxObj = nil
+	selectionObj = nil
+	jobImgList = nil
+	techItemColumns = nil
+	techDescPanel = nil
+	upgradePanel = nil
+	viewData = nil
+	selectedItem = nil
+	playingFx = nil
+end

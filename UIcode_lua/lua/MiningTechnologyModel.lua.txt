@@ -1,0 +1,41 @@
+local miningTechnologyUtils = require "MiningTechnologyUtils"
+
+function DoInit()
+
+end
+
+---获取界面数据
+local function GetTechnologyViewData()
+    local viewData = miningTechnologyUtils.GetMiningTechnologyViewData()
+    self:SendNotification("InitTechnologyView", viewData)
+end
+
+---开启一个采矿科技
+function OnCommand_OpenOneTechnologyItem(objs)
+    local data = objs[0]
+    if not CheckItemEnough(data.selfConsume.id, data.selfConsume.typeId, data.consume.count, true) then
+        return
+    end
+    if data.isOpened == false and data.canOpen == true then
+        miningTechnologyUtils.OpenMiningTechnology(data.id, function()
+            GetTechnologyViewData()
+        end)
+    end
+end
+
+---显示帮助界面
+function OnCommand_ShowHelpView(objs)
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("HelpView", "MingMainModel")
+        view:SetData(INSTRUCTION_MINING_TECHNOLOGY)
+    end, "HelpView")
+end
+
+---初始化界面
+function OnCommand_InitTechnologyView(objs)
+    GetTechnologyViewData()
+end
+
+function DoOnExit()
+
+end

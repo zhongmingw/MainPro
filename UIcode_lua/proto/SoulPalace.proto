@@ -1,0 +1,87 @@
+import "stage.proto";
+import "playerData.proto";
+import "BattleData.proto";
+package SoulPalace;
+
+message PlayerTempleInfo
+{
+    required int32 remains = 1;//免费次数
+    required int32 extraRemains = 2;//购买次数
+    required int64 lastRenewTime = 3;//免费恢复时间
+    repeated TempleTarget targets = 4;//匹配对手
+    required TempleTarget myRankInfo = 5;//个人排名
+    repeated int32 rankReward = 6;//名次达成奖励记录
+    required int32 dailyBuyExtraRemainsCount = 7;//每日购买额外次数
+    required int32 hisHighestRank = 8;//历史最高排名
+}
+message TempleTarget
+{
+    required playerData.PlayerBaseInfo playerBaseInfo = 1;
+    required bool robot = 2;
+    required int32 rank = 3;
+    required int64 combat = 4;
+}
+
+message PlayerTempleDefInfo
+{
+    repeated DefRecord defRecords = 1;
+    required int32 index = 2;
+}
+message DefRecord
+{
+    required int64 id = 1;
+    required playerData.PlayerBaseInfo playerBaseInfo = 2;
+    required int64 time = 3;
+    required int32 win = 4;
+    required int32 deltaScore = 5;
+    repeated BattleData.BattleInfo battleInfo = 6;
+}
+
+//匹配对手 URL matchTarget
+message MatchTargetReq
+{
+    required int32 useless = 1;
+}
+
+message MatchTargetResp
+{
+    required int32 status = 1;
+    required int64 seasonEndTime = 2;//赛季结束时间
+}
+
+//挑战 URL templeChallenge
+message TempleChallengeReq
+{
+    repeated stage.FormationPos formationPos = 1; //阵容
+    required int32 targetRank = 2;//对手名次
+    required int32 rank = 3;//个人名次
+}
+
+//排行榜 URL templeRank
+message TempleRankReq
+{
+    required int32 count = 1;//需要前多少名
+}
+
+message TempleRankResp
+{
+   repeated TempleTarget rankItems = 1;//前n名
+   required TempleTarget myRankItem = 2;//自己排名
+}
+
+//获取战斗录像列表 URL templeDefRecord
+message TempleDefRecordReq
+{
+    required int32 useless = 1;
+}
+
+message TempleDefRecordResp
+{
+    repeated DefRecord defRecords = 1;
+}
+
+//播放战斗录像 URL templeDefRecordPlay
+message TempleDefRecordPlayReq
+{
+    required int32 id = 1;//记录的Id(从0开始)
+}

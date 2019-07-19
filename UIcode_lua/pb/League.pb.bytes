@@ -1,0 +1,129 @@
+
+À
+League.protoLeaguestage.protoplayerData.protoBattleData.protoArenaData.protoSkyscraperData.proto""
+GetBraveArenaInfoReq
+
+id ("Ì
+GetBraveArenaInfoResp,
+matches (2.League.BraveArenaMatchInfo
+currentRound (
+gameOver (
+group (	
+totalRoundNum (
+seasonEndTime (
+signUpEndTime (
+signed (
+rankingOfAuditions	 ("ë
+BraveArenaMatchInfo
+group (	
+round (
+
+id (-
+	redPlayer (2.playerData.PlayerBaseInfo/
+blackPlayer (2.playerData.PlayerBaseInfo
+	redCombat (
+blackCombat (
+redRank (
+	blackRank	 (
+redOdds
+ (
+	blackOdds (
+done (
+redWin (
+time (%
+
+winRewards (2.stage.RewardItem&
+lostRewards (2.stage.RewardItem
+remark (	
+redTotalStake (
+blackTotalStake (
+oddsLastUpdateNum (
+redTotalCompensate (
+blackTotalCompensate (,
+selfStakeRecord (2.League.StakeRecord
+redWinTimes (
+blackWinTimes (
+redWinMatchIds (	
+redStakeLocked (
+blackStakeLocked (1
+redFormation1 (2.ArenaData.FormationPosAdv1
+redFormation2 (2.ArenaData.FormationPosAdv1
+redFormation3 (2.ArenaData.FormationPosAdv3
+blackFormation1  (2.ArenaData.FormationPosAdv3
+blackFormation2! (2.ArenaData.FormationPosAdv3
+blackFormation3" (2.ArenaData.FormationPosAdv
+winnerHeroId# ("X
+StakeRecord
+zone (	
+userId (	
+count (
+odds (
+redWin ("N
+StakeBraveArenaReq
+round (
+
+id (
+redWin (
+count ("%
+StakeBraveArenaResp
+result ("2
+GetBraveArenaVedioReq
+round (
+
+id ("∫
+GetBraveArenaVedioResp4
+battleInfos1 (2.League.BraveArenaBattleResult4
+battleInfos2 (2.League.BraveArenaBattleResult4
+battleInfos3 (2.League.BraveArenaBattleResult"¥
+BraveArenaBattleResult
+redWin (*
+
+battleInfo (2.BattleData.BattleInfo-
+	redPlayer (2.playerData.PlayerBaseInfo/
+blackPlayer (2.playerData.PlayerBaseInfo"2
+GetBraveArenaMatchReq
+round (
+
+id ("H
+GetBraveArenaMatchResp.
+	matchInfo (2.League.BraveArenaMatchInfo"$
+CheckBraveArenaOpenReq
+
+id (":
+CheckBraveArenaOpenResp
+open (
+	newSeason ("Z
+UpdateFTArenaSingleFormationReq
+type ()
+formationPos (2.stage.FormationPos"2
+ UpdateFTArenaSingleFormationResp
+result ("ê
+UpdateFTArenaFormationReq%
+formation_1 (2.stage.Formation%
+formation_2 (2.stage.Formation%
+formation_3 (2.stage.Formation",
+UpdateFTArenaFormationResp
+result ("+
+CheckBraveArenaCombatReq
+matchId ("C
+CheckBraveArenaCombatResp
+	redCombat (
+blackCombat ("ä
+SignUpBraveArenaReq%
+formation_1 (2.stage.Formation%
+formation_2 (2.stage.Formation%
+formation_3 (2.stage.Formation"&
+SignUpBraveArenaResp
+result ("
+GetSignersReq
+count ("Ö
+GetSignersResp9
+seededPlayers (2".SkyscraperData.CombatRankInfoItem8
+otherPlayers (2".SkyscraperData.CombatRankInfoItem",
+CheckBraveArenaRewardReq
+userless ("D
+CheckBraveArenaRewardResp'
+rewards (2.League.RoundRewardDef"F
+RoundRewardDef
+rankText (	"
+rewards (2.stage.RewardItem

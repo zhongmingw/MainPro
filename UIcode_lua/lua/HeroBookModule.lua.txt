@@ -1,0 +1,11 @@
+function AssetNames(objs)
+  local arr={"HeroBagView", "HeroItemSlot"}
+  return arr
+end
+
+function OnEnter(objs,onFinished)
+	   self:OpenView("HeroBagView","HeroBagModel")
+       if(onFinished ~= nil)then
+	     onFinished()  
+       end
+end

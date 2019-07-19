@@ -1,0 +1,21 @@
+
+function ShowHeroGet(self,reward,callback)
+    if reward.typeId ~= ItemTypeEnum.Hero or reward.id == 0 then
+        --print("not hero or heroId is 0")
+        return
+    end
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("HeroGetView","HeroGetModel")
+        view:SendCommand("GetHeroData",reward,callback)
+    end, "HeroGetView","SkillItemSlot")
+end
+
+function ShowJewelGet(self,reward,callback)
+    if reward.typeId ~= ItemTypeEnum.Jewel or reward.id == 0 then
+        return
+    end
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("JewelGetView","JewelGetModel")
+        view:SendCommand("InitJewelData",reward,callback)
+    end, "JewelGetView")
+end

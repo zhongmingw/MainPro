@@ -1,0 +1,61 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-05-06 11:28:21
+]]
+
+local MazeDef = require "MazeDef"
+local MazeGrid = require "MazeGrid"
+local MazeUtils = require "MazeUtils"
+
+local MazeEventGrid = class("MazeEventGrid",MazeGrid)
+
+local MazeEvent = MazeDef.MazeEvent
+
+function MazeEventGrid:Ctor(row, col, state, type, data)
+    --super(self.super,row,col,state,type)
+    self.super.super.Ctor(self,row,col,state,type)
+    -- self.row = row
+    -- self.col = col
+    -- self.state = state
+    -- self.type = type
+    self.passed = data.isNormal
+    self.triggerId = data.triggerId
+    self.params = MazeUtils.GetEventParams(self.triggerId)
+end
+
+function MazeEventGrid:SetData(svrData)
+    self.passed = svrData.isNormal
+end
+
+function MazeEventGrid:BindOnStateValue(trans)
+    local bg = trans:GetGameObjectAtPath("BgImg")
+    local blockFlag = trans:GetGameObjectAtPath("BgImg/BlockFlag")
+    local monsterRootObj = trans:GetGameObjectAtPath("MonsterRoot")
+    local monsterRoot = trans:GetComponentAtPath("MonsterRoot/Monster",CLS_RECTTRANSFORM)
+    local iconImg = trans:GetGameObjectAtPath("IconImg")
+    blockFlag:SetSelfActive(false)
+    bg:SetSelfActive(false)
+    monsterRootObj:SetSelfActive(false)
+    MazeUtils.DestroyModel(monsterRoot)
+    if self.passed then
+        iconImg:SetSelfActive(false)
+    else
+        local iconName = ResTblContainer:GetPropToStr(self.triggerId,MazeEvent.icon,MazeEvent.tblName)
+        SetSpriteByModule(iconImg,iconName)
+        iconImg:SetSelfActive(true)
+    end
+end
+
+function MazeEventGrid:Click(data)
+    if self.passed then
+        data.onFinished()
+    else
+        self:TriggerEvent(data.curPlayer)
+    end
+end
+
+function MazeEventGrid:TriggerEvent(curPlayer)end
+
+return MazeEventGrid

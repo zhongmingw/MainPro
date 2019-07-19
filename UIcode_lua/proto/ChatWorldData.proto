@@ -1,0 +1,126 @@
+import "playerData.proto";
+package ChatWorldData;
+
+message ChatPlayerBaseInfo
+{
+	required string nick=1;
+	required int32 icon=2;
+	required int32 level=3;
+	required int32 vip=4;
+	required playerData.BoxItem box = 5; //炫彩头像
+}
+
+message ChatRecruitReq
+{
+	required ChatPlayerBaseInfo playerBaseInfo=1;
+	required int32 contentType=2;
+	required RecruitInfo recruitInfo=3;
+}
+
+message RecruitInfo
+{
+	required int32 type=1;//1:union recruit
+	required string data=2;
+}
+
+message ChatRecruitResp
+{
+	required int32 reslut=1;
+}
+
+message ChatContent
+{
+	required string playerId=1;
+	required ChatPlayerBaseInfo playerBaseInfo=2;
+	required int32 contentType=3;
+	required string content=4;
+	required int64 time=5;
+	required string zone=6;
+}
+
+message CheckChatContentReq
+{
+	required int64 time=1;
+	required string legionId=2;
+}
+
+message ChatRecord
+{
+	required int32 chatGroup=1;
+	required ChatContent content=2;
+	required int64 chatTime=3;
+}
+
+message CheckChatContentResp
+{
+	required int64 time=1;
+	repeated ChatRecord contents=2;
+}
+
+message LoginChatReq
+{
+	required string channel=1;
+	required string zone=2;
+	required string playerId=3;
+}
+
+message LoginChatResp
+{
+	required string uid=1;
+}
+
+message CheckChatReq
+{
+	required int64 time=1;
+	required string legionId=2;
+}
+
+message CheckChatResp
+{
+	required int64 time=1;
+	required bool hasNewChat=2;
+}
+
+message ChatZoneReq
+{
+	required ChatPlayerBaseInfo playerBaseInfo=1;
+	required int32 contentType =2;
+	required string content=3;
+}
+
+message ChatVipReq
+{
+	required ChatPlayerBaseInfo playerBaseInfo=1;
+	required int32 contentType=2;
+	required string content=3;
+}
+
+message ChatPrivateReq
+{
+	required ChatPlayerBaseInfo playerBaseInfo=1;
+	required string friendZone=2;
+	required string friendPlayerId=3;
+	required int32 contentType=4;
+	required string content=5;
+	required string friendNickName=6;
+}
+
+message ChatLegionReq
+{
+	required ChatPlayerBaseInfo playerBaseInfo=1;
+	required int32 contentType=2;
+	required string legionId=3;
+	required string content=4;
+}
+
+message ChatAllReq
+{
+	required ChatPlayerBaseInfo playerBaseInfo=1;
+	required int32 contentType=2;
+	required string content=3;
+}
+
+message FriendShieldInfo
+{
+    repeated string blackList = 1; //玩家黑名单
+}

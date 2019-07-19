@@ -1,0 +1,75 @@
+--[[
+	file: UnionSettingsView.lua
+	author: hangang
+	description: View for update union settings
+]]
+
+local contentInput
+local viewData, confirmCbk
+
+local step = 50
+local level_min = 1
+
+function DoInit()
+	self.Shadow = 1
+	InitUI()
+end 
+
+function InitUI()
+	contentInput = CsBridge.GetInputFromView(self, "Center/Input")
+end
+
+function SetParamDataList(objs)
+	viewData = objs[0]
+	confirmCbk = objs[1]
+	RefreshView(viewData)
+end
+
+function RefreshView(data)
+	contentInput.text = data
+end
+
+function OnIncreaseBtnClick(sender)	
+	local value = tonumber(contentInput.text)
+	contentInput.text = tostring(value + step)
+end
+
+function OnDecreaseBtnClick(sender)	
+	local value = tonumber(contentInput.text) - step
+	value = value < level_min and level_min or value
+	contentInput.text = tostring(value)
+end
+
+function OnConfirmBtnClick(sender)
+	local value = tonumber(contentInput.text)
+	if value < 0 then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("InvalidLevelInput"))
+	else
+		confirmCbk(value)
+	end
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function OnNotification_CloseUnionView(obj)
+	Close()
+end
+
+function OnNotification_UpdateSettingsFinished(obj)
+	Close()
+end
+
+function Close()
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	contentInput = nil
+	viewData = nil
+	confirmCbk = nil
+
+	step = nil
+	level_min = nil
+end

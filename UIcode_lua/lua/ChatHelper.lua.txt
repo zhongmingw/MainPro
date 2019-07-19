@@ -1,0 +1,41 @@
+function IsSheild(userId)
+    local shield = appData:checkData("FriendShieldInfo")
+	if shield ~= nil and shield.blackList then
+		for i=1,#shield.blackList do
+		    if (shield.blackList[i] == userId) then
+			    return true
+			end
+		end
+	end
+	return false
+end
+
+function MaskFriend(zone, userId,nickName,onFinished)
+    if not IsSheild(userId) then
+        CsBridge.messageManager:showAlertView(Language:getStr("hint"), string.gsub(Language:getStr("MaskFriendHint"), "%%s", nickName), Language:getStr("local_cancel"), nil, Language:getStr("local_confirm"), function()
+            DoMaskFriend(zone, userId,false,onFinished)
+        end)
+    else
+        DoMaskFriend(zone, userId,true,onFinished)
+    end
+end
+
+function DoMaskFriend(zone, userId, shield,onFinished)
+    local req={}
+    if shield then
+        req.type=2
+    else
+        req.type=1
+    end
+    req.userId=userId
+    HttpRequest("friendSheild", "FriendSheildReq", "FriendSheildResp", req, function(resp)
+         if (onFinished ~= nil) then
+		     onFinished()
+		 end
+		 if not shield then
+		     CsBridge.hintUILayer:ShowHintBox(Language:getStr("MaskSuccess"))
+		 else
+		     CsBridge.hintUILayer:ShowHintBox(Language:getStr("MaskCancelSuccess"))
+		 end
+    end)
+end

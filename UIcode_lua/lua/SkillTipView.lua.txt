@@ -1,0 +1,51 @@
+local isInit = false
+
+local skillNameTxt 
+local skillUnLockCondTxt
+local skillDesTxt
+local skillDesTxtRectTransform
+local skillIconImg
+
+function DoInit()
+    self.Shadow = 1
+    self.Anim = 8
+    local skillTipTrans=self:GetComponentAtPath("Center/Content",CLS_RECTTRANSFORM)
+    skillNameTxt=skillTipTrans:GetComponentAtPath("BaseInfo/NameTxt",CLS_TEXT)
+    skillIconImg=skillTipTrans:GetGameObjectAtPath("BaseInfo/NameTxt/frameImg/IconImg")
+    skillUnLockCondTxt=skillTipTrans:GetComponentAtPath("UnLockCondTxt",CLS_TEXT)
+	skillDesTxt=skillTipTrans:GetComponentAtPath("DesTxt",CLS_TEXT)
+    skillDesTxtRectTransform=skillDesTxt:GetComponent("RectTransform")
+end
+
+function SetParamDataList(objs)
+    local skillData = objs[0]
+    self:SendCommand("InitData",skillData)
+end
+
+function IsSetAnchor()
+	self.transform.parent:SetAsLastSibling()
+    return true
+end
+
+function OnNotification_RefreshSkillTipView(objs)
+    local skill = objs[0]
+	CsBridge.IconData.SetIconByName(skillIconImg,skill.icon)
+    skillNameTxt.text=skill.name
+    local isOpen = skill.isOpen == nil and true or skill.isOpen
+    skillUnLockCondTxt.gameObject:SetSelfActive(not isOpen)
+    if not isOpen then
+        skillUnLockCondTxt:SetText(string.format(Language:getStr("SkillLockCond"),skill.openGrade))
+    end
+    skillDesTxt.text=skill.des
+    CsBridge.UnityHelper.SetUISizeDelta(skillDesTxtRectTransform,skillDesTxtRectTransform.sizeDelta.x, skillDesTxt:GetPreferredValues().y)
+end
+
+function DoExit()
+    isInit = nil
+
+    skillNameTxt  = nil
+    skillUnLockCondTxt = nil
+    skillDesTxt = nil
+    skillDesTxtRectTransform = nil
+    skillIconImg = nil
+end

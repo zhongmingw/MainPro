@@ -1,0 +1,76 @@
+--[[
+	file: UnionApplyView.lua
+	author: hangang
+	description: Base view for union foundation,searching and application when player joined no union
+]]
+
+local currentTabIndex = 0
+local childToggles
+local toggleGroup
+
+local viewData
+
+function DoInit()
+	self.Shadow = 1
+	InitUI()
+end 
+
+function IsSetAnchor()
+	return true
+end
+
+function InitUI()
+	local selfTrans = self.transform
+
+	childToggles = {}
+	local path = "Top/TogGroup"
+	local togglesRoot = selfTrans:Find(path)
+	toggleGroup = togglesRoot:GetComponent(CLS_TOGGLE_GROUP_ARCHLY)
+	for i = 0, togglesRoot.childCount - 1 do
+		local toggle = togglesRoot:GetChild(i):GetComponent(CLS_TOGGLE_ARCHLY)
+		childToggles[toggle.Index] = toggle
+	end
+end
+
+function OnAnimationFinished()		
+	local moduleTrans = self.transform.parent.parent
+	local childCount = moduleTrans.childCount
+	self.transform.parent:SetSiblingIndex(childCount)
+
+	currentTabIndex = -1
+	childToggles[0].isOn = false
+	childToggles[0].isOn = true
+end 
+
+function OnTogGroupClick(isOn, index)
+	if not isOn then
+		return
+	end
+
+	if currentTabIndex == index then
+		return
+	end
+	currentTabIndex = index
+	self:SendCommand("OpenChildView", currentTabIndex)
+end
+
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close() 
+	self:SendCommand("CloseUnionApplyView")
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	currentTabIndex = nil
+	childToggles = nil
+	toggleGroup = nil
+
+	viewData = nil
+end

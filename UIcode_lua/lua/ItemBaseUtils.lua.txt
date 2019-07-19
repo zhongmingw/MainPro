@@ -1,0 +1,204 @@
+
+require "JewelUtils"
+
+local function SetJewelItem(id,frameImg,iconImg,starRoot)
+	JewelUtils.SetIconByJewelId(iconImg,id)
+	JewelUtils.SetQualityByJewelId(frameImg,id)
+	JewelUtils.SetStarByJewelId(starRoot,id)
+end
+
+function SetRewardIcon(trans, rewardStr)
+    local result = SplitString(rewardStr, ",")
+    local reward = {
+        typeId = tonumber(result[0]),
+        id = tonumber(result[1]),
+        count = tonumber(result[2])
+    }
+	BindItemBaseValue(trans,reward)
+end
+
+function BindItemBaseValue(itemBaseTF,itemBaseData)
+
+	local icon_Sprite=itemBaseTF:Find("IconSprite"):GetComponent("UnityEngine.UI.Image")
+	local frame_Sprite=itemBaseTF:Find("FrameSprite"):GetComponent("UnityEngine.UI.Image")
+	local chip_Sprite=itemBaseTF:Find("ChipSprite"):GetComponent("UnityEngine.UI.Image")
+	local raceObj=itemBaseTF:Find("RaceObj")
+	local race_Sprite=itemBaseTF:Find("RaceSprite"):GetComponent("UnityEngine.UI.Image")
+	local starRoot=itemBaseTF:Find("StarRoot")
+	local orderRoot=itemBaseTF:Find("OrderRoot")
+	local countTxt=itemBaseTF:Find("CountTxt"):GetComponent(CLS_TEXT)
+	local defaultObj = itemBaseTF:Find("Default")
+	SetDefautShow(frame_Sprite,icon_Sprite,chip_Sprite,raceObj,race_Sprite,starRoot,orderRoot,countTxt)
+	if itemBaseData.id < 1 then
+		--SetQuality(frame_Sprite.gameObject,8)
+		SetDefaultQuality(frame_Sprite)
+		if defaultObj ~= nil then
+			defaultObj.gameObject:SetSelfActive(true)
+		end
+		return
+	end 
+	if defaultObj ~= nil then
+		defaultObj.gameObject:SetSelfActive(false)
+	end
+    local icon_TF = frame_Sprite.transform
+    if icon_TF.childCount~=0  then
+        for i=icon_TF.childCount-1,0,-1 do
+            local model = icon_TF:GetChild(i)
+            CsBridge.objectCache:Recycle(model.gameObject)
+        end
+    end
+	if itemBaseData.typeId==1 then
+		icon_Sprite.gameObject:SetSelfActive(true)
+		SetIconByResourceId(icon_Sprite.gameObject,itemBaseData.id)
+		SetResourceQuality(frame_Sprite.gameObject)
+	elseif itemBaseData.typeId==2 then
+		icon_Sprite.gameObject:SetSelfActive(true)
+		local itemType = ResTblContainer:GetPropToInt(itemBaseData.id,ItemBase.category,ItemBase.actorTbl)
+		if itemType==1 then
+			SetEquipmentItem(itemBaseData.id,orderRoot)
+		elseif itemType==3 then
+			chip_Sprite.gameObject:SetSelfActive(true)
+			SetHeroPiecesItem(itemBaseData.id,race_Sprite,starRoot,raceObj.gameObject)
+		elseif itemType==2 then
+			local tbl = ResTblContainer:GetTable(ItemBase.actorTbl)
+			local raceId = tbl:GetInt(itemBaseData.id, ItemBase.group)
+			if raceId ~= 0 then
+				raceObj.gameObject:SetSelfActive(true)
+				race_Sprite.gameObject:SetSelfActive(true)
+				SetIconByRaceId(race_Sprite.gameObject,raceId)	
+			end
+			local star = tbl:GetInt(itemBaseData.id, ItemBase.pieceStar)
+			if star ~= 0 then
+				SetStar(starRoot,star)
+			end
+		end
+		SetIconByItemId(icon_Sprite.gameObject,itemBaseData.id)
+		SetQualityByItemId(frame_Sprite.gameObject,itemBaseData.id)
+	elseif itemBaseData.typeId==3 then
+		icon_Sprite.gameObject:SetSelfActive(true)
+		raceObj.gameObject:SetSelfActive(true)
+		race_Sprite.gameObject:SetSelfActive(true)
+		SetRaceIconByHeroId(race_Sprite.gameObject,itemBaseData.id)
+		SetIconByHeroId(icon_Sprite.gameObject,itemBaseData.id)
+		ShowHeroQuality(itemBaseData.id,starRoot,frame_Sprite,itemBaseData.distillationStar)
+	elseif itemBaseData.typeId==4 then
+		icon_Sprite.gameObject:SetSelfActive(true)
+		SetRelicItem(itemBaseData,icon_Sprite,frame_Sprite,orderRoot)
+	elseif itemBaseData.typeId==5 then
+		SetHeadBoxItem(itemBaseData,frame_Sprite)
+	elseif itemBaseData.typeId == 0 then --rune 符文
+		icon_Sprite.gameObject:SetSelfActive(true)
+		SetRuneItem(itemBaseData.id,icon_Sprite,frame_Sprite,orderRoot)
+	elseif itemBaseData.typeId == ItemTypeEnum.Jewel then
+		icon_Sprite.gameObject:SetSelfActive(true)
+		SetJewelItem(itemBaseData.id,frame_Sprite.gameObject,icon_Sprite.gameObject,starRoot)
+	end
+
+	if itemBaseData.count==1 or itemBaseData.count == nil or itemBaseData.hideCount then
+		countTxt.text=""
+		countTxt.gameObject:SetSelfActive(false)
+	else
+		countTxt.text=GetValueAbbreviation(itemBaseData.count)
+		countTxt.gameObject:SetSelfActive(true)
+	end
+end
+
+function SetDefautShow(frame_Sprite,icon_Sprite,chip_Sprite,raceObj,race_Sprite,starRoot,orderRoot,countTxt)
+	--SetQuality(frame_Sprite.gameObject,8)
+	local spine_TF = icon_Sprite.transform
+	if spine_TF.childCount~=0  then
+        for i=spine_TF.childCount-1,0,-1 do
+            local model = spine_TF:GetChild(i)
+            CsBridge.objectCache:Recycle(model.gameObject)
+        end
+    end
+	icon_Sprite.gameObject:SetSelfActive(false)
+	chip_Sprite.gameObject:SetSelfActive(false)
+	if raceObj ~= nil then
+		raceObj.gameObject:SetSelfActive(false)
+	end
+	race_Sprite.gameObject:SetSelfActive(false)
+	starRoot.gameObject:SetSelfActive(false)
+	if orderRoot ~= nil then
+		orderRoot.gameObject:SetSelfActive(false)
+	end
+	countTxt.gameObject:SetSelfActive(false)
+end
+
+function SetEquipmentItem(id,orderRoot)
+	SetEquipOrder(id,orderRoot)
+end
+
+function SetHeroPiecesItem(id,race_Sprite,starRoot,raceObj)
+	ShowHeroPiecesQuality(id,starRoot)
+	local propStr = ResTblContainer:GetPropToStr(id,PiecesComposition.fixedResult,PiecesComposition.actorTbl)
+	local result=SplitString(propStr,",")
+	local raceId = ResTblContainer:GetPropToInt(id,ItemBase.group,ItemBase.actorTbl)
+	if(result.Length>=2)then
+		if raceObj ~= nil then
+			raceObj:SetSelfActive(true)
+		end
+		race_Sprite.gameObject:SetSelfActive(true) 
+		local heroId=tonumber(result[1])
+		SetRaceIconByHeroId(race_Sprite.gameObject,heroId)
+	elseif raceId ~= 0 then
+		if raceObj ~= nil then
+			raceObj:SetSelfActive(true)
+		end
+		race_Sprite.gameObject:SetSelfActive(true) 
+		SetIconByRaceId(race_Sprite.gameObject,raceId)
+	else
+		if raceObj ~= nil then
+			raceObj:SetSelfActive(false)
+		end
+		race_Sprite.gameObject:SetSelfActive(false)
+	end
+end
+
+function ShowHeroPiecesQuality(itemId,starRoot)
+	starRoot.gameObject:SetSelfActive(true)
+	local quality = ResTblContainer:GetPropToInt(itemId,ItemBase.pieceStar,ItemBase.actorTbl) 
+	if quality== nil or quality<0 then
+		return
+	end
+	for i=0,starRoot.childCount-1 do
+		CsBridge.IconData.SetIconByName(starRoot:GetChild(i).gameObject, "ui_com_star")
+		starRoot:GetChild(i).gameObject:SetSelfActive(i<quality and quality<6 or i==quality-1)
+	end
+end
+
+function SetRelicItem(relic,icon_Sprite,frame_Sprite,orderRoot)
+	SetIconByRelicId(icon_Sprite,relic.id)
+	SetQualityByRelicId(frame_Sprite,relic.id)
+	SetRelicStar(orderRoot,relic.level or 1)
+end
+
+function SetRuneItem(level,icon_Sprite,frame_Sprite,orderRoot)
+	SetIconByRuneLevel(icon_Sprite,level)
+	SetQualityByRuneLevel(frame_Sprite,level)
+	SetRuneStar(orderRoot,level)
+end 
+
+function SetHeadBoxItem(itemBaseData,frame_Sprite)
+	local spine_TF = frame_Sprite.transform
+	local iconSpine = ResTblContainer:GetPropToStr(itemBaseData.id, AvatarBox.iconSpine, AvatarBox.tblName)
+    if iconSpine~=nil and iconSpine~="" then
+        CsBridge.SpineHelper.CreatSpineModel(iconSpine,spine_TF,
+        function(skeleton)
+            CsBridge.UnityHelper.SetUILocalScale(skeleton.rectTransform,1.1)
+        end)
+	end
+	local icon = ResTblContainer:GetPropToStr(itemBaseData.id, AvatarBox.icon, AvatarBox.tblName)
+    CsBridge.IconData.SetIconByName(frame_Sprite.gameObject,icon)
+end
+
+function SetItemIconSprite(iconObject, typeID, itemID)
+	if typeID == ItemTypeEnum.Resource then
+		SetIconByResourceId(iconObject,itemID)
+	elseif typeID == ItemTypeEnum.Item then
+		SetIconByItemId(iconObject, itemID)
+	elseif typeID == ItemTypeEnum.Hero then
+		SetIconByHeroId(iconObject, itemID)
+	end
+end
+

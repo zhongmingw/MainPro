@@ -1,0 +1,307 @@
+--[[
+	file: DestructionActivityUtils.lua
+	author: zhangyue
+	description: DestructionActivity utilities
+]]
+
+
+local LoadDestructionRewardConfig, GetDestructionRankViewData
+local GetDestructionEnemyViewData, GetDestructionTicketCount, GetRaidCountViewData
+local OpenRaidFormationView, AssertDestructionTicket, TryRaidDestruction
+local OpenDestructionFormationView, TryChallengeDestruction, OnFormationViewConfirmed
+
+
+local function GetTicketItemID()
+	return GetConstValue("destructionItem")
+end
+
+local function ShowDestructionTips(model)
+	local ID_Instruction = 27
+	CsBridge.CacheAssetsByModule(model.Module,
+    function()
+        local view = CsBridge.OpenView("HelpView","ServerActivityModel",false,true)
+        view:SetData(ID_Instruction)
+    end, "HelpView")
+end
+
+local function OpenShopView(currentActivityID, onShopViewClosed, model)
+	local typeId = ItemTypeEnum.Item
+	local key = "destructionItemLimit"
+	local count = GetConstValue(key)
+	local resId = 2
+	key = "destructionItemPrice"
+	local price = GetConstValue(key)
+	local ticketItemID = GetTicketItemID()
+
+	ShowBuyView(model,typeId,ticketItemID,count,resId,price,onShopViewClosed(currentActivityID))
+end
+
+local function OpenDestructionRewardsView(destructionData, model)
+	if not destructionData.destructionRewardConfig then
+		LoadDestructionRewardConfig(destructionData)
+	end
+
+	local tips = Language:getStr("DestrucionTips")
+	CsBridge.CacheAssetsByModule(
+		model.Module,
+		function()
+			local view = model:OpenView("RankRewardView","ServerActivityModel")
+			view:SetParamDataList(tips, destructionData.destructionRewardConfig)
+		end,
+		"RankRewardView",
+		"APArenaRewardItemSlot",
+		"RewardItemSlot"
+		)
+end
+
+local function GetDestructionRank(model)
+	local req = {}
+	req.count = 50
+	HttpRequest("getDestructionRank", "GetDestructionRankReq", "GetDestructionRankResp", req, function(resp)
+		model:OpenView("SkyscraperRankView","ServerActivityModel")
+		model:SendNotification("RefreshDestructionRankView", GetDestructionRankViewData(resp))
+	end)
+end
+
+local function OpenDestructionEnemyView(destructionType, model)
+	local view = model:OpenView("DestructionEnemyView","ServerActivityModel")
+	local viewData = GetDestructionEnemyViewData(destructionType)
+	view:SetParamDataList(viewData)
+end
+
+local function OpenRaidCountView(destructionData, currentActivityID, destructionType, onFinished, model)
+	local viewData = GetRaidCountViewData(destructionType)
+	ShowDealView(
+		model,
+		viewData,
+		function(inputCount, destructionType)
+			OpenRaidFormationView(destructionData, currentActivityID, destructionType, inputCount, onFinished, model)
+		end
+	)
+end
+
+local function OpenFormationView(data, currentActivityID, model)
+	local datas = {
+		type = data[0],
+		isRaid = data[1],
+		count = 0,
+	}
+	OpenDestructionFormationView(datas, currentActivityID, model)
+end
+
+LoadDestructionRewardConfig = function(destructionData)
+	destructionData.destructionRewardConfig = {}
+	local tableName = DestructionRankReward.tblName
+	local tbl = ResTblContainer:GetTable(tableName)
+	local itemIds = tbl:GetCol(DestructionRankReward.min)
+    for  i = 0, itemIds.Length - 1 do
+		local min = itemIds[i]
+		local rowCells = tbl:GetRow(min, DestructionRankReward.max, DestructionRankReward.reward)
+		local rewardData = {}
+		rewardData.id = i + 1
+		rewardData.min = tonumber(min)
+		rewardData.max = tonumber(rowCells[0])
+		rewardData.rewardStr = rowCells[1]
+
+		table.insert(destructionData.destructionRewardConfig, rewardData)
+    end
+
+	destructionData.ticketItemID = GetTicketItemID()
+end
+
+GetDestructionRankViewData = function(svrData)
+	local viewData = {}
+	if svrData then
+		viewData.selfRankInfo = svrData.playerRankItem
+		viewData.rankInfos = svrData.rankItems
+		local rankItems = viewData.rankInfos
+		for k, rankItem in pairs(rankItems) do
+			rankItem.scoreHead = Language:getStr("totalHurt")
+		end
+	end
+
+	return viewData
+end
+
+GetDestructionEnemyViewData = function(destructionType)
+	local viewData = {}
+	viewData.destructionType = destructionType
+
+	local count = GetDestructionTicketCount()
+	viewData.ticketCount = GetValueAbbreviation(count)
+	viewData.ticketIcon = ResTblContainer:GetPropToStr(
+		GetTicketItemID(), ItemBase.icon,ItemBase.actorTbl)
+
+	local enemyList = {}
+	viewData.enemyList = enemyList
+	viewData.progress = 0
+	viewData.progressText = ""
+	local svrData = appData:checkItem("PlayerDestruction", tostring(destructionType))
+	if svrData then
+		local enemy = {}
+		local monsterID = svrData.monsterId
+		local heroID = ResTblContainer:GetPropToInt(monsterID, Monster.actorId, Monster.actorTbl)
+		enemy.heroId = heroID
+		enemy.level = svrData.monsterLevel
+		viewData.progress = svrData.monsterCurHp / (svrData.monsterMaxHp + 0.0)
+		viewData.progressText = svrData.monsterCurHp .. "/" .. svrData.monsterMaxHp
+		table.insert(enemyList, enemy)
+	end
+
+	return viewData
+end
+
+GetDestructionTicketCount = function()
+	local itemData = appData:checkItem("PackItem",tostring(GetTicketItemID()))
+	local count = itemData and itemData.count or 0
+
+	return count
+end
+
+GetRaidCountViewData = function(destructionType)
+	local viewData = {}
+
+	viewData.destructionType = destructionType
+	viewData.type = DealType.GetInput
+	viewData.title = Language:getStr("InputDestrucionCount")
+	viewData.itemId = GetTicketItemID()
+	viewData.itemCount = GetDestructionTicketCount()
+	viewData.confirmBtnText = Language:getStr("local_confirm")
+
+	return viewData
+end
+
+OpenRaidFormationView = function(destructionData, currentActivityID, destructionType, count, onFinished, model)
+	if count == 0 or(not AssertDestructionTicket(count)) then
+		return
+	end
+
+	CsBridge.CacheAssetsByModule(
+		model.Module,
+		function()
+			local view = model:OpenView("FormationView","FormationModel")
+			local formationType = FormationTypeEnum.FormationType_PVE
+			local battleCbk = function(heroIds)
+				TryRaidDestruction(destructionData, currentActivityID, destructionType, heroIds, count, onFinished, model)
+			end
+			local formView = 1
+			local canSkip = false
+			view:SetParamDataList(formationType,nil, battleCbk, formView, canSkip)
+		end,
+		"FormationView",
+		"HeroItemSlot")
+end
+
+AssertDestructionTicket = function(count)
+	local ticketItemID = GetTicketItemID()
+	if GetDestructionTicketCount(ticketItemID) < count then
+		local itemName = ResTblContainer:GetPropToStr(ticketItemID, ItemBase.title, ItemBase.actorTbl)
+		local tips = Language:getStr("ResNotEnough")
+		CsBridge.hintUILayer:ShowHintBox(string.format(tips, itemName))
+		return false
+	else
+		return true
+	end
+end
+
+TryRaidDestruction = function(destructionData, currentActivityID, destructionType, formation, count, onFinished, model)
+	destructionData.currentDestructionType = destructionType
+	local req = {}
+	req.id = currentActivityID
+	req.type = destructionType
+	req.count = count
+	req.formationPos = formation
+	HttpRequest(
+		"raidDestruction",
+		"RaidDestructionReq",
+		"RaidDestructionResp",
+		req,
+		function(resp)
+			local rewards = resp.rewards
+			local confirmCbk = function()
+				local bossKilled = resp.isKilled
+				if bossKilled then
+					model:HideView("DestructionEnemyView")
+					CsBridge.hintUILayer:ShowHintBox(Language:getStr("DestrucionBossKilledTips"))
+					onFinished(currentActivityID)
+				else
+					local viewData = GetDestructionEnemyViewData(destructionData.currentDestructionType)
+					model:SendNotification("RefreshDestructionEnemyView", viewData)
+				end
+			end
+			ShowRewardReceivedTip(model, rewards, confirmCbk)
+		end
+	)
+end
+
+OpenDestructionFormationView = function(datas, currentActivityID, model)
+	if not AssertDestructionTicket(1) then
+		return
+	end
+
+	CsBridge.CacheAssetsByModule(
+		model.Module,
+		function()
+			--self:Deactive("PlayerInfoView")
+			local view = model:OpenView("FormationView","FormationModel")
+			local formationType = FormationTypeEnum.FormationType_PVE
+			local battleCbk = function(heroIds)
+				model:HideView("DestructionEnemyView")
+				TryChallengeDestruction(datas.destructionType, heroIds, currentActivityID, model)
+			end
+			local formView = 0
+			local canSkip = false
+			view:SetParamDataList(formationType, battleCbk,nil, formView, canSkip)
+		end,
+		"FormationView",
+		"HeroItemSlot")
+end
+
+TryChallengeDestruction = function(destructionType, formation, currentActivityID, model)
+	local req = {}
+	req.id = currentActivityID
+	req.type = destructionType
+	req.formationPos = formation
+	HttpRequest("destructionChallenge", "DestructionChallengeReq", "BattleInfo", req, function(resp)
+		local battleInfo = resp
+		ShowBattleModule(battleInfo, model)
+	end)
+end
+
+OnFormationViewConfirmed = function(destructionType, isRaid, formation, count, model)
+	if isRaid then
+		TryRaidDestruction(destructionType, formation, count)
+	else
+		model:HideView("DestructionEnemyView")
+		TryChallengeDestruction(destructionType, formation)
+	end
+end
+
+local function GetBaseViewData(activity, viewData)
+	local ticketItemID = tostring(GetConstValue("destructionItem"))
+	local itemData = appData:checkItem("PackItem",ticketItemID)
+	local count = itemData and itemData.count or 0
+	viewData.ticketCount = GetValueAbbreviation(count)
+	viewData.ticketIcon = ResTblContainer:GetPropToStr(ticketItemID, ItemBase.icon,ItemBase.actorTbl)
+end
+
+local function InitData(data, activityData)
+	LoadDestructionRewardConfig(activityData)
+	local items = {}
+	activityData.items = items
+	for k, itemData in pairs(data.activities) do
+		items[itemData.type] = itemData
+	end
+end
+
+return{
+	ShowDestructionTips = ShowDestructionTips,
+	OpenShopView = OpenShopView,
+	OpenDestructionRewardsView = OpenDestructionRewardsView,
+	GetDestructionRank = GetDestructionRank,
+	OpenDestructionEnemyView =OpenDestructionEnemyView,
+	OpenRaidCountView = OpenRaidCountView,
+	OpenFormationView = OpenFormationView,
+	GetBaseViewData = GetBaseViewData,
+	InitData = InitData,
+}

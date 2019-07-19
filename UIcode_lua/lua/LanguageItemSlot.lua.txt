@@ -1,0 +1,11 @@
+function OnLanguageItemSlotBindValue(slot, data)
+    slot.m_SelectSprite=slot:GetGameObjectAtPath("CheckSprite")
+    local languageName = slot:GetComponentAtPath("NameTxt" ,CLS_TEXT)
+    
+    if(data.IsSelected ~= nil) then
+	    slot.m_SelectSprite:SetSelfActive(data.IsSelected)
+	else
+	    slot.m_SelectSprite:SetSelfActive(false)
+	end
+    languageName:SetText(data.name)
+end

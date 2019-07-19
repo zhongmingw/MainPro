@@ -1,0 +1,11 @@
+local IconData = CS.Client.Library.IconData
+
+function OnAssistItemSlotBindValue(slot,data)
+    local selectImg = slot:GetGameObjectAtPath("SelectImg")
+    local nameTxt = slot:GetComponentAtPath("NameTxt",CLS_TEXT)
+    local IconImg = slot:GetGameObjectAtPath("IconImg")
+
+    selectImg:SetSelfActive(data.selected)
+    nameTxt.text = data.name
+    IconData.SetIconByName(IconImg,data.icon)
+end

@@ -1,0 +1,143 @@
+
+
+---购买
+local function BuyTripShopActivityItem(currentItemData, buyCount, currentActivityID, onFinished, model)
+    local price = currentItemData.price
+    if not CheckItemEnough(currentItemData.priceTypeId, currentItemData.priceType, price, true) then
+        return
+    end
+
+    local req = {}
+    req.activityId = currentActivityID
+    req.id = currentItemData.id
+    req.count = buyCount
+    HttpRequest("bartering", "BarteringReq", "BarteringResp", req, function(resp)
+        local rewards = {}
+        local reward = {}
+        reward.id = currentItemData.reward.id
+        reward.count = currentItemData.reward.count * buyCount
+        reward.typeId = currentItemData.reward.typeId,
+        table.insert(rewards, reward)
+        local confirmCbk = function()
+            onFinished(currentActivityID)
+        end
+        ShowRewardReceivedTip(model, rewards, confirmCbk)
+    end)
+end
+
+---是否限时物品图片
+local function CheckShowItemBound(typeId, itemID)
+    local enabled = false
+    if typeId == ItemTypeEnum.Item then
+        if (itemID >= 1 and itemID <= 1000) or
+                (itemID >= 5001 and itemID <= 10000) then
+            enabled = true
+        end
+    elseif typeId == ItemTypeEnum.Hero or typeId == ItemTypeEnum.Relic or typeId == ItemTypeEnum.IconFrame then
+        enabled = true
+    end
+
+    return enabled
+end
+
+---改变数据结构
+local function ChangShopItemDataForView(item)
+    local itemViewData = {}
+    itemViewData.id = item.id
+    itemViewData.reward = {}
+    itemViewData.reward.typeId = item.rewardItem.typeId
+    itemViewData.reward.id = item.rewardItem.id
+    itemViewData.reward.count = item.rewardItem.count
+    itemViewData.reward.showItemBound = CheckShowItemBound(itemViewData.reward.typeId, itemViewData.reward.id)
+
+    itemViewData.priceType = item.cost.typeId
+    itemViewData.priceTypeId = item.cost.id
+    itemViewData.price = item.cost.count
+
+    itemViewData.inventoryAnchor = CsBridge.TextAlignmentOptions.MiddleLeft
+    itemViewData.inventoryTextColor = color13
+    itemViewData.basePrice = itemViewData.price
+
+    local inventoryText = ""
+    local limitCount = item.limitCount
+
+    if limitCount and limitCount > 0 then
+        local ownerCount = limitCount - item.remainCount
+        inventoryText = "(" .. tostring(ownerCount) .. "/" .. limitCount .. ")"
+        if ownerCount >= limitCount then
+            itemViewData.inventoryTextColor = color26
+        end
+        itemViewData.inventory = item.remainCount
+        itemViewData.remainCount = item.remainCount
+        itemViewData.limited = true
+    end
+    itemViewData.buyLblAnchor = (inventoryText == "") and
+            CsBridge.TextAlignmentOptions.Center or CsBridge.TextAlignmentOptions.Left
+    itemViewData.inventoryText = inventoryText
+
+    return itemViewData
+end
+
+local function UpdateCountdown(itemDataTbl)
+    local MILLISECONDS_DAY = 1000 * 60 * 60 * 24
+    local currentTime = CsBridge.timeManager.ServerTime % MILLISECONDS_DAY
+    for i, itemData in pairs(itemDataTbl) do
+        if itemData.timeLimited then
+            itemData.restTime = ""
+            if currentTime > itemData.endTimeStamp then
+                itemData.restTime = CheckTimeRemain(currentTime - itemData.endTimeStamp)
+            end
+        end
+    end
+end
+
+local function GetItemViewData(activityData)
+    local allItemData = {}
+    for i = 1, #activityData.items do
+        local viewData = {}
+        allItemData[i] = viewData
+        for j = 1, #activityData.items[i] do
+            local itemViewData = ChangShopItemDataForView(activityData.items[i][j])
+            table.insert(viewData, itemViewData)
+        end
+        if viewData ~= nil and #viewData > 0 then
+            UpdateCountdown(viewData)
+        end
+    end
+
+    return allItemData
+end
+
+local function InitData(data, activityData)
+    local utils = require "SoulBitsShopUtils"
+    local items = {}
+    local priceItems = {}
+    activityData.items = items
+    activityData.priceItems = priceItems
+
+    if data and data.shopList then
+        for i = 1, #data.shopList do
+            if data.shopList[i] ~= nil and #data.shopList[i].goodsList ~= nil and #data.shopList[i].goodsList > 0 then
+                local consume = {}
+                consume.typeId = data.shopList[i].cost.typeId
+                consume.id = data.shopList[i].cost.id
+                consume.count = GetCountByItemType(consume.id, consume.typeId)
+                consume.desp = utils.GetDespByItemType(consume.id, consume.typeId)
+                table.insert(priceItems, consume)
+                local colItems = {}
+                table.insert(items, colItems)
+                for k, itemData in ipairs(data.shopList[i].goodsList) do
+                    table.insert(colItems, itemData)
+                end
+            end
+        end
+    end
+end
+
+return {
+    BuyTripShopActivityItem = BuyTripShopActivityItem,
+    ChangShopItemDataForView = ChangShopItemDataForView,
+    UpdateCountdown = UpdateCountdown,
+    GetItemViewData = GetItemViewData,
+    InitData = InitData,
+}

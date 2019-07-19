@@ -1,0 +1,86 @@
+local togGroup
+local togArr
+local flag 
+
+local curSort = 1
+local sortFunc
+
+local function InitScreenUI(tg,arr,fg)
+    togGroup = tg
+    togArr = arr
+    flag = fg
+end
+
+local function InitScreen(func)
+    sortFunc = func
+    togGroup:SetAllTogglesOff()
+    curSort = 1
+    togArr[curSort].isOn = true
+    CsBridge.UnityHelper.SetAnchoredPosition(flag.gameObject,togArr[1].transform.localPosition.x,flag.localPosition.y)
+end
+
+local function BindSortFunc(func)
+    sortFunc = func
+end
+
+local function UpdateScreen()
+    if sortFunc ~= nil then
+        sortFunc(curSort)
+    end
+end
+
+local function ScreenAnim(direct)
+    local offset = 10
+    if direct then
+        offset = -offset
+    end
+    togGroup:SetToggleOn(curSort)
+    local targetX = togArr[curSort].transform.localPosition.x
+    local t1 = CsBridge.TweenUtils.MoveTo(flag,targetX+offset,flag.localPosition.y,0.15,function()
+        local t2 = CsBridge.TweenUtils.MoveTo(flag,targetX,flag.localPosition.y,0.05)
+        t2:DoPlay()
+    end)
+    t1:DoPlay()
+end
+
+local function Screen(sort)
+    if curSort == sort then
+        return
+    end
+    local direct = sort - curSort < 0
+    curSort = sort
+    ScreenAnim(direct)
+    if sortFunc ~= nil then
+        sortFunc(curSort)
+    end
+end
+
+local function TogGroupClick(isOn,index)
+    if not isOn then
+        return
+    end
+    Screen(index)
+end
+
+local function GetCurSort()
+    return curSort
+end
+
+local function Clear()
+    togGroup = nil
+    togArr = nil
+    flag  = nil
+
+    curSort = nil
+    sortFunc = nil
+end
+
+return {
+    InitScreenUI = InitScreenUI,
+    InitScreen = InitScreen,
+    BindSortFunc = BindSortFunc,
+    UpdateScreen = UpdateScreen,
+    TogGroupClick = TogGroupClick,
+    GetCurSort = GetCurSort,
+    Clear = Clear,
+}

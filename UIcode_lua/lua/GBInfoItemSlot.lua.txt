@@ -1,0 +1,14 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2018-11-19 10:48:58
+]]
+
+function OnGBInfoItemSlotBindValue(slot, data)
+    local leftTxt = slot:GetComponentAtPath("LeftTxt",CLS_TEXT)
+    local rightTxt = slot:GetComponentAtPath("RightTxt",CLS_TEXT)
+
+    leftTxt.text = ">="..data.count
+    rightTxt.text = data.dis.."%"
+end

@@ -1,0 +1,234 @@
+---对采矿科技进行排序
+local function SortTechnologyByCanOpenAndId(a, b)
+    if a.stateEnum == b.stateEnum then
+        return a.id < b.id
+    else
+        return a.stateEnum < b.stateEnum
+    end
+end
+
+---比较两个值
+local function CompareNumber(have, condition)
+    if have >= condition then
+        return true
+    else
+        return false
+    end
+end
+
+---第一种类型的判断，判断等级
+local function TypePlayerLevelOpenCondition(item)
+    local playerInfo = appData:checkData("PlayerInfo")
+    return CompareNumber((playerInfo.level or 0), item.conditionParameter)
+end
+
+---第二种类型的判断,判断攻击次数
+local function TypeAttackOpenCondition(item)
+    local mineInfo = appData:checkData("MineInfo")
+    return CompareNumber((mineInfo.grabTimes or 0), item.conditionParameter)
+end
+
+---第三种类型的判断，判断攻击成功的次数
+local function TypeAttackSuccessOpenCondition(item)
+    local mineInfo = appData:checkData("MineInfo")
+    return CompareNumber((mineInfo.grabWinTimes or 0), item.conditionParameter)
+end
+
+---第三种类型的判断，判断占领时长
+local function TypeHoldTimeOpenCondition(item)
+    local mineInfo = appData:checkData("MineInfo")
+    return CompareNumber((mineInfo.totalTakenTime or 0), item.conditionParameter)
+end
+
+---第三种类型的判断，判断获取金币数量
+local function TypeGetCoinOpenCondition(item)
+    local mineInfo = appData:checkData("MineInfo")
+    return CompareNumber((mineInfo.totalGold or 0), item.conditionParameter)
+end
+
+---第三种类型的判断，判断获取战魂
+local function TypeGetAttackSoulOpenCondition(item)
+    local mineInfo = appData:checkData("MineInfo")
+    return CompareNumber((mineInfo.totalSoul or 0), item.conditionParameter)
+end
+
+---第三种类型的判断，判断获取绿魂
+local function TypeGetGreenSoulCondition(item)
+    local mineInfo = appData:checkData("MineInfo")
+    return CompareNumber((mineInfo.totalStepCoin or 0), item.conditionParameter)
+end
+
+---是否可以开始这个科技
+local function IsCanOpenTechnology(item)
+    item.canOpen = false
+    if item.isOpened then
+        return
+    end
+    if item.conditionType == MiningTechnologyOpenTypeEnum.PlayerLevel then
+        item.canOpen = TypePlayerLevelOpenCondition(item)
+    elseif item.conditionType == MiningTechnologyOpenTypeEnum.AttackCount then
+        item.canOpen = TypeAttackOpenCondition(item)
+    elseif item.conditionType == MiningTechnologyOpenTypeEnum.AttackSuccess then
+        item.canOpen = TypeAttackSuccessOpenCondition(item)
+    elseif item.conditionType == MiningTechnologyOpenTypeEnum.HoldTime then
+        item.canOpen = TypeHoldTimeOpenCondition(item)
+    elseif item.conditionType == MiningTechnologyOpenTypeEnum.GetCoin then
+        item.canOpen = TypeGetCoinOpenCondition(item)
+    elseif item.conditionType == MiningTechnologyOpenTypeEnum.GetAttackSoul then
+        item.canOpen = TypeGetAttackSoulOpenCondition(item)
+    elseif item.conditionType == MiningTechnologyOpenTypeEnum.GetGreenSoul then
+        item.canOpen = TypeGetGreenSoulCondition(item)
+    end
+
+end
+
+---科技item的数据准备
+local function MiningTechnologyItemSlotData(item)
+    local OPENED_NAME = "new_com_cksykq" ---已开启的图片名称
+    local CAN_NOT_OPEN_NAME = "new_com_ckswkq" ---不能开启的图片名称
+    item.stateImageName = "new_com_ckswkq"
+    IsCanOpenTechnology(item)
+    if item.canOpen then
+        item.showOpenBtn = true
+    else
+        item.showOpenBtn = false
+        item.stateImageName = CAN_NOT_OPEN_NAME
+    end
+
+    if item.isOpened then
+        item.showOpenBtn = false
+        item.stateImageName = OPENED_NAME
+    end
+end
+
+---是否有可以开启的科技
+local function HaveCanOpenTechnology()
+    local mineInfo = appData:checkData("MineInfo")
+    local technologyTbl = ResTblContainer:GetTable(MineralScience.actorTbl)
+    local ids = ResTblContainer:GetIds(MineralScience.actorTbl)
+    local have = false
+    if technologyTbl == nil or ids == nil then
+        return have
+    end
+    for i = 0, ids.Length - 1 do
+        local item = {}
+        item.id = tonumber(ids[i])
+        item.idStr = tostring(item.id)
+        item.conditionType = tonumber(technologyTbl:Get(item.id, MineralScience.conditionType))
+        item.conditionParameter = tonumber(technologyTbl:Get(item.id, MineralScience.conditionParameter))
+        item.isOpened = false
+        if mineInfo and mineInfo.upgradeIds then
+            for k = 1, #mineInfo.upgradeIds do
+                if mineInfo.upgradeIds[k] == item.idStr then
+                    item.isOpened = true
+                end
+            end
+        end
+        MiningTechnologyItemSlotData(item)
+        if item.canOpen then
+            have = true
+        end
+    end
+    return have
+end
+
+---获取自己的对应资源
+local function GetSelfConsume(consume)
+    local selfConsume = {}
+    selfConsume.typeId = consume.typeId
+    selfConsume.id = consume.id
+    selfConsume.count = GetCountByItemType(selfConsume.id, selfConsume.typeId) or 0
+    return selfConsume
+end
+
+---获取采矿科技列表
+local function GetMiningTechnologyItemArr(mineInfo)
+    local technologyStateEnum = {
+        CanOpen = 1,
+        NotOpen = 2,
+        Opened = 3,
+    }
+    local miningUtils = require "MiningUtils"
+    local itemArr = {}
+    local totalUpValue = math.floor(mineInfo.upgradeNum / 1000 * 100)
+    local totalUpValueStr = totalUpValue .. "%"
+    local technologyTbl = ResTblContainer:GetTable(MineralScience.actorTbl)
+    local ids = ResTblContainer:GetIds(MineralScience.actorTbl)
+    if technologyTbl == nil or ids == nil then
+        return itemArr, totalUpValue, totalUpValueStr
+    end
+    for i = 0, ids.Length - 1 do
+        local item = {}
+        item.id = tonumber(ids[i])
+        item.idStr = tostring(item.id)
+        item.name = tostring(technologyTbl:Get(item.id, MineralScience.name))
+        item.icon = tostring(technologyTbl:Get(item.id, MineralScience.icon))
+        item.conditionType = tonumber(technologyTbl:Get(item.id, MineralScience.conditionType))
+        item.conditionParameter = tonumber(technologyTbl:Get(item.id, MineralScience.conditionParameter))
+        item.conditionDescribe = tostring(technologyTbl:Get(item.id, MineralScience.conditionDescribe))
+        item.expendStr = tostring(technologyTbl:Get(item.id, MineralScience.expend))
+        item.consume = miningUtils.GetItemByString(item.expendStr)
+        item.outputPromote = tonumber(technologyTbl:Get(item.id, MineralScience.outputPromote))
+        item.outputPromoteStr = math.floor(item.outputPromote / 1000 * 100) .. "%"
+        item.scienceDescribe = tostring(technologyTbl:Get(item.id, MineralScience.scienceDescribe))
+        item.isOpened = false
+        item.selfConsume = GetSelfConsume(item.consume)
+        if mineInfo and mineInfo.upgradeIds then
+            for k = 1, #mineInfo.upgradeIds do
+                if mineInfo.upgradeIds[k] == item.idStr then
+                    item.isOpened = true
+                end
+            end
+        end
+        MiningTechnologyItemSlotData(item)
+        if item.isOpened then
+            item.stateEnum = technologyStateEnum.Opened
+        end
+        if item.canOpen then
+            item.stateEnum = technologyStateEnum.CanOpen
+        end
+        if not item.canOpen and not item.isOpened then
+            item.stateEnum = technologyStateEnum.NotOpen
+        end
+        table.insert(itemArr, item)
+    end
+    table.sort(itemArr, SortTechnologyByCanOpenAndId)
+    return itemArr, totalUpValue, totalUpValueStr
+end
+
+---获取科技界面的数据
+local function GetMiningTechnologyViewData()
+    local viewData = {}
+    viewData.technologyItemArr = {}
+    viewData.mineInfo = appData:checkData("MineInfo")
+    local itemArr, totalUpValue, totalUpValueStr = GetMiningTechnologyItemArr(viewData.mineInfo)
+    viewData.technologyItemArr = itemArr
+    viewData.totalUpValue = totalUpValue
+    viewData.totalUpValueStr = totalUpValueStr
+    return viewData
+end
+
+---开启一个采矿技能
+local function OpenMiningTechnology(id, callback)
+    local req = {}
+    req.id = id
+    HttpRequest("upgradeMineScience", "UpgradeMineScienceReq", "UpgradeMineScienceResp", req, function(resp)
+        if resp then
+            if resp.result == 0 then
+                CsBridge.ShowHintBoxTwo(Language:getStr("OpenMiningTechnologySuccess"))
+                if callback then
+                    callback()
+                end
+            else
+                CsBridge.ShowHintBoxTwo(Language:getStr("OpenMiningTechnologyFail"))
+            end
+        end
+    end)
+end
+
+return {
+    GetMiningTechnologyViewData = GetMiningTechnologyViewData,
+    OpenMiningTechnology = OpenMiningTechnology,
+    HaveCanOpenTechnology = HaveCanOpenTechnology,
+    GetSelfConsume = GetSelfConsume,
+}

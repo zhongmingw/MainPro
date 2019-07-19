@@ -1,0 +1,44 @@
+
+function OnMailItemSlotBindValue(slot,data)
+    local itemBtn = slot:GetComponentAtPath("ItemBtn",CLS_BUTTON_ARCHLY)
+    local checkImgObj = slot:GetGameObjectAtPath("ItemBtn/CheckImg")
+    local titleTxt = slot:GetComponentAtPath("ItemBtn/TitleTxt",CLS_TEXT)
+    local timeTxt = slot:GetComponentAtPath("ItemBtn/TimeTxt",CLS_TEXT)
+    local normalImgObj = slot:GetGameObjectAtPath("ItemBtn/NormalImg")
+    local rewardImgObj = slot:GetGameObjectAtPath("ItemBtn/RewardImg")
+
+	slot.m_SelectSprite=checkImgObj
+    slot.m_SelectSprite:SetActive(slot.IsSelected)
+    
+    if data.type == 2 then
+        titleTxt.text = Language:getStr("Mail_Player")
+    else
+        if string.widthSingle(data.mailItem.title) > 3 then
+            titleTxt.text = CsBridge.UnityHelper.SubString(data.mailItem.title,0,3).."..."
+        else
+            titleTxt.text = data.mailItem.title
+        end
+    end
+    timeTxt.text = CsBridge.timeManager:checkTimePass(data.mailItem.sendTime)
+
+    local iconImg = nil
+    if data.attach ~= nil then
+        rewardImgObj:SetActive(true)
+        normalImgObj:SetActive(false)
+        iconImg = rewardImgObj
+    else
+        rewardImgObj:SetActive(false)
+        normalImgObj:SetActive(true)
+        iconImg = normalImgObj
+    end
+
+    if data.status == 2 then
+        itemBtn.Gray = true
+        CsBridge.IconData.ChangeImageMaterial(checkImgObj, "SpriteGray")
+        CsBridge.IconData.ChangeImageMaterial(iconImg, "SpriteGray")
+    elseif data.status == 1 then
+        itemBtn.Gray = false
+        CsBridge.IconData.ChangeImageMaterial(checkImgObj, "")
+        CsBridge.IconData.ChangeImageMaterial(iconImg, "")
+    end 
+end

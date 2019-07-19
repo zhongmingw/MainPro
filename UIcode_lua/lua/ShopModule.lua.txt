@@ -1,0 +1,19 @@
+
+function DoInit()
+
+end
+
+function AssetNames(objs)
+  local arr={"ShopItemSlot", "ShopView", "ShopTypeItemSlot"}
+  return arr
+end
+
+function OnEnter(objs,onFinished)
+    local view = self:OpenView("ShopView","ShopModel")
+    if objs~= nil and objs.Length == 1 then
+      view:SetParamDataList(objs[0])
+    end
+    if(onFinished ~= nil)then
+	     onFinished()  
+    end
+end

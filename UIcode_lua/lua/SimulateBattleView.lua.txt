@@ -1,0 +1,282 @@
+local headViewsMap = {}
+
+local content
+local battleRoot
+local battleModelRoot
+local battleBGRoot
+local battleEffectRoot
+local battlePopNumRoot
+
+local coinsSpineParentTrans
+local takeCoinsSpineParentTrans
+
+local coinsSpineObj
+local takeCoinSpineObj
+
+local coinsSpine
+local takeCoinSpine
+
+local redHeroList
+local blackHeroList
+local onHookStageId
+local bg_tex
+
+local onOpen = false
+local close = false
+local iskip = false
+local isFirst = false
+local inBattle = false
+local initBattle = false
+local cached = true
+
+local curProgress = 0
+local start = false
+local class = 0
+
+local TICKER_NAME = "ticker_SimulateBattleView"
+local GROUP_SPINE = "SimulateBattleViewSpine"
+
+function DoInit()
+	self.Anim=0
+	local viewTrans = self.transform
+	content = viewTrans:Find("Content")
+	battleModelRoot=viewTrans:Find("Content/BattleModelRoot")
+	battleEffectRoot=viewTrans:Find("Content/BattleEffectRoot")
+	bg_tex=self:GetComponentAtPath("Content/Image" ,CLS_RAWIMAGE)
+	coinsSpineParentTrans = viewTrans:Find("Content/CoinsSpineParent")
+	takeCoinsSpineParentTrans = viewTrans:Find("Content/TakeCoinsSpineParent")
+	MsgCenter:Subscribe(Notify_LoadSimulateBattle,LoadSimulateBattle)
+	MsgCenter:Subscribe(Notify_ShowMap,ShowMap)
+	MsgCenter:Subscribe(Notify_HideMap,HideMap)
+	MsgCenter:Subscribe(Notify_InitCoin,InitCoin)
+	MsgCenter:Subscribe(Notify_TrophyCoin,TrophyCoin)
+	MsgCenter:Subscribe(Notify_BGMoveStart,BGStartMove)
+	MsgCenter:Subscribe(Notify_BGMoveEnd,BGMoveEnd)
+end
+
+function LoadSimulateBattle(objs)
+	redHeroList = objs[0]
+	blackHeroList = objs[1]
+	onHookStageId = objs[2]
+	close = false
+	local map = ResTblContainer:GetPropToStr(onHookStageId,Campaign.map,Campaign.actorTbl)
+	CsBridge.IconData.SetRawImageByName(bg_tex.gameObject,map)
+	initBattle = true
+end
+
+function ShowMap(obj)
+	CsBridge.TweenUtils.MoveToByAnchored(content,0,-900,0.3,
+		function()
+			self:HideView(self.gameObject.name)
+		end)
+end
+
+function HideMap(obj)
+	CsBridge.TweenUtils.MoveToByAnchored(content,0,0,0.3,nil)
+end
+
+function InitCoin(obj)
+	isFirst=true
+    class=obj
+	if coinsSpineObj == nil then
+		CsBridge.CacheAssetsByGroup(GROUP_SPINE,  function()
+			coinsSpineObj = CsBridge.objectCache:CreateObject("CoinsSpine", true, coinsSpineParentTrans)
+			coinsSpine = coinsSpineObj:GetComponent(CLS_SKELETONGRAPHIC)
+			InitCoinAnimation()
+		end, "CoinsSpine")
+	else
+		InitCoinAnimation()
+	end
+end
+
+function InitCoinAnimation()
+	if coinsSpine == nil then
+		coinsSpine = coinsSpineObj:GetComponent(CLS_SKELETONGRAPHIC)
+	end
+	coinsSpineObj:SetSelfActive(true)
+	if takeCoinSpineObj then
+		takeCoinSpineObj:SetSelfActive(false)
+	end
+	local animName="shine_gold"..class
+	coinsSpine:PlayAnimation(animName,true,nil,nil)
+end
+
+function TrophyCoin(index)
+	if index<=class then
+		if takeCoinSpineObj == nil then
+			CsBridge.CacheAssetsByGroup(GROUP_SPINE,  function()
+				takeCoinSpineObj = CsBridge.objectCache:CreateObject("TakeCoinsSpine", true, takeCoinsSpineParentTrans)
+				takeCoinSpine = takeCoinSpineObj:GetComponent(CLS_SKELETONGRAPHIC)
+				TrophyCoinAnimation(index)
+			end, "TakeCoinsSpine")
+		else
+			TrophyCoinAnimation(index)
+		end
+	end
+end
+
+function TrophyCoinAnimation(index)
+	if takeCoinSpine == nil then
+		takeCoinSpine = takeCoinSpineObj:GetComponent(CLS_SKELETONGRAPHIC)
+	end
+	takeCoinSpineObj:SetSelfActive(true)
+	local curIndex = class-index
+	local coinsAnim = (curIndex+1).."_"..(curIndex)
+	MsgCenter:Broadcast(Notify_TakeCoin,takeCoinsSpineParentTrans.position)
+	local takeCallback = curIndex~=0 and function() takeCoinSpineObj:SetSelfActive(false) end or ClearSpine
+	takeCoinSpine:PlayAnimation("loop",false,nil, takeCallback)
+	if curIndex~=0 then
+		coinsSpine:PlayAnimation("shine_gold"..curIndex,true,nil,nil)
+	else
+		coinsSpineObj:SetSelfActive(false)
+		self:HideView("CoinView")
+		MsgCenter:Broadcast(Notify_StopCoin)
+		isFirst=false
+		if not isFirst then
+			self:SendCommand("IsFirst",isFirst)
+		end
+	end
+end
+
+function ClearSpine()
+	CS.UnityEngine.GameObject.Destroy(coinsSpineObj)
+	CS.UnityEngine.GameObject.Destroy(takeCoinSpineObj)
+	coinsSpineObj = nil
+	takeCoinSpineObj = nil
+	coinsSpine = nil
+	takeCoinSpine = nil
+	CsBridge.objectCache:ClearGroup(GROUP_SPINE, true)
+end
+
+function Update()
+	if 	initBattle and cached and not close then
+		initBattle = false
+		InitBattle()
+	end
+end
+
+function OnNotification_OnDie(objs)
+	local startPos = objs[0]
+	MsgCenter:Broadcast(Notify_OnHeroDead,startPos)
+end
+
+function OnNotification_OnCachFinished(objs)
+	cached = true
+end
+
+function OnNotification_ExitBattle(objs)
+	local y,x = math.modf(bg_tex.uvRect.x)
+	start=true
+	if x<0.5 and x>0 then
+		bg_tex:SetRawImageUVRect(0.5,0)
+		curProgress = 0.5
+	elseif x<=1 and x>0.5 then
+		bg_tex:SetRawImageUVRect(1,0)
+		curProgress = 0
+	end
+end
+
+function InitBattle()
+	if redHeroList==nil then
+		return
+	end
+	if onOpen then
+		return
+	end
+	onOpen=true
+	Timer:AddTicker(TICKER_NAME,0.2*1000+CsBridge.timeManager.ServerTime,nil,function()
+		if self == nil or self.Module == nil then
+			return
+		end
+		if inBattle then
+			return
+		end
+		if close then
+			return
+		end
+		--print("InitBattle")
+		cached=false
+		self:SendCommand("IsFirst",isFirst)
+		self:SendCommand("InitBattle",battleModelRoot,battleEffectRoot,redHeroList,blackHeroList,onHookStageId)
+	end,nil)
+end
+
+function OnDoHide()
+	onOpen = false
+	close = true
+	Timer:StopTicker(TICKER_NAME)
+	self:SendCommand("SkipBattle")
+end
+
+function OnClose()
+	onOpen = false
+	close = true
+	Timer:StopTicker(TICKER_NAME)
+	self:SendCommand("SkipBattle")
+end
+
+function Deactive()
+	onOpen = false
+	close = true
+	Timer:StopTicker(TICKER_NAME)
+	self:SendCommand("SkipBattle")
+end
+
+
+function BGStartMove(objs)
+	if isFirst then
+		return 
+	end
+	local interval = objs[0]
+	local t = objs[1]
+	bg_tex:SetRawImageUVRect(curProgress+t/interval/2,0)
+end
+
+function BGMoveEnd()
+	if isFirst then
+		return 
+	end
+	curProgress = curProgress+0.5
+end
+
+function DoExit()
+	onOpen = false
+	close = true
+	ClearSpine()
+	Timer:StopTicker(TICKER_NAME)
+	self:SendCommand("SkipBattle")
+	MsgCenter:Unsubscribe(Notify_LoadSimulateBattle,LoadSimulateBattle)
+	MsgCenter:Unsubscribe(Notify_ShowMap,ShowMap)
+	MsgCenter:Unsubscribe(Notify_HideMap,HideMap)
+	MsgCenter:Unsubscribe(Notify_InitCoin,InitCoin)
+	MsgCenter:Unsubscribe(Notify_TrophyCoin,TrophyCoin)
+	MsgCenter:Unsubscribe(Notify_BGMoveStart,BGStartMove)
+	MsgCenter:Unsubscribe(Notify_BGMoveEnd,BGMoveEnd)
+	self.Module = nil
+	headViewsMap = nil
+
+	content = nil
+	battleRoot = nil
+	battleModelRoot = nil
+	battleBGRoot = nil
+	battleEffectRoot = nil
+	battlePopNumRoot = nil
+
+	coinsSpine  = nil
+	takeCoinSpine = nil
+
+	redHeroList = nil
+	blackHeroList = nil
+	onHookStageId = nil
+	bg_tex = nil
+
+	iskip = nil
+	isFirst = nil
+	inBattle = nil
+	initBattle = nil
+	cached = nil
+
+	curProgress = nil
+	start = nil
+	TICKER_NAME = nil
+end

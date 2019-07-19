@@ -1,0 +1,291 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-01-22 11:20:47
+]]
+local AttrUtils = require "AttrUtils"
+
+JewelUtils = {}
+
+JewelEffectType = {
+    BattleAttr = 1,
+    PassiveSkill = 2
+}
+
+JewelType = {
+    Atk = 1,
+    Def = 2,
+    Control = 3,
+    Special = 4,
+    Common = 100
+}
+
+JewelCondType = {
+    Race = 1,
+    Job = 2
+}
+
+-------------------------view utils------------------------------
+local function SetJewelIcon(iconImg, icon)
+    CsBridge.IconData.SetIconByName(iconImg, icon)
+end
+
+local function SetJewelQuality(frameImg, quality)
+    SetQuality(frameImg, quality+1)
+end
+
+local function SetJewelStar(starRoot, star)
+    SetStar(starRoot, star)
+end
+
+local function SetIconByJewelId(iconImg, id)
+    local icon = ResTblContainer:GetPropToStr(id, Jewel.icon, Jewel.tblName)
+    SetJewelIcon(iconImg, icon)
+end
+
+local function SetQualityByJewelId(frameImg, id)
+    local quality = ResTblContainer:GetPropToInt(id, Jewel.quality, Jewel.tblName)
+    SetJewelQuality(frameImg, quality)
+end
+
+local function SetStarByJewelId(starRoot, id)
+    local star = ResTblContainer:GetPropToInt(id, Jewel.star, Jewel.tblName)
+    SetJewelStar(starRoot, star)
+end
+
+-------------------------------logic utils-------------------------
+local function GetJewelIdIndexByQuliatyAndTypeData()
+    local data = {}
+    local tbl = ResTblContainer:GetTable(Jewel.tblName)
+    local ids = tbl:GetCol(Jewel.id)
+    for i=0, ids.Length-1 do
+        local id = tonumber(ids[i])
+        local infos = tbl:GetRow(id,Jewel.quality,Jewel.type,Jewel.star,Jewel.subType)
+        local quality = tonumber(infos[0])
+        local type = tonumber(infos[1])
+        local star = tonumber(infos[2])
+        local subType = tonumber(infos[3])
+        if type ~= JewelType.Common then
+            if data[quality] == nil then
+                data[quality] = {}
+            end
+            if data[quality][type] == nil then
+                data[quality][type] = {}
+            end
+            if data[quality][type][subType] == nil then
+                data[quality][type][subType] = {}
+            end
+            table.insert(data[quality][type][subType], {
+                id = id,
+                star = star
+            })
+            table.sort(data[quality][type][subType], function(a, b)
+                return a.star < b.star
+            end)    
+        end
+    end
+    return data
+end
+
+local function GetJewelNextStarIdById(id, indexTbl)
+    if id == 0 then
+        return id
+    end
+
+    indexTbl = indexTbl or GetJewelIdIndexByQuliatyAndTypeData()
+    local tbl = ResTblContainer:GetTable(Jewel.tblName)
+    local infos = tbl:GetRow(id, Jewel.quality, Jewel.type, Jewel.subType)
+    local quality, type, subType = tonumber(infos[0]), tonumber(infos[1]), tonumber(infos[2])
+    local arr = indexTbl[quality][type][subType]
+    local idx = 0
+    for i,v in ipairs(arr) do
+        if v.id == id then
+            idx = i
+            break
+        end
+    end
+    local nextJewel = arr[idx + 1]
+    return nextJewel and nextJewel.id or nil
+end
+
+local function GetJewelMaxStarIdById(id, indexTbl)
+    if id == 0 then
+        return id
+    end
+
+    indexTbl = indexTbl or GetJewelIdIndexByQuliatyAndTypeData()
+
+    local tbl = ResTblContainer:GetTable(Jewel.tblName)
+    local infos = tbl:GetRow(id, Jewel.quality, Jewel.type, Jewel.subType)
+    local quality, type, subType = tonumber(infos[0]), tonumber(infos[1]), tonumber(infos[2])
+    local arr = indexTbl[quality][type][subType]
+    return arr[#arr].id
+end
+
+local function CheckJewelEffectCondsActive(hero,conds)
+    if hero == nil and conds and #conds ~= 0 then
+        return false
+    end
+    if conds == nil or #conds == 0 then
+        return true
+    end
+    local heroId = hero.heroId or appData:checkItem("HeroItem",hero.uid).heroId
+    local race = hero.race or ResTblContainer:GetPropToInt(heroId,HeroBase.group,HeroBase.actorTbl)
+    local job = hero.job or ResTblContainer:GetPropToInt(heroId,HeroBase.job,HeroBase.actorTbl)
+    for i,cond in ipairs(conds) do
+        if cond.type == JewelCondType.Race then
+            if not (cond.val == race) then
+                return false
+            end
+        elseif cond.type == JewelCondType.Job then
+            if not (cond.val == job) then
+                return false
+            end
+        end
+    end
+    return true
+end
+
+local function GetJewelCondDesp(conds)
+    local str = ""
+    local count = #conds 
+    for i=1,count do
+		if conds[i].type == JewelCondType.Race then
+			str = str..ResTblContainer:GetPropToStr(conds[i].val,Camp.camp,Camp.tblName)
+        elseif conds[i].type == JewelCondType.Job then
+			str = str..ResTblContainer:GetPropToStr(conds[i].val,Job.name,Job.tblName)
+		end
+		if i < count then
+			str = str..","
+		end 
+    end
+	return str
+end
+
+local function GetJewelCondsFromTblStr(condStr)
+    local conds = {}
+    local condInfos = SplitString(condStr, ";")
+    for i = 0, condInfos.Length - 1 do
+        local condInfo = condInfos[i]
+        local c = SplitString(condInfo, ",")
+        local cond = {
+            type = tonumber(c[0]),
+            val = tonumber(c[1])
+        }
+        table.insert(conds, cond)
+    end
+    return conds
+end
+
+local function GetJewelEffectFromTblStr(active, infos)
+    local effect = {}
+    effect.active = active
+    effect.type = tonumber(infos[0])
+    if effect.type == JewelEffectType.BattleAttr then
+        effect.effect = AttrUtils.GetAttrsDataFromTblStr(infos[1])
+    elseif effect.type == JewelEffectType.PassiveSkill then
+        effect.effect = tonumber(infos[1])
+    end
+    effect.conds = GetJewelCondsFromTblStr(infos[2])
+    effect.desp = infos[3]
+    return effect
+end
+
+local function GetJewelEffect(tbl, effects, id, maxId, effectType, effect, restriction, desp)
+    if tbl:GetInt(maxId,effectType) ~= 0 then
+        table.insert(
+            effects,
+            GetJewelEffectFromTblStr(tbl:GetInt(id, effectType) ~= 0, tbl:GetRow(maxId, effectType, effect, restriction, desp))
+        )
+    end
+end
+
+local function GetJewelEffectsById(id, indexTbl)
+
+    indexTbl = indexTbl or GetJewelIdIndexByQuliatyAndTypeData()
+
+    local maxStarJewelId = GetJewelMaxStarIdById(id,indexTbl)
+    local effects = {}
+    local tbl = ResTblContainer:GetTable(Jewel.tblName)
+    GetJewelEffect(tbl, effects, id, maxStarJewelId, Jewel.effectType1, Jewel.effect1, Jewel.restriction1, Jewel.desp1)
+    GetJewelEffect(tbl, effects, id, maxStarJewelId, Jewel.effectType2, Jewel.effect2, Jewel.restriction2, Jewel.desp2)
+    GetJewelEffect(tbl, effects, id, maxStarJewelId, Jewel.effectType3, Jewel.effect3, Jewel.restriction3, Jewel.desp3)
+    GetJewelEffect(tbl, effects, id, maxStarJewelId, Jewel.effectType4, Jewel.effect4, Jewel.restriction4, Jewel.desp4)
+    GetJewelEffect(tbl, effects, id, maxStarJewelId, Jewel.effectType5, Jewel.effect5, Jewel.restriction5, Jewel.desp5)
+    return effects
+end
+
+local function GetJewelUpStarMatData(id, count)
+    local mat = {
+        typeId = ItemTypeEnum.Jewel,
+        id = id,
+        count = count,
+        hideCount = true
+    }
+    local tbl = ResTblContainer:GetTable(Jewel.tblName)
+    mat.jewelType = tbl:GetInt(id, Jewel.type)
+    mat.type =  mat.jewelType == JewelType.Common and JewelMatType.FixedQualityAndStar or JewelMatType.FiexedAll
+    mat.quality = tbl:GetInt(id, Jewel.quality)
+    mat.star = tbl:GetInt(id, Jewel.star)
+    mat.putList = {}
+    return mat
+end
+
+local function GetJewelUpStarMatDataFromTbl(matStr)
+    local infos = SplitString(matStr, ",")
+    local id = tonumber(infos[0])
+    local count = tonumber(infos[1])
+    return GetJewelUpStarMatData(id, count)
+end
+
+local function GetJewelUpStarMatArrDataFromTbl(arr, matStr)
+    if matStr == "" then
+        return
+    end
+    table.insert(arr, GetJewelUpStarMatDataFromTbl(matStr))
+end
+
+local function GetJewelRefineTbl()
+    local refineTbl = {}
+    local tbl = ResTblContainer:GetTable(JewelRefine.tblName)
+    local ids = tbl:GetCol(JewelRefine.id)
+    for i=0,ids.Length-1 do
+        local id = tonumber(ids[i])
+        local infos = tbl:GetRow(id,
+            JewelRefine.main,
+            JewelRefine.sub1,
+            JewelRefine.sub2,
+            JewelRefine.sub3,
+            JewelRefine.extra)
+        local mainMat,subMat1,subMat2,subMat3 = infos[0],infos[1],infos[2],infos[3]
+        local consume = infos[4]
+        local matArr = {}
+        JewelUtils.GetJewelUpStarMatArrDataFromTbl(matArr,mainMat)
+        JewelUtils.GetJewelUpStarMatArrDataFromTbl(matArr,subMat1)
+        JewelUtils.GetJewelUpStarMatArrDataFromTbl(matArr,subMat2)
+        JewelUtils.GetJewelUpStarMatArrDataFromTbl(matArr,subMat3)
+        local consumeArr = GetRewardFromTbl(consume)
+        refineTbl[id] = {
+            matArr = matArr,
+            consumeArr = consumeArr
+        }
+    end
+    return refineTbl
+end
+
+JewelUtils.SetJewelIcon = SetJewelIcon
+JewelUtils.SetJewelQuality = SetJewelQuality
+JewelUtils.SetJewelStar = SetJewelStar
+JewelUtils.SetIconByJewelId = SetIconByJewelId
+JewelUtils.SetQualityByJewelId = SetQualityByJewelId
+JewelUtils.SetStarByJewelId = SetStarByJewelId
+
+JewelUtils.GetJewelEffectsById = GetJewelEffectsById
+JewelUtils.GetJewelNextStarIdById = GetJewelNextStarIdById
+JewelUtils.CheckJewelEffectCondsActive = CheckJewelEffectCondsActive
+JewelUtils.GetJewelCondDesp = GetJewelCondDesp
+JewelUtils.GetJewelCondsFromTblStr = GetJewelCondsFromTblStr
+JewelUtils.GetJewelUpStarMatArrDataFromTbl = GetJewelUpStarMatArrDataFromTbl
+JewelUtils.GetJewelIdIndexByQuliatyAndTypeData = GetJewelIdIndexByQuliatyAndTypeData
+JewelUtils.GetJewelRefineTbl = GetJewelRefineTbl

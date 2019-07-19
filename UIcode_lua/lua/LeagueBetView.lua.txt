@@ -1,0 +1,103 @@
+--[[
+	file: LeagueBetView.lua
+	author: hangang
+	description: for league match betting
+]]
+
+local step = 10
+local maxGem = 1000
+local minGem = 10
+local input
+local confirmCbk
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 1     --shadow type
+    input = CsBridge.GetInputFromView(self, "Center/Num/Input")
+
+	minGem = tonumber(GetConstValue("FTArenaLeastBet"))
+	maxGem = tonumber(GetConstValue("FTArenaMostBet"))
+end
+
+function SetParamDataList(objs)
+	confirmCbk = objs[0]
+
+	local currencyIcon = objs[1]
+	local currencyIconObj = self:GetGameObjectAtPath("Center/Item/IconSprite")
+	local CsIconData=CS.Client.Library.IconData
+	CsIconData.SetIconByName(currencyIconObj, currencyIcon)
+end
+
+--UI event handlers-------------------------------------------------------------------
+function OnAddBtnClick(sender)
+	local value = tonumber(input.text) + step
+	value = value < maxGem and value or maxGem
+    input.text = tostring(value)
+end
+
+function OnReduceBtnClick(sender)
+	local value = tonumber(input.text) - step
+    value = value > step and value or step
+    input.text = tostring(value)
+end
+
+local function PopMsgBox(cbk)
+	local amount = input.text
+	local title = Language:getStr("hint")
+	local text = Language:getStr("League_BetTips")
+	local cancelText = Language:getStr("local_cancel")
+	local confirmText = Language:getStr("local_confirm")
+	local cancelCbk = nil
+	local confirmCbk = function()
+		cbk(tonumber(amount))
+	end
+	CsBridge.messageManager:showAlertView(title, text, cancelText, cancelCbk, confirmText, confirmCbk)
+end
+
+function OnConfirmBtnClick(sender)
+	local amount = tonumber(input.text)
+	if amount > maxGem then
+		input.text = tostring(maxGem)
+	elseif amount < minGem then
+		input.text = tostring(minGem)
+	end
+
+	if confirmCbk then
+		PopMsgBox(confirmCbk)
+	end
+end
+
+function OnInputInputValChanged(sender,val)
+	if IsNilOrEmpty(val) then
+		input.text = tostring(minGem)
+		return
+	end
+
+    local amount = tonumber(val)
+	if amount > maxGem then
+		input.text = tostring(maxGem)
+	elseif amount < 0 then
+		input.text = tostring(1)
+	end
+end
+
+--On closing--------------------------------------------------------------------------
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close() 
+	self:HideView("LeagueBetView")
+end
+
+function DoExit()
+	step = nil
+	maxGem  = nil
+	minGem  = nil
+	input = nil
+	confirmCbk = nil
+end

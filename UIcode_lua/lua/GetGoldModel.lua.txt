@@ -1,0 +1,83 @@
+function DoInit()
+  --  http=CS.Client.Library.HttpBehaviour.instance
+end
+
+function InitProperties()
+end
+
+function OnCommand_GetGold(objs)
+  local getGoldID = objs[0]
+  local req={
+	id = getGoldID,
+  }
+
+  HttpRequest("getGold", "GetGoldReq", "GetGoldResp", req, OnGetGoldResp)
+end
+
+function OnGetGoldResp(resp)
+	self:SendNotification("GetGoldResp", resp)
+end
+
+function OnCommand_GetGoldPrice()
+	local goldIDs = ResTblContainer:GetIds(GetGold.tblName)
+	local priceTable = {}
+	for i = 0, goldIDs.Length - 1 do
+		table.insert(priceTable, GetGoldPrice(tonumber(goldIDs[i])))
+	end
+
+	self:SendNotification("GetGoldPriceResp", priceTable)
+end
+
+function GetGoldPrice(getGoldID)
+  local goldPrice = {
+	id = getGoldID,
+	price = 0,
+	amount = 0,
+	priceType = 0,
+  }
+
+  local priceCfgString = ResTblContainer:GetPropToStr(getGoldID, GetGold.cost, GetGold.tblName)
+  if priceCfgString ~= nil then
+	local PRICE_INDEX = 5
+	priceString = string.sub(priceCfgString, PRICE_INDEX)
+	if priceString ~= nil then
+		local price = tonumber(priceString)
+		if price ~= nil then
+			goldPrice.price = price
+		end
+	end
+
+	local PRICE_TYPE_INDEX = 3
+	local priceTypeString = string.sub(priceCfgString, PRICE_TYPE_INDEX, PRICE_TYPE_INDEX)
+	if priceTypeString ~= nil then
+		local priceType = tonumber(priceTypeString)
+		if priceType ~= nil then
+			goldPrice.priceType = priceType
+		end
+	end
+  end
+
+  goldPrice.amount =  GetBonus(getGoldID)
+  return goldPrice
+end
+
+function GetBonus(getGoldID)
+	local GOLD_BASE = GetConstValue("goldDefault")
+	local GOLD_FACTOR_BASE = GetConstValue("goldConst")
+	local LEVEL_MAX = GetConstValue("goldLevelLimit")
+	local GOLD_FACTOR_TYPE = ResTblContainer:GetPropToInt(getGoldID, GetGold.reward, GetGold.tblName)
+	local playerInfo = appData:checkData("PlayerInfo")
+	local vipFactor = 1
+	if playerInfo.vip > 0 then
+		vipFactor = 1 + ResTblContainer:GetPropToInt(playerInfo.vip, VipTbl.coinAdd, VipTbl.tblName) / 10000
+	end
+	local level = playerInfo.level > LEVEL_MAX and LEVEL_MAX or playerInfo.level
+	local bonus = (GOLD_BASE + level * GOLD_FACTOR_BASE) * GOLD_FACTOR_TYPE * vipFactor
+	return math.floor(bonus)
+end
+
+function OnCommand_RefreshGetGold(objs)
+	local req = {}
+    req.id = 5
+    HttpRequest("initPBItem", "InitPBItemReq", "InitPBItemResp", req)
+end

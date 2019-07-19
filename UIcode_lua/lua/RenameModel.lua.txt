@@ -1,0 +1,144 @@
+local personalRenameCardId
+
+function DoInit()
+	personalRenameCardId = GetConstValue("PersonalRenameCard")
+end
+
+local function GetRenameConsume()
+	local consume = {
+		typeId = ItemTypeEnum.Resource,
+		id = ResourceEnum.Gem,
+		count = 0
+	}
+	local freeCount = GetConstValue("nameChangeTime")
+	local playerInfo = appData:checkData("PlayerInfo")
+	local renamedTimes = playerInfo.nickChangedTimes
+
+	if renamedTimes >= freeCount then
+		local pb = appData:checkItem("PackItem",personalRenameCardId)
+		if pb and pb.count ~= 0 then
+			consume.typeId = ItemTypeEnum.Item
+			consume.id = personalRenameCardId
+			consume.count = 1
+		else
+			consume.count = GetConstValue("nameChangePrice")
+		end
+	end
+
+	return consume
+end
+
+function OnCommand_GetRenameViewData(obj)
+	local viewData = {}
+	viewData.consume = GetRenameConsume()
+	local playerInfo = appData:checkData("PlayerInfo")
+	viewData.newName = playerInfo.nick
+	if CheckItemEnough(viewData.consume.id,viewData.consume.typeId,viewData.consume.count,false) then
+		viewData.priceColor = color2
+	else
+		viewData.priceColor = color26
+	end
+	self:SendNotification("RefreshRenameView", viewData)
+end
+
+function OnCommand_GetRandomName(obj)
+	self:SendNotification("GetRandomName", GetRandomName())
+end
+
+function GetGem()
+	local playerInfo = appData:checkData("PlayerInfo")
+	local balance = playerInfo.payGem + playerInfo.rewardGem
+
+	return balance
+end
+
+function OnCommand_Rename(obj)
+	local newName = obj[0]
+	local title = Language:getStr("hint")
+	local text = Language:getStr("PlayerRenameHint")
+	local consume = GetRenameConsume()
+	text = string.format(text, consume.count..GetRewardName(consume))
+	local cancelText = Language:getStr("local_cancel")
+	local confirmText = Language:getStr("local_confirm")
+	local cancelCbk = nil
+	local confirmCbk = function()
+		if IsInputSameName(newName) then
+			CsBridge.hintUILayer:ShowHintBox(Language:getStr("InputSameNameTips"))
+			return
+		end
+	
+		if not CheckItemEnough(consume.id,consume.typeId,consume.count,true) then
+			return 
+		end
+	
+		local url = "changeNick"
+		local req = {}
+		req.nick = newName
+		HttpRequest(url, "ChangeNickReq", "ChangeNickResp", req, OnRenameResp)	
+	end
+	CsBridge.messageManager:showAlertView(title, text, cancelText, cancelCbk, confirmText, confirmCbk)
+end
+
+function IsInputSameName(newName)
+	local playerInfo = appData:checkData("PlayerInfo")
+	local oldName = playerInfo.nick
+	return newName == oldName
+end
+
+function OnRenameResp(resp)
+	MsgCenter:Broadcast(Notify_Rename)
+	self:SendNotification("RenameFinished")
+end
+
+function GetRenamePrice()
+	local price = 0
+	local freeCount = GetConstValue("nameChangeTime")
+	local playerInfo = appData:checkData("PlayerInfo")
+	local renamedTimes = playerInfo.nickChangedTimes
+
+	if renamedTimes >= freeCount then
+		price = GetConstValue("nameChangePrice")
+	end
+
+	return price
+end
+
+function GetRandomName()
+	local name = ""
+	local tblName = RandomName.tblName
+	local itemIds = GetIds(tblName)
+	local minIndex, maxIndex = 0, itemIds.Length - 1
+
+	local index = CsBridge.UnityHelper.GetRandomInt(minIndex, maxIndex)
+	local id = itemIds[index]
+	local tbl = ResTblContainer:GetTable(tblName)
+	local firstName = tbl:Get(id, RandomName.firstName)
+	local secondName = ""
+	while(not secondName or secondName == "") do
+		index = CsBridge.UnityHelper.GetRandomInt(minIndex, maxIndex)
+		id = itemIds[index]
+		secondName = tbl:Get(id, RandomName.secondName)
+	end
+
+	name = firstName .. secondName
+	return name
+end
+
+function OnCommand_GetUniqueName(objs)
+	TryGetUniqueName()
+end
+
+function TryGetUniqueName()
+	local req = {}
+	req.id = 0
+	HttpRequest("checkNickName", "CheckNickNameReq", "CheckNickNameResp", req, OnGetUniqueResp)
+end
+
+function OnGetUniqueResp(resp)
+	local uniqueName = resp.nick
+	self:SendNotification("SetUniqueName", uniqueName)
+end
+
+function DoOnExit()
+	personalRenameCardId = nil
+end

@@ -1,0 +1,131 @@
+--[[
+	file: BattleRatingComposeView.lua
+	author: hangang
+	description: View for battle review composing
+]]
+
+local contentInput, reviewGrid, emptyTipsObj
+local confirmCbk, viewData
+local currentItemSlot
+
+function DoInit()
+	self.MoveDistance=510
+    self.Shadow = 1
+    self.Anim = 5
+	InitUI()
+end 
+
+function InitUI()
+    local path = "Bottom/MessageInput"
+	contentInput = CsBridge.GetInputFromView(self, path)
+
+    path = "ReviewSV/ScrollRect/Viewport/Grid"
+	reviewGrid = self:GetComponentAtPath(path,CLS_UI_ITEM_GRID)
+
+    path = "Nothing"
+    emptyTipsObj = self:GetGameObjectAtPath(path)
+end
+
+function SetParamDataList(objs)
+    viewData = objs[0]
+	RefreshView(viewData)
+end
+
+function OnAnimationFinished()
+	
+end
+
+function RefreshView(data)
+	contentInput.text = ""
+
+    local reviewList = data.reviewList
+    reviewGrid:RefreshItemSlots(reviewList, self.gameObject, "BattleReviewItemSlot")
+    emptyTipsObj:SetActive(#reviewList <= 0)
+end
+
+--Bind item slots--------------------------------------------------------------------
+function OnBattleReviewItemSlotBindValue(slot, data)
+	local slotTrans = slot.transform
+	local path = "nameTxt"
+	local nameText = slotTrans:GetComponentAtPath(path,CLS_TEXT)
+	nameText.text = data.playerName
+
+	path = "dateTxt"
+	local dateTxt = slotTrans:GetComponentAtPath(path,CLS_TEXT)
+	dateTxt.text = data.date
+
+	path = "contentTxt"
+	local contentTxt = slotTrans:GetComponentAtPath(path,CLS_TEXT)
+	contentTxt.text = data.content
+
+	path = "likeCountTxt"
+	local likeCountTxt = slotTrans:GetComponentAtPath(path,CLS_TEXT)
+	likeCountTxt.text = data.likeCount
+
+	path = "LikeBtn"
+	local likeBtnObj = slotTrans:GetGameObjectAtPath(path)
+	likeBtnObj:SetActive(not data.liked)
+end
+
+function OnNotification_RefreshView(objs)
+	if self.gameObject.activeInHierarchy then
+		viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function OnNotification_UpdateReview(objs)
+	local itemViewData = objs[0]
+
+	local reviewList = viewData.reviewList
+	for k, item in pairs(reviewList) do
+		if item.id == itemViewData.id then
+			reviewList[k] = itemViewData
+			break
+		end
+	end
+
+	OnBattleReviewItemSlotBindValue(currentItemSlot, itemViewData)
+end
+
+function OnGridLikeBtnClick(slot, itemIndex)
+	currentItemSlot = slot
+	local slotData = slot.m_data
+	local reviewID = slotData.id
+	self:SendCommand("LikeReview", reviewID)
+end
+
+function OnSendBtnClick(sender)
+    if IsEmptyInput() then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("EmptyHeroReview"))
+	else
+		self:SendCommand("PostReview", contentInput.text)
+	end	
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function OnMaskClick()
+    Close()
+end
+
+function IsEmptyInput()
+	local newName = contentInput.text
+	newName = string.gsub(newName, " ", "")
+	return newName == nil or newName == "" 
+end
+
+function Close()
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	contentInput = nil
+	reviewGrid = nil
+	emptyTipsObj = nil
+	confirmCbk = nil
+	viewData = nil
+	currentItemSlot = nil
+end

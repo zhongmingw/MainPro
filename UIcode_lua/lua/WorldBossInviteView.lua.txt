@@ -1,0 +1,85 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-06-18 18:41:54
+
+local isInit = false
+
+local inviteGrid
+local nothingObj
+
+function DoInit()
+    self.Shadow = 1
+end
+
+local function InitUI()
+    inviteGrid = self:GetComponentAtPath("Center/playerSV/ScrollRect/Viewport/InviteGrid",CLS_UI_ITEM_GRID)
+    nothingObj = self:GetGameObjectAtPath("Center/Nothing")
+end
+
+function SetParamDataList(objs)
+    local data = objs[0]
+    self:SendCommand("InitData",data)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitWorldBossInviteData")
+end
+
+function OnClose()
+    inviteGrid:ClearItems()
+end
+
+function DoExit()
+    isInit = nil
+    inviteGrid = nil
+    nothingObj = nil
+end
+
+local function HideView()
+    self:HideView(self.gameObject.name)
+end
+
+function OnNotification_RefreshWorldBossInviteView(objs)
+    local inviteArr = objs[0]
+    nothingObj:SetSelfActive(#inviteArr == 0)
+    inviteGrid:RefreshItemSlots(inviteArr,self.gameObject,"WorldBossInviteItemSlot")
+end
+
+function OnNotification_HideView(objs)
+    HideView()
+end
+
+function OnWorldBossInviteItemSlotBindValue(slot, data)
+    local playerBase = slot:GetComponentAtPath("PlayerBase",CLS_RECTTRANSFORM)
+    local playerNameTxt = slot:GetComponentAtPath("PlayerNameTxt",CLS_TEXT)
+    local dutyTxt = slot:GetComponentAtPath("DutyTxt",CLS_TEXT)
+    local fightTxt = slot:GetComponentAtPath("FightTxt",CLS_TEXT)
+
+    BindPlayerBaseInfoValue(playerBase, data)
+    playerNameTxt.text = data.name
+    dutyTxt.text = data.dutyName
+    fightTxt.text = data.combat
+end
+
+function OnInviteGridInviteBtnClick(obj)
+    local data = obj.m_data
+    self:SendCommand("Invite",data)
+end
+
+function OnInviteGridPlayerBaseClick(obj)
+    local data = obj.m_data
+    self:SendCommand("ShowPlayerTips",data)
+end
+
+function OnCloseBtnClick(sender)
+    HideView()
+end
+
+function OnMaskClick(sender)
+    HideView()
+end

@@ -1,0 +1,153 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-04-26 16:06:06
+
+local Direction = {
+    Left = -1,
+    Right = 1
+}
+local oldPos
+local shopData
+local curShopDataIdx
+
+local shopIdxArr
+local lInitPos
+local cInitPos
+local rInitPos
+local dragAreaWidth
+
+local function SwitchShopIdxFirstToEnd()
+    local tmp = shopIdxArr[1]
+    table.remove(shopIdxArr,1)
+    table.insert(shopIdxArr,tmp)
+end
+
+local function SwitchShopIdxEndToFirst()
+    local len = #shopIdxArr
+    local tmp = shopIdxArr[len]
+    for i=len-1,1,-1 do
+        shopIdxArr[i+1] = shopIdxArr[i]
+    end
+    shopIdxArr[1] = tmp
+end
+
+local function GetGridToPos(pos, deltaX, dir)
+    return {
+        x = pos.x+deltaX*dir,
+        y = pos.y,
+        z = pos.z
+    }
+end
+
+local function GetGridsToPos(deltaX, dir)
+    local data = {}
+    data[shopIdxArr[1]] = GetGridToPos(lInitPos,deltaX,dir)
+    data[shopIdxArr[2]] = GetGridToPos(cInitPos,deltaX,dir)
+    data[shopIdxArr[3]] = GetGridToPos(rInitPos,deltaX,dir)
+    return data
+end
+
+local function GetData()
+    return ""
+end
+
+--Todo:
+local function GetShopData()
+    return {
+        [1] = nil,
+        [2] = {"a","b"},
+        [3] = {"a","b","c"}
+    }
+end
+
+local function GetLeftEnable()
+    return shopData[curShopDataIdx-1] ~= nil
+end
+
+local function GetRightEnable()
+    return shopData[curShopDataIdx+1] ~= nil
+end
+
+local function MoveToLeft()
+    local gridsToPosDic = GetGridsToPos(dragAreaWidth,Direction.Left)
+    self:SendNotification("RefreshGridsToPos",gridsToPosDic,function()
+        SwitchShopIdxFirstToEnd()
+        curShopDataIdx = curShopDataIdx+1
+        local leftEnable,rightEnable = GetLeftEnable(),GetRightEnable()
+        self:SendNotification("SwitchGridsPos",shopIdxArr[#shopIdxArr],rInitPos,GetData(),leftEnable,rightEnable)
+    end)
+end
+
+local function MoveToRight()
+    local gridsToPosDic = GetGridsToPos(dragAreaWidth,Direction.Right)
+    self:SendNotification("RefreshGridsToPos",gridsToPosDic,function()
+        SwitchShopIdxEndToFirst()
+        curShopDataIdx = curShopDataIdx-1
+        local leftEnable,rightEnable = GetLeftEnable(),GetRightEnable()
+        self:SendNotification("SwitchGridsPos",shopIdxArr[1],lInitPos,GetData(),leftEnable,rightEnable)
+    end)
+end
+
+function DoOnExit()
+    Direction = nil
+    oldPos = nil
+    shopData = nil
+    curShopDataIdx = nil
+
+    shopIdxArr = nil
+    lInitPos = nil
+    cInitPos = nil
+    rInitPos = nil
+    dragAreaWidth = nil
+end
+
+function OnCommand_InitMazeShopData(objs)
+    lInitPos,cInitPos = objs[0],objs[1]
+    rInitPos,dragAreaWidth = objs[2],objs[3]
+    shopIdxArr = {1,2,3}
+    shopData = GetShopData()
+    curShopDataIdx = 2
+    local leftEnable,rightEnable = GetLeftEnable(),GetRightEnable()
+    self:SendNotification("RefreshMazeShopView",shopData,leftEnable,rightEnable)
+end
+
+function OnCommand_BeginDrag(objs)
+    local pos = objs[0]
+    oldPos = pos
+end
+
+function OnCommand_OnDrag(objs)
+    local newPos = objs[0]
+    local deltaX = newPos.x - oldPos.x
+    oldPos = newPos
+    local curDragDir = deltaX < 0 and Direction.Left or Direction.Right
+    self:SendNotification("RefreshGridsChangePos",deltaX,shopIdxArr)
+end
+
+function OnCommand_EndDrag(objs)
+    local pos = objs[0]
+    local switchWidht = dragAreaWidth/2
+    local curDragDir = pos.x < 0 and Direction.Left or Direction.Right
+    if math.abs(pos.x) <= switchWidht or
+    (curDragDir == Direction.Left and shopData[curShopDataIdx+1] == nil) or
+    (curDragDir == Direction.Right and shopData[curShopDataIdx-1] == nil) then
+        local idxPosDic = {}
+        idxPosDic[shopIdxArr[1]] = lInitPos
+        idxPosDic[shopIdxArr[2]] = cInitPos
+        idxPosDic[shopIdxArr[3]] = rInitPos
+        self:SendNotification("ResetGridsPos",idxPosDic)
+    elseif curDragDir == Direction.Left then
+        MoveToLeft()
+    elseif curDragDir == Direction.Right then
+        MoveToRight()
+    end
+end
+
+function OnCommand_MoveToLeft(objs)
+    MoveToLeft()
+end
+
+function OnCommand_MoveToRight(objs)
+    MoveToRight()
+end

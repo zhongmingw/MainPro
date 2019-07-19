@@ -1,0 +1,59 @@
+import "stage.proto";
+package testHero;
+
+message HeroAddGMReq 
+{
+	repeated int32 heroIds =1;
+	required int32 level = 2;
+}
+message GMRomoveHeroReq 
+{
+	repeated int32 heroIds =1;
+	required int32 removeAll = 2;
+}
+message GMRomoveItemReq 
+{
+	repeated int32 itemIds =1;
+	required int32 removeAll = 2;
+}
+message GMUpgradePlayerLevelReq 
+{
+	required int32 level = 1;
+	required int32 vipLevel = 2;
+}
+message GMResp 
+{
+	required int32 status = 1;
+	repeated stage.RewardItem upLevelRewardItems = 2; 
+}
+
+
+
+message PackGMReq 
+{
+	repeated PackGMItem items =1;
+}
+
+message PackGMItem 
+{
+	required int32 itemId = 1;
+	required int32 count = 2;
+}
+message PackGMResp 
+{
+	required int32 status = 1;
+	repeated stage.RewardItem upLevelRewardItems = 2; 
+}
+message TestSample 
+{
+    required int32 id=1;
+    required string title=2;
+}
+
+
+
+
+
+
+
+

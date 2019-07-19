@@ -1,0 +1,44 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-11-19 10:46:18
+
+require "GBInfoItemSlot"
+
+local isInit = false
+
+local grid 
+
+function DoInit()	
+    self.Anim = 8
+    self.Shadow = 1
+end
+
+function InitUI()
+    grid = self:GetComponentAtPath("Center/recordSV/ScrollRect/Viewport/Grid",CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitGroupBuyInfoData")
+end
+
+function OnClose()
+    grid:ClearItems()
+end
+
+function OnNotification_RefreshGroupBuyInfoView(objs)
+    grid:RefreshItemSlots(objs[0],self.gameObject,"GBInfoItemSlot")
+end
+
+function OnMaskClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+    isInit = nil
+    grid = nil
+end

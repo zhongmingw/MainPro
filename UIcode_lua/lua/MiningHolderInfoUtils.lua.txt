@@ -1,0 +1,172 @@
+---获取消耗资源
+local function GetConsumeByString(valueStr)
+    local costConsume = {}
+    local resourceSplit = string.split(tostring(valueStr), ",")
+    costConsume.typeId = tonumber(resourceSplit[0])
+    costConsume.id = tonumber(resourceSplit[1])
+    costConsume.count = tonumber(resourceSplit[2])
+    return costConsume
+end
+
+---购买保护的消耗数组
+local function GetBuyProtectCostConsumeArr()
+    local mineralProtectTbl = ResTblContainer:GetTable(MineralProtect.actorTbl)
+    local ids = ResTblContainer:GetIds(MineralProtect.actorTbl)
+    local costArr = {}
+    for i = 0, ids.Length - 1 do
+        local item = {}
+        item.id = tonumber(ids[i])
+        item.numMix = tonumber(mineralProtectTbl:Get(item.id, MineralProtect.numMix))
+        item.numMax = tonumber(mineralProtectTbl:Get(item.id, MineralProtect.numMax))
+        item.expend = tostring(mineralProtectTbl:Get(item.id, MineralProtect.expend))
+        item.costConsume = GetConsumeByString(item.expend)
+        for j = item.numMix, item.numMax do
+            costArr[j] = item
+        end
+    end
+    return costArr
+end
+
+---获取购买这次保护需要的消耗
+local function GetBuyProtectCostConsume(consumeArr)
+    local MineInfo = appData:checkData("MineInfo")
+    local nextId = (MineInfo.protectBuyTimes or 0) + 1
+    local moreMax = false
+    local consume = nil
+    if consumeArr[nextId] == nil then
+        moreMax = true
+        consume = consumeArr[#consumeArr]
+    else
+        moreMax = false
+        consume = consumeArr[nextId]
+    end
+    return consume, moreMax
+end
+
+---获取一个空的阵容
+local function GetNilFormationHeroArr()
+    local result = {}
+    for i = 1, 6 do
+        local heroItem = {}
+        heroItem.pos = i
+        heroItem.srcUid = 0
+        heroItem.heroId = 0
+        heroItem.uid = 0
+        heroItem.showHpSlider = false
+        table.insert(result, heroItem)
+    end
+    return result
+end
+
+--- 赋值到新的item里面去
+local function CopyFormationProperty(heroItem, formationPos)
+    if formationPos ~= nil then
+        for j = 1, #formationPos do
+            local posInfo = formationPos[j]
+            if heroItem.pos == posInfo.formationPos.pos then
+                heroItem.uid = posInfo.formationPos.uid
+                heroItem.pos = posInfo.formationPos.pos
+                heroItem.srcUid = posInfo.formationPos.uid
+                heroItem.heroId = posInfo.formationPos.heroId
+                heroItem.grade = posInfo.heroGrade
+                heroItem.level = posInfo.heroLevel
+                heroItem.distillationStar = posInfo.distillationStar
+                heroItem.distillationLevel = posInfo.distillationLevel
+                heroItem.skillStar = posInfo.skillStar
+                heroItem.skillLevel = posInfo.skillLevel
+                heroItem.quality = global_heroBaseArr[heroItem.heroId].quality
+                heroItem.maxGrade = ResTblContainer:GetPropToInt(heroItem.quality, HeroQuality.maxGrade, HeroQuality.actorTbl)
+                heroItem.showHpSlider = true
+            end
+        end
+    end
+end
+
+---初始化持有者的阵容
+local function InitHolderFormation(formationPos, heroInfos)
+    local miningFormationUtils = require "MiningFormationUtils"
+    local result = {}
+    for i = 1, 6 do
+        local heroItem = {}
+        heroItem.pos = i
+        heroItem.srcUid = 0
+        heroItem.heroId = 0
+        heroItem.uid = 0
+        CopyFormationProperty(heroItem, formationPos)
+        miningFormationUtils.InitHeroHp(heroItem, heroInfos)
+        table.insert(result, heroItem)
+    end
+    return result
+end
+
+---获取阵容
+local function GetHolderFormationHeroArr(caveInfo, callback)
+    local req = {}
+    req.mineId = caveInfo.idStr
+    HttpRequest("checkHostInfo", "checkHostInfoReq", "CheckHostInfoResp", req, function(resp)
+        if resp then
+            local result = InitHolderFormation(resp.formationPos, resp.heroInfos)
+            if callback then
+                callback(result, resp.hostCombat)
+            end
+        end
+    end)
+end
+
+---购买保护
+local function BuyProtectTime(caveInfo, callback)
+    local req = {}
+    req.mineId = caveInfo.idStr
+    HttpRequest("buyMineProtection", "BuyMineProtectionReq", "BuyMineProtectionResp", req, function(resp)
+        if resp.result == 0 then
+            CsBridge.ShowHintBoxTwo(Language:getStr("BuySuccess"))
+            if callback then
+                callback()
+            end
+        else
+            CsBridge.ShowHintBoxTwo(Language:getStr("BuyFail"))
+        end
+    end)
+end
+
+---收取矿产的产出
+local function ReceiveCaveOutput(caveInfo, callback)
+    local req = {}
+    if caveInfo then
+        req.mineId = caveInfo.idStr
+    else
+        req.mineId = nil
+    end
+    HttpRequest("getMineResource", "GetMineResourceReq", "GetMineResourceResp", req, function(resp)
+        if resp and callback then
+            callback(resp.resource)
+        end
+    end)
+end
+
+---退出矿点
+local function ExitCaveItem(caveInfo, callback)
+    local req = {}
+    req.mineId = caveInfo.idStr
+    HttpRequest("quitMine", "QuitMineReq", "QuitMineResp", req, function(resp)
+        if resp.result == 0 then
+            CsBridge.ShowHintBoxTwo(Language:getStr("ExitCaveItemSuccess"))
+            if callback then
+                callback()
+            end
+        else
+            CsBridge.ShowHintBoxTwo(Language:getStr("ExitCaveItemFail"))
+        end
+    end)
+end
+
+return {
+    GetConsumeByString = GetConsumeByString,
+    GetBuyProtectCostConsumeArr = GetBuyProtectCostConsumeArr,
+    GetBuyProtectCostConsume = GetBuyProtectCostConsume,
+    GetHolderFormationHeroArr = GetHolderFormationHeroArr,
+    BuyProtectTime = BuyProtectTime,
+    ReceiveCaveOutput = ReceiveCaveOutput,
+    ExitCaveItem = ExitCaveItem,
+    GetNilFormationHeroArr = GetNilFormationHeroArr,
+}

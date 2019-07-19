@@ -1,0 +1,1312 @@
+import "stage.proto";
+import "playerData.proto";
+import "SkyscraperData.proto";
+import "ArenaData.proto";
+import "LimitTurnTableData.proto";
+package ServerActivity;
+
+message ActiveActivityItem
+{
+    required int32 id = 1;
+	required int32 type = 2;
+	required int64 startTime = 3;
+	required int64 endTime = 4;
+	required string content = 5;//名称
+	required string title = 6;//标题
+	required string description = 7;//活动介绍
+	required string bgPic = 8;//图标背景
+	required string topPic = 9;//顶部图片
+	required string rawPic = 10;//底图图片
+	required int32 order = 11;
+	required bool active = 12;
+}
+
+message GetActivityReq
+{
+    repeated int32 types=1;
+}
+
+message GetActivityResp
+{
+    repeated ActiveActivityItem activities=1;
+}
+
+message GetAllActivitiesReq
+{
+	required int32 id = 1; //占位符
+}
+
+message GetAllActivitiesResp
+{
+    repeated ActiveActivityItem activityItems = 1;
+}
+
+message GetAPArenaActivityReq
+{
+    required int32 type = 1;//获取好战者活动内容
+}
+
+message GetAPArenaActivityResp
+{
+    repeated APArenaActivityItem activityItems = 1;//获取好战者活动内容
+}
+
+message APArenaActivityItem
+{
+	required int32 subId = 1;
+	required int32 count = 2; //任务目标数量
+	required string title = 3;//标题
+	repeated stage.RewardItem rewards = 4;//奖励
+	required int32 score = 5;
+}
+
+message GetAutoTaskActivityReq
+{
+    required int32 type = 1;//获取酒馆活动内容
+}
+
+message GetAutoTaskActivityResp
+{
+    repeated AutoTaskActivityItem activityItems = 1;//酒馆活动状态内容
+}
+
+message AutoTaskActivityItem
+{
+	required int32 subId = 1;
+	required int32 star = 2; //任务星级
+	required int32 count = 3; //任务目标数量
+	required string title = 4;//标题
+	repeated stage.RewardItem rewards = 5;//奖励
+	required int32 finishedCount = 6; //已达成数量
+	required bool taken = 7;//是否领取奖励
+}
+
+message GetDestructionActivityReq
+{
+	required int32 id = 1; //活动id
+}
+
+message GetDestructionActivityResp
+{
+	repeated DestructionActivityConfig activities = 1;
+	required int64 endTime = 2;
+}
+
+message DestructionActivityConfig
+{
+	required int32 id = 1; //活动ID
+	required int32 type = 2;
+	repeated stage.RewardItem rewards = 3;//奖励
+	required string name = 4;
+	required string pic = 5;
+}
+
+message DestructionChallengeReq
+{
+	required int32 id = 1;
+	required int32 type = 2;
+	repeated stage.FormationPos formationPos = 3;
+}
+
+message RaidDestructionReq
+{
+	required int32 id = 1;
+	required int32 type = 2;
+	required int32 count = 3;//扫荡次数
+	repeated stage.FormationPos formationPos = 4;
+}
+
+message RaidDestructionResp
+{
+	repeated stage.RewardItem rewards = 1;//奖励
+	required bool isKilled = 2;
+}
+
+message GetDestructionRankReq
+{
+	required int32 count = 1; //需要前多少名
+}
+
+message GetDestructionRankResp
+{
+	repeated DestructionRankItem rankItems = 1;//前N名
+	required DestructionRankItem playerRankItem = 2;//玩家自己的排名
+}
+
+message DestructionRankItem
+{
+	required playerData.PlayerBaseInfo playerBaseInfo = 1;
+	required int32 score = 2;
+	required int32 rank = 3;
+}
+
+message PlayerDestruction
+{
+	required int32 type = 1;//破碎时空挑战类型，对应DestructionActivityConfig.type
+	required int32 monsterId = 2;//怪物ID
+	required int64 monsterCurHp = 3;//剩余血量
+	required int32 monsterLevel = 4;//怪物level
+	required int64 monsterMaxHp = 5;//总血量
+}
+
+message HeroSummonActivityConfig
+{
+	required int32 id = 1;
+	required int32 subId = 2;
+	required int32 hero = 3;
+	repeated stage.RewardItem rewards = 4;
+}
+
+message GetHeroSummonActivityReq
+{
+	required int32 id = 1;
+}
+
+message GetHeroSummonActivityResp
+{
+	repeated HeroSummonActivityConfig activities = 1;
+}
+
+message GetCallHeroActivityReq
+{
+	required int32 id = 1;
+}
+
+message GetCallHeroActivityResp
+{
+	repeated CallHeroActivityConfig activities = 1;
+	required int32 score = 2;
+	required int32 totalScore = 3;//总积分
+	required int32 round = 4;//轮次
+	required int32 maxRound = 5;//最高轮次
+}
+
+message CallHeroActivityConfig
+{
+	required int32 id = 1;
+	required int32 subId = 2;
+	required int32 count = 3;
+	required string title = 4;
+	repeated stage.RewardItem rewards = 5;
+	required int32 payId = 100;
+}
+
+message GetSuperPackageReq
+{
+	required int32 id = 1;
+}
+
+message GetSuperPackageResp
+{
+	repeated ActivityPackageConfig activities = 1;
+
+}
+
+message ActivityPackageConfig
+{
+	required int32 activityId = 1;
+	required int32 id = 2;
+	required int32 remain = 3;
+	required int32 vip = 4;
+	required int32 price = 5;
+	required string pid = 6;
+	required string currency = 7;
+	required string title = 8;
+	required string desp = 9;
+	required string currencySign = 10;
+	repeated stage.RewardItem rewards = 11;
+}
+
+message GetLoginRewardActivityReq
+{
+	required int32 id = 1;
+}
+
+message GetLoginRewardActivityResp
+{
+	repeated DailyLoginConfigItem activityItems = 1;
+}
+
+
+message DailyLoginConfigItem
+{
+	required DailyLoginConfig config = 1;
+	required int32 state = 2;//0-未领 1-已领 2-今日
+}
+
+message DailyLoginConfig
+{
+	required int32 activityId = 1;
+	required int32 day = 2;
+	repeated stage.RewardItem rewards = 3;
+}
+
+message LoginRewardReq
+{
+	required int32 activityId = 1;
+	required int32 dayId = 2;
+}
+
+message LoginRewardResp
+{
+	repeated stage.RewardItem rewards = 1;
+}
+
+message GetDailyRewardActivityReq
+{
+	required int32 id = 1;
+}
+
+message GetDailyRewardActivityResp
+{
+	required DailyRewardConfig activity = 1;
+}
+
+message DailyRewardConfig
+{
+	required int32 activityId = 1;
+	required string title = 2;
+	repeated stage.RewardItem rewards = 3;
+}
+
+message GetDragonCallHeroActivityReq
+{
+	required int32 id = 1;
+}
+
+message GetDragonCallHeroActivityResp
+{
+	repeated CallHeroActivityConfig activities = 1;
+	required int32 score = 2;
+	required int32 totalScore = 3;//总积分
+	required int32 round = 4;//轮次
+	required int32 maxRound = 5;//最高轮次
+}
+
+message DragonCallHeroActivityConfig
+{
+	required int32 id = 1;
+	required int32 subId = 2;
+	required int32 count = 3;
+	required string title = 4;
+	repeated stage.RewardItem rewards = 5;
+}
+
+message GetMiracleActivityReq
+{
+	required int32 id = 1;
+}
+
+message GetMiracleActivityResp
+{
+	repeated MiracleActivityResp activities = 1;
+}
+
+message MiracleActivityResp
+{
+	required MiracleConfig config = 1;
+	required int32 score = 2;
+}
+
+message MiracleConfig
+{
+	required int32 id = 1;
+	required int32 camp = 2;
+	required int32 count = 3;
+	required string title = 4;
+	repeated stage.RewardItem rewards = 5;
+}
+
+message GetHonorOfComposeActivityReq
+{
+	required int32 id = 1;
+}
+
+message GetHonorOfComposeActivityResp
+{
+	repeated HonorOfComposeActivityResp activities = 1;
+}
+
+message HonorOfComposeActivityResp
+{
+	required HonorOfComposeConfig config = 1;
+	required int32 count = 2;
+}
+
+message HonorOfComposeConfig
+{
+    required int32 id = 1;
+    required int32 star = 2;
+    required string title = 3;
+    repeated stage.RewardItem rewards = 4;
+	required int32 rewardLimit = 5;
+}
+
+message GetLotteryActivityReq
+{
+	required int32 id = 1;
+}
+
+message GetLotteryActivityResp
+{
+	repeated LotteryActivityConfig activities = 1;
+	required int32 score = 2;//当前积分
+	required int32 totalScore = 3;//总积分
+	required int32 round = 4;//轮次
+	required int32 maxRound = 5;//最高轮次
+}
+
+message LotteryActivityConfig
+{
+    required int32 id = 1;
+    required int32 subId = 2;
+    required int32 count = 3;
+    required string title = 4;
+	repeated stage.RewardItem rewards = 5;
+}
+
+message GetPveDropActivityReq
+{
+	required int32 id = 1;
+}
+
+message GetPveDropActivityResp
+{
+	repeated PveDropActivityConfig activities = 1;
+}
+
+message PveDropActivityConfig
+{
+    required int32 id = 1;
+	repeated stage.RewardItem rewards = 2;
+}
+
+message GetLotteryDropActivityReq
+{
+	required int32 id = 1;
+}
+
+message GetLotteryDropActivityResp
+{
+	repeated LotteryDropActivityConfig activities = 1;
+}
+
+message LotteryDropActivityConfig
+{
+    required int32 id = 1;
+	repeated stage.RewardItem rewards = 2;
+}
+
+message GetExchangeActivityReq
+{
+	required int32 id = 1;
+}
+
+message GetExchangeActivityResp
+{
+	repeated ExchangeItemResp activities = 1;
+}
+
+message ExchangeItemResp
+{
+	required ExchangeItemConfig activity = 1;
+	required int32 remain = 2;
+}
+
+message ExchangeItemConfig
+{
+    required int32 id = 1;
+    required int32 subId = 2;
+    repeated stage.RewardItem rewards = 3;
+    repeated stage.RewardItem prices = 4;
+	required int32 buyLimit = 5;
+	required int32 extraInfo = 6;
+}
+
+message ExchangeReq
+{
+	required int32 id = 1;//活动id
+	required int32 subId = 2;//子id
+	required int32 count = 3;//个数
+}
+
+message ExchangeResp
+{
+	repeated stage.RewardItem rewardItems = 1;
+}
+
+message GetDailyPackageReq
+{
+	required int32 id = 1;//活动id
+}
+
+message GetDailyPackageResp
+{
+	repeated DailyPackage activities = 1;
+	required bool isTodayBuy = 2;
+}
+
+message DailyPackage
+{
+	required int32 activityId = 1;
+	required int32 payId = 2;
+	required int32 remain = 3; //剩余购买次数
+	required int32 vip = 4;
+	required int32 price = 5;
+	required string pid = 6;
+	required string currency = 7;
+	required string title = 8;
+	required string desp = 9;
+	required string currencySign = 10;
+	repeated stage.RewardItem rewards = 11;
+	required int32 status = 12; //1.已购买 2.可购买 3.不可买
+	required int32 day = 13;
+}
+
+message HeroGangReq
+{
+	required int32 id = 1;//活动id
+	required int32 subId = 2;//子id
+	repeated int32 subMaterial = 3; //英雄的uid列表
+}
+
+message GetCycleChargeActivityReq
+{
+	required int32 id = 1;//活动id
+}
+
+message GetCycleChargeActivityResp
+{
+	required CycleCharge activity = 1;
+	required bool canBuy = 2;
+}
+
+message CycleCharge
+{
+	required int32 activityId = 1;
+	required int32 payId = 2;
+	required int32 remain = 3; //剩余购买次数
+	required int32 vip = 4;
+	required int32 price = 5;
+	required string pid = 6;
+	required string currency = 7;
+	required string title = 8;
+	required string desp = 9;
+	required string currencySign = 10;
+	repeated stage.RewardItem rewards = 11;
+}
+
+message GetLimitCallHeroActivityReq
+{
+	required int32 id = 1;//活动id
+}
+
+message GetLimitCallHeroActivityResp
+{
+	repeated LimitCallHeroActivityConfig activities = 1;
+}
+
+message LimitCallHeroActivityConfig
+{
+    required int32 id = 1;
+	required int32 heroId = 2;
+}
+
+message GetDailyChargeActivityReq
+{
+	required int32 id = 1;//活动id
+}
+
+message GetDailyChargeActivityResp
+{
+	repeated DailyChargeActivityResp activities = 1;
+}
+
+message DailyChargeActivityResp
+{
+	required DailyChargeConfig config = 1;
+	required int32 score = 2;//当前积分
+	required bool active = 3;
+}
+
+message DailyChargeConfig
+{
+	required int32 id = 1;
+	required int32 day = 2;
+	required int32 price = 3;
+	required string title = 4;
+	repeated stage.RewardItem rewards = 5;
+}
+
+message HalloweenChallengeReq
+{
+	required int32 id = 1;//活动id
+	required int32 level = 2;//挑战难度
+	repeated stage.FormationPos formationPos = 3; //我方阵容
+}
+
+message GetHalloweenActivityReq
+{
+	required int32 id = 1;//活动id
+}
+
+message GetHalloweenActivityResp
+{
+	required int32 status = 1;
+	required int32 HallowmasPrice = 2;
+	required int32 HallowmasLimit = 3;
+}
+
+message PlayerHalloween
+{
+	required int32 level = 1;
+	required int32 id = 2;
+	required int32 acId = 3;
+	repeated MonsterInfo monsterInfos = 4; //英雄记录
+}
+
+message MonsterInfo
+{
+	required int32 pos = 1;
+	required int64 curHp = 2;
+	required int64 hp = 3;
+}
+
+message PlayerHalloweenInfo
+{
+	required int32 count = 1;
+	required int64 lastPurchaseTime = 2;
+}
+
+message GetGroupBuyReq
+{
+	required int32 id = 1;//活动id
+}
+
+message GetGroupBuyResp
+{
+	repeated GroupBuyGood goods = 1;
+	required string discount = 2;
+}
+
+message GroupBuyGood
+{
+	required GroupBuyConfig config = 1;
+	required int32 remain = 2; //剩余购买次数
+	required GroupBuy groupBuy = 3;//团购信
+}
+
+message GroupBuyConfig
+{
+	required int32 id = 1;
+	required int32 count = 2;//限购次数
+	repeated stage.RewardItem goodItem = 3;//商品
+	repeated stage.RewardItem priceItem = 4;//价格
+}
+
+message GetGroupBuyInfoReq
+{
+	required int32 acId = 1;
+	required int32 goodId = 2;
+}
+
+message GetGroupBuyInfoResp
+{
+	repeated GroupBuyInfo groupBuyInfos = 1;
+}
+
+message GetMyGroupBuyInfoReq
+{
+	required int32 acId = 1;
+}
+
+message GetMyGroupBuyInfoResp
+{
+	repeated GroupBuy groupBuys = 1;
+}
+
+message GroupBuyInfo
+{
+	required GroupBuy groupBuy = 1;
+	required bool avaliable = 2;
+}
+
+
+message GroupBuy
+{
+	required int64 version = 1;
+	required int32 activityId = 2;//活动Id
+	required int32 goodId = 3;//商品Id
+	required int64 createdTime = 4;//创建时间
+	required int32 count = 5;//团购人数
+	required int32 rebateCount = 6;//返利人数,服务器使用
+	required string id = 7;//uid
+}
+
+message ParticipateGroupBuyReq
+{
+	required int32 acId = 1;
+	required int32 goodId = 2;
+}
+
+message GroupBuyStatusResp
+{
+	required int32 status = 1;
+}
+
+message CreateGroupBuyReq
+{
+	required int32 acId = 1;
+	required int32 goodId = 2;
+}
+
+message RefreshDiscountBuyReq
+{
+	required int32 acId = 1;
+	required bool free = 2;
+	required bool useGem = 3;
+}
+
+message RefreshDiscountBuyResp
+{
+	required int32 status = 1;
+}
+
+message DiscountBuyReq
+{
+	required int32 acId = 1;
+	required int32 goodId = 2;
+}
+
+message DiscountBuyResp
+{
+	required int32 status = 1;
+}
+
+message PlayerDiscountActivity
+{
+	required int32 acId = 1; //活动id
+	required int64 lastFreeRefreshTime = 2; //上次免费刷新时间
+	required int32 refreshCount = 3; //刷新次数
+	repeated Good goods = 4; //商品
+}
+
+message Good
+{
+	required DiscountBuyConfig goodConfig = 1;
+	required int32 count = 2;//已购次数
+	required int32 totalCount = 3;
+}
+
+message DiscountBuyConfig
+{
+    required int32 id = 1;
+    required int32 Discount = 2;
+    required int32 Count = 3;
+	required int32 special = 4;
+	required int32 lowestDiscount = 5;
+    repeated stage.RewardItem goodItem = 6;
+	repeated stage.RewardItem priceItem = 7;
+	required int32 purchase = 8;
+}
+
+message InitDiscountBuyReq
+{
+	required int32 id = 1;
+}
+
+message InitDiscountBuyResp
+{
+	required int32 status = 1;
+	required int32 DoubleElevenDiscountPrice = 2;
+	required int32 DoubleElevenDiscountRefresh = 3;
+}
+
+message GetNewDailyPackageReq
+{
+	required int32 id = 1;
+}
+
+message GetNewDailyPackageResp
+{
+	repeated NewDailyPackage items = 1;
+}
+
+message NewDailyPackage
+{
+	required int32 activityId = 1;
+	required int32 level = 2;
+	required int32 payId = 3;
+	required int32 type = 4;
+	repeated stage.RewardItem rewards = 5;
+	required int32 remain = 6;
+	required int32 vip = 7;
+	required int32 price = 8;
+	required string pId = 9;
+	required string currency = 10;
+	required string title = 11;
+	required string description = 12;
+	required string currencySign = 13;
+	required int32 status = 14;//1:enabled, 0:disabled
+}
+
+message GetActivityRankReq
+{
+	required int32 id = 1;
+	required int32 count = 2;
+}
+
+message GetCombatActivityRankResp
+{
+	repeated SkyscraperData.CombatRankInfoItem rankInfos = 1;
+	required SkyscraperData.CombatRankInfoItem selfRankInfo = 2;
+	required int64 endTime = 3;
+	required bool rewardClaimed = 4;
+}
+
+message GetActivityRewardReq
+{
+	required int32 id = 1;
+}
+
+message GetActivityRewardResp
+{
+	repeated stage.RewardItem rewards = 1;//奖励
+}
+
+message GetArenaActivityRankResp
+{
+	repeated ArenaData.ArenaRankItem rankInfos = 1;
+	required ArenaData.ArenaRankItem selfRankInfo = 2;
+	required int64 endTime = 3;
+	required bool rewardClaimed = 4;
+}
+
+message GetInvestmentActivityReq
+{
+	required int32 useless = 1;
+}
+
+message GetInvestmentResp
+{
+	repeated GetInvestmentActivityResp activities = 1;
+}
+
+message GetInvestmentActivityResp
+{
+	repeated InvestmentActivityConfigs activities = 1;
+	required int64 endTime = 2;
+}
+
+message InvestmentActivityConfigs
+{
+	required int32 acId = 1;
+	required int32 type = 2;
+	required bool enabled = 3;//是否可购买
+	required PayInfo payInfo = 4;
+	required string title = 5;
+	required string description = 6;
+	required string bgPic = 7;
+	required string topPic = 8;
+	repeated InvestmentActivityInfo configs = 9;
+	required int32 progress = 10;
+}
+
+message InvestmentActivityInfo
+{
+	required bool active = 1;//是否可领取奖励
+	required InvestmentActivityConfig config = 2;
+}
+
+message InvestmentActivityConfig
+{
+	required int32 id = 1;
+	required int32 type = 2;
+	required string title = 3;
+	required int32 parameter = 4;
+	repeated stage.RewardItem rewards = 5;
+}
+
+message GetInvestmentActivityRewardReq
+{
+	required int32 acId = 1;
+	required int32 type = 2;
+	required int32 parm = 3;
+}
+
+message GetInvestmentActivityRewardResp
+{
+	repeated stage.RewardItem rewards = 1;
+}
+
+message PayInfo
+{
+	required int32 payId = 1;
+	required int32 vipExp = 2;
+	required int32 price = 3;
+	required string pId = 4;
+	required string currency = 5;
+	required string title = 6;
+	required string desc = 7;
+	required string currencySign = 8;
+}
+
+message GetJewelActivityResp
+{
+	repeated CallHeroActivityConfig activities = 1;
+	required int32 score = 2;//当前积分
+	required int32 totalScore = 3;//总积分
+	required int32 round = 4;//轮次
+	required int32 maxRound = 5;//最高轮次
+}
+
+message GetGloryRoadActivityResp
+{
+	repeated GetGloryRoadActivityInfo activities = 1;
+}
+
+message GetGloryRoadActivityInfo
+{
+	required GloryRoadActivityConfig config = 1;
+	required bool active = 2;
+	required int32 curCount = 3;
+}
+
+message GetGloryRoadActivityRewardReq
+{
+	required int32 acId = 1;//活动id
+	required int32 count = 2;
+}
+
+message GetGloryRoadActivityRewardResp
+{
+	repeated stage.RewardItem rewardItems = 1;
+}
+
+message GloryRoadActivityConfig
+{
+	required int32 id = 1;
+	required int32 count = 2;
+	required string title = 3;
+	repeated stage.RewardItem rewards = 4;
+}
+
+message GetActivityByIdReq
+{
+	required int32 id = 1;
+}
+
+message GetFirstChargeActivityResp
+{
+	required CallHeroActivityConfig config = 1;
+	required int32 score = 2;
+}
+
+message GetHeroGrowthActivityReq
+{
+	required int32 id = 1;
+}
+
+message GetHeroGrowthActivityResp
+{
+	repeated HeroGrowthItem activities = 1;
+	required bool showTips = 2;
+}
+
+message HeroGrowthItem
+{
+	required int32 subId = 1;
+	required int32 count = 2;
+	required string description = 3;
+	repeated stage.RewardItem rewards = 4;
+	required int32 progress = 5;
+}
+
+message GetActivitySlideshowReq
+{
+	required int32 useless = 1;
+}
+
+message GetActivitySlideshowResp
+{
+	repeated ActivitySlideshowConfig  list = 1;
+}
+
+message ActivitySlideshowConfig
+{
+	required int32 id = 1;
+	required int32 skipType = 2;
+	required int32 skipParameter = 3;
+	required string SlideshowPicture = 4;
+}
+
+message ActivitySlideshowLogReq
+{
+	required int32 id = 1;
+}
+
+message ActivitySlideshowLogResp
+{
+	required int32 status = 1;
+}
+
+message LimitLotteryShopReq
+{
+	required int32 activityId = 1;
+}
+
+message LimitLotteryShopResp
+{
+	repeated LotteryShopGoods results = 1;
+	required int32 priceType = 2;
+}
+
+message LotteryShopGoods
+{
+	required int32 id = 1;
+	required int32 shopId = 2;
+	required stage.RewardItem rewardItem = 3;
+	required stage.RewardItem cost = 4;
+	required int32 remainCount = 5;
+	required int32 limitCount = 6;
+}
+
+message LimitLotteryShoppingReq
+{
+	required int32 activityId = 1;
+	required int32 id = 2;
+	required int32 count = 3;
+}
+
+message LimitLotteryShoppingResp
+{
+	repeated stage.RewardItem rewardItem = 1;
+}
+
+message ExchangeShopReq
+{
+	required int32 activityId = 1;
+}
+
+message ExchangeShopResp
+{
+	repeated ExchangeShopItemList shopList = 1;
+}
+
+message ExchangeShopItemList
+{
+	required int32 id = 1;
+	required stage.RewardItem cost = 2;
+	repeated LotteryShopGoods goodsList = 3;
+}
+
+message BarteringReq
+{
+	required int32 activityId = 1;
+	required int32 id = 2;
+	required int32 count = 3;
+}
+
+message BarteringResp
+{
+	repeated stage.RewardItem rewardItem = 1;
+}
+
+//限时抢购相关
+message Rush2BuyShopReq
+{
+	required int32 activityId = 1;
+}
+
+message Rush2BuyShopResp
+{
+	required Rush2BuyShop nowShop = 1;
+	required Rush2BuyShop nextShop = 2;
+}
+
+message Rush2BuyShop
+{
+	required int32 id = 1;
+	required int64 startTime = 2;//开始时间
+	required int64 endTime = 3;//结束时间
+	repeated Rush2BuyGoods goods = 4;
+}
+
+message Rush2BuyGoods
+{
+	required int32 id = 1;
+	required stage.RewardItem reward = 2;//商品
+	required stage.RewardItem cost = 3;//现在价格
+	required int32 count = 4;//剩余数量
+	required int32 limit = 5;//限购数量
+	required int32 remain = 6;//全区剩余数量
+	required stage.RewardItem originalCost = 7;//原来的价格
+}
+
+//限时抢购购买
+message Rush2BuyReq
+{
+	required int32 goodsId = 1;
+	required int32 count = 2;
+}
+
+message Rush2BuyResp
+{
+	required int32 status = 1;
+}
+
+//竞技场达标
+message GetArenaStandActReq
+{
+	required int32 id = 1;
+} 
+
+message GetArenaStandActResp
+{
+	repeated CallHeroActivityConfig activities = 1;
+	required int32 score = 2;
+}
+
+//英雄交锋达标
+message GetHeroBoutActReq
+{
+	required int32 id = 1;
+} 
+
+message GetHeroBoutActResp
+{
+	repeated CallHeroActivityConfig activities = 1;
+	required int32 score = 2;
+}
+
+//战役通关达标
+message GetBattlePassActReq
+{
+	required int32 id = 1;
+} 
+
+message GetBattlePassActResp
+{
+	repeated CallHeroActivityConfig activities = 1;
+	required int32 score = 2;
+}
+
+//试炼之塔通关达标
+message GetTrialTowerActReq
+{
+	required int32 id = 1;
+} 
+
+message GetTrialTowerActResp
+{
+	repeated CallHeroActivityConfig activities = 1;
+	required int32 score = 2;
+}
+
+//限定任务
+// url = "dailyTaskActivity"
+message LimitedTaskActivityReq
+{
+	required int32 acid = 1;//活动id
+}
+
+message LimitedTaskActivityResp
+{
+	repeated LimitedTaskActivityItem items = 1;
+	required LimitedTaskActivityItem zeroPos = 2;
+}
+
+message LimitedTaskActivityItem
+{
+	required int32 acid = 1;//活动id
+	required int32 id = 2;//任务id
+	required int32 count = 3;//任务数量
+	required int32 curCount = 4;//当前数量
+	required string title = 5;//任务标题
+	required bool active = 6;//可领取
+	repeated stage.RewardItem rewards = 7;//奖励
+}
+
+//限定任务领取奖励
+// url = "dailyTaskActivityReward"
+message LimitedTaskActivityRewardReq
+{
+	required int32 acid = 1;
+	required int32 id = 2;
+}
+
+message LimitedTaskActivityRewardResp
+{
+	repeated stage.RewardItem rewardItems = 1;
+}
+
+//限定任务GM
+// url = "gmDailyTaskActivity"
+message GMLimitedTaskActivityReq
+{
+	required int32 type = 1;//0-全部完成，-1-重置
+}
+
+message GMLimitedTaskActivityResp
+{
+	required int32 status = 1;
+}
+
+message JewelActivityConfig
+{
+    required int32 activityId = 1;
+    required int32 subId = 2;
+    required int32 count = 3;
+    required string description = 4;
+    repeated stage.RewardItem rewardItems = 5;
+    required int32 curCount = 6;//当前数量
+    required bool active = 7;//可领取
+}
+
+//晶石品质获取达标
+message GetJewelQualityActivityReq
+{
+	required int32 activityId = 1;
+}
+
+message GetJewelQualityActivityResp
+{
+	repeated JewelActivityConfig activityConfigs = 1;
+}
+
+//晶石品质获取达标奖励
+message GetJewelQualityRewardReq
+{
+    required int32 activityId = 1;
+    required int32 subId = 2;
+}
+
+message GetJewelQualityRewardResp
+{
+	repeated stage.RewardItem rewardItems = 1;
+}
+
+message HeroActivityConfig
+{
+    required int32 activityId = 1;
+    required int32 subId = 2;
+    required int32 count = 3;
+    required string description = 4;
+    repeated stage.RewardItem rewardItems = 5;
+    required bool active = 6;//可领取
+    required int32 curCount = 7;//当前数量
+}
+
+//英雄升级活动
+message GetHeroLevelActivityReq
+{
+	required int32 activityId = 1;
+}
+
+message GetHeroLevelActivityResp
+{
+	repeated HeroActivityConfig activityConfigs = 1;
+}
+
+//英雄升级奖励
+message GetHeroLevelRewardReq
+{
+    required int32 activityId = 1;
+    required int32 subId = 2;
+}
+
+message GetHeroLevelRewardResp
+{
+	repeated stage.RewardItem rewardItems = 1;
+}
+
+//英雄升星活动
+message GetHeroStarActivityReq
+{
+	required int32 activityId = 1;
+}
+
+message GetHeroStarActivityResp
+{
+	repeated HeroActivityConfig activityConfigs = 1;
+}
+
+//英雄升星奖励
+message GetHeroStarRewardReq
+{
+	required int32 activityId = 1;
+    required int32 subId = 2;
+}
+
+message GetHeroStarRewardResp
+{
+	repeated stage.RewardItem rewardItems = 1;
+}
+
+//荣耀之都排名信息 
+//url getHonorCityRank：排名
+message ActivityRankItem
+{
+    required playerData.PlayerBaseInfo playerBaseInfo = 1;
+    required int64 score = 2;
+    required int32 rank = 3;
+}
+
+message GetHonorCityRankReq
+{
+	required int32 id = 1;
+	required int32 count = 2;
+}
+
+message GetHonorCityRankResp
+{
+    repeated ActivityRankItem groupRankInfos = 1; //战区排名列表
+    required ActivityRankItem selfGroupRankInfo = 2; //自身战区的信息
+    repeated ActivityRankItem rankInfos = 3; //排名列表
+    required ActivityRankItem selfRankInfo = 4; //玩家自身的信息
+    required int64 endTime = 5;//截止时间
+    repeated LimitTurnTableData.LotteryActivityRankRewardConfig groupRewardConfigs = 6;//战区奖励配置
+    repeated LimitTurnTableData.LotteryActivityRankRewardConfig rewardConfigs = 7;//奖励配置
+	required int32 donateCount = 8;//已捐赠次数
+	required int32 honorCityDonateMax = 9;//捐赠上限
+    required int32 honorCityDonateScore = 10;//捐赠积分
+    required int32 honorCityDonatePrice = 11;//捐赠价格
+    required int32 honorCityDonateItem = 12;//捐献道具id，0=关闭捐献
+}
+
+//荣耀之都任务进度
+//url getHonorCityTask：任务进度
+message Task
+{
+    required int32 id = 1;
+    required int32 count = 2;
+    required int32 curCount = 3;
+    required int32 score = 4;
+    required string description = 5;
+}
+
+message GetHonorCityTaskReq
+{
+	required int32 useless = 1;
+}
+
+message GetHonorCityTaskResp
+{
+	repeated Task tasks = 1;
+}
+
+// 精选抽取达标
+// url = "getSummonUpCountActivity"
+message GetSummonUpCountActivityReq
+{
+	required int32 id = 1;
+}
+
+message GetSummonUpCountActivityResp
+{
+	repeated CallHeroActivityConfig activities = 1;
+	required int32 score = 2;//当前积分
+	required int32 totalScore = 3;//总积分
+	required int32 round = 4;//轮次
+	required int32 maxRound = 5;//最高轮次
+}

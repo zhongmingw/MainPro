@@ -1,0 +1,77 @@
+local luaRewardItemSlot=require "RewardItemSlot"
+local luaHeroShowUtils = require "HeroShowUtils"
+
+local dropGrid
+local failSpine
+local battleEndInfo={}
+
+function DoInit()
+	dropGrid= self:GetComponentAtPath("Anim2/ScrollRect/Viewport/DropGrid" ,"UIItemGrid")
+	failSpine=self:GetComponentAtPath("Anim0/FailSpine" ,"SkeletonGraphic")
+
+	failSpine.gameObject:SetActive(false)
+	CsBridge.audioManager:PlayUI(ResTblContainer:GetPropToStr(2,sound.name,sound.tblName))
+end
+
+function SetParamDataList(obj)
+	battleEndInfo=obj[0]
+end
+
+function OnOpen()
+	failSpine.gameObject:SetActive(true)
+
+	CsBridge.SpineHelper.PlayAnimation(failSpine,"apear",false,nil,
+	function ()
+		CsBridge.SpineHelper.PlayAnimation(failSpine,"stand",true,nil,nil)
+	end)
+end
+
+function OnAnimationFinished()
+	dropGrid:RefreshItemSlots(MergeRewards(battleEndInfo.dropItems),self.gameObject,"RewardItemSlot")
+end
+
+function OnDropGridItemBtnClick(obj)
+	local data=obj.m_data
+	if(data.typeId~=3)then--不支持英雄类tip
+		local view = CsBridge.OpenView("DropTipView","DropTipModel",false,true)
+		view:SetParamDataList(data)
+	end
+end
+
+function OnDetailBtnClick(sender)
+	ShowBattleRecordView({battleInfo},self)
+end
+
+local function Close(onClose)
+	self:HideView(self.gameObject.name)
+	if onClose then
+		onClose()
+	end
+end
+
+function OnMaskClick(sender)
+	Close(battleInfo.onClose)
+end
+
+function OnCloseBtnClick(sender)
+	Close(battleInfo.onClose)
+end
+
+
+function OnEquipBtnClick(sender)
+	LinkSystem(7,self)
+end 
+
+function OnLevelUpBtnClick(sender)
+	LinkHeroShowSystem(36,self)
+end 
+
+function OnSummonBtnClick(sender)
+	LinkSystem(5,self)
+end 
+
+function DoExit()
+	dropGrid = nil
+	failSpine = nil
+	battleEndInfo = nil
+end

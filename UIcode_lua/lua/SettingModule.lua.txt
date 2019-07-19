@@ -1,0 +1,17 @@
+function DoInit()
+
+end
+
+function AssetNames( objs )
+    local arr = {"SettingView"}
+    return arr
+end
+
+function OnEnter( objs, onFinished )
+    local view = self:OpenView("SettingView", "SettingModel")
+    view:SendCommand("InitSetting",objs[0])
+    self.bgm = false
+    if(onFinished ~= nil) then
+        onFinished()
+    end
+end

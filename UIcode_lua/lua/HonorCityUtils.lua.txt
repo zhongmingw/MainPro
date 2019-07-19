@@ -1,0 +1,164 @@
+local REWARD_TYPE = 1
+local RANKING_TYPE = 2
+local ICON_NAME_RIBBON = "new_com_paiming"
+local RIBBON_IDX_MAX = 3
+
+local Insert = table.insert
+local Sort = table.sort
+
+local function GetStage(groupScore)
+	local tbl = ResTblContainer:GetTable("GloryCapital")
+	local ids = tbl:GetCol("id")
+	local id = 0
+	for i=0,ids.Length-1 do
+		local score = tbl:Get(ids[i],"min")
+		if groupScore > tonumber(score) then
+			id = tonumber(ids[i])
+		end
+	end
+	return id
+end
+
+local function GetViewData(data)
+	local viewData = {}
+	viewData.groupScore = data.selfGroupRankInfo.score or 0
+    viewData.selfScore = data.selfRankInfo.score or 0
+    viewData.donateCount = data.donateCount
+    viewData.honorCityDonateMax = data.honorCityDonateMax
+    viewData.honorCityDonateScore = Language:getStr("HonorCityDes1") ..":".. "<color=#ccff00>".. " +" .. data.honorCityDonateScore .."</color>"
+    viewData.honorCityDonatePrice = Language:getStr("HonorCityDes9") ..":".. "<color=#ccff00>".. " " .. data.honorCityDonatePrice .."</color>"
+    viewData.needCount = data.honorCityDonatePrice
+    viewData.addScore = data.honorCityDonateScore
+    viewData.honorCityDonateItem = data.honorCityDonateItem
+    local now = CsBridge.timeManager.ServerTime
+    viewData.isOver = now > data.endTime
+    local iconName = ResTblContainer:GetPropToStr(data.honorCityDonateItem,ItemBase.icon,ItemBase.actorTbl)
+    viewData.iconName = iconName
+    viewData.stageId = GetStage(viewData.groupScore)
+    return viewData
+end
+
+local function FormatRankInfos(rankInfos,myRank)
+	local rankData = {}
+	if rankInfos then
+		for k,v in pairs(rankInfos) do
+			local data = {}
+			data.playerBaseInfo = v.playerBaseInfo
+			data.score = v.score
+			data.rank = v.rank
+			data.myRank = myRank
+			data.showRibbon = v.rank > 0 and v.rank <= RIBBON_IDX_MAX
+			data.ribbonIcon = ICON_NAME_RIBBON .. v.rank
+			Insert(rankData,data)
+		end
+		Sort(rankData,function(a,b)
+			if a.rank ~= b.rank then
+				return (a.rank > 0 and a.rank < b.rank)
+			end
+		end)
+	end
+	return rankData
+end
+
+local function FormatRewardInfos(rewardInfos,myRank)
+	local rewardData = {}
+	if rewardInfos then
+		for k,v in pairs(rewardInfos) do
+			local data = {}
+			data.min = v.min
+			data.max = v.max
+			data.myRank = myRank
+			data.rank = v.min == v.max and v.max or (v.min .. "-" .. v.max)
+			data.showRibbon = v.max > 0 and v.max <= RIBBON_IDX_MAX
+			data.ribbonIcon = ICON_NAME_RIBBON .. v.max
+			data.rewardItems = v.rewardItems
+			Insert(rewardData,data)
+		end
+		Sort(rewardData,function(a,b)
+			if a.max ~= b.max then
+				return a.max < b.max
+			end
+		end)
+	end
+	return rewardData
+end
+
+local function GetRewards(rank,configs)
+	local rewards = {}
+	for k,v in pairs(configs) do
+		if rank >= v.min and rank <= v.max then
+			rewards = v.rewardItems
+			break
+		end
+	end
+	return rewards
+end
+
+local function GetRankRewardData(data,type,deadTime)
+	local viewData = {}
+	viewData.type = type
+	viewData.selfScore = data.selfRankInfo.score or 0
+	viewData.selfRanking = data.selfRankInfo.rank or 0
+	viewData.groupScore = data.selfGroupRankInfo.score or 0
+	viewData.groupRanking = data.selfGroupRankInfo.rank or 0
+	if type == REWARD_TYPE then
+		viewData.endTime = deadTime
+		viewData.leftItems = FormatRewardInfos(data.groupRewardConfigs,viewData.groupRanking)
+		viewData.rightItems = FormatRewardInfos(data.rewardConfigs,viewData.selfRanking)
+		viewData.groupBanner = "ui_bg_qfjl"
+		viewData.selfBanner = "ui_bg_grjl"
+		viewData.groupTitle = Language:getStr("ui_bg_qfjl")
+		viewData.selfTitle = Language:getStr("ui_bg_grjl")
+		viewData.flagBg = "new_com_hongqi"
+		viewData.flagNameImg = Language:getStr("new_com_hongqi")
+		viewData.leftTopTxt = Language:getStr("HonorCityDes7")
+		viewData.rightTopTxt = Language:getStr("HonorCityDes8")
+		viewData.isRewards = true
+	else
+		viewData.endTime = data.endTime
+		viewData.leftItems = FormatRankInfos(data.groupRankInfos,viewData.groupRanking)
+		viewData.rightItems = FormatRankInfos(data.rankInfos,viewData.selfRanking)
+		viewData.groupBanner = "ui_bg_qfph"
+		viewData.selfBanner = "ui_bg_grph"
+		viewData.groupTitle = Language:getStr("ui_bg_qfph")
+		viewData.selfTitle = Language:getStr("ui_bg_grph")
+		viewData.flagBg = "new_com_lanqi"
+		viewData.flagNameImg = Language:getStr("new_com_lanqi")
+		viewData.leftTopTxt = Language:getStr("HonorCityDes5")
+		viewData.rightTopTxt = Language:getStr("HonorCityDes6")
+		viewData.isRewards = false
+	end
+	return viewData
+end
+
+local function GetTaskData(data)
+	local taskData = {}
+	for k,v in pairs(data) do
+		local t = {}
+		t.id = v.id
+		t.curCount = v.curCount
+		t.count = v.count
+		t.progress = v.curCount .. "/" .. v.count
+		t.isFinished = v.curCount >= v.count
+		t.description = v.description
+		t.scoretxt = GetValueAbbreviation(v.score) .. Language:getStr("Global_4")
+		Insert(taskData,t)
+	end
+	Sort(taskData,function(a,b)
+		if a.isFinished ~= b.isFinished then
+			return (not a.isFinished)
+		else
+			local aProgress = a.curCount/a.count
+			local bProgress = b.curCount/b.count
+			return aProgress > bProgress
+		end
+	end)
+	return taskData
+end
+
+return {
+	GetViewData = GetViewData,
+	GetRankRewardData = GetRankRewardData,
+	GetTaskData = GetTaskData,
+	GetRewards = GetRewards,
+}

@@ -1,0 +1,363 @@
+
+
+
+--全局数据数组
+global_levelUpArr={}
+global_attributeArr={}
+global_auraArr={}
+global_uiOpenArr={}
+global_heroBaseArr={}
+global_passiveSkillArr={}
+global_skillBaseArr={}
+global_campaignArr={}
+
+global_relationDic={}
+global_heroLevelUpDic={}
+global_heroDistillationDic={}
+global_heroDistillationLevelDic={}
+global_elementCampDic={}
+global_elementFusionDic={}
+global_elementCrystalDic={}
+global_skillbreakDic={}
+global_skillLevelUpDic={}
+global_skillLevelUpConsumptionDic={}
+--初始化数组
+function LoadArr(clsName)
+	if(clsName=="HeroLevelUp")then
+		global_levelUpArr={}
+		local ids=GetIds(clsName)
+		local tbl=ResTblContainer:GetTable(HeroLevelUp.actorTbl)
+		for  i = 0,ids.Length-1 do
+			local id=tonumber(ids[i])
+			local newData={}
+			newData.id=id
+			newData.grade=tbl:GetInt(id,HeroLevelUp.grade)
+			newData.level=tbl:GetInt(id,HeroLevelUp.level)
+			newData.soulCoin=tbl:GetInt(id,HeroLevelUp.soulCoin)
+			newData.coin=tbl:GetInt(id,HeroLevelUp.coin)
+			table.insert(global_levelUpArr,newData)
+		end
+	elseif(clsName=="Attribute")then
+		global_attributeArr={}
+		local ids=GetIds(clsName)
+		local tbl=ResTblContainer:GetTable(Attribute.actorTbl)
+		for  i = 0,ids.Length-1 do
+			local id=tonumber(ids[i])
+			local newData={}
+			newData.id=id
+			newData.name= tbl:Get(id,Attribute.name)
+			newData.type= tbl:GetInt(id,Attribute.type)
+			newData.value= tbl:GetFloat(id,Attribute.value)
+			table.insert(global_attributeArr,newData)	
+		end
+	elseif(clsName=="Campaign")then
+		global_campaignArr={}
+		local ids=GetIds(clsName)
+		local tbl=ResTblContainer:GetTable(Campaign.actorTbl)
+		for  i = 0,ids.Length-1 do
+			local id=tonumber(ids[i])
+			local newData={}
+			newData.id=id
+			newData.stageId= tbl:GetInt(id,Campaign.stageId)
+			newData.chapterId= tbl:GetInt(id,Campaign.chapterId)
+			newData.difficulty= tbl:GetInt(id,Campaign.difficulty)
+			newData.name= tbl:Get(id,Campaign.name)
+			newData.monsterStr= tbl:Get(id,Campaign.monsterStr)
+			--newData.resourceRewardStr= tbl:Get(id,Campaign.resourceRewardStr)
+			newData.otherRewardStr= tbl:Get(id,Campaign.otherRewardStr)
+			table.insert(global_campaignArr,newData)	
+		end
+	elseif(clsName=="AuraBase")then
+		global_auraArr={}
+		local ids=GetIds(clsName)
+		local tbl = ResTblContainer:GetTable(AuraBase.actorTbl)
+		for  i = 0,ids.Length-1 do
+			local id=tonumber(ids[i])
+			local newData={}
+			newData.id=id
+			newData.title= tbl:Get(id,AuraBase.title)
+			newData.icon= tbl:Get(id,AuraBase.icon)
+			newData.desp= tbl:Get(id,AuraBase.desp)
+			newData.cond= tbl:Get(id,AuraBase.cond)
+			newData.condDesp= tbl:Get(id,AuraBase.condDesp)
+			table.insert(global_auraArr,newData)	
+		end
+	elseif(clsName=="HeroBase")then
+		global_heroBaseArr={}
+		local ids=GetIds(clsName)
+		local tbl=ResTblContainer:GetTable(HeroBase.actorTbl)
+		for  i = 0,ids.Length-1 do
+			local id=tonumber(ids[i])
+			local newData={}
+			newData.id=id
+			newData.model= tbl:Get(id,HeroBase.model)
+			newData.title= tbl:Get(id,HeroBase.title)
+			newData.desp= tbl:Get(id,HeroBase.desp)
+			newData.icon= tbl:Get(id,HeroBase.icon)
+			newData.job= tbl:GetInt(id,HeroBase.job)
+			newData.group= tbl:GetInt(id,HeroBase.group)
+			newData.quality= tbl:GetInt(id,HeroBase.quality)
+			newData.skillId= tbl:GetInt(id,HeroBase.skillId)
+			newData.passiveStr= tbl:Get(id,HeroBase.passiveStr)
+			global_heroBaseArr[id] = newData
+		end
+	elseif(clsName=="UIOpenBase")then
+		global_uiOpenArr={}
+		local ids=GetIds(clsName)
+		local tbl=ResTblContainer:GetTable(UIOpenBase.actorTbl)
+		for  i = 0,ids.Length-1 do
+			local id=tonumber(ids[i])
+			local newData={}
+			newData.id=id
+		    newData.name=tbl:Get(id,UIOpenBase.name)
+			newData.type=tbl:GetInt(id,UIOpenBase.type)
+			newData.conditionType=tbl:GetInt(id,UIOpenBase.conditionType)
+			newData.level=tbl:GetInt(id,UIOpenBase.level)
+			newData.vipLevel=tbl:GetInt(id,UIOpenBase.vipLevel)
+			newData.newHandGuide=tbl:GetInt(id,UIOpenBase.newHandGuide)
+			table.insert(global_uiOpenArr,newData)	
+		end
+	end
+end
+
+function LoadTabToDic(clsName)
+	if clsName == Hero.actorTbl then
+		global_relationDic = {}
+		local relationArr = {}
+		local ids = GetIds(Hero.actorTbl)
+		local tbl = ResTblContainer:GetTable(Hero.actorTbl)
+		for i=0,ids.Length-1 do
+			local id  = tonumber(ids[i])
+			local relationId = tbl:GetInt(tostring(id),Hero.relationId)
+			if relationId ~= 0 then
+				if relationArr[relationId] == nil then
+					relationArr[relationId] = {
+						relationHeroId = 0,
+						heroIds = {}
+					}
+				end
+				table.insert(relationArr[relationId].heroIds, id)
+				local quality = ResTblContainer:GetPropToInt(tostring(id),HeroBase.quality,HeroBase.actorTbl)
+				if quality == 5 then
+					relationArr[relationId].relationHeroId = id
+				end
+			end
+		end
+
+		for k,v in pairs(relationArr) do
+			local relationHeroId = v.relationHeroId
+			for i,heroId in ipairs(v.heroIds) do
+				global_relationDic[heroId] = relationHeroId
+			end
+		end
+
+	elseif clsName == HeroLevelUp.actorTbl then
+		local itemIds =GetIds(HeroLevelUp.actorTbl)
+		global_heroLevelUpDic = {}
+		local tbl=ResTblContainer:GetTable(HeroLevelUp.actorTbl)
+		for  i = 0,itemIds.Length-1 do
+			local infos=tbl:GetRow(tostring(itemIds[i]),HeroLevelUp.grade,HeroLevelUp.level,HeroLevelUp.soulCoin,HeroLevelUp.coin)
+			local data={}
+			data.id=itemIds[i]
+			data.grade=tonumber(infos[0])
+			data.level=tonumber(infos[1])
+			global_heroLevelUpDic[data.grade.."-"..data.level]=data
+		end
+	elseif clsName == HeroDistillation.tblName then
+		local ids = GetIds(HeroDistillation.tblName)
+		global_heroDistillationDic = {}
+		local herodisTbl=ResTblContainer:GetTable(HeroDistillation.tblName)
+		local heroTbl=ResTblContainer:GetTable(Hero.actorTbl)
+		for i=0,ids.Length-1 do
+			local infos = herodisTbl:GetRow(
+			ids[i],
+			HeroDistillation.hero,
+			HeroDistillation.star,
+			HeroDistillation.attribute,
+			HeroDistillation.passiveSkill,
+			HeroDistillation.target,
+			HeroDistillation.mainId,
+			HeroDistillation.mainCount,
+			HeroDistillation.subId1,
+			HeroDistillation.subCount1,
+			HeroDistillation.subId2,
+			HeroDistillation.subCount2,
+			HeroDistillation.count)
+			local heroId = tonumber(infos[0])
+			if heroTbl:GetInt(heroId,Hero.distillation) == 1 then
+				if global_heroDistillationDic[heroId] == nil then
+					global_heroDistillationDic[heroId] = {}
+				end
+				global_heroDistillationDic[heroId][tonumber(infos[1])] = {
+					attribute = tonumber(infos[2]),
+					passiveSkill = tonumber(infos[3]),
+					target = tonumber(infos[4]),
+					mainId = tonumber(infos[5]=="" and 0 or infos[5]),
+					mainCount = tonumber(infos[6]=="" and 0 or infos[6]),
+					subId1 = tonumber(infos[7]=="" and 0 or infos[7]),
+					subCount1 = tonumber(infos[8]=="" and 0 or infos[8]),
+					subId2 = tonumber(infos[9]=="" and 0 or infos[9]),
+					subCount2 = tonumber(infos[10]=="" and 0 or infos[10]),
+					count = tonumber(infos[11])
+				}
+			end
+		end
+	elseif clsName == HeroDistillationLevel.tblName then
+		global_heroDistillationLevelDic = {}
+		local ids = GetIds(HeroDistillationLevel.tblName)
+		local tbl=ResTblContainer:GetTable(HeroDistillationLevel.tblName)
+		for i=0,ids.Length-1 do
+			local infos = tbl:GetRow(
+			ids[i],
+			HeroDistillationLevel.grade,
+			HeroDistillationLevel.level,
+			HeroDistillationLevel.soulCoin,
+			HeroDistillationLevel.coin)
+			local grade = tonumber(infos[0])
+			if global_heroDistillationLevelDic[grade] == nil then
+				global_heroDistillationLevelDic[grade] = {}
+			end
+			global_heroDistillationLevelDic[grade][tonumber(infos[1])] = {
+				soulCoin = infos[2],
+				coin = infos[3],
+				id = tonumber(ids[i])
+			}
+		end
+	elseif clsName == ElementCamp.tblName then
+		global_campaignArr = {}
+		local tbl=ResTblContainer:GetTable(ElementCamp.tblName)
+		local levels = tbl:GetCol(ElementCamp.level)
+		for i=0,levels.Length-1 do
+			local level = levels[i]
+			local infos = tbl:GetRow(level,ElementCamp.exp,ElementCamp.propStr)
+			level = tonumber(level)
+			local exp = tonumber(infos[0])
+			local attrs = {}
+			GetProp(infos[1],attrs)
+			global_campaignArr[level] = {
+				exp = exp, 
+				attrs = attrs
+			}
+		end
+	elseif clsName == ElementFusion.tblName then
+		global_elementFusionDic = {}
+		local tbl=ResTblContainer:GetTable(ElementFusion.tblName)
+		local levels = tbl:GetCol(ElementFusion.level)
+		for i=0,levels.Length-1 do
+			local level = levels[i]
+			local infos = tbl:GetRow(level,ElementFusion.exp,ElementFusion.icon,ElementFusion.bg,ElementFusion.propStr,ElementFusion.name,ElementFusion.campExp)
+			level = tonumber(level)
+			local exp = tonumber(infos[0])
+			local attrs = {}
+			GetProp(infos[3],attrs)
+			global_elementFusionDic[level] = {
+				icon = infos[1], 
+				bg = infos[2],
+				exp = exp, 
+				attrs = attrs,
+				name = infos[4],
+				campExp = infos[5]
+			}
+		end
+	elseif clsName == ElementCrystal.tblName then
+		global_elementCrystalDic = {}
+    	local ids = GetIds(ElementCrystal.tblName)
+		local tbl=ResTblContainer:GetTable(ElementCrystal.tblName)
+		for i=0,ids.Length-1 do
+			local id = ids[i]
+			local infos = tbl:GetRow(id,ElementCrystal.camp,ElementCrystal.exp)
+			local camp = tonumber(infos[0])
+			local exp = tonumber(infos[1])
+			if global_elementCrystalDic[camp] == nil then
+				global_elementCrystalDic[camp] = {}
+			end
+			global_elementCrystalDic[camp][tonumber(id)] = {
+				exp = exp
+			}
+		end
+	elseif clsName == SkillBreak.tblName then
+		global_skillbreakDic = {}
+		local ids = GetIds(SkillBreak.tblName)
+		for i=0,ids.Length-1 do
+			local infos = CsBridge.UnityHelper.GetRowFromTbl(SkillBreak.tblName,ids[i],SkillBreak.skillId,SkillBreak.grade,SkillBreak.targetSkillId,SkillBreak.consumption)
+			local skillId = tonumber(infos[0])
+			local grade = tonumber(infos[1])
+			local targetSkill = tonumber(infos[2])
+			local consumption = GetRewardFromTbl(infos[3])
+			if global_skillbreakDic[skillId] == nil then
+				global_skillbreakDic[skillId] = {}
+			end
+			global_skillbreakDic[skillId][grade] = {
+				targetSkillId = targetSkill,
+				consumption = consumption
+			}
+		end
+	elseif clsName == SkillLevelUp.tblName then
+		global_skillLevelUpDic = {}
+		local ids = GetIds(SkillLevelUp.tblName)
+		local subSkillIds = CsBridge.UnityHelper.GetCol(SkillLevelUp.tblName,SkillLevelUp.subSkillId)
+		local props = {SkillLevelUp.hurtFactor,
+						SkillLevelUp.cureFactor,
+						SkillLevelUp.skillFactor,
+						SkillLevelUp.stateFactor,
+						SkillLevelUp.stateId,
+						SkillLevelUp.targetProb,
+						SkillLevelUp.hurtStr,
+						SkillLevelUp.cureStr,
+						SkillLevelUp.defHpStr,
+						SkillLevelUp.effectStr,
+						SkillLevelUp.dotStr}
+		for i=0,ids.Length-1 do
+			local id = ids[i]
+			local infos = CsBridge.UnityHelper.GetRowFromTbl(SkillLevelUp.tblName,tostring(id),
+						SkillLevelUp.subSkillId,
+						props[1],
+						props[2],
+						props[3],
+						props[4],
+						props[5],
+						props[6],
+						props[7],
+						props[8],
+						props[9],
+						props[10],
+						props[11])
+			local subSkill = tonumber(infos[0])
+			if global_skillLevelUpDic[subSkill] == nil then
+				global_skillLevelUpDic[subSkill] = {}
+			end
+			for i=1,infos.Length-1 do
+				local valArr = CsBridge.UnityHelper.SplitString(infos[i],",")
+				local prop = {}
+				if valArr.Length ~= 0 then
+					if valArr.Length > 1 then
+						prop.type = valArr[1]
+						prop.val = valArr[2]
+					else
+						prop.type = 0
+						prop.val = valArr[0]
+					end
+				else
+					prop.type = -1
+					prop.val = 0
+				end
+				global_skillLevelUpDic[subSkill][props[i]] = prop
+			end
+		end
+	elseif clsName == SkilllevelUpConsumption.tblName then
+		global_skillLevelUpConsumptionDic = {}
+		local ids = GetIds(SkilllevelUpConsumption.tblName)
+		for i=0,ids.Length-1 do
+			local infos = CsBridge.UnityHelper.GetRowFromTbl(SkilllevelUpConsumption.tblName,ids[i],SkilllevelUpConsumption.grade,SkilllevelUpConsumption.level,SkilllevelUpConsumption.consumption)
+			local grade = tonumber(infos[0])
+			local level = tonumber(infos[1])
+			local consumption = GetRewardFromTbl(infos[2])
+			if global_skillLevelUpConsumptionDic[grade] == nil then
+				global_skillLevelUpConsumptionDic[grade] = {}
+			end
+			global_skillLevelUpConsumptionDic[grade][level] = {
+				consumption = consumption
+			}
+		end
+	end
+end

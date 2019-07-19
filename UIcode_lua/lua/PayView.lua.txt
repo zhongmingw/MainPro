@@ -1,0 +1,157 @@
+local fromVipTxt, fromVipHeadTxt
+local toVipTxt, toVipHeadTxt
+local needGemTxt
+local expTxt
+local expSlider
+local need
+local btnTxt
+local backgroud
+local maxLevelTipsObj
+
+local inited = false
+local payTbls
+local curType = 0
+
+function DoInit()
+    self.Anim = 1
+    self.Shadow = 1
+end
+
+function IsSetAnchor()
+    return true
+end
+
+function OnMaskClick(sender)
+    DoClose()
+end
+
+function OncloseBtnClick(sender)
+    DoClose()
+end
+
+function DoClose()
+    self:HideView("PayItemView")
+	CS.Client.Library.MoneyBanner.SetBannerVisible(true)
+    self:ReturnBack()
+end
+
+function InitUI()
+    fromVipTxt=self:GetComponentAtPath("OTHER/VIP/VIPLevel01Txt" ,CLS_TEXT)
+    toVipTxt=self:GetComponentAtPath("OTHER/VIP/VIPLevel02Txt" ,CLS_TEXT)
+    needGemTxt=self:GetComponentAtPath("OTHER/need/numberTxt" ,CLS_TEXT)
+    expTxt=self:GetComponentAtPath("OTHER/VIP/number03Txt" ,CLS_TEXT)
+    expSlider=self:GetComponentAtPath("OTHER/VIP/progress" ,CLS_SLIDER)
+    need=self:GetGameObjectAtPath("OTHER/need")
+    btnTxt=self:GetComponentAtPath("BUTTON/privilegeBtn/name01Txt" ,CLS_TEXT)
+    backgroud=self:GetGameObjectAtPath("BGS/middlebgImg")
+    maxLevelTipsObj = self:GetGameObjectAtPath("OTHER/maxTxt")
+end
+
+function SetParamDataList(objs)
+    if(objs.Length > 0) then
+        curType=objs[0]
+    end
+end
+
+function OnAnimationFinished()
+    if (not inited) then
+        InitUI()
+        inited=true
+    end
+    self:SendCommand("InitPay")
+    DoShowDetail()
+end
+
+function OnLinked(obj)
+    curType = tonumber(obj)
+end
+
+function DoShowDetail()
+    if curType == 0 then
+        btnTxt.text=Language:getStr("privilegeBtnTxt")
+        self:Deactive("VIPView")
+        backgroud:SetSelfActive(false)
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            local view = CsBridge.OpenView("PayItemView","PayModel",false,true)
+	    end, "PayItemView","PayItemSlot")
+    else
+        btnTxt.text=Language:getStr("payBtnTxt")
+        self:Deactive("PayItemView")
+        backgroud:SetSelfActive(true)
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            local view = CsBridge.OpenView("VIPView","PayModel",false,true)
+	    end, "VIPView","messageSlotItem", "VIPSlotItem")
+    end
+end
+
+function OnNotification_InitPay(objs)
+    payTbls=objs[0]
+    local vip=payTbls.vip
+    BindVip(vip)
+end
+
+function BindVip(vip)
+	local level = vip.level
+	SetVipText(fromVipTxt, vip.isMax and level - 1 or level)
+	SetVipText(toVipTxt, vip.isMax and level or level + 1)
+
+    maxLevelTipsObj:SetSelfActive(vip.isMax)
+    if vip.isMax then
+        need:SetSelfActive(false)
+        expTxt.gameObject:SetSelfActive(false)
+        SetSlider(1, false)
+    else
+        need:SetSelfActive(true)
+        expTxt.gameObject:SetSelfActive(true)
+        needGemTxt.text=tostring(vip.needExp)
+        expTxt.text=tostring(vip.exp).."/"..tostring(vip.totalExp)
+        SetSlider(vip.exp/vip.totalExp, true)
+    end
+end
+
+function SetSlider(newValue, playAnimation)
+	local currentValue = expSlider.value
+	if not playAnimation then
+		expSlider.value = newValue
+	else
+		if newValue <= currentValue then
+			expSlider.value = 0
+		end
+		CS.Client.Library.TweenUtils.TweenSliderTo(expSlider, newValue, 0.6)
+	end
+end
+
+function OnNotification_ShipSuccess(objs)
+    BindVip(objs[0])
+end
+
+function OnNotification_payed(objs)
+    local vip=objs[0].vip
+    BindVip(vip)
+end
+
+function OnprivilegeBtnClick(sender)
+    if curType == 0 then
+        curType = 1
+    else
+        curType = 0
+    end
+    DoShowDetail()
+end
+
+function DoExit()
+    fromVipTxt = nil 
+    fromVipHeadTxt = nil
+    toVipTxt = nil
+    toVipHeadTxt = nil
+    needGemTxt = nil
+    expTxt = nil
+    expSlider = nil
+    need = nil
+    btnTxt = nil
+    backgroud = nil
+    maxLevelTipsObj = nil
+    inited  = nil
+    payTbls = nil
+    curType  = nil
+end

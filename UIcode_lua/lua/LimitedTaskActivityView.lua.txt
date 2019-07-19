@@ -1,0 +1,244 @@
+require "LimitedTaskActivityItemSlot"
+
+---@type UnityEngine.GameObject
+local bannerImgObj
+---@type Client.Library.Localize
+local nameImgLocalize
+---@type UnityEngine.TextMesh
+local timeCountTxt
+---@type UnityEngine.GameObject
+local overTipsObj
+---@type UnityEngine.GameObject
+local nothingTipsObj
+---@type UnityEngine.GameObject
+local finishAllTaskObj
+---@type UnityEngine.TextMesh
+local allTaskTitleNameTxt
+---@type Client.Library.ButtonArchly
+local allTaskReceiveBtn
+---@type Client.Library.UIItemGrid
+local allTaskItemGrid
+---@type UnityEngine.UI.Slider
+local allTaskProgressSlider
+---@type UnityEngine.TextMesh
+local allTaskProgressTxt
+---@type UnityEngine.GameObject
+local allTaskProgressFrontObj
+---@type UnityEngine.GameObject
+local allTaskGotObj
+---@type UnityEngine.GameObject
+local allTaskRedFlagObj
+
+---@type Client.Library.UIItemGrid
+local taskSVItemGrid
+---@type UnityEngine.TextMesh
+local ruleTxt
+
+---@type userdata
+local viewData
+---@type number
+local COMMON_RELOAD_TIME
+---@type string
+local TICKER_NAME = "tickerName_LimitedTaskActivity"
+
+---@type Client.Library.ViewBase
+local selfViewBase
+
+function DoInit()
+    selfViewBase = self
+    selfViewBase.Anim = 0
+    bannerImgObj = selfViewBase:GetGameObjectAtPath("Banner/BannerImg")
+    nameImgLocalize = selfViewBase:GetComponentAtPath("Banner/nameImg", CLS_LOCALIZE)
+    timeCountTxt = selfViewBase:GetComponentAtPath("Banner/TimeCountTxt", CLS_TEXT)
+    overTipsObj = selfViewBase:GetGameObjectAtPath("Banner/OverTxt")
+    nothingTipsObj = selfViewBase:GetGameObjectAtPath("NothingTips")
+    finishAllTaskObj = selfViewBase:GetGameObjectAtPath("FinishAllTask")
+    allTaskTitleNameTxt = selfViewBase:GetComponentAtPath("FinishAllTask/TitleNameTxt", CLS_TEXT)
+    allTaskReceiveBtn = selfViewBase:GetComponentAtPath("FinishAllTask/FinishAllTaskReceiveBtn", CLS_BUTTON_ARCHLY)
+    allTaskItemGrid = selfViewBase:GetComponentAtPath("FinishAllTask/AllTaskGrid", CLS_UI_ITEM_GRID)
+    allTaskProgressSlider = selfViewBase:GetComponentAtPath("FinishAllTask/ProgressSlider", CLS_SLIDER)
+    allTaskProgressTxt = selfViewBase:GetComponentAtPath("FinishAllTask/ProgressSlider/ProgressTxt", CLS_TEXT)
+    allTaskGotObj = selfViewBase:GetGameObjectAtPath("FinishAllTask/Get")
+    allTaskProgressFrontObj = selfViewBase:GetGameObjectAtPath("FinishAllTask/ProgressSlider/jindutiaoImg")
+    allTaskRedFlagObj = selfViewBase:GetGameObjectAtPath("FinishAllTask/FinishAllTaskReceiveBtn/RedFlag")
+    taskSVItemGrid = selfViewBase:GetComponentAtPath("TaskSV/ScrollRect/Viewport/TaskSVGrid", CLS_UI_ITEM_GRID)
+    ruleTxt = selfViewBase:GetComponentAtPath("Rule/RuleTxt", CLS_TEXT)
+    COMMON_RELOAD_TIME = GetConstValue("commonReloadTime")
+end
+
+---定时器刷新
+local function RefreshTime()
+    Timer:AddTicker(TICKER_NAME, GetReloadTimestamp(COMMON_RELOAD_TIME * 3600000), function(targetTime)
+        if self == nil or self.Module == nil then
+            return
+        end
+    end, function()
+        if viewData then
+            self:SendCommand("GetActivityViewData", viewData.id)
+        end
+    end, nil)
+end
+
+---设置下面的任务列表
+local function SetSVGridItem(taskList)
+    if taskList then
+        taskSVItemGrid:RefreshItemSlots(taskList, selfViewBase.gameObject, "LimitedTaskActivityItemSlot")
+    end
+end
+
+---设置最上面那个任务的显示
+local function SetZeroPosTaskItem(zeroPosData)
+    if zeroPosData then
+        nothingTipsObj:SetActive(false)
+        finishAllTaskObj:SetActive(true)
+        allTaskTitleNameTxt.text = zeroPosData.title
+        allTaskReceiveBtn.Gray = zeroPosData.btnGray
+        allTaskReceiveBtn.interactable = not zeroPosData.btnGray
+        if zeroPosData.rewards then
+            allTaskItemGrid:RefreshItemSlots(zeroPosData.rewards, selfViewBase.gameObject, "ItemSlot")
+        end
+        allTaskProgressSlider.value = zeroPosData.progressValue
+        allTaskProgressTxt.text = zeroPosData.progressValueStr
+        CsBridge.IconData.SetIconByName(allTaskProgressFrontObj, zeroPosData.frontImgName)
+        allTaskGotObj:SetActive(zeroPosData.showGot)
+        allTaskRedFlagObj:SetActive(zeroPosData.canReceive)
+    else
+        finishAllTaskObj:SetActive(false)
+    end
+end
+
+---设置活动剩余时间
+local function SetActivityRestTime()
+    if viewData.restTime ~= nil and viewData.restTime ~= "" then
+        overTipsObj:SetActive(true)
+        timeCountTxt.text = viewData.restTime
+    else
+        overTipsObj:SetActive(false)
+    end
+end
+
+---刷新界面
+local function RefreshView(data)
+    if selfViewBase.gameObject.activeInHierarchy then
+        if viewData then
+            ruleTxt.text = viewData.desc
+            CsBridge.IconData.SetRawImageByName(bannerImgObj, viewData.image)
+            if viewData.image ~= nil and viewData.image ~= "" then
+                nameImgLocalize.gameObject:SetActive(true)
+                SetServerActivityArtFontByImage(nameImgLocalize, viewData.image)
+            else
+                nameImgLocalize.gameObject:SetActive(false)
+            end
+            SetActivityRestTime()
+            if viewData.zeroPos ~= nil or (viewData.taskList and #viewData.taskList > 0) then
+                nothingTipsObj:SetActive(false)
+                finishAllTaskObj:SetActive(true)
+                SetZeroPosTaskItem(viewData.zeroPosData)
+                SetSVGridItem(viewData.taskList)
+            else
+                finishAllTaskObj:SetActive(false)
+                nothingTipsObj:SetActive(true)
+            end
+        else
+            taskSVItemGrid:ClearItems()
+            finishAllTaskObj:SetActive(false)
+            nothingTipsObj:SetActive(true)
+        end
+    end
+end
+
+---刷新活动倒计时
+local function RefreshCountdown(countdownData)
+    if not viewData then
+        return
+    end
+
+    local currentActivityID = viewData.id
+    for activityID, restTime in pairs(countdownData) do
+        if activityID == currentActivityID then
+            overTipsObj:SetActive(true)
+            timeCountTxt.text = restTime
+            if restTime == "" then
+                overTipsObj:SetActive(false)
+            end
+            return
+        end
+    end
+end
+
+function OnAnimationFinished()
+    RefreshTime()
+end
+
+---获取界面数据
+function OnNotification_RefreshActivityView(objs)
+    if self.gameObject.activeInHierarchy then
+        viewData = objs[0]
+        RefreshView(viewData)
+    end
+end
+
+---刷新活动倒计时
+function OnNotification_RefreshCountdown(objs)
+    local data = objs[0]
+    RefreshCountdown(data)
+end
+
+---关闭活动界面前先隐藏自己
+function OnNotification_CloseActivityView(obj)
+    self:HideView(selfViewBase.gameObject.name)
+end
+
+---所有任务的奖励item点击事件
+function OnAllTaskGridItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("OpenTipView", data)
+end
+
+---所有任务的收取奖励按钮点击
+function OnFinishAllTaskReceiveBtnClick()
+    local data = viewData.zeroPosData
+    self:SendCommand("LimitedTaskGetReward", data)
+end
+
+---下面任务的item点击事件
+function OnLimitedTaskRewardGridItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("OpenTipView", data)
+end
+
+---下面任务的收取按钮点击
+function OnTaskSVGridReceiveBtnClick(obj)
+    local data = obj.m_data
+    self:SendCommand("LimitedTaskGetReward", data)
+end
+
+function OnClose()
+    finishAllTaskObj:SetActive(false)
+    nothingTipsObj:SetActive(true)
+    taskSVItemGrid:ClearItems()
+    Timer:StopTicker(TICKER_NAME)
+end
+
+function DoExit()
+    Timer:StopTicker(TICKER_NAME)
+    bannerImgObj = nil
+    nameImgLocalize = nil
+    timeCountTxt = nil
+    overTipsObj = nil
+    nothingTipsObj = nil
+    finishAllTaskObj = nil
+    allTaskTitleNameTxt = nil
+    allTaskReceiveBtn = nil
+    allTaskItemGrid = nil
+    allTaskProgressSlider = nil
+    allTaskProgressTxt = nil
+    allTaskGotObj = nil
+    allTaskRedFlagObj = nil
+    taskSVItemGrid = nil
+    viewData = nil
+    selfViewBase = nil
+    allTaskProgressFrontObj = nil
+    COMMON_RELOAD_TIME = nil
+    TICKER_NAME = nil
+end

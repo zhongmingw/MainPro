@@ -1,0 +1,149 @@
+local data
+local img_icon
+local img_quality
+
+local txt_order
+local img_race
+local go_debrisFlag
+
+local starListObj
+local starArr={}
+local star_6
+local star_7
+
+local BuyBtn
+
+local itemType
+
+local input
+local curNum=0
+local maxNum=0
+
+local tabData ={}
+local superId
+local itemTmp2
+
+function DoInit()
+    -- body
+    img_icon=self.transform:Find("Dynamic/item/iconImg"):GetComponent("UnityEngine.UI.Image")
+	img_quality=self.transform:Find("Dynamic/item/qualityImg"):GetComponent("UnityEngine.UI.Image")
+	img_race=self.transform:Find("Dynamic/item/race"):GetComponent("UnityEngine.UI.Image")
+	txt_order=self.transform:Find("Dynamic/item/order"):GetComponent(CLS_TEXT)
+	go_debrisFlag=self.transform:Find("Dynamic/item/debrisFlag").gameObject
+
+	BuyBtn=self.transform:Find("Dynamic/BuyBtn").gameObject
+
+	starListObj=self.transform:Find("Dynamic/item/Stars/starList").gameObject
+	star_6=self.transform:Find("Dynamic/item/Stars/star6").gameObject
+	star_7=self.transform:Find("Dynamic/item/Stars/star7").gameObject
+	for  i = 1,5 do
+		local obj=starListObj.transform:Find("star"..i).gameObject
+		table.insert(starArr,obj)
+	end
+	input= self.transform:Find("Dynamic/BuyInput"):GetComponent("UnityEngine.UI.InputField")
+
+	tabData=GetData()
+	superId=tabData[2].id
+end
+function GetData()
+	local data = {}
+    local ids=GetIds(HeroSummon.HeroSummonTbl)
+	local tbl = ResTblContainer:GetTable(HeroSummon.HeroSummonTbl)
+	for  i = 0,ids.Length-1 do
+		local id=tonumber(ids[i])
+		local tmp={}
+		tmp.id=id
+		tmp.consume1=SplitString(tbl:Get(id,HeroSummon.consume1),",")
+		tmp.consume2=SplitString(tbl:Get(id,HeroSummon.consume2),",")
+		tmp.free=tbl:GetInt(id,HeroSummon.free)
+		tmp.cd=tbl:GetInt(id,HeroSummon.cd)
+		table.insert(data,tmp)
+	end
+	return data
+end
+
+
+function SetParamDataList(objs)
+	data=objs[0]
+	SetIconByItemId(img_icon.gameObject,data.reward.id)
+	SetQualityByItemId(img_quality.gameObject,data.reward.id)
+	
+	SetItemSpecial(txt_order,go_debrisFlag,data.reward.id)
+	SetDebrisInfo(img_race,starListObj,starArr,star_6,star_7,data.reward.id)
+	
+	itemType = ResTblContainer:GetPropToInt(data.reward.id,ItemBase.type,ItemBase.actorTbl)
+	-- local val=ResTblContainer:GetPropToInt(data.itemId,PiecesComposition.count,PiecesComposition.actorTbl)
+	
+	local playerInfo=appData:checkData("PlayerInfo")
+	local exchangeCoin=playerInfo.exchangeCoin
+	maxNum=math.floor(exchangeCoin/100)
+	--print(val)
+	CheckCurNum()
+	
+end 
+
+
+
+
+function OnBuyInputInputValChanged(sender,val)
+	curNum=tonumber(val)
+	CheckCurNum()
+end
+
+function OnAddBtnClick(sender)
+	curNum=curNum+1
+	CheckCurNum()
+end
+
+function OnReduceBtnClick(sender)
+	curNum=curNum-1
+	CheckCurNum()
+end
+
+function CheckCurNum()
+	if maxNum == 0 then
+		return 
+	end
+	if(curNum>maxNum)then
+		curNum=maxNum
+	elseif(curNum<1)then
+		curNum=1
+	end
+	input.text=tostring(curNum)
+end
+
+function OnBuyBtnClick(sender)
+	CsBridge.messageManager:PopMsgBox("",Language:getStr("HeroSummonShop_Check"),Language:getStr("local_confirm"),OnConfirmCallBack,Language:getStr("local_cancel"),nil);
+	
+end
+
+function OnConfirmCallBack()
+	data.reward.count=curNum
+	self:SendCommand("HeroSummonBuy",data)
+	self:HideView(self.gameObject.name)
+end
+
+function OnCloseBtnClick(sender)
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	data = nil
+	img_icon = nil
+	img_quality = nil
+	txt_order = nil
+	img_race = nil
+	go_debrisFlag = nil
+	starListObj = nil
+	starArr = nil
+	star_6 = nil
+	star_7 = nil
+	BuyBtn = nil
+	itemType = nil
+	input = nil
+	curNum = nil
+	maxNum = nil
+	tabData = nil
+	superId = nil
+	itemTmp2 = nil
+end

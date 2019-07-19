@@ -1,0 +1,26 @@
+
+º
+ExchangeData.protoExchangeDatastage.protoCallHero.proto"-
+ComposePiecesReq
+
+id (
+count ("7
+ComposePiecesResp"
+rewards (2.stage.RewardItem"9
+OpenTreasureReq
+uid (
+
+id (
+count ("6
+OpenTreasureResp"
+rewards (2.stage.RewardItem",
+SellReq!
+sellList (2.CallHero.Goods"
+SellResp
+coin (",
+ExchangeItemReq
+
+id (
+count ("(
+NormalExchangeItemResp
+result (

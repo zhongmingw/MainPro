@@ -1,0 +1,24 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2018-10-23 22:12:16
+]]
+
+function OnLimitTurnTableRankRewardItemSlotBindValue(slot,data)
+    local rankSprite = slot:GetGameObjectAtPath("RankSprite")
+    local frameImg = slot:GetGameObjectAtPath("frameImg")
+    local rankTxt = slot:GetComponentAtPath("RankTxt",CLS_TEXT)
+    local rewardGrid = slot:GetComponentAtPath("RewardGrid",CLS_UI_ITEM_GRID)
+
+    if data.min<=3 and data.min>0 then
+        rankSprite:SetSelfActive(true)
+        frameImg:SetSelfActive(true)
+		CsBridge.IconData.SetIconByName(rankSprite.gameObject,"new_com_paiming"..data.min)
+	else
+		rankSprite:SetSelfActive(false)
+        frameImg:SetSelfActive(false)
+    end
+    rankTxt.text = data.rank
+    rewardGrid:RefreshItemSlots(data.rewardItems,slot.m_grid.viewBase.gameObject,"ItemSlot")
+end

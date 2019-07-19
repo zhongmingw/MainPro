@@ -1,0 +1,23 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-01-30 17:53:26
+]]
+
+function OnItemMatItemSlotBindValue(slot, data)
+    local itemBaseTF = slot.transform:Find("ItemBase")
+    local NumTxt = slot:GetComponentAtPath("NumTxt" ,CLS_TEXT)
+    local redFlag = slot:GetGameObjectAtPath("NewFlag")
+    BindItemBaseValue(itemBaseTF,data)
+    NumTxt.text = #data.putList.."/"..data.count
+    SetFontColorWithEnough(NumTxt,function()
+        return #data.putList >= data.count
+    end)
+    itemBaseTF.gameObject:SetSelfAndChildrenGray(#data.putList == 0)
+    redFlag:SetSelfActive(data.redFlag)
+    if data.anim then
+        CsBridge.UnityHelper.SetlocalScale(itemBaseTF.gameObject,1,1,1)
+        SetUpdateEffect(itemBaseTF,1,nil,true,true)
+    end
+end

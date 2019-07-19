@@ -1,0 +1,138 @@
+--[[
+	file: UnionApplicationView.lua
+	author: hangang
+	description: View for union applications management
+]]
+
+local memberCountTxt, nameTxt
+local banerImgObj
+local autoGrantOnBtnObj, autoGrantOffBtnObj, emptyTipsObj
+local applicationGrid
+
+local viewData
+
+function DoInit()
+	self.Shadow = 0
+	InitUI()
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	local path = "Center/bannerImg"
+	banerImgObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "Center/memberCountTxt"
+	memberCountTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Center/nameTxt"
+	nameTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Center/AutoGrantOnBtn"
+	autoGrantOnBtnObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "Center/AutoGrantOffBtn"
+	autoGrantOffBtnObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "Center/applicationSV/ScrollRect/Viewport/Grid"
+	applicationGrid = selfTrans:GetComponentAtPath(path ,CLS_UI_ITEM_GRID)
+
+	path = "Center/Nothing"
+	emptyTipsObj = selfTrans:GetGameObjectAtPath(path)
+end
+
+function OnNotification_RefreshApplicationView(objs)
+	viewData = objs[0]
+	RefreshView(viewData)
+end
+
+function RefreshView(data)
+	CsBridge.IconData.SetIconByName(banerImgObj, data.icon)
+	memberCountTxt.text = data.memberText
+	nameTxt.text = data.name
+
+	autoGrantOnBtnObj:SetActive(data.autoGrantApplications)
+	autoGrantOffBtnObj:SetActive(not data.autoGrantApplications)
+
+	emptyTipsObj:SetActive(#data.applications == 0)
+	applicationGrid:RefreshItemSlots(data.applications, self.gameObject, "UnionApplicationItemSlot")
+end
+
+function OnUnionApplicationItemSlotBindValue(slot, data)
+	local path = "PlayerBase"
+	local playerRoot = slot.transform:Find(path)
+	BindPlayerBaseInfoValue(playerRoot, data.playerInfo)
+	
+	local path = "Other"
+	local otherRoot = slot.transform:Find(path)
+
+	path = "powerTxt"
+	local powerTxt = otherRoot:GetComponentAtPath(path ,CLS_TEXT)
+	powerTxt.text = data.power
+
+	path = "nameTxt"
+	local nameTxt = otherRoot:GetComponentAtPath(path ,CLS_TEXT)
+	nameTxt.text = data.name
+end
+
+function OnGridPlayerBaseClick(obj, itemIndex)
+	local slotData = obj.m_data
+	local memberID = slotData.userId
+	local zone = slotData.zone
+	self:SendCommand("OpenMemberDetailView", memberID, zone, self.gameObject.name)
+end
+
+function OnGridGrantBtnClick(obj, itemIndex)
+	local slotData = obj.m_data
+	local memberID = slotData.userId
+	local zone = slotData.zone
+	local granted = true
+	self:SendCommand("GranteApplication", memberID, zone, granted)
+
+	obj.gameObject:SetActive(false)	
+end
+
+function OnGridRejectBtnClick(obj, itemIndex)
+	local slotData = obj.m_data
+	local memberID = slotData.userId
+	local zone = slotData.zone
+	local granted = false
+	self:SendCommand("GranteApplication", memberID, zone, granted)
+
+	obj.gameObject:SetActive(false)	
+end
+
+function OnAutoGrantOnBtnClick(sender)
+	local autoGrantOn = false
+	self:SendCommand("SetAutoGrant", autoGrantOn)
+end
+
+function OnAutoGrantOffBtnClick(sender)	
+	local autoGrantOn = true
+	self:SendCommand("SetAutoGrant", autoGrantOn)
+end
+
+function OnRejectAllBtnClick(sender)	
+	local granted = false
+	self:SendCommand("HandleAllApplication", granted)
+end
+
+function OnGrantAllBtnClick(sender)	
+	local granted = true
+	self:SendCommand("HandleAllApplication", granted)
+end
+
+function OnNotification_CloseUnionView(obj)
+	self:HideView("UnionApplicationView")
+end
+
+function DoExit()
+	memberCountTxt = nil
+	nameTxt = nil
+	banerImgObj = nil
+	autoGrantOnBtnObj = nil
+	autoGrantOffBtnObj = nil
+	emptyTipsObj = nil
+	applicationGrid = nil
+
+	viewData = nil
+end

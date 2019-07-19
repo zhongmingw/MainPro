@@ -1,0 +1,39 @@
+--[[
+	file: UnionOprtView.lua
+	author: hangang
+	description: Menu for union operation
+]]
+
+local popupParentViewName = "UnionInfoView"
+
+function DoInit()
+	self.Shadow = 1
+	InitUI()
+end 
+
+function InitUI()
+
+end
+
+function OnNotificationBtnClick(sender)
+	Close()
+	self:SendCommand("OpenNotificationView", popupParentViewName)
+end
+
+function OnRenameBtnClick(sender)
+	Close()
+	self:SendCommand("OpenRenameView", popupParentViewName)
+end
+
+function OnSettingsBtnClick(sender)
+	Close()
+	self:SendCommand("OpenSettingsView", popupParentViewName)
+end
+
+function OnNotification_CloseUnionView(obj)
+	Close()
+end
+
+function Close()
+	self:HideView(self.gameObject.name)
+end

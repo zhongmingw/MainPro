@@ -1,0 +1,126 @@
+local REWARD_TYPE = 1
+local RANKING_TYPE = 2
+local MAX_STAGE = 6
+local scoreTxt
+local zoneScoreTxt
+local donateObj
+local donateDecTxt
+local donateCostTxt
+local itemImgObj
+local building = {}
+local standSpine = {}
+local windmillSpine
+local gemSpine
+local viewData
+local endTime
+
+function DoInit()
+	self.Shadow = 1
+end 
+
+function InitUI()
+	scoreTxt = self:GetComponentAtPath("scoreTxt/numberTxt" ,CLS_TEXT)
+	zoneScoreTxt = self:GetComponentAtPath("zoneScoreTxt/numberTxt" ,CLS_TEXT)
+	donateObj = self:GetGameObjectAtPath("Donate")
+	donateDecTxt = self:GetComponentAtPath("Donate/decTxt" ,CLS_TEXT)
+	donateCostTxt = self:GetComponentAtPath("Donate/costTxt" ,CLS_TEXT)
+	itemImgObj = self:GetGameObjectAtPath("Donate/costTxt/comImg")
+	local building1 = self:GetGameObjectAtPath("Pedestal1/building1")
+	local building2 = self:GetGameObjectAtPath("Pedestal2/building2")
+	local building3 = self:GetGameObjectAtPath("Pedestal1/building3")
+	local building4 = self:GetGameObjectAtPath("Pedestal3/building4")
+	local building5 = self:GetGameObjectAtPath("Pedestal4/building5")
+	building = {
+		[1] = building1,
+		[2] = building2,
+		[3] = building3,
+		[4] = building4,
+		[5] = building5,
+	}
+	windmillSpine = self:GetGameObjectAtPath("Pedestal3/building4/windmillSpine")
+	gemSpine = self:GetGameObjectAtPath("Pedestal4/building5/gemSpine")
+
+	local standSpine1 = self:GetGameObjectAtPath("Pedestal1/standSpine1")
+	local standSpine2 = self:GetGameObjectAtPath("Pedestal2/standSpine2")
+	local standSpine3 = self:GetGameObjectAtPath("Pedestal1/standSpine3")
+	local standSpine4 = self:GetGameObjectAtPath("Pedestal3/standSpine4")
+	local standSpine5 = self:GetGameObjectAtPath("Pedestal4/standSpine5")
+	standSpine = {
+		[1] = standSpine1,
+		[2] = standSpine2,
+		[3] = standSpine3,
+		[4] = standSpine4,
+		[5] = standSpine5,
+	}
+
+end
+
+function SetParamDataList(objs)
+	endTime = objs[0]
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+	end
+	self:SendCommand("InitHonorCityInfo")
+end
+
+local function SetViewText()
+	scoreTxt.text = GetValueAbbreviation(viewData.selfScore)
+	zoneScoreTxt.text = GetValueAbbreviation(viewData.groupScore)
+	donateDecTxt.text = viewData.honorCityDonateScore
+	donateCostTxt.text = viewData.honorCityDonatePrice
+	CsBridge.IconData.SetIconByName(itemImgObj,viewData.iconName)
+end
+
+function OnNotification_RefreshViewData(objs)
+	viewData = objs[0]
+	SetViewText()
+	for k,v in pairs(building) do
+		v:SetActive(k <= viewData.stageId)
+	end
+	for k,v in pairs(standSpine) do
+		v:SetActive(k == (viewData.stageId+1))
+	end
+	windmillSpine:SetActive(viewData.stageId >= MAX_STAGE)
+	gemSpine:SetActive(viewData.stageId >= MAX_STAGE)
+	donateObj:SetActive((viewData.honorCityDonateItem>0) and (not viewData.isOver))
+end
+
+function OnRuleBtnClick(sender)
+	ShowHelpTip(self,INSTRUCTION_HONORCITY)
+end
+
+function OnScoreBtnClick(sender)
+	self:SendCommand("OpenScoreView")
+end
+
+function OnAwardsBtnClick(sender)
+	self:SendCommand("OpenRankRewardView",REWARD_TYPE,endTime)
+end
+
+function OnRankBtnClick(sender)
+	self:SendCommand("OpenRankRewardView",RANKING_TYPE,endTime)
+end
+
+function OnDonateBtnClick(sender)
+	self:SendCommand("DonateItems",viewData)
+end
+
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close()
+	self:ReturnBack()
+end
+
+function DoExit()
+	
+end

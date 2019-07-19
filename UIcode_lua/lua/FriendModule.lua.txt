@@ -1,0 +1,11 @@
+function AssetNames(objs)
+	local arr={"FriendGenView"}
+	return arr
+end
+
+function OnEnter(objs,onFinished)
+	self:OpenView("FriendGenView","FriendModel")
+	if(onFinished ~= nil)then
+		onFinished()  
+	end
+end

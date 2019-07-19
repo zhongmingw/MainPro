@@ -1,0 +1,698 @@
+local gmInput
+local gmBtn
+
+local autoTaskTxt
+local summonTxt
+local arenaTxt
+local dragonTxt
+local turnTableTxt
+local burnTaskTxt
+local skyscraperTxt
+local shopTxt
+local equipComposeTxt
+local heroDecomposeTxt
+local heroComposeTxt
+local elementFusionTxt
+local gloryRoadTxt
+local monopolyTxt
+
+local equipComposeFlag
+local heroComposeFlag
+local dragonFlag
+local turnTableFlag
+local elementFusionFlag
+
+local lotteryFlag
+local lotteryCountFlag
+local autoTaskFlag
+local autoTaskCountFlag
+local expditionFlag
+local arenaFlag
+local arenaCountFlag
+local skyTowerFlag 
+local skyTowerCountFlag 
+local monopolyFlag
+
+local arenaEnable = false
+local castle
+local castleText
+
+local isInit = false
+
+function DoInit()
+	local viewTrans = self.transform
+	gmInput = self:GetComponentAtPath("GM/gmInput" ,"UnityEngine.UI.InputField")
+	gmBtn = self:GetComponentAtPath("GM/SendBtn" ,"UnityEngine.UI.Button")
+
+	autoTaskTxt = self:GetComponentAtPath("BG/Text/AutoTaskName/bgImg/nameTxt" ,CLS_TEXT)
+	summonTxt = self:GetComponentAtPath("BG/Text/SummonName/bgImg/nameTxt" ,CLS_TEXT)
+	arenaTxt = self:GetComponentAtPath("BG/Text/ArenaName/bgImg/nameTxt" ,CLS_TEXT)
+	dragonTxt = self:GetComponentAtPath("BG/Text/DragonName/bgImg/nameTxt" ,CLS_TEXT)
+	turnTableTxt = self:GetComponentAtPath("BG/Text/TurnName/bgImg/nameTxt" ,CLS_TEXT)
+	burnTaskTxt = self:GetComponentAtPath("BG/Text/BurnName/bgImg/nameTxt" ,CLS_TEXT)
+	skyscraperTxt = self:GetComponentAtPath("BG/Text/TowerName/bgImg/nameTxt" ,CLS_TEXT)
+	shopTxt = self:GetComponentAtPath("BG/Text/ShopName/bgImg/nameTxt" ,CLS_TEXT)
+	equipComposeTxt = self:GetComponentAtPath("BG/Text/EquipComposeName/bgImg/nameTxt" ,CLS_TEXT)
+	heroDecomposeTxt = self:GetComponentAtPath("BG/Text/HeroDecomposeName/bgImg/nameTxt" ,CLS_TEXT)
+	heroComposeTxt = self:GetComponentAtPath("BG/Text/HeroComposeName/bgImg/nameTxt" ,CLS_TEXT)
+	elementFusionTxt = self:GetComponentAtPath("BG/Text/ElementFusionName/bgImg/nameTxt" ,CLS_TEXT)
+	gloryRoadTxt = self:GetComponentAtPath("BG/Text/GloryRoadName/bgImg/nameTxt",CLS_TEXT)
+	monopolyTxt = self:GetComponentAtPath("BG/Text/MonopolyName/bgImg/nameTxt",CLS_TEXT)
+
+	equipComposeFlag = self:GetGameObjectAtPath("BG/Text/EquipComposeName/NewFlag")
+	heroComposeFlag = self:GetGameObjectAtPath("BG/Text/HeroComposeName/NewFlag")
+	dragonFlag = self:GetGameObjectAtPath("BG/Text/DragonName/NewFlag")
+	turnTableFlag = self:GetGameObjectAtPath("BG/Text/TurnName/NewFlag")
+	elementFusionFlag = self:GetGameObjectAtPath("BG/Text/ElementFusionName/NewFlag")
+	lotteryFlag=self:GetGameObjectAtPath("BG/Text/SummonName/NewFlag")
+	lotteryCountFlag=self:GetGameObjectAtPath("BG/Text/SummonName/CountFlag")
+	autoTaskFlag=self:GetGameObjectAtPath("BG/Text/AutoTaskName/NewFlag")
+	autoTaskCountFlag=self:GetGameObjectAtPath("BG/Text/AutoTaskName/CountFlag")
+	expditionFlag = self:GetGameObjectAtPath("BG/Text/BurnName/NewFlag")
+	arenaFlag=self:GetGameObjectAtPath("BG/Text/ArenaName/NewFlag")
+	arenaCountFlag=self:GetGameObjectAtPath("BG/Text/ArenaName/CountFlag")
+	skyTowerFlag =self:GetGameObjectAtPath("BG/Text/TowerName/NewFlag")
+	skyTowerCountFlag =self:GetGameObjectAtPath("BG/Text/TowerName/CountFlag")
+	monopolyFlag =self:GetGameObjectAtPath("BG/Text/MonopolyName/NewFlag")
+
+	castle = self:GetGameObjectAtPath("BG/Castle")
+	castleText = self:GetGameObjectAtPath("BG/Text")
+end
+
+function OnOpen()
+	self:PlayBg("music_mailTown")
+end
+
+function Active()
+	self:PlayBg("music_mailTown")
+end
+
+function OnAnimationFinished()
+	SetMainBuildingName()
+	RefreshCenterTxt()
+
+	if not isInit then
+		self:SendCommand("RefreshMainRedFlag")
+		isInit = true
+	end
+end
+
+function SetMainBuildingName()
+	local tbl=ResTblContainer:GetTable(UIOpenBase.actorTbl)
+	autoTaskTxt:SetText(tbl:Get(UI_OPEN_TYPE_AUTOTASK,UIOpenBase.name))
+	summonTxt:SetText(tbl:Get(UI_OPEN_TYPE_HEROSUMMON,UIOpenBase.name))
+	arenaTxt:SetText(tbl:Get(UI_OPEN_TYPE_PVP,UIOpenBase.name))
+	dragonTxt:SetText(tbl:Get(UI_OPEN_TYPE_DROGAN,UIOpenBase.name))
+	turnTableTxt:SetText(tbl:Get(UI_OPEN_TYPE_TRUNTABLE,UIOpenBase.name))
+	burnTaskTxt:SetText(tbl:Get(UI_OPEN_TYPE_EXPEDITIOIN,UIOpenBase.name))
+	skyscraperTxt:SetText(tbl:Get(UI_OPEN_TYPE_TOWER,UIOpenBase.name))
+	shopTxt:SetText(tbl:Get(UI_OPEN_TYPE_SHOP,UIOpenBase.name))
+	equipComposeTxt:SetText(tbl:Get(UI_OPEN_TYPE_EQUIPCOMPOSE,UIOpenBase.name))
+	heroDecomposeTxt:SetText(tbl:Get(UI_OPEN_TYPE_HERODECOMPOSE,UIOpenBase.name))
+	heroComposeTxt:SetText(tbl:Get(UI_OPEN_TYPE_HEROCOMPOSE,UIOpenBase.name))
+	elementFusionTxt:SetText(tbl:Get(UI_OPEN_TYPE_ELEMENT_FUSION,UIOpenBase.name))
+	gloryRoadTxt:SetText(tbl:Get(UI_OPEN_TYPE_GLORYROAD,UIOpenBase.name))
+	monopolyTxt:SetText(tbl:Get(UI_OPEN_TYPE_HUNT_TREASURE,UIOpenBase.name))
+end
+
+function OnNotification_AutoTaskRed(objs)
+	local active = objs[0]
+	autoTaskFlag:SetSelfActive(active)
+end
+
+function OnNotification_AutoTaskBlue(objs)
+	local active = objs[0]
+	autoTaskCountFlag:SetSelfActive(active)
+end
+
+function OnNotification_ExpeditionRed(objs)
+	local active = objs[0]
+
+	expditionFlag:SetSelfActive(active)
+end
+
+function OnNotification_LotteryRed(objs)
+	local active = objs[0]
+	lotteryFlag:SetSelfActive(active)
+end
+
+function OnNotification_APArenaBlue(objs)
+	local active = objs[0]
+	arenaCountFlag:SetSelfActive(active)
+end
+
+function OnNotification_SkyscraperFlags(objs)
+	local viewData = objs[0]
+	skyTowerCountFlag:SetSelfActive(viewData.blueFlag)
+	skyTowerFlag:SetSelfActive(viewData.redFlag)
+end
+
+function OnNotification_EquipComposeRedFlagChanged(objs)
+	local active = objs[0]
+	OnEquipComposeRedFlagChanged(active)
+end
+
+function OnNotification_HeroComposeRedFlagChanged(objs)
+	local active = objs[0]
+	OnHeroComposeRedFlagChanged(active)
+end
+
+function OnNotification_DragonRedFlagChanged(objs)
+	local active = objs[0]
+	OnDragonRedFlagChanged(active)
+end
+
+function OnNotification_TurnTableRedFlagChanged(objs)
+	local active = objs[0]
+	OnTurnTableRedFlagChanged(active)
+end
+
+function OnNotification_ElementFusionRedFlagChanged(objs)
+	local active = objs[0]
+	OnElementFusionRedFlagChanged(active)
+end
+
+function OnNotification_LanguageChanged(objs)
+	SetMainBuildingName()
+end
+
+function OnNotification_RefreshMonopolyRedFlag(objs)
+	local active = objs[0]
+	OnMonopolyRedFlagChanged(active)
+end
+
+function DoExit()
+	self.Module=nil
+end
+
+function OnDoUnhide()
+	OnReset()
+end
+
+function OnReset()
+	RefreshCenterTxt()
+end
+	
+local modulePathTable = {
+	"BG/Text/AutoTaskName",
+	"BG/Text/ArenaName",
+	"BG/Text/SummonName",
+	"BG/Text/DragonName",
+	"BG/Text/TurnName",
+	"BG/Text/BurnName",
+	"BG/Text/TowerName",
+	"BG/Text/ShopName",
+	"BG/Text/EquipComposeName",
+	"BG/Text/HeroDecomposeName",
+	"BG/Text/HeroComposeName",
+	"BG/Text/ElementFusionName",
+	"BG/Text/GloryRoadName",
+	"BG/Text/MonopolyName"
+}
+local moduleTable = {
+	UI_OPEN_TYPE_AUTOTASK,
+	UI_OPEN_TYPE_PVP,
+	UI_OPEN_TYPE_HEROSUMMON,
+	UI_OPEN_TYPE_DROGAN,
+	UI_OPEN_TYPE_TRUNTABLE,
+	UI_OPEN_TYPE_EXPEDITIOIN,
+	UI_OPEN_TYPE_TOWER,
+	UI_OPEN_TYPE_SHOP,
+	UI_OPEN_TYPE_EQUIPCOMPOSE,
+	UI_OPEN_TYPE_HERODECOMPOSE,
+	UI_OPEN_TYPE_HEROCOMPOSE,
+	UI_OPEN_TYPE_ELEMENT_FUSION,
+	UI_OPEN_TYPE_GLORYROAD,
+	UI_OPEN_TYPE_HUNT_TREASURE,
+}
+function RefreshCenterTxt()
+	for i = 1, #moduleTable do
+		SetModuleEnabled(moduleTable[i], modulePathTable[i])
+	end
+end
+
+function SetModuleEnabled(module, path)
+	local itemObject = self:GetGameObjectAtPath(path)
+	local showHint = false
+	itemObject:SetActive(UIOpen(module, showHint))
+end
+
+function RefreshArenaFlag()
+	arenaEnable = UIOpen(18,false)
+	arenaFlag:SetActive(false)
+	if arenaEnable then
+		arenaFlag:SetActive(CheckArenaCount())
+	end 
+end 
+
+--Center btns--------------------------------------
+function OnBurnTaskBtnClick(sender)
+	if not UIOpen(UI_OPEN_TYPE_EXPEDITIOIN) then
+		return
+    end
+	self:ShowModule("ExpeditionModule",nil,false)
+end 
+
+function OnTurnTableBtnClick(sender)
+	if not UIOpen(UI_OPEN_TYPE_TRUNTABLE) then
+		return
+	end
+	self:ShowModule("TurnTableModule",nil,false)
+end 
+
+function OnEquipComposeBtnClick(sender)
+	if not UIOpen(UI_OPEN_TYPE_EQUIPCOMPOSE) then
+		return
+	end 
+	self:ShowModule("EquipmentComposeModule",nil,false)
+end 
+
+function OnHeroDecompositionBtnClick(sender)
+    if not UIOpen(UI_OPEN_TYPE_HERODECOMPOSE) then
+		return
+	end
+	self:ShowModule("AltarModule",{AltarSubViewTypeEnum.HeroDecompositionView},false)
+end
+
+function OnHeroComposeBtnClick(sender)
+	if not UIOpen(UI_OPEN_TYPE_HEROCOMPOSE) then
+		return
+	end
+	self:ShowModule("HeroComposeModule",nil,false)
+end
+
+function OnDragonBtnClick(sender)
+	if not UIOpen(UI_OPEN_TYPE_DROGAN) then
+		return
+	end
+	self:ShowModule("DragonCrystalModule",{1},false)
+end
+
+function OnArenaBtnClick(sender)
+    if not UIOpen(UI_OPEN_TYPE_PVP) then
+		return
+    end
+	self:ShowModule("ArenaModule",nil,false)
+end
+
+function OnSummonBtnClick(sender)
+    if not UIOpen(UI_OPEN_TYPE_HEROSUMMON) then
+		return
+    end
+	self:ShowModule("LotteryModule",nil,false)
+end
+
+function OnAutoTaskBtnClick(sender)
+    if not UIOpen(UI_OPEN_TYPE_AUTOTASK) then
+		return
+    end
+    self:ShowModule("AutoTaskModule",nil,false)
+end
+
+function OnShopBtnClick(sender)
+	if not UIOpen(UI_OPEN_TYPE_SHOP) then
+		return
+	end
+	self:ShowModule("ShopModule",nil,false)
+end 
+
+function OnSkyscraperBtnClick(sender)
+    if not UIOpen(UI_OPEN_TYPE_TOWER) then
+		return
+    end
+	self:ShowModule("SkyscraperModule",nil)
+end
+
+function OnElementFusionBtnClick(sender)
+	if not UIOpen(UI_OPEN_TYPE_ELEMENT_FUSION) then
+		return
+	end
+	self:ShowModule("ElementFusionModule",{},false)
+end
+
+function OnGloryRoadBtnClick(sender)
+	if not UIOpen(UI_OPEN_TYPE_GLORYROAD) then
+		return
+	end
+	self:ShowModule("GloryRoadModule",nil,false)
+end
+
+function OnMonopolyBtnClick(sender)
+	if not UIOpen(UI_OPEN_TYPE_HUNT_TREASURE) then
+		return
+	end
+	self:ShowModule("TreasureChallengeModule",nil,false)
+end
+
+--Center btns--------------------------------------
+
+
+function OnSendBtnClick(sender)
+
+	local gmStr=gmInput.text
+	if(gmStr=="")then
+		return nil
+	end
+
+	if gmStr == "sendmail" then
+		self:SendCommand("SendMail")
+		return
+	end 
+
+	local result=SplitString(gmStr,"_")
+
+	if(result.Length<=0)then
+		return nil
+	end
+	if result[0] == "beagod" then
+		self:SendCommand("FixHeroLv",200,13)
+		for i=15,60,15 do
+			self:SendCommand("AddItem",i,10)
+		end
+		for i=1,10 do
+			self.BindingContext:ReceiveCommand("AddRes",i,1000000000)
+		end
+	end
+	if(result[0]=="additem")then--添加物品
+		if(result.Length==3)then
+			local itemId=tonumber(result[1])
+			local count=tonumber(result[2])
+			self:SendCommand("AddItem",itemId,count)
+		end
+	elseif(result[0]=="addres")then--添加资源
+		if(result.Length==3)then
+			local itemId=tonumber(result[1])
+			local count=tonumber(result[2])
+			self.BindingContext:ReceiveCommand("AddRes",itemId,count)
+		end
+	elseif(result[0]=="costres")then--消耗资源
+		if(result.Length==3)then
+			local itemId=tonumber(result[1])
+			local count=tonumber(result[2])
+			self.BindingContext:ReceiveCommand("CostRes",itemId,count)
+		end
+	elseif(result[0]=="addhero")then --添加英雄
+		if(result.Length==3)then
+			local heroId=tonumber(result[1])
+			local level = tonumber(result[2])
+			self:SendCommand("AddHero",heroId,level)
+		end
+	elseif(result[0]=="pass")then--通关到指定关卡
+		if(result.Length==4)then
+			local difficulty=tonumber(result[1])
+			local chapter=tonumber(result[2])
+			local stage=tonumber(result[3])
+			self.BindingContext:ReceiveCommand("Pass",difficulty,chapter,stage)
+		end
+	elseif(result[0]=="fixlv")then--升级玩家等级和VIP等级
+		if(result.Length==3)then
+			local lv=tonumber(result[1])
+			local vip=tonumber(result[2])
+			self:SendCommand("FixHeroLv",lv,vip)
+		end
+	elseif(result[0]=="delhero")then --删除英雄
+		if(result.Length>=3)then
+			local heroId=tonumber(result[1])
+			local removeAll=tonumber(result[2])
+			self:SendCommand("RemoveHero",heroId,removeAll)
+		end
+	elseif(result[0]=="delitem")then --删除物品
+		if(result.Length>=3)then
+			local itemId=tonumber(result[1])
+			local removeAll=tonumber(result[2])
+			self:SendCommand("RemoveItem",itemId,removeAll)
+		end
+	elseif(result[0]=="finish")then --完成日常-id
+		if(result.Length == 2)then
+			local id = tonumber(result[1])
+			self:SendCommand("FinishDailyTask", id)
+		end 
+	elseif(result[0]=="resetall")then --重置日常
+		if(result.Length == 1)then
+			self:SendCommand("ResetAllDailyTask")
+		end 
+	elseif(result[0]=="fight")then --重置日常
+		if(result.Length==4)then
+			local difficulty=tonumber(result[1])
+			local chapter=tonumber(result[2])
+			local stage=tonumber(result[3])
+			OnTestBtnClick(difficulty,chapter,stage)
+		end
+	elseif result[0]=="resetsign" then
+	    if result.Length==3 then
+	        local round=tonumber(result[1])
+	        local id=tonumber(result[2])
+	        self:SendCommand("resetsign", round, id)
+	    end
+	elseif(result[0]=="resetGetGold")then --重置点金
+		if(result.Length == 1)then
+			self:SendCommand("ResetGetGold")
+		end 
+	elseif(result[0]=="resetUnionDungeon")then --reset union dungeon
+		if(result.Length == 1)then
+			self:SendCommand("ResetUnionDungeon")
+		end 
+	elseif result[0] == "RuneDowngrade" then
+		if result.Length == 3 then
+			self:SendCommand("RuneDowngrade",tonumber(result[1]),tonumber(result[2]))
+		end 
+	elseif result[0] == "addrelic" then --获得神器
+		if result.Length == 3 then
+			self:SendCommand("AddRelic",tonumber(result[1]),tonumber(result[2]))
+		end
+	elseif result[0] == "upgraderelic" then
+		if result.Length == 3 then
+			self:SendCommand("UpgradeRelic",tonumber(result[1]),tonumber(result[2]))
+		end 
+	elseif result[0] == "toprelic" then
+		if result.Length == 2 then
+			self:SendCommand("TopRelic",tonumber(result[1]))
+		end 
+	elseif result[0] == "onlinereward" then
+		if result.Length == 1 then
+			self:SendCommand("GMOnlineReward")
+		end 
+	elseif result[0] == "getonlinereward" then
+		if result.Length == 2 then
+			self:SendCommand("GMGetOnlineReward",tonumber(result[1]))
+		end 
+	elseif result[0] == "resetonlinereward" then
+		if result.Length == 1 then
+			self:SendCommand("GMResetOnlineReward")
+		end 
+	elseif result[0] == "resetGuide" then
+	    if result.Length == 2 then
+		    self:SendCommand("resetGuide", tonumber(result[1]))
+		end
+	elseif result[0] == "resetdonationrequest" then
+		if result.Length == 1 then
+			self:SendCommand("ResetUnionRequestPiecesCD")
+		end
+	elseif result[0] == "resetdonationcount" then
+		if result.Length == 1 then
+			self:SendCommand("ResetUnionDonationCount")
+		end
+	elseif result[0] == "GetFriendMonster" then
+		if result.Length == 1 then
+			self:SendCommand("GMGetFriendMonster")
+		end
+	elseif result[0] == "beagod" then
+		if result.Length == 1 then
+			self:SendCommand("GMBeAGod")
+		end
+	elseif result[0] == "union" then
+		SendUnionGmCmd(gmStr)
+	elseif result[0] == "addavatarbox" then
+		if result.Length == 2 then
+			self:SendCommand("GMaddavatarbox", tonumber(result[1]))
+		end
+	elseif result[0] == "addjewel" then --获得神器
+		if result.Length == 3 then
+			self:SendCommand("AddJewel",tonumber(result[1]),tonumber(result[2]))
+		end
+	elseif result[0] == "resetdailylottery" then ---重置每日抽取礼包
+		self:SendCommand("ResetDailyLottery")	elseif result[0] == "WorldBossUpdateHP" then
+		if result.Length == 2 then
+			self:SendCommand("GMWorldBoss","gmUpdateHp",tonumber(result[1]))
+		end
+	elseif result[0] == "WorldBossUpdateBuff" then
+		if result.Length == 2 then
+			self:SendCommand("GMWorldBoss","gmUpdateBuff",tonumber(result[1]))
+		end
+	elseif result[0] == "setlimitedtaskstate" then --- 设置限定任务的状态
+		if result.Length == 2 then
+			self:SendCommand("SetLimitedTaskState",tonumber(result[1]))
+		end
+	elseif result[0] == "ResetMaze" then --- 设置限定任务的状态
+		if result.Length == 1 then
+			self:SendCommand("GMResetMaze")
+		end
+	elseif result[0] == "MazeSkipFloor" then --- 设置限定任务的状态
+		if result.Length == 2 then
+			self:SendCommand("GMMazeSkipFloor",tonumber(result[1]))
+		end
+	elseif result[0] == "MazeGetItem" then --- 设置限定任务的状态
+		if result.Length == 3 then
+			self:SendCommand("GMMazeGetItem",tonumber(result[1]),tonumber(result[2]))
+		end
+	elseif result[0] == "finishrealnamecheck" then --- 实名认证完成
+		self:SendCommand("GMFinishRealNameCheck")
+	end
+end
+
+function SendUnionGmCmd(gmStr)
+	local inputArray = SplitString(gmStr,"_")
+	local paramCount = inputArray.Length
+	local cmdIdx = 1
+	local subCmd = inputArray[cmdIdx]
+	local cmdStr = "UnionGM"
+
+	if subCmd == "Upgrade" and paramCount == 3 then
+		self:SendCommand(cmdStr, "Upgrade", inputArray[cmdIdx + 1])
+	elseif subCmd == "CleanExp" then
+		self:SendCommand(cmdStr, "CleanExp")
+	elseif subCmd == "AddExp" and paramCount == 3 then
+		self:SendCommand(cmdStr, "AddExp", inputArray[cmdIdx + 1])
+	elseif subCmd == "Dismiss" then
+		self:SendCommand(cmdStr, "Dismiss")
+	elseif subCmd == "Demise" then
+		self:SendCommand(cmdStr, "Demise")
+	elseif subCmd == "ResetCheckin" then
+		self:SendCommand(cmdStr, "ResetCheckin")
+	elseif subCmd == "SetTech" and paramCount == 4 then
+		self:SendCommand(cmdStr, "SetTech", inputArray[cmdIdx + 1], inputArray[cmdIdx + 2])
+	elseif subCmd == "ResetTech" then
+		self:SendCommand(cmdStr, "ResetTech")
+	elseif subCmd == "ClearDungeon" and paramCount == 3 then
+		self:SendCommand(cmdStr, "ClearDungeon", inputArray[cmdIdx + 1])
+	elseif subCmd == "ResetDungeon" then
+		self:SendCommand(cmdStr, "ResetDungeon")
+	elseif subCmd == "ClaimDungeonBonus" then
+		self:SendCommand(cmdStr, "ClaimDungeonBonus")
+	elseif subCmd == "FinishAllOrder" then
+		self:SendCommand(cmdStr, "FinishAllOrder")
+	elseif subCmd == "ResetHarborCD" then
+		self:SendCommand(cmdStr, "ResetHarborCD")
+	elseif subCmd == "UpgradeOrder" and paramCount == 3 then
+		self:SendCommand(cmdStr, "UpgradeOrder", inputArray[cmdIdx + 1])
+	elseif subCmd == "ResetHarborDonation" then
+		self:SendCommand(cmdStr, "FinishAllOrder")
+	elseif subCmd == "ResetDonationCD" then
+		self:SendCommand(cmdStr, "ResetDonationCD")
+	elseif subCmd == "ResetDonation" then
+		self:SendCommand(cmdStr, "ResetDonation")
+	end
+end
+
+function OnNotification_RefreshArena(objs)
+	RefreshArenaFlag()
+end 
+
+function OnEquipComposeRedFlagChanged(redFlag)
+	equipComposeFlag:SetSelfActive(redFlag)
+end
+
+function OnHeroComposeRedFlagChanged(redFlag)
+	heroComposeFlag:SetSelfActive(redFlag)
+end 
+
+
+function OnDragonRedFlagChanged(redFlag)
+	dragonFlag:SetSelfActive(redFlag)
+end
+
+function OnTurnTableRedFlagChanged(redFlag)
+	turnTableFlag:SetSelfActive(redFlag)
+end
+
+function OnElementFusionRedFlagChanged(redFlag)
+	elementFusionFlag:SetSelfActive(redFlag)
+end
+
+function OnMonopolyRedFlagChanged(redFlag)
+	monopolyFlag:SetSelfActive(redFlag)
+end
+
+function OnNotification_OnPackGMResp(resp)
+	if(resp[0].status==0)then
+		OnReset()
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("GMOK"))	
+	end
+	
+end
+
+function OnNotification_OnGMResp(resp)
+	if(resp[0]~=nil)then
+		if resp[0].upLevelRewardItems ~= nil then
+			GMLevelUp(resp[0].upLevelRewardItems)
+		end 
+		OnReset()
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("GMOK"))	
+	end
+end
+
+function GMLevelUp(rewards)
+	PlayerLevelUp(self.Module, rewards)
+end 
+
+function OnAddGemBtnClick(sender)
+    self:ShowModule("PayModule",nil,false)
+end
+
+function MoveTo(y)
+    y=y+668
+    castle:SetPosition(0,y,0)
+	castleText:SetPosition(0,y,0)
+end
+
+function MoveToTower()
+    MoveTo(0)
+end
+
+function MoveToPvp()
+    MoveTo(500)
+end
+
+function MoveToAutoTask()
+    MoveTo(0)
+end
+
+function MoveToSummon()
+    MoveTo(300)
+end
+
+function MoveToDeCompose()
+    MoveTo(300)
+end
+
+function MoveToShop()
+    MoveTo(150)
+end
+
+function MoveToExpedition()
+    MoveTo(0)
+end
+
+function MoveToElementFusion()
+	MoveTo(-100)
+end
+
+function MoveToGloryRoad()
+    MoveTo(-200)
+end
+
+function MoveToTurnTable()
+    MoveTo(0)
+end
+
+function MoveToDragon()
+    MoveTo(100)
+end
+
+function MoveToTreasure()
+	MoveTo(-220)
+end
+
+function EnableBanner()
+	CsBridge.MoneyBanner.SetButtonsEnabled(true)
+end

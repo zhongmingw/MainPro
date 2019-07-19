@@ -1,0 +1,40 @@
+
+function OnSkyscraperItemSlotBindValue(slot,data)
+	local slotTrans = slot.transform
+	local fightBtn_GO=slot:GetGameObjectAtPath("FightBtn")
+	local fight_Btn = fightBtn_GO:GetComponent("ButtonArchly")
+	local spine_TF=slotTrans:Find("SpineGO")
+	local box_TF = slotTrans:Find("BoxSpineGO")
+	local boxSpine = box_TF:GetComponentAtPath("BoxSpine" ,CLS_SKELETONGRAPHIC)
+	local Bg_Raw=slot:GetComponentAtPath("BGRaw" ,"UnityEngine.UI.RawImage")
+	local level_Lab=slot:GetComponentAtPath("LevelTxt" ,CLS_TEXT)
+
+	if spine_TF.childCount~=0  then
+		local model = spine_TF:GetChild(0)
+		CsBridge.objectCache:Recycle(model.gameObject)
+	end
+	level_Lab.text=tostring(data.id)
+	local iconName = slot.m_index%2==0 and "ui_bg_stairs01" or "ui_bg_stairs02"
+	CsBridge.IconData.SetRawImageByName(Bg_Raw.gameObject,iconName)
+	if data.showRewards then
+		if data.id%5==0 and data.status~=0 then
+			box_TF.gameObject:SetSelfActive(true)
+			boxSpine:PlayAnimation("full_stand",true,nil,nil)
+		else
+			box_TF.gameObject:SetSelfActive(false)
+			boxSpine:PlayAnimation("empty_stand",true,nil,nil)
+		end
+	end
+	fightBtn_GO.gameObject:SetSelfActive(data.status==1)
+	if data.status~=0 then
+		local infos=ResTblContainer:GetRowFromTbl(Skyscraper.tblName,tostring(data.id),Skyscraper.monsterStr)
+		local monsterStr=infos[0]
+		local monsterInfos = SplitString(monsterStr,";")
+	    local monsterId=SplitString(monsterInfos[0],",")[1]
+		local spineModelId = ResTblContainer:GetPropToInt(tonumber(monsterId),Monster.actorId,Monster.actorTbl)
+		local spineModel=ResTblContainer:GetPropToStr(spineModelId,"model","HeroBase")
+		CsBridge.SpineHelper.CreatSpineModel(spineModel,"stand",spine_TF,true)
+	end
+
+ end 
+

@@ -1,0 +1,53 @@
+
+ç
+SettingData.protoSettingDataplayerData.protostage.proto">
+SettingInfo
+music (
+sound (
+	languange (	"A
+ChangeSettingReq-
+settingInfo (2.SettingData.SettingInfo"#
+ChangeSettingResp
+result (""
+SendFeedbackReq
+content (	""
+SendFeedbackResp
+result ("
+GetAllZonesReq
+
+id ("D
+GetAllZonesResp1
+	zoneInfos (2.playerData.ZoneWithPlayerInfo"?
+ChangePwdReq
+account (	
+oldPwd (	
+newPwd (	"
+ChangePwdResp
+result ("!
+RewardGiftCodeReq
+code (	"$
+RewardGiftCodeResp
+result (""
+CheckGiftCodeOpenReq
+
+id ("_
+CheckGiftCodeOpenResp
+giftCodeOpen (
+facebookOpen (
+authenticationOpen ("?
+IdentityVerifyReq
+
+ID (	
+name (	
+rewardId (";
+IdentityVerifyResp%
+
+rewardItem (2.stage.RewardItem")
+CheckIdentityVerityReq
+useless (")
+CheckIdentityVerityResp
+isAuth ("&
+GMIdentityVerifyReq
+useless ("&
+GMIdentityVerifyResp
+status (

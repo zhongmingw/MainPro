@@ -1,0 +1,37 @@
+
+×
+RuneData.protoRuneData"J
+RuneConversionRecord
+heroUid (
+level (
+
+attributes ("
+
+GetRuneReq
+heroUid ("
+GetRuneResp
+status ("$
+RuneConversionReq
+heroUid ("(
+RuneConversionResp
+
+attributes ("(
+RuneConversionSaveReq
+heroUid ("(
+RuneConversionSaveResp
+status ("*
+RuneConversionCancelReq
+heroUid ("*
+RuneConversionCancelResp
+status ("1
+RuneUpgradeReq
+heroUid (
+isLock ("%
+RuneUpgradeResp
+
+attributes ("4
+GmRuneDowngradeReq
+heroUid (
+level ("%
+GmRuneDowngradeResp
+result (

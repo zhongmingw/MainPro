@@ -1,0 +1,263 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-01-25 09:47:05
+
+require "ItemMatItemSlot"
+require "JewelDespItemSlot"
+
+local isInit = false
+
+local oldJewelView
+local newJewelView
+local maxJewelView
+local despGrid
+local arrowTrans
+local itemMatGrid
+local consume
+local upStarBtn
+local maxTips
+local effectObj
+
+local arrowPos
+local arrowTweener
+
+local moveDelta
+local upArrowObj
+local downArrowObj
+
+function DoInit()	
+    self.Anim = 0
+end
+
+function InitUI()
+    arrowTrans = self:GetComponentAtPath("Center/iconImg",CLS_RECTTRANSFORM)
+    arrowPos = arrowTrans:CheckPosition()
+    oldJewelView = {
+        obj = self:GetGameObjectAtPath("Center/OldJewel"),
+        trans = self:GetComponentAtPath("Center/OldJewel",CLS_RECTTRANSFORM),
+        frame = self:GetGameObjectAtPath("Center/OldJewel/JewelItemSlot/Item/FrameSprite"),
+        icon = self:GetGameObjectAtPath("Center/OldJewel/JewelItemSlot/Item/IconSprite"),
+        addFlag = self:GetGameObjectAtPath("Center/OldJewel/JewelItemSlot/Item/AddFlag"),
+        equipFlag = self:GetGameObjectAtPath("Center/OldJewel/JewelItemSlot/Item/EquipFlag"),
+        redFlag = self:GetGameObjectAtPath("Center/OldJewel/JewelItemSlot/Item/RedFlag"),
+        starRoot = self:GetComponentAtPath("Center/OldJewel/JewelItemSlot/StarRoot",CLS_RECTTRANSFORM)
+    }
+    newJewelView = {
+        obj = self:GetGameObjectAtPath("Center/NewJewel"),
+        trans = self:GetComponentAtPath("Center/NewJewel",CLS_RECTTRANSFORM),
+        frame = self:GetGameObjectAtPath("Center/NewJewel/JewelItemSlot/Item/FrameSprite"),
+        icon = self:GetGameObjectAtPath("Center/NewJewel/JewelItemSlot/Item/IconSprite"),
+        addFlag = self:GetGameObjectAtPath("Center/NewJewel/JewelItemSlot/Item/AddFlag"),
+        equipFlag = self:GetGameObjectAtPath("Center/NewJewel/JewelItemSlot/Item/EquipFlag"),
+        starRoot = self:GetComponentAtPath("Center/NewJewel/JewelItemSlot/StarRoot",CLS_RECTTRANSFORM)
+    }
+    maxJewelView = {
+        obj = self:GetGameObjectAtPath("Center/MaxJewel"),
+        trans = self:GetComponentAtPath("Center/MaxJewel",CLS_RECTTRANSFORM),
+        frame = self:GetGameObjectAtPath("Center/MaxJewel/JewelItemSlot/Item/FrameSprite"),
+        icon = self:GetGameObjectAtPath("Center/MaxJewel/JewelItemSlot/Item/IconSprite"),
+        addFlag = self:GetGameObjectAtPath("Center/MaxJewel/JewelItemSlot/Item/AddFlag"),
+        equipFlag = self:GetGameObjectAtPath("Center/MaxJewel/JewelItemSlot/Item/EquipFlag"),
+        starRoot = self:GetComponentAtPath("Center/MaxJewel/JewelItemSlot/StarRoot",CLS_RECTTRANSFORM)
+    }
+    despGrid = self:GetComponentAtPath("Center/ScrollRect/Viewport/DespGrid",CLS_UI_ITEM_GRID)
+    itemMatGrid = self:GetComponentAtPath("Center/upgrade/ItemMatGrid",CLS_UI_ITEM_GRID)
+    consume = {
+        obj = self:GetGameObjectAtPath("Center/upgrade/Consume"),
+        icon = self:GetGameObjectAtPath("Center/upgrade/Consume/IconImg"),
+        num = self:GetComponentAtPath("Center/upgrade/Consume/NumTxt",CLS_TEXT)
+    }
+    upStarBtn = self:GetComponentAtPath("button/UpStarBtn",CLS_BUTTON_ARCHLY)
+    maxTips = self:GetGameObjectAtPath("button/MaxTips")
+    effectObj = self:GetGameObjectAtPath("Effect")
+
+    upArrowObj = self:GetGameObjectAtPath("Center/UpArrow")
+    downArrowObj = self:GetGameObjectAtPath("Center/DownArrow")
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitJewelUpStarData")
+end
+
+function OnClose()
+    oldJewelView.obj:SetSelfActive(false)
+    newJewelView.obj:SetSelfActive(false)
+    maxJewelView.obj:SetSelfActive(false)
+    consume.obj:SetSelfActive(false)
+    upArrowObj:SetSelfActive(false)
+    downArrowObj:SetSelfActive(false)
+    despGrid:ClearItems()
+    itemMatGrid:ClearItems()
+    if arrowTweener then
+        arrowTweener:DoKill(true)
+    end
+    arrowTrans:ResetPosition(arrowPos)
+    self:SendCommand("CloseJewelUpStarView")
+end
+
+function BeoforeReturnBack()
+    self:HideView(self.gameObject.name)
+end
+
+local function RefreshJewel(jewelView, jewel)
+    if jewel.id == 0 then
+        SetDefaultQuality(jewelView.frame)
+        jewelView.icon:SetSelfActive(false)
+        jewelView.starRoot.gameObject:SetSelfActive(false)
+        jewelView.equipFlag:SetSelfActive(false)
+        jewelView.addFlag:SetSelfActive(true)
+    else
+        jewelView.icon:SetSelfActive(true)
+        jewelView.starRoot.gameObject:SetSelfActive(true)
+        jewelView.equipFlag:SetSelfActive(jewel.isEquip)
+        jewelView.addFlag:SetSelfActive(false)
+        JewelUtils.SetJewelIcon(jewelView.icon, jewel.icon)
+        JewelUtils.SetJewelQuality(jewelView.frame, jewel.quality)
+        JewelUtils.SetJewelStar(jewelView.starRoot, jewel.star)
+    end
+    jewelView.obj:SetSelfActive(true)
+end
+
+local function RefreshJewelDesp(despArr)
+    local count = #despArr
+    upArrowObj:SetSelfActive(count ~= 0)
+    downArrowObj:SetSelfActive(count ~= 0)
+    despGrid:RefreshItemSlots(despArr, self.gameObject, "JewelDespItemSlot")
+end
+
+local function RefreshSingleJewelMat(mat)
+    itemMatGrid:SingleRefreshSlot(mat)
+end
+
+local function RefreshJewelMat(matArr)
+    itemMatGrid:RefreshItemSlots(matArr, self.gameObject, "ItemMatItemSlot")
+end
+
+local function RefreshConsume(consumeArr)
+    if consumeArr then
+        local co = consumeArr[1]
+        consume.obj:SetSelfActive(true)
+        ShowOneConsume(consume.icon,consume.num,co)
+        SetFontColorWithEnough(consume.num, function()
+            return CheckItemEnough(co.id, co.typeId, co.count, false)
+        end,color25)
+    else
+        consume.obj:SetSelfActive(false)
+    end
+end
+
+local function RefreshBtnState(gray)
+    upStarBtn.Gray = gray
+end
+
+local function RefreshArrowState(anim)
+    if anim then
+        if arrowTweener then
+            arrowTweener:DoKill(true)
+        end
+        arrowTrans:ResetPosition(arrowPos)
+        arrowTweener = CsBridge.TweenUtils.MoveLeftRight(arrowTrans, arrowPos.x+10, 0.5)
+    else
+        if arrowTweener then
+            arrowTweener:DoKill(true)
+        end
+    end
+end
+
+function OnNotification_RefreshJewelUpStarView(objs)
+    local oldJewel, newJewel, matArr, consumeArr, despArr = objs[0], objs[1], objs[2], objs[3], objs[4]
+    if newJewel then
+        RefreshJewel(oldJewelView, oldJewel)
+        RefreshJewel(newJewelView, newJewel)
+        maxJewelView.obj:SetSelfActive(false)
+        RefreshBtnState(oldJewel.id == 0)
+        maxTips:SetSelfActive(false)
+        RefreshArrowState(oldJewel.id ~= 0)
+    else
+        RefreshJewel(maxJewelView, oldJewel)
+        oldJewelView.obj:SetSelfActive(false)
+        newJewelView.obj:SetSelfActive(false)
+        RefreshBtnState(true)
+        maxTips:SetSelfActive(true)
+        RefreshArrowState(false)
+    end
+    RefreshJewelMat(matArr)
+    RefreshConsume(consumeArr)
+    RefreshJewelDesp(despArr)
+end
+
+function OnNotification_RefreshOldJewelUpStarRedFlag(objs)
+    local redFlag = objs[0]
+    oldJewelView.redFlag:SetSelfActive(redFlag)
+end
+
+function OnNotification_RefreshSingleJewelUpStarMat(objs)
+    local mat = objs[0]
+    RefreshSingleJewelMat(mat)
+end
+
+function OnNotification_ShowUpStarJewelEffect(objs)
+    local onFinish = objs[0]
+    effectObj:SetSelfActive(true)
+    local spineName = "EquipmentComposeSpine"
+    local animName = "a_1"
+    CsBridge.CacheAssetsByGroup(spineName,function()
+        local obj = CsBridge.objectCache:CreateObject(spineName, true, oldJewelView.trans)
+        -- local pos = {
+        --     x = 0,
+        --     y = -300
+        -- }
+        -- obj.transform:ResetAnchoredPosition(pos)
+		obj:GetComponent(CLS_SKELETONGRAPHIC):PlayAnimation(animName,false,function()
+			local name = obj.name
+			CS.UnityEngine.GameObject.Destroy(obj)
+            CsBridge.objectCache:ClearGroup(name, true)
+            effectObj:SetSelfActive(false)
+			onFinish()
+		end)
+	end,spineName)
+end
+
+function OnJewelItemSlotClick(sender)
+    self:SendCommand("OpenUpStarJewelSelectView")
+end
+
+function OnItemMatGridItemMatItemSlotClick(obj)
+    local index = obj.m_index
+    self:SendCommand("OpenUpStarJewelMatSelectView", index)
+end
+
+function OnUpStarBtnClick(sender)
+    self:SendCommand("UpStarJewel")
+end
+
+function OnHelpBtnClick(sender)
+    ShowHelpTip(self,INSTRUCTION_JEWEL_UPSTAR)
+end
+
+function DoExit()
+    isInit = nil
+
+    oldJewelView = nil
+    newJewelView = nil
+    maxJewelView = nil
+    despGrid = nil
+    arrowTrans = nil
+    itemMatGrid = nil
+    consume = nil
+    upStarBtn = nil
+    maxTips = nil
+    effectObj = nil
+
+    arrowPos = nil
+    arrowTweener = nil
+
+    moveDelta = nil
+    upArrowObj = nil
+    downArrowObj = nil
+end

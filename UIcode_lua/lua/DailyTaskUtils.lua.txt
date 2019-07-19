@@ -1,0 +1,346 @@
+local subscribeState = nil
+local initData = false
+local refreshRedCallback = nil
+
+---排序
+local function SortDailyTask(a, b)
+    if (a.status ~= b.status) then
+        if b.status == DailyTaskItemStateEnum.GotReward then
+            return a.status < b.status
+        elseif a.status == DailyTaskItemStateEnum.GotReward then
+            return a.status < b.status
+        else
+            return a.status > b.status
+        end
+    end
+    return a.id < b.id
+end
+
+---通过str获取到奖励
+local function GetRewardByStr(strValue)
+    local result = {}
+    if strValue == nil or strValue == "" then
+        return result
+    end
+    local strArr = string.split(strValue, ",")
+    local id = tonumber(strArr[1])
+    local typeId = tonumber(strArr[0])
+    local count = tonumber(strArr[2])
+    result.id = id
+    result.typeId = typeId
+    result.count = count
+    return result
+end
+
+---初始化日常任务的数据
+local function InitDailyTaskData(dailyTask)
+    local result = {}
+    result.id = dailyTask.id
+    result.count = dailyTask.count
+    result.status = dailyTask.status
+    result.showGoBtn = result.status == DailyTaskItemStateEnum.NotFinish
+    result.getBtnGray = result.status == DailyTaskItemStateEnum.GotReward
+    result.rewardStr = ResTblContainer:GetPropToStr(result.id, DailyTask.rewardStr, DailyTask.tblName)
+    result.reward = GetRewardByStr(result.rewardStr)
+    result.allCount = ResTblContainer:GetPropToInt(result.id, DailyTask.count, DailyTask.tblName)
+    result.sliderTxt = result.count .. "/" .. result.allCount
+    result.sliderValue = result.count / result.allCount
+    result.description = ResTblContainer:GetPropToStr(result.id, DailyTask.desc, DailyTask.tblName)
+    result.linkedSysId = ResTblContainer:GetPropToInt(result.id, DailyTask.linkedSys, DailyTask.tblName)
+    return result
+end
+
+---从同步的协议里面读取出任务列表
+local function GetDailyTaskArr()
+    local dailyTaskArr = {}
+    local totalCount = 0
+    local finishedCount = 0
+    local dailyTaskInfo = appData:checkData("DailyTaskInfo")
+    if dailyTaskInfo == nil or dailyTaskInfo.dailyTasks == nil then
+        return dailyTaskArr
+    end
+    --筛选出open的任务
+    local tbl = ResTblContainer:GetTable(DailyTask.tblName)
+    for i, dailyTask in ipairs(dailyTaskInfo.dailyTasks) do
+        --选出已经开放的系统
+        if tonumber(tbl:Get(dailyTask.id, DailyTask.open)) == 1 then
+            totalCount = totalCount + 1
+            local taskItem = InitDailyTaskData(dailyTask)
+            if taskItem.status == DailyTaskItemStateEnum.GotReward then
+                finishedCount = finishedCount + 1
+            end
+            table.insert(dailyTaskArr, InitDailyTaskData(dailyTask))
+        end
+    end
+    table.sort(dailyTaskArr, SortDailyTask)
+    return dailyTaskArr, totalCount, finishedCount
+end
+
+---获取真正的支付项
+local function GetRealPayId()
+    local SCRIBE_ID = GetConstValue("SubscribePayId")
+    local PASS_ID = GetConstValue("PassportPayId")
+    return SCRIBE_ID == PASS_ID and SCRIBE_ID or PASS_ID, SCRIBE_ID, PASS_ID
+end
+
+---服务器请求
+local function HttpInitDailyTaskItemList(callback)
+    local req = {
+        id = 0
+    }
+    HttpRequest("refreshDailyTask", "RefreshDailyTaskReq", "RefreshDailyTaskResp", req, function(resp)
+        if resp.result == 0 and callback then
+            callback()
+        end
+    end)
+end
+
+---获取日常任务的奖励
+local function TakeDailyTaskReward(id, callback)
+    local req = {}
+    req.id = id
+    HttpRequest("takeDailyTaskReward", "TakeDailyTaskRewardReq", "TakeDailyTaskRewardResp", req, function(resp)
+        if resp and callback then
+            callback(resp)
+        end
+    end)
+end
+
+---获取订阅状态
+local function GetSubscribeState(callback)
+    local req = {}
+    req.id = GetRealPayId()
+    HttpRequest("checkSubscription", "CheckSubscriptionReq", "CheckSubscriptionResp", req, function(resp)
+        if resp and callback then
+            callback(resp)
+        end
+    end)
+end
+
+--- 请求获取每日任务需要的数据
+local function GetDailyTaskServerData(callBack)
+    if initData and callBack and subscribeState then
+        callBack()
+        return
+    end
+    local function SubscribeReqCallBack(resp)
+        subscribeState = resp
+        initData = true
+        if callBack then
+            callBack()
+        end
+    end
+    local function DailyTaskReqCallBack()
+        GetSubscribeState(SubscribeReqCallBack)
+    end
+    HttpInitDailyTaskItemList(DailyTaskReqCallBack)
+end
+
+---是否可以购买通行证
+local function GetCanBuySubscribe(callback)
+    local GetSubscribeStateCallBack = function(subscribeStateResp)
+        local result = {}
+        result.seasonCardEndTime = subscribeStateResp.seasonCardEndTime
+        result.subEndTime = subscribeStateResp.endTime
+        result.firstSub = subscribeStateResp.firstSub
+        result.remainTime = result.seasonCardEndTime > 0 and result.seasonCardEndTime or result.subEndTime
+        result.canFree = subscribeStateResp.firstSub
+        result.canUse = result.seasonCardEndTime <= 0 and result.subEndTime <= 0
+        result.canBuy = subscribeStateResp.endTime <= 0 and result.seasonCardEndTime <= 0
+        result.canPayBuy = subscribeStateResp.endTime <= 0
+        result.canGetPayReward = subscribeStateResp.canReward
+        result.consumeType = subscribeStateResp.consumeType
+        if callback then
+            callback(result)
+        end
+    end
+    GetSubscribeState(GetSubscribeStateCallBack)
+end
+
+---开始回调
+local function StartCallback(callback)
+    if callback then
+        callback()
+    end
+end
+
+---开始倒计时
+local function StartSubscribeTicker(self, viewData, callback)
+    local TICKER_NAME = "ticker_subscribeTicker"
+    local TICKER_TASK = "ticker_daily_season"
+
+    --刷新订阅倒计时
+    local subscribeRemainTime = viewData.subscribeRemainTime
+    if subscribeRemainTime > CsBridge.timeManager.ServerTime then
+        Timer:AddTicker(TICKER_NAME, subscribeRemainTime, function(targetTime)
+            local str = CheckTimeRemain(subscribeRemainTime, false)
+            viewData.subscribeRemainTimeStr = string.format(Language:getStr("SubscribeRemainTimeTips"), str)
+            if self then
+                self:SendNotification("RefreshSubscribeStr", viewData.subscribeRemainTimeStr)
+            end
+        end, function()
+            StartCallback(callback)
+            StartCallback(refreshRedCallback)
+        end)
+    end
+
+    --刷新任务周期倒计时
+    local seasonEndTime = viewData.seasonEndTime
+    if seasonEndTime <= CsBridge.timeManager.ServerTime then
+        return
+    end
+    Timer:AddTicker(TICKER_TASK, seasonEndTime, function(targetTime)
+        local timeStr = CheckTimeRemain(seasonEndTime, false)
+        if self then
+            self:SendNotification("ShowRewardRemainTime", timeStr)
+        end
+    end, function()
+        if callback and seasonEndTime ~= subscribeRemainTime then
+            StartCallback(callback)
+            StartCallback(refreshRedCallback)
+        end
+    end)
+end
+
+---停止订阅倒计时
+local function StopSubscribeTicker()
+    local TICKER_NAME = "ticker_subscribeTicker"
+    local TICKER_TASK = "ticker_daily_season"
+    Timer:StopTicker(TICKER_NAME)
+    Timer:StopTicker(TICKER_TASK)
+end
+
+---初始化订阅按钮的状态
+local function InitBuySubscribeBtnState(viewData)
+    local NO_SCRIBE_IMAGE_NAME = "new_com_reward02"
+    local SCRIBE_IMAGE_NAME = "new_com_reward01"
+    local dailyTaskInfo = appData:checkData("DailyTaskInfo")
+    local payId = GetRealPayId()
+    viewData.subscribeRemainTime = 0
+    viewData.seasonEndTime = dailyTaskInfo.seasonEndTime
+    viewData.seasonCard = dailyTaskInfo.seasonCard
+    viewData.payData = payId ~= 0 and CheckPayData(payId) or {}
+    viewData.showBuyBtn = true
+    viewData.alreadyBuyGray = false
+    viewData.showAllBtn = payId ~= 0
+
+    if subscribeState.endTime > 0 or dailyTaskInfo.seasonCard == true then
+        ---有特权
+        viewData.iconName = SCRIBE_IMAGE_NAME
+        viewData.showBuyBtn = false
+        viewData.alreadyBuyGray = true
+        viewData.subscribeRemainTime = subscribeState.endTime
+        if subscribeState.seasonCardEndTime > 0 then
+            viewData.subscribeRemainTime = subscribeState.seasonCardEndTime
+        end
+    else
+        viewData.iconName = NO_SCRIBE_IMAGE_NAME
+    end
+
+    local remainTimeStr = "00:00:00"
+    if viewData.subscribeRemainTime > CsBridge.timeManager.ServerTime then
+        remainTimeStr = CheckTimeRemain(viewData.subscribeRemainTime, false)
+    end
+    viewData.subscribeRemainTimeStr = string.format(Language:getStr("SubscribeRemainTimeTips"), remainTimeStr)
+end
+
+---每日任务是否有奖励可获取
+local function CanGetDailyTaskReward(dailyTaskInfo)
+    if dailyTaskInfo == nil or dailyTaskInfo.dailyTasks == nil then
+        return false
+    end
+    for i = 1, #dailyTaskInfo.dailyTasks do
+        if dailyTaskInfo.dailyTasks[i].status == DailyTaskItemStateEnum.Finished then
+            return true
+        end
+    end
+    return false
+end
+
+---是否可以获取通行证奖励
+local function CanGetSubscribeReward(subscribeStateResp)
+    local subscribeRewardUtils = require "SubscribeRewardUtils"
+    local haveSubscribe = subscribeStateResp.endTime > 0 or subscribeStateResp.seasonCardEndTime > 0
+    local subRewardData = subscribeRewardUtils.GetAllItemArr(not haveSubscribe)
+    local haveSubReward = subRewardData.haveReward
+    return haveSubReward
+end
+
+---是否可以有奖励可以领取
+local function CanGetReward(subscribeStateResp)
+    local dailyTaskInfo = appData:checkData("DailyTaskInfo")
+    local haveDailyReward = CanGetDailyTaskReward(dailyTaskInfo)
+    local haveSubReward = CanGetSubscribeReward(subscribeStateResp)
+    if haveDailyReward or haveSubReward then
+        return true
+    end
+    return false
+end
+
+---是否能获取奖励
+local function HaveRewardToGet(callback)
+    initData = false
+    GetDailyTaskServerData(function()
+        local result = false
+        result = CanGetReward(subscribeState)
+        if callback then
+            callback(result)
+        end
+    end)
+end
+
+---清理服务器缓存的数据
+local function ClearServerData()
+    StopSubscribeTicker()
+    subscribeState = nil
+    initData = false
+    refreshRedCallback = nil
+end
+
+---购买订阅
+local function BuySubscribe(viewOrModel, callback)
+    local payId, SCRIBE_ID, PASS_ID = GetRealPayId()
+    if payId <=0 then
+        return
+    end
+    if CheckCanBuy(nil, payId) then
+        local payData = CheckPayData(payId)
+        DoPayActivity(0, payData, function(resp)
+            if payId == SCRIBE_ID and callback then
+                callback()
+                return
+            end
+            local subscribeUtils = require "SubscribeUtils"
+            local reward = subscribeUtils.GetSubscribeDiamondAndVipReward(PASS_ID)
+            if payId == PASS_ID and #reward > 0 then
+                ShowRewardReceivedTip(viewOrModel, reward, callback, true)
+            else
+                StartCallback(callback)
+            end
+        end)
+    else
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("SubscribeItemAlreadyHave"), 2)
+    end
+end
+
+---设置刷新红点的回调
+local function SetRefreshRedCallback(callback)
+    refreshRedCallback = callback
+end
+
+return {
+    TakeDailyTaskReward = TakeDailyTaskReward,
+    HttpInitDailyTaskItemList = HttpInitDailyTaskItemList,
+    GetSubscribeState = GetSubscribeState,
+    InitBuySubscribeBtnState = InitBuySubscribeBtnState,
+    GetCanBuySubscribe = GetCanBuySubscribe,
+    StartSubscribeTicker = StartSubscribeTicker,
+    StopSubscribeTicker = StopSubscribeTicker,
+    HaveRewardToGet = HaveRewardToGet,
+    GetDailyTaskArr = GetDailyTaskArr,
+    GetDailyTaskServerData = GetDailyTaskServerData,
+    ClearServerData = ClearServerData,
+    BuySubscribe = BuySubscribe,
+    CanGetSubscribeReward = CanGetSubscribeReward,
+    SetRefreshRedCallback = SetRefreshRedCallback,
+}

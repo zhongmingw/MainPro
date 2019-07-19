@@ -1,0 +1,111 @@
+
+´
+Activity.protoActivitystage.proto"s
+WonderActivityPackageConfig
+
+activityId (
+payId (
+type (
+	rewardStr (	
+buyLimit ("W
+ActivityPackage5
+detail (2%.Activity.WonderActivityPackageConfig
+count ("%
+GetActivityPackageReq
+type ("M
+GetActivityPackageResp3
+activityPackages (2.Activity.ActivityPackage"5
+GetChargedNumReq
+
+activityId (
+payId (" 
+GetChargedNumResp
+num ("s
+OnlineRewardConfig
+
+id (
+rewardId (
+time (
+title (	"
+rewards (2.stage.RewardItem"(
+GetOnlineRewardActivityReq
+
+id ("€
+GetOnlineRewardActivityResp0
+
+activities (2.Activity.OnlineRewardConfig
+onlineRewardStartTime (
+rewardId ("/
+OnlineRewardReq
+
+id (
+rewardId (":
+OnlineRewardResp&
+rewardItems (2.stage.RewardItem"$
+GmOnlineRewardReq
+useless ("$
+GmOnlineRewardResp
+status ("4
+GmGetOnlineRewardReq
+
+id (
+rewardId ("?
+GmGetOnlineRewardResp&
+rewardItems (2.stage.RewardItem")
+GmResetOnlineRewardReq
+useless (")
+GmResetOnlineRewardResp
+status ("*
+GetActivityPackageInfoReq
+types ("4
+ActivityPackageInfo
+type (
+endTime ("Y
+GetActivityPackageInfoResp;
+activityPackageInfos (2.Activity.ActivityPackageInfo"*
+GetFirstChargeRewardReq
+useless ("W
+GetFirstChargeRewardResp&
+rewardItems (2.stage.RewardItem
+firstCharge ("&
+CheckSevenTargetReq
+useless ("I
+CheckSevenTargetResp
+isOpen (
+endTime (
+showTips ("!
+SevenTargetReq
+useless ("ƒ
+SevenTargetResp
+dayCount (
+taskEndTime (
+	awardTime ('
+taskList (2.Activity.SevenTarget
+icons (	"ý
+SevenTarget
+
+id (
+description (	
+type (
+date (
+level (
+progress (
+goal (
+status (
+rewardClaimed	 (
+unlocked
+ ("
+rewards (2.stage.RewardItem
+typeTag (	
+showProgress (""
+SevenTargetRewardReq
+
+id ("?
+SevenTargetRewardResp&
+rewardItems (2.stage.RewardItem"G
+HeroSubstitutionReq
+heroId (
+mainUid (
+subUids (":
+HeroSubstitutionResp"
+results (2.stage.RewardItem

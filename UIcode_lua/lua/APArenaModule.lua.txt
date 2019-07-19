@@ -1,0 +1,14 @@
+function AssetNames(objs)
+	local arr={"APArenaView","APArenaItemSlot"}
+	return arr
+end
+
+function OnEnter(objs,onFinished)
+	local view = self:OpenView("APArenaView","APArenaModel")
+	if objs ~= nil and objs.Length>0 then
+		view:SetParamDataList(objs[0])
+	end 
+	if(onFinished ~= nil)then
+		onFinished()  
+	end
+end

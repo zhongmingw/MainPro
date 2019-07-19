@@ -1,0 +1,161 @@
+--[[
+	file: UnionBattleOpponentView.lua
+	author: hangang
+	description: union battle opponent details view
+]]
+
+--cached UI items
+local cachedUIItems
+local SHOW_COUNT = GetConstValue("Guildwar30")
+local MAX_SCORE = GetConstValue("Guildwar31")
+local POSY_UP = -4
+local POSY_DOWN = -31
+local POWERTXT_POSX = -84
+local POWERIMG_POSX = -147
+local SILDER_MIN = 0.05
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 1     --shadow type
+	InitUI()            --cache UI items
+end
+
+function InitUI()
+	local selfTrans = self.transform
+    cachedUIItems = {}
+
+    --labels on top
+	local path = "Top/memberCountTxt"
+	cachedUIItems.memberCountTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Top/scoreTxt"
+	cachedUIItems.scoreTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Top/cdTxt"
+	cachedUIItems.cdTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Top/nameTxt"
+	cachedUIItems.nameTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Top/serverTxt"
+	cachedUIItems.serverTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Top/powerTxt"
+	cachedUIItems.powerTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Top/idTxt"
+	cachedUIItems.idTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Top/iconImg"
+	cachedUIItems.bannerObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "MemberList/ScrollRect/ViewPort/Grid"
+    cachedUIItems.membersGrid = selfTrans:GetComponentAtPath(path, CLS_UI_ITEM_GRID)
+end
+
+--UIController events handlers-------------------------------------------------------
+function OnNotification_RefreshOpponentView(objs)
+	local viewData = objs[0]
+	RefreshView(viewData)
+end
+
+function RefreshView(viewData)
+	cachedUIItems.nameTxt.text = viewData.name
+    cachedUIItems.idTxt.text = viewData.id
+    cachedUIItems.powerTxt.text = viewData.power
+    cachedUIItems.serverTxt.text = viewData.zone
+    cachedUIItems.scoreTxt.text = viewData.score
+    cachedUIItems.cdTxt.text = viewData.cdText
+    cachedUIItems.memberCountTxt.text = viewData.memberCountText
+
+    CsBridge.IconData.SetIconByName(cachedUIItems.bannerObj, viewData.unionBanner)
+    cachedUIItems.membersGrid:RefreshItemSlots(viewData.memberList, self.gameObject, "UnionBattleOpponentItemSlot")
+end
+
+function OnNotification_RefreshBattleViewCD(objs)
+	if self.gameObject.activeInHierarchy then
+		local challengeCD = objs[1]
+		cachedUIItems.cdTxt.text = challengeCD
+	end
+end
+
+--Bind item slots--------------------------------------------------------------------
+function OnUnionBattleOpponentItemSlotBindValue(slot, data)
+	local selfTrans = slot.transform
+    local path = "PlayerBase"
+	local playerRoot = selfTrans:Find(path)
+	BindPlayerBaseInfoValue(playerRoot,data.baseInfo)
+
+	local path = "Other"
+	local otherRoot = selfTrans:Find(path)
+
+	path = "nameTxt"
+	local nameText = otherRoot:GetComponentAtPath(path, CLS_TEXT)
+	nameText.text = data.name
+
+	path = "powerTxt"
+	local powerTxt = otherRoot:GetComponentAtPath(path, CLS_TEXT)
+	powerTxt.text = data.power
+
+	path = "powerImg"
+	local powerImg = otherRoot:GetComponentAtPath(path, CLS_IMAGE)
+
+	path = "Slider"
+	local bar = otherRoot:GetComponentAtPath(path, CLS_SLIDER)
+
+	path = "Slider/BlastSpine"
+	local blastSpine = otherRoot:GetComponentAtPath(path,CLS_SKELETONGRAPHIC)
+	bar.gameObject:SetActive(true)
+	bar.value = data.defeatedScore/MAX_SCORE < SILDER_MIN and SILDER_MIN or data.defeatedScore/MAX_SCORE
+	CsBridge.UnityHelper.SetAnchoredPosition(powerImg.gameObject,POWERIMG_POSX,POSY_UP)
+	CsBridge.UnityHelper.SetAnchoredPosition(powerTxt.gameObject,POWERTXT_POSX,POSY_UP)
+	local hideBar = function()
+		bar.gameObject:SetActive(false)
+		CsBridge.UnityHelper.SetAnchoredPosition(powerImg.gameObject,POWERIMG_POSX,POSY_DOWN)
+		CsBridge.UnityHelper.SetAnchoredPosition(powerTxt.gameObject,POWERTXT_POSX,POSY_DOWN)
+	end
+	if data.isBlast then
+		blastSpine:PlayAnimation("boom",false,nil,
+		function ()
+			hideBar()
+		end)
+	elseif data.challengCount < SHOW_COUNT then
+		hideBar()
+	elseif not data.available then
+		hideBar()
+	end
+
+    path = "ChallengeBtn"
+    local challengeBtnObj = otherRoot:GetGameObjectAtPath(path)
+    challengeBtnObj:SetActive(data.available)
+
+    path = "DefeatedBtn"
+    local defeatedBtnObj = otherRoot:GetGameObjectAtPath(path)
+    defeatedBtnObj:SetActive(not data.available)
+end
+
+--UI event handlers-------------------------------------------------------------------
+function OnGridChallengeBtnClick(itemSlot)
+	self:SendCommand("TryToChallenge", itemSlot.m_data)
+end
+
+function OnHelpBtnClick(sender)
+	self:SendCommand("OnHelpBtnClick", self.gameObject.name)
+end
+
+--On closing--------------------------------------------------------------------------
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close() 
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	cachedUIItems = nil
+end

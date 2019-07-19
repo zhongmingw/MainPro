@@ -1,0 +1,61 @@
+--[[
+	file: UnionRecruitView.lua
+	author: hangang
+	description: View for union recruiting
+]]
+
+local contentInput
+local viewData, confirmCbk
+
+function DoInit()
+	self.Shadow = 1
+	InitUI()
+end 
+
+function InitUI()
+	contentInput = CsBridge.GetInputFromView(self, "Input")
+end
+
+function SetParamDataList(objs)	
+	confirmCbk = objs[1]
+	RefreshView(objs[0])
+end
+
+function RefreshView(data)
+	contentInput.text = data
+end
+
+function OnConfirmBtnClick(sender)
+	if IsEmptyInput() then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("EmptyUnionRecruitWords"))
+	else
+		confirmCbk(contentInput.text)
+	end
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function OnMaskClick(sender)
+    Close()
+end
+
+function IsEmptyInput()
+	local newName = contentInput.text
+	return newName == nil or newName == "" 
+end
+
+function OnNotification_CloseUnionView(obj)
+	Close()
+end
+
+function Close()
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	contentInput = nil
+	viewData = nil
+	confirmCbk = nil
+end

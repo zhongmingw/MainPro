@@ -1,0 +1,125 @@
+local cambat_lab
+local aPArenaGrid
+local isSkip
+
+function DoInit()
+	self.Shadow = 1
+end 
+
+function InitUI()
+
+    cambat_lab=self:GetComponentAtPath("Center/CambatTxt",CLS_TEXT)
+
+	aPArenaGrid = self:GetComponentAtPath("Center/APArenaGrid",CLS_UI_ITEM_GRID)
+end
+
+function SetData(data)
+	isSkip = data
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+	end 
+	self:SendCommand("InitArenaDetailsData")
+end 
+
+function OnNotification_InitArenaDetailsData(objs)
+	local targets = objs[0]
+	local type = objs[1]
+	local cambat = 0
+	aPArenaGrid:ClearItems()
+	if type==1 then
+		aPArenaGrid:RefreshItemSlots(targets,self.gameObject,"APArenaItemSlot")
+		cambat = GetFormationFight(2)
+	elseif type==2 then
+		aPArenaGrid:RefreshItemSlots(targets,self.gameObject,"CrossArenaItemSlot")
+		cambat = GetFormationFight(5)+GetFormationFight(6)+GetFormationFight(7)
+	end
+    cambat_lab.text = tostring(cambat)
+end
+
+function OnAPArenaItemSlotBindValue(slot,data)
+	local name_Lab=slot:GetComponentAtPath("NameTxt",CLS_TEXT)
+	local fight_Lab=slot:GetComponentAtPath("FightTxt",CLS_TEXT)
+	local score_Lab=slot:GetComponentAtPath("ScoreTxt",CLS_TEXT)
+	local fightDecLab=slot:GetComponentAtPath("FightBtn/nameTxt",CLS_TEXT)
+	local player_TF=slot.transform:Find("PlayerBase")
+	BindPlayerBaseInfoValue(player_TF,data.playerBaseInfo)
+	name_Lab.text=tostring(data.playerBaseInfo.name) 
+	fight_Lab.text=CsBridge.UnityHelper.ChangeFightNum(data.combat) 
+	score_Lab.text=tostring(data.score)
+	if isSkip then
+		fightDecLab.text = Language:getStr("QuickFight")
+	else
+		fightDecLab.text = Language:getStr("Global_7")
+	end
+end
+
+function OnCrossArenaItemSlotBindValue(slot,data)
+	local name_Lab=slot:GetComponentAtPath("NameTxt",CLS_TEXT)
+	local fight_Lab=slot:GetComponentAtPath("FightTxt",CLS_TEXT)
+	local score_Lab=slot:GetComponentAtPath("ScoreTxt",CLS_TEXT)
+	local fightDecLab=slot:GetComponentAtPath("FightBtn/nameTxt",CLS_TEXT)
+	local palyer_TF=slot:GetComponentAtPath("PlayerBase",CLS_RECTTRANSFORM)
+	BindPlayerBaseInfoValue(palyer_TF,data.playerBaseInfo)
+	name_Lab.text=tostring(data.playerBaseInfo.name) 
+	fight_Lab.text=CsBridge.UnityHelper.ChangeFightNum(data.combat) 
+	score_Lab.text=tostring(data.score) 
+	if isSkip then
+		fightDecLab.text = Language:getStr("QuickFight")
+	else
+		fightDecLab.text = Language:getStr("Global_7")
+	end
+end
+
+function OnRefreshBtnClick(sender)
+	self:SendCommand("InitArenaDetailsData")
+end
+
+function OnCloseBtnClick(sender)
+	CloseView()
+end
+
+function OnMaskClick(sender)
+	CloseView()
+end
+
+function OnAPArenaGridFightBtnClick(obj)
+	local data=obj.m_data
+	self:SendCommand("OpenFormationView",data,isSkip)
+end
+
+function OnAPArenaGridPlayerBaseClick(obj)
+	local data = obj.m_data
+	if data.robot==1 then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("ArenaTargetCannotSee"))
+	else
+		CsBridge.CacheAssetsByModule(self.Module,
+			function()
+				local view = CsBridge.OpenView("PlayerInfoView", "PlayerInfoModel",true,true)
+				view.transform.parent:SetAsLastSibling()
+				local isLocal = false
+				local uid = data.playerBaseInfo.userId
+				local zone = data.playerBaseInfo.zone
+				view:SetParamDataList(isLocal, uid, zone)
+			end, "PlayerInfoView","AchievementItemSlot")
+	end
+end
+
+function OnNotification_APArenaBattle(objs)
+	CloseView()
+end
+
+function CloseView()
+	aPArenaGrid:ClearItems()
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	self.Module=nil
+	loadedAPArenaItemSlot = nil
+	cambat_lab = nil
+	aPArenaGrid = nil
+end

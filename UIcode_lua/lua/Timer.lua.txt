@@ -1,0 +1,119 @@
+--[[
+	file: Timer.lua
+	author: hangang
+	description: Lua time management utilities
+]]
+
+Timer = {}
+
+local INTERVAL_MIN = 0.1
+local THE_END = 99999189228000
+
+local loopingCbk
+local loopFinished = true
+local lastUpdateTime = 0
+
+local cachedTickers
+
+--Start looping
+function Timer:Init()
+	cachedTickers = {}
+	lastUpdateTime = CsBridge.timeManager.ServerTime
+	local endTime = lastUpdateTime * 2;
+	loopFinished = false
+	local hostObj = CS.UnityEngine.GameObject.Find("EventSystem")
+	local interval = INTERVAL_MIN
+	local onFinished = nil
+	CsBridge.timeManager:FixedStepTimer(
+		hostObj,
+		loopingCbk,
+		onFinished,
+		endTime,
+		interval,
+		function()
+			return loopFinished
+		end)
+end
+
+loopingCbk = function()
+	local now = CsBridge.timeManager.ServerTime
+	local timeElapsed = now - lastUpdateTime
+	lastUpdateTime = now
+
+	for k, ticker in pairs(cachedTickers) do
+		if now < ticker.endTime then
+			ticker.timeElapsed = ticker.timeElapsed + timeElapsed
+			if ticker.timeElapsed >= ticker.interval then
+				if ticker.onLooping then
+					ticker.onLooping(ticker.endTime)
+				end
+				
+				ticker.timeElapsed = ticker.timeElapsed - ticker.interval
+				if ticker.timeElapsed > ticker.interval then
+					ticker.timeElapsed = math.fmod(ticker.timeElapsed, ticker.interval)
+				end
+			end
+		else
+			if ticker.onFinished then
+				ticker.onFinished()
+			end
+			Timer:StopTicker(ticker.name)
+		end
+	end
+end
+
+--Start a ticker,if a same name ticker already started,replace it
+	--params:[name] unique name
+	--params:[endTime] timestamp of end(in miniseconds)
+	--params:[onLooping] looping callback
+	--params:[onFinished] countdown finished callback
+	--params:[interval] loop interval(in seconds)
+function Timer:AddTicker(name, endTime, onLooping, onFinished, interval)
+	if loopFinished then
+		Timer:Init()
+	end
+
+	local now = CsBridge.timeManager.ServerTime
+	local tickerInterval = interval or INTERVAL_MIN
+	tickerInterval = tickerInterval < INTERVAL_MIN and INTERVAL_MIN or tickerInterval
+	if endTime > now then
+		local ticker =
+		{
+			["name"] = name,
+			["endTime"] = endTime,
+			["interval"] = tickerInterval * 1000,
+			["onLooping"] = onLooping,
+			["onFinished"] = onFinished,
+			timeElapsed = 0,
+		}
+		cachedTickers[name] = ticker
+	else
+		if onFinished then 
+			onFinished()
+		end
+	end
+end
+
+--Start a continious ticker,if a same name ticker already started,replace it
+	--params:[name] unique name
+	--params:[onLooping] looping callback
+	--params:[interval] loop interval(in seconds)
+function Timer:AddNonstopTicker(name, onLooping, interval)
+	local endTime = THE_END
+	local onFinished = nil
+	Timer:AddTicker(name, endTime, onLooping, onFinished, interval)
+end
+
+--Stop specific ticker
+	--params:[name] unique name
+function Timer:StopTicker(name)
+	if cachedTickers then
+		cachedTickers[name] = nil
+	end
+end
+
+--Clear
+function Timer:Clear()
+	loopFinished = true
+	cachedTickers = {}
+end

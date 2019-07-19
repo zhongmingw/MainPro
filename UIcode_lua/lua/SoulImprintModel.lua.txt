@@ -1,0 +1,484 @@
+local commonHeroBagUtils = require('CommonHeroBagUtils')
+local soulImprintUtils = require('SoulImprintUtils')
+local soulImprintItemBagUtils = require('SoulImprintItemBagUtils')
+local soulImprintItemPutOnUtils = require("SoulImprintItemPutOnUtils")
+
+---@type table 解封的消耗表
+local soulorbResetTbl
+
+---@type table 自己所有的英雄
+local allBagHeroArr
+---@type table 当前标签页下面的所有英雄
+local curBagHeroArr
+
+---@type table 所有的灵魂纹章数组
+local allSoulImprintItemArr
+
+---@type table 选择的要印刻的英雄数据
+local choseHeroData
+---@type number 目标英雄最小星级
+local targetHeroMinStarLevel = 5
+
+---选取了的纹章
+local selectedSoulImprintItemArr = {}
+
+---解封自己的资源属性
+local selfConsume
+---解封需要消耗的资源
+local costConsume
+---获取的数组
+local receiveItemArr
+---@type string model的名字
+local selfModelName = "SoulImprintModel"
+
+local raceId
+local sortId = HeroSortEnum.SortHeroByLevel
+
+local HERO_UPDATE_SPINE = "IconUpdateSpine"
+local HERO_UPDATE_SPINE_ANIM = "a_1"
+
+local SOUL_SPINE_NAME = "SoulImprintSp"
+local SOUL_SPINE_ANIM = "seal"
+
+local btnEnums = {
+    EXCHANGE = 1,
+    CANCEL = 2
+}
+
+function DoInit()
+    soulorbResetTbl = ResTblContainer:GetTable(SoulorbReset.actorTbl)
+end
+
+---清理旧的数据
+function OnCommand_ClearOldData(objs)
+    choseHeroData = nil
+end
+
+---打开自己的英雄背包界面
+local function OpenMineHeroView()
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("HeroMineView", selfModelName, true, true)
+    end, "HeroMineView", "HeroItemSlot")
+end
+
+---打开自己的英雄背包
+function OnCommand_OpenMineHero(objs)
+    OpenMineHeroView()
+end
+
+---显示提示信息
+local function ShowHintTip(localStr)
+    CsBridge.hintUILayer:ShowHintBox(Language:getStr(localStr), 2)
+end
+
+---英雄类型切换
+local function ScreenMineHero()
+    curBagHeroArr = {}
+    commonHeroBagUtils.ScreenHero(raceId, sortId, curBagHeroArr, allBagHeroArr)
+    local sortBtnStr = sortId == HeroSortEnum.SortHeroByLevel and Language:getStr("SortByQuality") or Language:getStr("SortByLevel")
+    self:SendNotification("InitMineListData", curBagHeroArr, sortBtnStr)
+end
+
+---切换灵魂纹章
+local function ScreenSoulImprintItem(curRance)
+    if allSoulImprintItemArr == nil then
+        allSoulImprintItemArr = {}
+        soulImprintItemBagUtils.InitAllSoulImprintItem(allSoulImprintItemArr, function(condition)
+            return condition >= targetHeroMinStarLevel
+        end)
+    end
+    soulImprintItemBagUtils.ScreenSoulImprintItem(curRance, allSoulImprintItemArr)
+    local playerInfo = appData:checkData("PlayerInfo")
+    CsBridge.prefHelper:saveInt("SoulImprintItemRace" .. playerInfo.userId, curRance)
+    self:SendNotification("InitSoulImprintItem", allSoulImprintItemArr)
+end
+
+---计算消耗的资源
+local function CalculateDesSoulImprintCost()
+    costConsume = nil
+    costConsume = soulImprintItemBagUtils.CalculateDesSoulImprintCost(selfConsume, selectedSoulImprintItemArr, soulorbResetTbl)
+    costConsume.count = costConsume.count or 0
+    local localStr = costConsume.count > selfConsume.count and "CostRed" or "CostNormal"
+    local costValueStr = string.format(Language:getStr(localStr), costConsume.count)
+    local consumeImage = ""
+    if costConsume.typeId == ItemTypeEnum.Item then
+        consumeImage = ResTblContainer:GetPropToStr(costConsume.id, ItemBase.icon, ItemBase.actorTbl)
+    else
+        consumeImage = ResTblContainer:GetPropToStr(costConsume.id, Resource.icon, Resource.ResourceTbl)
+    end
+    self:SendNotification("RefreshCostValue", consumeImage, costValueStr)
+end
+
+local function InitMineHeroList()
+    allBagHeroArr = {}
+    commonHeroBagUtils.GetMyHeroList(allBagHeroArr, targetHeroMinStarLevel)
+end
+
+---初始化自己的英雄背包界面
+function OnCommand_InitMineListData(objs)
+    raceId = objs[0]
+    InitMineHeroList()
+    ScreenMineHero()
+    local heroNum, bagNum = #allBagHeroArr, commonHeroBagUtils.CheckHeroBagNum()
+    local heroNumStr = heroNum .. "/" .. bagNum
+    self:SendNotification("RefreshHeroBagCount", heroNumStr, false)
+end
+
+---切换英雄类型
+function OnCommand_ScreenMineHero(objs)
+    raceId = objs[0]
+    ScreenMineHero()
+end
+
+---排序英雄
+function OnCommand_ReSortMineHero()
+    sortId = sortId == HeroSortEnum.SortHeroByLevel and HeroSortEnum.SortHeroByQuality or HeroSortEnum.SortHeroByLevel
+    ScreenMineHero()
+end
+
+---扩展背包点击指令
+function OnCommand_ExtendHeroBag()
+    commonHeroBagUtils.ExtendHeroBag(function()
+        local heroNum, bagNum = #allBagHeroArr, commonHeroBagUtils.CheckHeroBagNum()
+        local heroNumStr = heroNum .. "/" .. bagNum
+        self:SendNotification("RefreshHeroBagCount", heroNumStr, true)
+    end)
+end
+
+---选取了自己需要的英雄
+function OnCommand_ChoseMyOneHero(objs)
+    if objs ~= nil then
+        local heroIndex = objs[1]
+        local heroData = curBagHeroArr[heroIndex + 1]
+        if ShowSoulImprintedTip(heroData) then
+            return
+        end
+        if HeroInFormationTip(heroData, HeroDuty.AUTO_TASK) then
+            return
+        end
+        if DownHeroFromFormation(self, heroData, heroIndex) then
+            return
+        end
+        heroData.showDuty = false
+        heroData.anim = true
+        choseHeroData = heroData
+        local choiceData = {}
+        choiceData.heroData = heroData
+        choiceData.firstSpineAssetName = HERO_UPDATE_SPINE
+        choiceData.firstSpineAnimName = HERO_UPDATE_SPINE_ANIM
+        self:HideView("HeroMineView")
+        self:SendNotification("ChoseMyOneHero", choiceData)
+    end
+end
+
+---灵魂印刻按钮点击
+function OnCommand_HeroToSouImPrintClick()
+    if choseHeroData then
+        local confirmCallBack = function()
+            soulImprintUtils.HeroToSoulImprint(choseHeroData, function(resp)
+                local spAnim = {}
+                spAnim.firstSpineAssetName = SOUL_SPINE_NAME
+                spAnim.firstSpineAnimName = SOUL_SPINE_ANIM
+                spAnim.secondSpineAssetName = HERO_UPDATE_SPINE
+                spAnim.secondSpineAnimName = HERO_UPDATE_SPINE_ANIM
+                spAnim.finishCallBack = function()
+                    local temp = {}
+                    soulImprintItemBagUtils.InitAllSoulImprintItem(temp, function(condition, heroPb)
+                        return condition >= targetHeroMinStarLevel and heroPb.uid == choseHeroData.uid
+                    end)
+                    CsBridge.CacheAssetsByModule(self.Module, function()
+                        local view = CsBridge.OpenView("SoulImprintReceiveView", selfModelName)
+                        view:SetParamDataList(temp)
+                    end, "SoulImprintReceiveView", "SoulImprintItemMaskSlot")
+                    choseHeroData = nil
+                end
+                self:SendNotification("HeroToSouImPrintClick", spAnim)
+            end)
+        end
+        CsBridge.messageManager:PopMsgBox(Language:getStr("local_confirm"), Language:getStr("SoulImprintTip"),
+                Language:getStr("local_cancel"), nil,
+                Language:getStr("local_confirm"), function()
+                    confirmCallBack()
+                end)
+    else
+        ShowHintTip("PleaseChoiceHeroToImprint")
+    end
+end
+
+---获取新的灵魂纹章
+function OnCommand_GetNewSoulImprintItem(objs)
+    receiveItemArr = objs[0]
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("SoulImprintItemReceivedEffectView", selfModelName, false, false)
+        view:SetParamDataList(receiveItemArr)
+    end, "SoulImprintItemReceivedEffectView", "SoulImprintItemMaskSlot")
+end
+
+---获取收取到背包的动画需要的数据
+function OnCommand_GetReceiveEffectViewData(objs)
+    self:SendNotification("GetReceiveEffectViewData", receiveItemArr)
+end
+
+---打开灵魂纹章的介绍
+function OnCommand_OpenSoulImprintHelpInfo()
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("HelpView", "SoulImprintModel")
+        view:SetData(INSTRUCTION_SOUL_IMPRINT)
+    end, "HelpView")
+end
+
+---灵魂纹章背包打开
+function OnCommand_OpenSoulImprintItemBag()
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("SoulImprintItemBagView", selfModelName, true, true)
+        local playerInfo = appData:checkData("PlayerInfo")
+        local soulImprintItemRace = CsBridge.prefHelper:checkInt("SoulImprintItemRace" .. playerInfo.userId)
+        view:SetParamDataList(soulImprintItemRace or 0)
+    end, "SoulImprintItemBagView", "SoulImprintItemSlot")
+end
+
+---初始化灵魂纹章背包
+function OnCommand_InitSoulImprintItem(objs)
+    allSoulImprintItemArr = nil
+    allSoulImprintItemArr = {}
+    soulImprintItemBagUtils.InitAllSoulImprintItem(allSoulImprintItemArr, function(condition)
+        return condition >= targetHeroMinStarLevel
+    end)
+    ScreenSoulImprintItem(objs[0])
+end
+
+---切换灵魂纹章的类型
+function OnCommand_ScreenSoulImprintItem(objs)
+    if objs then
+        local curRace = objs[0]
+        ScreenSoulImprintItem(curRace)
+    end
+end
+
+---灵魂解封点击
+function OnCommand_OpenDesImprint(objs)
+    selectedSoulImprintItemArr = {}
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("SoulDesImprintView", selfModelName, true, true)
+        local playerInfo = appData:checkData("PlayerInfo")
+        local soulImprintItemRace = CsBridge.prefHelper:checkInt("SoulImprintItemRace" .. playerInfo.userId)
+        view:SetParamDataList(soulImprintItemRace or 0)
+    end, "SoulDesImprintView", "SoulImprintItemSlot")
+end
+
+---选择了一个纹章
+function OnCommand_SelectSoulImprintItem(objs)
+    local targetUid = tonumber(objs[0].uid)
+    local temp = 0
+    if allSoulImprintItemArr and #allSoulImprintItemArr > 0 then
+        for i = 1, #allSoulImprintItemArr do
+            if allSoulImprintItemArr[i].uid == targetUid then
+                temp = i
+                break
+            end
+        end
+        if allSoulImprintItemArr[temp].emblemOwnerUid and allSoulImprintItemArr[temp].emblemOwnerUid > 0 then
+            local owner = {}
+            commonHeroBagUtils.GetMyHeroList(owner, 1, function(heroPb)
+                return heroPb.uid == allSoulImprintItemArr[temp].emblemOwnerUid
+            end)
+            local des = string.format(Language:getStr("WantToPutOffSoulImprintItemFromHero"), owner[1].name)
+            CsBridge.messageManager:PopMsgBox(Language:getStr("hint"), des, Language:getStr("Global_76"), nil, Language:getStr("Global_8"), function()
+                soulImprintItemPutOnUtils.PutOffSoulImprintItemFromHero(owner[1].uid, function(resp)
+                    allSoulImprintItemArr[temp].IsSelected = true
+                    allSoulImprintItemArr[temp].emblemOwnerUid = 0
+                    table.insert(selectedSoulImprintItemArr, allSoulImprintItemArr[temp])
+                    self:SendNotification("SelectSoulImprintItem", temp - 1)
+                    self:SendNotification("UnWearSoulImprintItem", temp - 1)
+                    CalculateDesSoulImprintCost()
+                end)
+            end)
+        else
+            allSoulImprintItemArr[temp].IsSelected = true
+            table.insert(selectedSoulImprintItemArr, allSoulImprintItemArr[temp])
+            self:SendNotification("SelectSoulImprintItem", temp - 1)
+            CalculateDesSoulImprintCost()
+        end
+    end
+end
+
+---初始化解封需要的资源
+function OnCommand_InitDesSoulImprintCost()
+    selfConsume = nil
+    selfConsume = soulImprintItemBagUtils.InitDesSoulImprintCost(soulorbResetTbl)
+    self:SendNotification("InitDesSoulImprintCost", selfConsume)
+    CalculateDesSoulImprintCost()
+end
+
+---反选了一个纹章
+function OnCommand_CancelSelectSoulImprintItem(objs)
+    local targetUid = tonumber(objs[0].uid)
+    local temp = 0
+    if allSoulImprintItemArr then
+        for i = 1, #allSoulImprintItemArr do
+            if allSoulImprintItemArr[i].uid == targetUid then
+                allSoulImprintItemArr[i].IsSelected = false
+                temp = i
+            end
+        end
+        if temp > 0 and #selectedSoulImprintItemArr > 0 then
+            local removeIndex = 0
+            for i = 1, #selectedSoulImprintItemArr do
+                if selectedSoulImprintItemArr[i].uid == allSoulImprintItemArr[temp].uid then
+                    removeIndex = i
+                end
+            end
+            table.remove(selectedSoulImprintItemArr, removeIndex)
+            self:SendNotification("CancelSelectSoulImprintItem", temp - 1)
+            CalculateDesSoulImprintCost()
+        end
+    end
+end
+
+---显示自己解封需要的资源
+function OnCommand_ShowSelfDesImprintRes(objs)
+    ShowTip(self, selfConsume.typeId, selfConsume.id)
+end
+
+---解封
+function OnCommand_SureToDeSoulImprintItem(objs)
+    if selectedSoulImprintItemArr and #selectedSoulImprintItemArr > 0 then
+        if not CheckItemEnough(costConsume.id, costConsume.typeId, costConsume.count, true) then
+            return
+        end
+        local name = ""
+        if selfConsume.typeId == ItemTypeEnum.Resource then
+            name = ResTblContainer:GetPropToStr(selfConsume.id, Resource.name, Resource.ResourceTbl)
+        elseif selfConsume.typeId == ItemTypeEnum.Item then
+            name = ResTblContainer:GetPropToStr(selfConsume.id, ItemBase.title, ItemBase.actorTbl)
+        end
+        local value = tostring(costConsume.count) .. name
+        local desp = string.format(Language:getStr("CostResToDesSoulImprint"), value)
+        CsBridge.messageManager:PopMsgBox(Language:getStr("hint"), desp, Language:getStr("local_cancel"), nil, Language:getStr("Global_8"), function()
+            soulImprintUtils.DesSoulImprintItem(selectedSoulImprintItemArr, function(resp)
+                selectedSoulImprintItemArr = nil
+                selectedSoulImprintItemArr = {}
+                local anim = {}
+                anim.spineAssetName = "ComDecomposeSpine"
+                anim.spineAnimName = "shifang"
+                anim.callBack = function()
+                    ShowHintTip("DesSoulImprintSuccess")
+                end
+                self:SendNotification("SureToDeSoulImprintItem", anim)
+            end)
+        end)
+    else
+        ShowHintTip("ChoiseAtLeastOneToDesSoulImprint")
+    end
+end
+
+---没有解封就关闭了解封界面
+function OnCommand_CloseDesImprintView()
+    selectedSoulImprintItemArr = nil
+    selectedSoulImprintItemArr = {}
+end
+
+---打开纹章的属性提示界面
+local function OpenSoulImprintItemTip(itemData)
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("SoulImprintItemTipView", "HeroShowModel")
+        view:SetParamDataList(itemData)
+    end, "SoulImprintItemTipView", "SoulItemTipsAttrItemSlot")
+end
+
+---显示属性
+function OnCommand_ShowSoulImprintItemTips(objs)
+    if objs then
+        local heroInfo = objs[0]
+        local result = soulImprintItemBagUtils.InitSoulItemTipsViewData(heroInfo)
+        if result then
+            if heroInfo.emblemOwnerUid == nil or heroInfo.emblemOwnerUid <= 0 then
+                result.showBtn.btnParentState = true
+                result.showBtn.useBtnState = true
+            end
+        end
+        OpenSoulImprintItemTip(result)
+    end
+end
+
+---收获界面的点出的提示界面
+function OnCommand_ShowSoulImprintItemTipsNoBtn(objs)
+    if objs then
+        local heroInfo = objs[0]
+        local result = soulImprintItemBagUtils.InitSoulItemTipsViewData(heroInfo)
+        OpenSoulImprintItemTip(result)
+    end
+end
+
+---制作预览需要的属性
+function OnCommand_GetSoulImprintItemPreAttr(objs)
+    if objs then
+        local heroInfo = objs[0]
+        local itemInfo = soulImprintItemBagUtils.GetPreviewSoulImprintItem(heroInfo)
+        self:SendNotification("GetSoulImprintItemPreAttr", itemInfo)
+    end
+end
+
+---打开功能的按钮界面
+function OnCommand_OpenCommonBtnView(objs)
+    local targetPos = objs[0]
+    local btnArr = {}
+    local exchangeBtnItem = {}
+    exchangeBtnItem.icon = "new_com_anniu2"
+    exchangeBtnItem.nameTxt = Language:getStr("Global_54")
+    exchangeBtnItem.id = btnEnums.EXCHANGE
+    local cancelBtnItem = {}
+    cancelBtnItem.icon = "new_com_anniu15"
+    cancelBtnItem.nameTxt = Language:getStr("GetOffSomeThing")
+    cancelBtnItem.id = btnEnums.CANCEL
+    table.insert(btnArr, exchangeBtnItem)
+    table.insert(btnArr, cancelBtnItem)
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("CommonVBtnsView", selfModelName)
+        view:SetParamDataList(targetPos, btnArr)
+    end, "CommonVBtnsView", "CommonBtnItemSlot")
+end
+
+---按钮界面点击按钮
+function OnCommand_CommonBtnItemClick(objs)
+    local data = objs[0]
+    if data == nil then
+        return
+    end
+
+    if data.id == btnEnums.EXCHANGE then
+        self.Module:HideView("CommonVBtnsView", false)
+        OpenMineHeroView()
+    elseif data.id == btnEnums.CANCEL then
+        choseHeroData = nil
+        local spineData = {}
+        spineData.spineName = HERO_UPDATE_SPINE
+        spineData.spineAnimName = HERO_UPDATE_SPINE_ANIM
+        self:HideView("CommonVBtnsView")
+        self:SendNotification("ClearOldData", spineData)
+    end
+end
+
+function DoOnExit()
+    soulorbResetTbl = nil
+    allBagHeroArr = nil
+    curBagHeroArr = nil
+    allSoulImprintItemArr = nil
+    choseHeroData = nil
+    targetHeroMinStarLevel = nil
+    selectedSoulImprintItemArr = nil
+    selfConsume = nil
+    soulImprintItemPutOnUtils = nil
+    soulImprintItemBagUtils = nil
+    commonHeroBagUtils = nil
+    soulImprintUtils = nil
+    receiveItemArr = nil
+    selfModelName = nil
+    raceId = nil
+    sortId = nil
+    HERO_UPDATE_SPINE = nil
+    HERO_UPDATE_SPINE_ANIM = nil
+    SOUL_SPINE_NAME = nil
+    SOUL_SPINE_ANIM = nil
+    btnEnums = nil
+end

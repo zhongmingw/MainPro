@@ -1,0 +1,37 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-01-21 20:05:59
+]]
+
+function OnJewelItemSlotBindValue(slot, data)
+    local item = slot:GetGameObjectAtPath("Item")
+    local frameImg = slot:GetGameObjectAtPath("Item/FrameSprite")
+    local iconImg = slot:GetGameObjectAtPath("Item/IconSprite")
+    local addFlag = slot:GetGameObjectAtPath("Item/AddFlag")
+    local redFlag = slot:GetGameObjectAtPath("Item/RedFlag")
+    local starRoot = slot:GetComponentAtPath("StarRoot",CLS_RECTTRANSFORM)
+    local equipFlag = slot:GetGameObjectAtPath("Item/EquipFlag")
+
+    if data.id == 0 then
+        SetDefaultQuality(frameImg)
+        iconImg:SetSelfActive(false)
+        starRoot.gameObject:SetSelfActive(false)
+        addFlag:SetSelfActive(true)
+    else
+        iconImg:SetSelfActive(true)
+        starRoot.gameObject:SetSelfActive(true)
+        addFlag:SetSelfActive(false)
+        JewelUtils.SetJewelIcon(iconImg, data.icon)
+        JewelUtils.SetJewelQuality(frameImg, data.quality)
+        JewelUtils.SetJewelStar(starRoot, data.star)
+    end
+    equipFlag:SetSelfActive(data.isEquip)
+    redFlag:SetSelfActive(data.redFlag)
+    if data.anim then
+        CsBridge.UnityHelper.SetlocalScale(item,1,1,1)
+        CsBridge.audioManager:PlayUI("pickuphero")
+        SetUpdateEffect(item.transform,1,nil,true,true)
+    end
+end

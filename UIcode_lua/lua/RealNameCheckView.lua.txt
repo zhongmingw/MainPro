@@ -1,0 +1,92 @@
+---@type UnityEngine.UI.InputField
+local realNameInput
+---@type UnityEngine.UI.InputField
+local idCardNumberInput
+---@type UnityEngine.TextMesh
+local realNameRuleTxt
+---@type Client.Library.UIItemGrid
+local itemGrid
+---@type Client.Library.ButtonArchly
+local submitBtn
+---@type UnityEngine.TextMesh
+local submitBtnTxt
+
+---@type Client.Library.ViewBase
+local selfViewBase
+---@type table
+local viewData
+local exitCallback
+
+function DoInit()
+    selfViewBase = self
+    selfViewBase.Shadow = 1
+    realNameInput = CsBridge.GetInputFromView(self, "Name/RealName")
+    idCardNumberInput = CsBridge.GetInputFromView(self, "IDCard/IDCard")
+    realNameRuleTxt = selfViewBase:GetComponentAtPath("RuleTxt", CLS_TEXT)
+    itemGrid = selfViewBase:GetComponentAtPath("Rewards", CLS_UI_ITEM_GRID)
+    submitBtn = selfViewBase:GetComponentAtPath("SubmitBtn", CLS_BUTTON_ARCHLY)
+    submitBtnTxt = selfViewBase:GetComponentAtPath("SubmitBtn/nameTxt", CLS_TEXT)
+end
+
+local function InitView()
+    realNameRuleTxt.text = viewData.ruleStr
+    itemGrid:RefreshItemSlots(viewData.rewardArr, selfViewBase.gameObject, "ItemSlot")
+    submitBtnTxt.text = viewData.submitBtnStr
+end
+
+function OnAnimationFinished()
+    selfViewBase:SendCommand("InitRealNameCheckView")
+end
+
+function SetParamDataList(objs)
+    exitCallback = objs[0]
+end
+
+function Active()
+
+end
+
+---通知初始化界面
+function OnNotification_InitRealNameCheckView(objs)
+    viewData = objs[0]
+    InitView()
+end
+
+---提交按钮点击
+function OnSubmitBtnClick()
+    local realName = realNameInput.text
+    local idCardNumber = idCardNumberInput.text
+    selfViewBase:SendCommand("SubmitRealNameCheck", realName, idCardNumber)
+end
+
+---物品点击
+function OnRewardsItemSlotClick(obj)
+    local data = obj.m_data
+    selfViewBase:SendCommand("ShowItemTip", data)
+end
+
+---关闭按钮点击
+function OnCloseBtnClick()
+    selfViewBase:ReturnBack()
+end
+
+---遮罩点击
+function OnMaskClick()
+    selfViewBase:ReturnBack()
+end
+
+function DoExit()
+    if exitCallback then
+        exitCallback()
+    end
+    realNameInput = nil
+    idCardNumberInput = nil
+    realNameRuleTxt = nil
+    itemGrid = nil
+    submitBtn = nil
+    submitBtnTxt = nil
+    selfViewBase = nil
+    viewData = nil
+    exitCallback = nil
+end
+

@@ -1,0 +1,247 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-01-28 11:33:29
+
+require "DecomposeJewelItemSlot"
+local ScreenUtils = require "ScreenUtils"
+
+local isInit = false
+
+local togGroup
+local togArr
+local flag
+
+local selectJewelGrid
+local jewelGrid
+local previewBtn
+local quickBtnNameTxt
+local decomposeBtn
+local nothingObj
+
+local effectObj
+local jewelEffect
+local selectJewelPosArr
+
+function DoInit()	
+    self.Anim = 0
+end
+
+function InitUI()
+    togGroup = self:GetComponentAtPath("Center/Under/TogGroup",CLS_TOGGLE_GROUP_ARCHLY)
+    local togGroupTrans = togGroup.transform
+    togArr = {}
+    for i=1,togGroupTrans.childCount-1 do
+		local tog = togGroupTrans:GetChild(i):GetComponent("ToggleArchly")
+        tog.ClickAnim = true
+		table.insert(togArr, tog)
+    end 
+    flag = togGroupTrans:Find("Flag")
+
+    selectJewelGrid = self:GetComponentAtPath("Center/UpGrid", CLS_UI_ITEM_GRID)
+    jewelGrid = self:GetComponentAtPath("Center/Under/kuangSV/ScrollRect/Viewport/Grid", CLS_UI_ITEM_GRID)
+    previewBtn = self:GetComponentAtPath("button/PreviewBtn",CLS_BUTTON_ARCHLY)
+    quickBtnNameTxt = self:GetComponentAtPath("button/QuickBtn/NameTxt",CLS_TEXT)
+    decomposeBtn = self:GetComponentAtPath("button/DecomposeBtn",CLS_BUTTON_ARCHLY)
+    nothingObj = self:GetGameObjectAtPath("Center/Nothing")
+
+    effectObj = self:GetGameObjectAtPath("Effect")
+    jewelEffect = {
+        trans = self:GetComponentAtPath("Effect/ItemSlot",CLS_RECTTRANSFORM),
+        obj = self:GetGameObjectAtPath("Effect/ItemSlot")
+    }
+    selectJewelPosArr = {}
+    local selectJewelGridTrans = selectJewelGrid.transform
+    for i=0,selectJewelGridTrans.childCount-1 do
+        local trans = selectJewelGridTrans:GetChild(i)
+        table.insert(selectJewelPosArr,{
+            trans = trans,
+            pos = trans:CheckPosition()
+        })
+    end
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    ScreenUtils.InitScreenUI(togGroup,togArr,flag)
+    self:SendCommand("InitJewelDecomposeData")
+end
+
+function Active()
+    self:SendCommand("ResetJewelDecompose")
+end
+
+function OnClose()
+    jewelGrid:ClearItems()
+    self:SendCommand("CloseJewelDecomposeView")
+end
+
+function BeoforeReturnBack()
+    self:HideView(self.gameObject.name)
+end
+
+local function RefreshDecomposeJewelGrid(jewelArr)
+    nothingObj:SetSelfActive(#jewelArr == 0)
+    jewelGrid:RefreshItemSlots(jewelArr, self.gameObject, "DecomposeJewelItemSlot")
+end
+
+local function RefreshSingleDecomposeJewel(jewel)
+    jewelGrid:SingleRefreshSlot(jewel)
+end
+
+local function RefreshSelectDecomposeJewelGrid(jewelArr)
+    selectJewelGrid:RefreshItemSlots(jewelArr, self.gameObject, "DecomposeJewelItemSlot")
+end
+
+local function RefreshSingleSelectDecomposeJewel(jewel)
+    selectJewelGrid:SingleRefreshSlot(jewel)
+end
+
+local function RefreshDecomposeBtnState(gray)
+    decomposeBtn.Gray = gray
+end
+
+local function RefreshPreviewBtnState(gray)
+    previewBtn.Gray = gray
+end
+
+local function RefreshQuickBtn(name)
+    quickBtnNameTxt.text = name
+end
+
+function OnNotification_RefreshJewelDecomposeView(objs)
+    local curDecomposeJewelArr = objs[0]
+    local curSelectDecomposeJewelArr = objs[1]
+    local decomposeGray = objs[2]
+    local previewGray = objs[3]
+    local name = objs[4]
+    RefreshDecomposeJewelGrid(curDecomposeJewelArr)
+    RefreshSelectDecomposeJewelGrid(curSelectDecomposeJewelArr)
+    RefreshDecomposeBtnState(decomposeGray)
+    RefreshPreviewBtnState(previewGray)
+    RefreshQuickBtn(name)
+end
+
+function OnNotification_ShowSelectJewelEffect(objs)
+    local jewel = objs[0]
+    local startPos = jewelGrid:GetItemDataByIndex(objs[1]).itemSlot.transform:CheckPosition()
+    local endPos = selectJewelPosArr[objs[2]].pos
+    local onFinished = objs[3]
+    effectObj:SetSelfActive(true)
+    jewelEffect.trans:ResetPosition(startPos)
+    jewelEffect.obj:SetSelfActive(true)
+    BindItemBaseValue(jewelEffect.trans, jewel)
+    local t = CsBridge.TweenUtils.MoveToByWorld(jewelEffect.trans,endPos.x,endPos.y,0.2,function()
+		effectObj:SetSelfActive(false)
+		jewelEffect.obj:SetSelfActive(false)
+		onFinished()
+	end)
+	t:DoPlay()
+end
+
+function OnNotification_ShowDecomposeEffect(objs)
+    effectObj:SetSelfActive(true)
+    local num = objs[0]
+    local onFinished = objs[1]
+    local spineName = "HeroDecompositionSpine"
+    local animName = "a_1"
+    for i=1,num do
+        CsBridge.CacheAssetsByGroup(spineName,function()
+            local obj = CsBridge.objectCache:CreateObject(spineName, true, selectJewelPosArr[i].trans)
+            CsBridge.UnityHelper.SetlocalScale(obj,0.5,0.5,1)
+            obj:GetComponent(CLS_SKELETONGRAPHIC):PlayAnimation(animName,false,function()
+                DestroyModel(obj)
+                if i>=num then
+                    effectObj:SetSelfActive(false)
+                    onFinished()
+                end
+            end)
+        end,spineName)
+    end
+end
+
+function OnNotification_RefreshDecomposeJewel(objs)
+    local jewelArr = objs[0]
+    RefreshDecomposeJewelGrid(jewelArr)
+end
+
+function OnNotification_UpdateSingleDecomposeJewel(objs)
+    local jewel = objs[0]
+    RefreshSingleDecomposeJewel(jewel)
+end
+
+function OnNotification_RefreshSelectDecomposeJewel(objs)
+    local jewelArr = objs[0]
+    RefreshSelectDecomposeJewelGrid(jewelArr)
+end
+
+function OnNotification_UpdateSingleSelectDecomposeJewel(objs)
+    local jewel = objs[0]
+    RefreshSingleSelectDecomposeJewel(jewel)
+end
+
+function OnNotification_RefreshPreviewBtn(objs)
+    local gray = objs[0]
+    RefreshPreviewBtnState(gray)
+end
+
+function OnNotification_RefreshDecomposeBtn(objs)
+    local gray = objs[0]
+    RefreshDecomposeBtnState(gray)
+end
+
+function OnNotification_RefreshQuickBtn(objs)
+    local name = objs[0]
+    RefreshQuickBtn(name)
+end
+
+function OnUpGridDecomposeJewelItemSlotClick(obj)
+    local data = obj.m_data
+    local index = obj.m_index
+    self:SendCommand("DownSelectedDecomposeJewel", data, index)
+end
+
+function OnGridDecomposeJewelItemSlotClick(obj)
+    local data = obj.m_data
+    local index = obj.m_index
+    self:SendCommand("UpdateDecomposeJewel", data, index)
+end
+
+function OnQuickBtnClick(sender)
+    self:SendCommand("QuickOperation")
+end
+
+function OnPreviewBtnClick(sender)
+    self:SendCommand("OpenDecomposePreview")
+end
+
+function OnDecomposeBtnClick(sender)
+    self:SendCommand("Decompose")
+end
+
+function OnTogGroupClick(isOn, index)
+    ScreenUtils.TogGroupClick(isOn, index)
+end
+
+function DoExit()
+    ScreenUtils = nil
+    isInit = nil
+
+    togGroup = nil
+    togArr = nil
+    flag = nil
+
+    selectJewelGrid = nil
+    jewelGrid = nil
+    previewBtn = nil
+    quickBtnNameTxt = nil
+    decomposeBtn = nil
+    nothingObj = nil
+
+    effectObj = nil
+    jewelEffect = nil
+    selectJewelPosArr = nil
+end

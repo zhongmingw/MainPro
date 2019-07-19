@@ -1,0 +1,116 @@
+--[[
+	file: DestructionActivityView.lua
+	author: hangang
+	description:������ʾ����ʱ�ջ
+]]
+
+local ticketIconObj, ticketCountTxt, countdownTxt
+local itemTransList
+
+local viewData
+
+function DoInit()
+	self.Shadow = CS.Client.Library.ShadowType.None
+	InitUI()
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	local path = "Title/ticketIconImg"
+	ticketIconObj = self:GetGameObjectAtPath(path)
+
+	path = "Title/ticketTxt"
+	ticketCountTxt = self:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Bottom/countdownTxt"
+	countdownTxt = self:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Center/Grid"
+	local itemsRoot = selfTrans:Find(path)
+	itemTransList = {}
+	for i = 0, itemsRoot.childCount - 1 do
+		itemTransList[i + 1] = itemsRoot:GetChild(i)
+	end
+end
+
+function OnNotification_RefreshActivityView(objs)
+	if self.gameObject.activeInHierarchy then
+		viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function RefreshView(data)
+	CsBridge.IconData.SetIconByName(ticketIconObj, data.ticketIcon)
+	ticketCountTxt.text = data.ticketCount
+	countdownTxt.text = data.restTime
+
+	local itemTrans, itemTitleTxt, itemImgObj
+	local path_name, path_img = "nameTxt", "bgImg"
+	for i, itemData in pairs(data.itemList) do
+		itemTrans = itemTransList[i]
+		itemTitleTxt = itemTrans:Find(path_name):GetComponent(CLS_TEXT)
+		itemTitleTxt.text = itemData.title
+		itemImgObj = itemTrans:Find(path_img).gameObject
+		CsBridge.IconData.SetRawImageByName(itemImgObj, itemData.image)
+	end
+end
+
+function OnNotification_RefreshCountdown(objs)
+	local data = objs[0]
+	RefreshCountdown(data)
+end
+
+function RefreshCountdown(countdownData)
+	if not viewData then--not ready
+		return
+	end
+
+	local currentActivityID = viewData.id
+	for activityID, restTime in pairs(countdownData) do
+		if activityID == currentActivityID then
+			countdownTxt.text = restTime
+			return
+		end
+	end
+end
+
+function OnNotification_CloseActivityView(obj)
+	self:HideView("DestructionActivityView")
+end
+
+function OnTipsBtnClick(obj)
+	self:SendCommand("ShowDestructionTips")
+end
+
+function OnRewardBtnClick(obj)
+	self:SendCommand("OpenDestructionRewardsView")
+end
+
+function OnAddBtnClick(obj)
+	self:SendCommand("OpenShopView")
+end
+
+function OnFightBtnClick(sender)
+	local itemTrans = sender.transform.parent
+	for index, trans in pairs(itemTransList) do
+		if trans == itemTrans then
+			local itemData = viewData.itemList[index]
+			local type = itemData.id
+			self:SendCommand("OpenDestructionEnemyView", type)
+			return
+		end
+	end
+end
+
+function OnRankBtnClick(sender)
+	self:SendCommand("GetDestructionRank")
+end
+
+function DoExit()
+	ticketIconObj = nil
+	ticketCountTxt = nil
+	countdownTxt = nil
+	itemTransList = nil
+	viewData = nil
+end

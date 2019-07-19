@@ -1,0 +1,21 @@
+---初始化
+function DoInit()
+
+end
+
+---资源列表
+function AssetNames(objs)
+    local arr = { "MiningMainView", "MiningMapItemSlot", "MiningMapItemSpine" }
+    return arr
+end
+
+---打开模块回调
+function OnEnter(objs, onFinished)
+    local view = self:OpenView("MiningMainView", "MiningMainModel")
+    if objs and objs.Length > 0 then
+        view:SetParamDataList(objs[0])
+    end
+    if (onFinished ~= nil) then
+        onFinished()
+    end
+end

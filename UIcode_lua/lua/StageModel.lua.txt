@@ -1,0 +1,390 @@
+local ResRewardCycle_CONST
+local stageIdOfStageDetail
+local stageItem
+local lastStageItem
+local onHookStageItem
+local lastOnHookStageItem
+local stageFormationCount_CONST = 15
+local stageFormationType_CONST = 3
+local walking = false
+local upHeroCount = 0
+
+local curSelectDiff
+
+local function OnRename()
+    self:SendNotification("PlayerRename",stageItem,onHookStageItem)
+end
+
+function DoInit()
+    ResRewardCycle_CONST = GetConstValue("campaignResourceRewardCycle")
+    lastStageItem=stageItem
+    stageItem=appData:checkData("StageItem")
+    onHookStageItem=appData:checkData("OnHookStageItem")
+    MsgCenter:Subscribe(Notify_BGMoveInit,BGMoveInit)
+    MsgCenter:Subscribe(Notify_BGMoveStart,BGMoveStart)
+    MsgCenter:Subscribe(Notify_BGMoveEnd,BGMoveEnd)
+    MsgCenter:Subscribe(Notify_HeadIconChanged,OnHeadIconChanged)
+    MsgCenter:Subscribe(Notify_Rename,OnRename)
+    MsgCenter:Subscribe(Notify_OnBattleEnd,OnBattleEndToStage)
+end
+
+function OnBattleEndToStage(battleInfo)
+    if battleInfo.battleEndInfo.type == UI_OPEN_TYPE_PVE and battleInfo.battleEndInfo.result ~= 1 then
+        local stageId = stageItem.difficulty*10000+stageItem.chapter*100+stageItem.stage
+        local nextStageId = GetNextStageId(stageId)
+        CheckAndShowConditionPackageView(self,GetConditionReqData(ConditionPackageType.Campaign,nextStageId))
+    end
+end
+
+function BGMoveInit()
+    walking = false
+end
+
+function BGMoveStart()
+    if not walking then
+        walking = true
+        self:SendNotification("BoxWalk")
+    end
+end
+
+function BGMoveEnd()
+    walking = false
+    self:SendNotification("FightBtnChanged",stageItem,onHookStageItem)
+end
+
+function OnHeadIconChanged()
+    self:SendNotification("HeadIconChanged",stageItem,onHookStageItem)
+end
+
+function OnCommand_RefreshUpHeroCount(objs)
+    local formation=appData:checkItem("Formation",tostring(stageFormationType_CONST))  
+    if formation ~= nil and formation.heroIds~=nil then 
+        upHeroCount = #formation.heroIds
+    else
+        upHeroCount = 0
+    end
+    --print(upHeroCount)
+end
+
+function OnCommand_InitStageData(objs)
+    lastStageItem=stageItem
+    stageItem=appData:checkData("StageItem")
+    lastOnHookStageItem=onHookStageItem
+    onHookStageItem=appData:checkData("OnHookStageItem")
+    local formation=appData:checkItem("Formation",tostring(stageFormationType_CONST))    
+    if formation ~= nil and formation.heroIds~=nil then 
+        upHeroCount = #formation.heroIds
+    else
+        upHeroCount = 0
+    end
+    local friendCampaign = appData:checkData("FriendCampaign")
+    if friendCampaign ~=nil then
+        self:SendNotification("InitFriendCampaignInfos",friendCampaign)
+    end
+    self:SendNotification("InitStageData",stageItem,onHookStageItem)
+    self:SendNotification("InitDataFinished")
+end
+
+local function SwitchDifficult(difficulty)
+    lastStageItem=stageItem
+    stageItem=appData:checkData("StageItem")
+    lastOnHookStageItem=onHookStageItem
+    onHookStageItem=appData:checkData("OnHookStageItem")
+    self:SendNotification("DifficultChanged",difficulty,stageItem,onHookStageItem)
+end
+
+local function GetStageDiffData()
+    local data = {}
+    local tbl = ResTblContainer:GetTable(Difficulty.tblName)
+    local ids = tbl:GetCol(Difficulty.difficulty)
+    for i=0,ids.Length-1 do
+        local id = tonumber(ids[i])
+        local name = tbl:Get(id, Difficulty.name)
+        local icon = tbl:Get(id, Difficulty.icon)
+        local diff = {
+            name = name,
+            icon = icon,
+            id = id,
+            selected = onHookStageItem.difficulty == id
+        }
+        if diff.selected then
+            curSelectDiff = diff
+        end
+        table.insert(data, diff)
+    end
+    return data
+end
+
+function OnCommand_UpdateStageBottomDiffData(objs)
+    local diffData = GetStageDiffData()
+    self:SendNotification("RefreshStageBottomDiffView",diffData)
+    SwitchDifficult(curSelectDiff.id)
+end
+
+function OnCommand_SelectDiff(objs)
+    local data = objs[0]
+    if data.selected then
+        return
+    end
+    if curSelectDiff then
+        curSelectDiff.selected = false
+        self:SendNotification("RefreshSingleStageBottomDiff",curSelectDiff)
+    end
+    data.selected = true
+    curSelectDiff = data
+    self:SendNotification("RefreshSingleStageBottomDiff",curSelectDiff)
+    SwitchDifficult(data.id)
+end
+
+function OnCommand_RefreshMap(objs)
+    lastStageItem=stageItem
+    stageItem=appData:checkData("StageItem")
+    lastOnHookStageItem=onHookStageItem
+    onHookStageItem=appData:checkData("OnHookStageItem")
+    local formation=appData:checkItem("Formation",tostring(stageFormationType_CONST))    
+    if formation ~= nil and formation.heroIds~=nil then 
+        upHeroCount = #formation.heroIds
+    else
+        upHeroCount = 0
+    end
+    if stageItem.difficulty==lastStageItem.difficulty and stageItem.chapter==lastStageItem.chapter and stageItem.stage==lastStageItem.stage then
+        self:SendNotification("LoadSimulateBattle",onHookStageItem)
+        self:SendNotification("RefreshSingleItem")
+    else
+        self:SendNotification("InitStageData",stageItem,onHookStageItem)
+    end
+end
+
+function OnCommand_ChangeMapState(objs)
+    self:SendNotification("ChangeMapState",stageItem,onHookStageItem)
+end
+
+function OnCommand_OpenStageDetailView(objs)
+    stageIdOfStageDetail = objs[0]
+    CsBridge.CacheAssetsByModule(self.Module,
+        function()
+            CsBridge.textureRender:RendererScreen(self.Module.rawImage,
+                function ()
+                    self:OpenView("StageDetailView","StageModel",true,true)
+                end)
+        end,"StageDetailView","ItemSlot")
+end
+
+function OnCommand_OpenNextStageDetailView(objs)
+    local onHookStageId = onHookStageItem.difficulty*10000+onHookStageItem.chapter*100+onHookStageItem.stage
+    stageIdOfStageDetail = GetNextStageId(onHookStageId)
+    CsBridge.CacheAssetsByModule(self.Module,
+        function()
+            CsBridge.textureRender:RendererScreen(self.Module.rawImage,
+            function ()
+                self:OpenView("StageDetailView","StageModel",true,true)
+            end)
+        end,"StageDetailView","ItemSlot")
+end
+
+function OnCommand_InitStageDetailData(objs)
+    local stageDetailData = {}
+    stageDetailData.id = stageIdOfStageDetail
+    local tbl=ResTblContainer:GetTable(Campaign.actorTbl)
+    stageDetailData.goldStr = tbl:Get(stageIdOfStageDetail,Campaign.goldReward)
+    stageDetailData.soulStr = tbl:Get(stageIdOfStageDetail,Campaign.soulReward)
+    stageDetailData.expStr = tbl:Get(stageIdOfStageDetail,Campaign.expReward)
+    stageDetailData.otherRewardStr = tbl:Get(stageIdOfStageDetail,Campaign.otherRewardStr)
+    stageDetailData.curHookStageId = onHookStageItem.difficulty*10000+onHookStageItem.chapter*100+onHookStageItem.stage
+    self:SendNotification("InitStageDetailData",stageDetailData,ResRewardCycle_CONST)
+end
+
+function OnCommand_InitChapterData(objs)
+    lastStageItem=stageItem
+    stageItem=appData:checkData("StageItem")
+    lastOnHookStageItem=onHookStageItem
+    onHookStageItem=appData:checkData("OnHookStageItem")
+    self:SendNotification("InitChapterData",stageItem,onHookStageItem)
+end
+
+function OnCommand_InitCoinView(objs)
+    local interval = (CsBridge.timeManager.ServerTime - onHookStageItem.goldStartTime)/3600000
+    local class = 0
+    if interval<0.25 or onHookStageItem.goldStartTime==0 then
+        self:HideView("CoinView")
+        return 
+    elseif interval<1 then
+        class=1
+    elseif interval<2 then
+        class=2
+    elseif interval<4 then
+        class=3
+    else
+        class=4
+    end
+    MsgCenter:Broadcast(Notify_InitCoin,class)
+end
+
+function OnCommand_SwitchChapter(objs)
+    local req = {}
+    req.difficulty=objs[0]
+    req.chapter=objs[1]
+    req.stage=1
+    if onHookStageItem.difficulty==req.difficulty and onHookStageItem.chapter==req.chapter then
+        return
+    end 
+    CsBridge.messageManager:PopMsgBox("",string.format(Language:getStr("uiStr_5"), cost),Language:getStr("local_cancel"),nil,Language:getStr("local_confirm"),
+    function ()
+        HttpRequest("switchOnHookStage", "SwitchOnHookStageReq", "SwitchOnHookStageResp", req,
+        function (resp)
+            if resp.result~=0 then
+                return
+            end
+            self:ShowView("StageView")
+            lastStageItem=stageItem
+            stageItem=appData:checkData("StageItem")
+            lastOnHookStageItem=onHookStageItem
+            onHookStageItem=appData:checkData("OnHookStageItem")
+            self:SendNotification("ChapterChanged",stageItem,onHookStageItem)
+            self:SendNotification("FightBtnChanged",stageItem,onHookStageItem)
+        end)
+    end)
+
+end
+
+function OnCommand_CheckDifficult(objs)
+    self:SendNotification("RefreshStageDifficultTog", onHookStageItem.difficulty)
+end
+
+function OnCommand_SwitchDifficult(objs)
+    local difficulty = objs[0]
+    SwitchDifficult(difficulty)
+end
+
+function OnCommand_SwitchStage(objs)
+    if stageIdOfStageDetail==onHookStageItem.difficulty*10000+onHookStageItem.chapter*100+onHookStageItem.stage then
+        return
+    end
+    if upHeroCount==0 then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("StageFormation_Empty"))
+        return 
+    end
+    local level = ResTblContainer:GetPropToInt(stageIdOfStageDetail,Campaign.level,Campaign.actorTbl)
+    local lv = appData:checkData("PlayerInfo").level
+    if level>lv then
+        CsBridge.hintUILayer:ShowHintBox(string.format(Language:getStr("StageFormation_Level"),level))
+        return 
+    end
+    local req = {}
+    req.difficulty=math.floor(stageIdOfStageDetail/10000)
+    req.chapter=math.floor((stageIdOfStageDetail%10000)/100)
+    req.stage=stageIdOfStageDetail%100
+    HttpRequest("switchOnHookStage", "SwitchOnHookStageReq", "SwitchOnHookStageResp", req,
+        function (resp)
+            if resp.result~=0 then
+                return
+            end
+            lastStageItem=stageItem
+            stageItem=appData:checkData("StageItem")
+            lastOnHookStageItem=onHookStageItem
+            onHookStageItem=appData:checkData("OnHookStageItem")
+            stageIdOfStageDetail=0
+            self:SendNotification("StageChanged",stageItem,onHookStageItem,lastOnHookStageItem)
+            self:SendNotification("FightBtnChanged",stageItem,onHookStageItem)
+            self:SendNotification("CloseStageDetailView")
+        end)
+end
+
+function OnCommand_LoadSimulateBattle(objs)
+    self:SendNotification("LoadSimulateBattle",onHookStageItem)
+end
+
+function OnCommand_CloseStageDetailView(objs)
+    stageIdOfStageDetail=0
+    self:SendNotification("CloseStageDetailView")
+end
+
+function OnCommand_EnterBattle(objs)
+    local req={}
+    req.heroIds=objs[0]
+    HttpBattle("fightStage", "FightStageReq", req,
+        function (battleInfo)
+            if  battleInfo==nil then
+                return
+            end
+            self:SendNotification("EnterBattle",battleInfo)
+        end)
+end
+
+function OnCommand_SaveFormation(objs)
+    local req={}
+    req.id=FormationTypeEnum.FormationType_PVE
+    req.heroIds=objs[0]
+    HttpRequest("updateFormation", "Formation", "UpdateFormationResp", req)
+end
+
+function OnCommand_FightBtnChanged()
+    self:SendNotification("FightBtnChanged",stageItem,onHookStageItem)
+end
+
+function OnCommand_TakeOnHookRewards(objs)
+    local req={}
+    req.id=3 
+    HttpRequest("takeOnHookRewards", "TakeOnHookRewardsReq", "TakeOnHookRewardsResp", req,
+        function (resp)
+            if resp.result~=0 then
+                return 
+            end
+            lastStageItem=stageItem
+            stageItem=appData:checkData("StageItem")
+            lastOnHookStageItem=onHookStageItem
+            onHookStageItem=appData:checkData("OnHookStageItem")
+            self:SendNotification("FightBtnChanged",stageItem,onHookStageItem)
+            self:SendNotification("Trophied")
+            if self.Module.ModuleName == CsBridge.moduleManager.CurrentModule.ModuleName then
+                ShowRewardReceivedTip(self, resp.rewardItems, 
+                    function()
+                        if resp.upLevelRewardItems~=nil then
+                            PlayerLevelUp(self.Module, resp.upLevelRewardItems)
+                        end
+                    end)
+            end
+        end)
+
+end
+
+function OnCommand_UpdateLight(objs)
+    local closeLight = objs[0]
+    local onHookStageId = onHookStageItem.difficulty*10000 + onHookStageItem.chapter*100 + onHookStageItem.stage
+    local minStageId = tonumber(ResTblContainer:GetCol("Campaign", "id")[0])
+    local limitStage = GetConstValue("ActionStage")
+    if onHookStageId >= limitStage or closeLight or onHookStageId < minStageId then
+        self:SendNotification("RefreshLight",false)
+    else
+        local req = {}
+        req.difficulty = onHookStageItem.difficulty
+        req.chapter = onHookStageItem.chapter
+        req.stage = onHookStageItem.stage
+        HttpRequest("checkCanOnHook", "CheckCanOnHookReq", "CheckCanOnHookResp", req,
+        function (resp)
+            local lightActive = resp.result
+            self:SendNotification("RefreshLight",lightActive)
+        end)
+    end
+end
+
+function DoOnExit()
+    MsgCenter:Unsubscribe(Notify_BGMoveInit,BGMoveInit)
+    MsgCenter:Unsubscribe(Notify_BGMoveStart,BGMoveStart)
+    MsgCenter:Unsubscribe(Notify_BGMoveEnd,BGMoveEnd)
+    MsgCenter:Unsubscribe(Notify_HeadIconChanged,OnHeadIconChanged)
+    MsgCenter:Unsubscribe(Notify_OnBattleEnd,OnBattleEndToStage)
+    CsBridge.MsgCenter:Unsubscribe(Notify_Rename,OnRename)
+    self.Module = nil
+    ResRewardCycle_CONST = nil
+    stageIdOfStageDetail = nil
+    stageItem = nil
+    lastStageItem = nil
+    onHookStageItem = nil
+    lastOnHookStageItem = nil
+    stageFormationCount_CONST = nil
+    stageFormationType_CONST = nil
+    walking = nil
+    upHeroCount = nil
+    curSelectDiff = nil
+end

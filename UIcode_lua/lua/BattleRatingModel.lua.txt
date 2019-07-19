@@ -1,0 +1,122 @@
+--[[
+	file: BattleRatingModel.lua
+	author: hangang
+	description: Battle rating view controller
+]]
+
+require "BattleRatingUtils"
+
+local reviewCharCount
+local maxReviewCount = 200
+
+local cachedBattleInfo
+local cachedReviews
+local barrageOn = true
+
+------initialization----------------------------------------------------------------
+function DoInit()
+    reviewCharCount = tonumber(GetConstValue("heroReviewCharCount")) or 10
+end
+
+------View events handler-----------------------------------------------------------------
+function OnCommand_GetBaseViewData(objs)
+	cachedBattleInfo = objs[0]
+	RefreshView()
+end
+
+function OnCommand_PostReview(objs)
+	local content = objs[0]
+    if CsBridge.UnityHelper.GetStringLen(content) > reviewCharCount then
+		local text = Language:getStr("HeroReviewTooLong")
+		text = string.format(text, tostring(math.floor(reviewCharCount / 2)))
+		CsBridge.hintUILayer:ShowHintBox(text)
+		return
+	end
+
+    local battleEndInfo = cachedBattleInfo.battleEndInfo
+	PostReview(RefreshView, battleEndInfo.uuid, content)
+end
+
+function OnCommand_LikeReview(objs)
+	currentReviewID = objs[0]
+	if not AssertLikeEnabled(currentReviewID) then
+		return
+	end
+
+	local uuid = cachedBattleInfo.battleEndInfo.uuid
+	LikeReview(UpdateReview, uuid, currentReviewID)
+end
+
+function AssertLikeEnabled(reviewID)
+	local review = GetReview(reviewID)
+	if review.like then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("AlreadyLikedHint"))
+		return false
+	end
+
+	return true
+end
+
+------Helpers-----------------------------------------------------------------------------
+function RefreshView()
+    FetchReviews(
+        function(resp)
+            cachedReviews = resp.comments or {}
+            local viewData = GetViewData()
+            self:SendNotification("RefreshView", viewData)
+        end, 
+        cachedBattleInfo.battleEndInfo.uuid,
+        maxReviewCount
+    )
+end
+
+function GetViewData(data)
+	local viewData = {}
+	local reviewList = {}
+	viewData.reviewList = reviewList
+    local reviews = cachedReviews or {}
+	for k, review in pairs(reviews) do		
+		table.insert(reviewList, GetItemViewData(review))
+	end
+	
+	return viewData
+end
+
+function GetItemViewData(review)
+	local itemViewData = {}                                                                                                                                                                                                                                                                                                                                                                                                                    
+	itemViewData.id = review.time
+	itemViewData.playerName = review.playerName
+	itemViewData.date = GLuaFormatTime(review.time, "yyyy-MM-dd")
+	itemViewData.liked = review.like
+	itemViewData.likeCount = GetValueAbbreviation(review.likeCount)
+	itemViewData.content = review.content
+	return itemViewData
+end
+
+function GetReview(reviewID)
+    local reviews = cachedReviews or {}
+	for k, review in pairs(reviews) do
+		if review.time == reviewID then
+			return review
+		end
+	end
+
+	return nil
+end
+
+function UpdateReview(resp)
+	local review = GetReview(currentReviewID)
+	review.like = true
+	review.likeCount = review.likeCount + 1
+
+    local review = GetReview(currentReviewID)
+	self:SendNotification("UpdateReview", GetItemViewData(review))
+end
+
+function DoOnExit()
+	reviewCharCount = nil
+	maxReviewCount = nil
+	cachedBattleInfo = nil
+	cachedReviews = nil
+	barrageOn = nil
+end

@@ -1,0 +1,234 @@
+require "SoulImprintItemSlot"
+require "SoulPreviewAttrItemSlot"
+
+---@type UnityEngine.Transform 旋转的动画特效
+local sphereSpParentTrans
+---@type UnityEngine.GameObject 选择了英雄的下方
+local bottomWithHeroObj
+---@type UnityEngine.GameObject 没有选择英雄的时候下方
+local bottomNoHeroObj
+
+---@type UnityEngine.UI.Image 加号按钮
+local addTagImg
+---@type UnityEngine.GameObject 中间的纹章
+local centerSoulImprintItemSlotObj
+---@type Client.Library.ItemSlot 中间的纹章组件
+local centerSoulImprintItemSlot
+---@type UnityEngine.Transform
+local centerSoulImprintItemSlotTrans
+---@type UnityEngine.Transform
+local putOnSpParentTrans
+
+---@type UnityEngine.GameObject 预览显示的物体
+local preSoulImprintItemSlotObj
+---@type Client.Library.ItemSlot 预览显示
+local preSoulImprintItemSlot
+---@type UnityEngine.RectTransform 英雄星级
+local starRootRectTrans
+---@type Client.Library.UIItemGrid 预览的属性
+local attrItemGrid
+---@type Client.Library.UIItemGrid 预览的属性
+local moreAttrItemGrid
+---@type UnityEngine.GameObject
+local moreSVObj
+
+---@type UnityEngine.Transform  成功的动画父节点
+local successSpParentTrans
+---@type UnityEngine.Transform 左边光的父节点
+local leftSpineParentTrans
+---@type UnityEngine.Transform 右边光的父节点
+local rightSpineParentTrans
+
+--- 加号的动画
+local imgFade
+--- 选取了需要的英雄数据
+local heroData
+
+function DoInit()
+    self.Shadow = 0
+    self.Anim = 0
+    ---@type UnityEngine.Transform
+    local selfTrans = self.transform
+    sphereSpParentTrans = selfTrans:Find("SphereParent")
+    bottomWithHeroObj = self:GetGameObjectAtPath("BottomWithHero")
+    bottomNoHeroObj = self:GetGameObjectAtPath("BottomNoHero")
+    addTagImg = self:GetComponentAtPath("Top/TargetHeroItem/AddFlag", CLS_IMAGE)
+    centerSoulImprintItemSlotObj = self:GetGameObjectAtPath("Top/SoulImprintParent/CenterSoulImprintItemSlot")
+    centerSoulImprintItemSlot = CsBridge.UnityHelper.GetOrAddComponent(centerSoulImprintItemSlotObj, CLS_ITEM_SLOT)
+    preSoulImprintItemSlotObj = self:GetGameObjectAtPath("BottomWithHero/SoulImprintItemSlot")
+    centerSoulImprintItemSlotTrans = centerSoulImprintItemSlot.transform
+    preSoulImprintItemSlot = CsBridge.UnityHelper.GetOrAddComponent(preSoulImprintItemSlotObj, CLS_ITEM_SLOT)
+    starRootRectTrans = selfTrans:Find("BottomWithHero/StarRoot")
+    attrItemGrid = self:GetComponentAtPath("BottomWithHero/AttrGrid", CLS_UI_ITEM_GRID)
+    moreAttrItemGrid = self:GetComponentAtPath("BottomWithHero/ItemSV/ScrollRect/Viewport/AttrGrid", CLS_UI_ITEM_GRID)
+    moreSVObj =self:GetGameObjectAtPath("BottomWithHero/ItemSV")
+    successSpParentTrans = selfTrans:Find("SpParent")
+    putOnSpParentTrans = selfTrans:Find("Top/SpParent")
+    leftSpineParentTrans = selfTrans:Find("LeftSpParent")
+    rightSpineParentTrans = selfTrans:Find("RightSpParent")
+end
+
+---设置下方的显示
+local function SetBottomInfo()
+    if heroData then
+        bottomNoHeroObj:SetActive(false)
+        bottomWithHeroObj:SetActive(true)
+    else
+        bottomNoHeroObj:SetActive(true)
+        bottomWithHeroObj:SetActive(false)
+        centerSoulImprintItemSlotObj:SetActive(false)
+    end
+end
+
+---开始加号按钮的动画
+local function StartAddTransAnima()
+    addTagImg.gameObject:SetActive(true)
+    if imgFade then
+        imgFade:DoKill()
+        imgFade = nil
+    end
+    imgFade = CsBridge.TweenUtils.DoImageFadeInAndOut(addTagImg, 2)
+    imgFade:DoPlay()
+end
+
+---开始界面的spine动画
+local function StartViewSpineAnima()
+    local SPHERE_SPINE_NAME = "SoulImprintSphereSpine"
+    local LIGHT_SPINE_NAME = "SoulImprintLightSpine"
+    StartSpineAnimation(self, GetSpineData(SPHERE_SPINE_NAME), sphereSpParentTrans)
+    StartSpineAnimation(self, GetSpineData(SPHERE_SPINE_NAME), sphereSpParentTrans)
+    StartSpineAnimation(self, GetSpineData(LIGHT_SPINE_NAME), leftSpineParentTrans)
+    StartSpineAnimation(self, GetSpineData(LIGHT_SPINE_NAME), rightSpineParentTrans)
+end
+
+---重置界面
+local function ResetView()
+    centerSoulImprintItemSlotObj:SetActive(false)
+    heroData = nil
+    attrItemGrid:ClearItems()
+    moreAttrItemGrid:ClearItems()
+    StartAddTransAnima()
+    StartViewSpineAnima()
+    SetBottomInfo()
+end
+
+function OnAnimationFinished()
+    ResetView()
+    self:SendCommand("ClearOldData")
+end
+
+---灵魂刻印成功的动画结束回调
+local function HeroToSouImPrintClickAnimFinish(spAnim)
+    local spineData = GetSpineData(spAnim.secondSpineAssetName, spAnim.secondSpineAnimName)
+    StartSpineAnimation(self, spineData, putOnSpParentTrans)
+    ResetView()
+    if spAnim.finishCallBack then
+        spAnim.finishCallBack()
+    end
+end
+
+---选取了需要的英雄数据
+function OnNotification_ChoseMyOneHero(objs)
+    if objs then
+        local choiceData = objs[0]
+        heroData = choiceData.heroData
+        SetBottomInfo()
+        centerSoulImprintItemSlotObj:SetActive(true)
+        CsBridge.TweenUtils.ScaleInAndOut(centerSoulImprintItemSlotObj.transform)
+        OnSoulImprintItemSlotBindValue(centerSoulImprintItemSlot, heroData)
+        OnSoulImprintItemSlotBindValue(preSoulImprintItemSlot, heroData)
+        ShowHeroQuality(heroData.heroId, starRootRectTrans, nil, heroData.distillationStar)
+        self:SendCommand("GetSoulImprintItemPreAttr", heroData)
+        local spineData = GetSpineData(choiceData.firstSpineAssetName, choiceData.firstSpineAnimName)
+        StartSpineAnimation(self, spineData, putOnSpParentTrans, nil)
+    end
+end
+
+---灵魂印刻成功
+function OnNotification_HeroToSouImPrintClick(objs)
+    local spAnim = objs[0]
+    local spineData = GetSpineData(spAnim.firstSpineAssetName, spAnim.firstSpineAnimName)
+    StartSpineAnimation(self, spineData, successSpParentTrans, function()
+        HeroToSouImPrintClickAnimFinish(spAnim)
+    end)
+end
+
+---预览版的灵魂纹章
+function OnNotification_GetSoulImprintItemPreAttr(objs)
+    local itemInfo = objs[0]
+    if #itemInfo.soulImprintValue > 4 then
+        moreSVObj:SetActive(true)
+        attrItemGrid.gameObject:SetActive(false)
+        moreAttrItemGrid:RefreshItemSlots(itemInfo.soulImprintValue, self.gameObject, "SoulPreviewAttrItemSlot")
+    else
+        moreSVObj:SetActive(false)
+        attrItemGrid.gameObject:SetActive(true)
+        attrItemGrid:RefreshItemSlots(itemInfo.soulImprintValue, self.gameObject, "SoulPreviewAttrItemSlot")
+    end
+end
+
+---取下纹章
+function OnNotification_ClearOldData(objs)
+    local spineData = objs[0]
+    local realSpineData = GetSpineData(spineData.spineName, spineData.spineAnimName)
+    heroData = nil
+    StartSpineAnimation(self, realSpineData, putOnSpParentTrans)
+    ResetView()
+end
+
+function OnHelpBtnClick()
+    self:SendCommand("OpenSoulImprintHelpInfo")
+end
+
+---目标英雄点击
+function OnTargetHeroItemClick()
+    self:SendCommand("OpenMineHero")
+end
+
+---中间的纹章点击事件
+function OnCenterSoulImprintItemSlotClick()
+    local centerPos = centerSoulImprintItemSlotTrans.position
+    local targetPos = { positionX = centerPos.x + 183, positionY = centerPos.y }
+    self:SendCommand("OpenCommonBtnView", targetPos)
+end
+
+---印刻按钮点击事件
+function OnImprintBtnClick()
+    self:SendCommand("HeroToSouImPrintClick")
+end
+
+---纹章背包点击事件
+function OnImprintBagBtnClick()
+    self:SendCommand("OpenSoulImprintItemBag")
+end
+
+---灵魂解封点击
+function OnDesImprintBtnClick()
+    self:SendCommand("OpenDesImprint")
+end
+
+---关闭界面之前关闭子界面
+function BeoforeReturnBack()
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+    sphereSpParentTrans = nil
+    bottomWithHeroObj = nil
+    bottomNoHeroObj = nil
+    addTagImg = nil
+    centerSoulImprintItemSlotObj = nil
+    centerSoulImprintItemSlot = nil
+    putOnSpParentTrans = nil
+    preSoulImprintItemSlotObj = nil
+    preSoulImprintItemSlot = nil
+    starRootRectTrans = nil
+    attrItemGrid = nil
+    moreAttrItemGrid = nil
+    moreSVObj = nil
+    successSpParentTrans = nil
+    leftSpineParentTrans = nil
+    rightSpineParentTrans = nil
+    imgFade = nil
+    heroData = nil
+end

@@ -1,0 +1,66 @@
+
+Ü
+achievement.protoachievementstage.protoArenaData.protoplayerData.protoRelicData.protoJewelData.protoUnion.proto"0
+AchievementRewardReq
+type (
+
+id ("?
+AchievementRewardResp&
+rewardItems (2.stage.RewardItem"8
+GmAchievementAccomplishedReq
+type (
+
+id ("/
+GmAchievementAccomplishedResp
+status ("%
+GmAchievementResetReq
+type ("(
+GmAchievementResetResp
+status ("0
+GmAchievementAccomplishAllReq
+useless ("0
+GmAchievementAccomplishAllResp
+status ("+
+GmAchievementResetAllReq
+useless ("+
+GmAchievementResetAllResp
+status ("L
+PlayerAchievement
+type (
+count (
+
+id (
+status ("K
+GetPlayerCardRequest
+userId (	
+zone (	
+formationType ("Å
+GetPlayerCardResp*
+
+playerInfo (2.playerData.PlayerInfo
+union (	
+formationType (
+combat (-
+	formation (2.ArenaData.FormationPosAdv
+auraId (
+sameZone (
+isFriend (4
+achievements	 (2.achievement.PlayerAchievement
+	unionIcon
+ (
+unionId (
+	sameGroup ("A
+GetHeroDetailReq
+userId (	
+zone (	
+heroUid ("Ç
+GetHeroDetailResp&
+heroItem (2.playerData.HeroItem'
+	relicItem (2.RelicData.RelicItem4
+heroCrystalInfo (2.playerData.HeroCrystalInfo-
+campInfo (2.playerData.ElementCampInfo.
+emblem (2.achievement.GetHeroDetailResp(
+
+jewelItems (2.JewelData.JewelItem"
+
+unionTechs (2.Union.JobTech

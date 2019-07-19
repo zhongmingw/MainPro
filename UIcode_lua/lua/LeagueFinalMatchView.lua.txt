@@ -1,0 +1,507 @@
+--[[
+	file: LeagueFinalMatchView.lua
+	author: hangang
+	description: League final match list view
+]]
+
+require "PlayerBaseInfoUtils"
+
+local SEQUENCE_LIGHT = "lightSequence"
+local SPEED_LIGHT = 120
+local ANIMATION_FIGHT = "loop"
+
+local playerList
+local lockList, fightSpineList
+local lightList
+local leftPlayer, rightPlayer, champion
+local maskObj, countdownObj, progressObj, seasonTipsObj, replayBtnObj
+local countdownTxt, countdownHeaderTxt, tipsTxt
+local prevBtnObj, nexBtnObj
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 0     --shadow type
+	InitUI()            --cache UI items
+end 
+
+function InitUI()
+	local viewTrans = self.transform
+
+	leftPlayer = {}
+	local path = "Bottom/PlayerLeft/PlayerBase"
+	leftPlayer.baseObj = viewTrans:GetGameObjectAtPath(path)
+	path = "Bottom/PlayerLeft/nameTxt"
+	leftPlayer.nameTxt = viewTrans:GetComponentAtPath(path, CLS_TEXT)
+	path = "Bottom/PlayerLeft/votedImg"
+	leftPlayer.votedImgObj = viewTrans:GetGameObjectAtPath(path)
+
+	rightPlayer = {}
+	path = "Bottom/PlayerRight/PlayerBase"
+	rightPlayer.baseObj = viewTrans:GetGameObjectAtPath(path)
+	path = "Bottom/PlayerRight/nameTxt" 
+	rightPlayer.nameTxt = viewTrans:GetComponentAtPath(path, CLS_TEXT)
+	path = "Bottom/PlayerRight/votedImg"
+	rightPlayer.votedImgObj = viewTrans:GetGameObjectAtPath(path)
+
+	path = "Bottom/PreviousBtn"
+	prevBtnObj = viewTrans:GetGameObjectAtPath(path)
+	path = "Bottom/NextBtn"
+	nexBtnObj = viewTrans:GetGameObjectAtPath(path)
+
+	path = "Mask"
+	maskObj = viewTrans:GetGameObjectAtPath(path)
+	path = "Top/SeasonFinishedTips"
+	seasonTipsObj = viewTrans:GetGameObjectAtPath(path)
+	path = "Center/ReplayBtn"
+	replayBtnObj = viewTrans:GetGameObjectAtPath(path)
+
+	path = "Top/Countdown"
+	countdownObj = viewTrans:GetGameObjectAtPath(path)
+	path = "Top/Countdown/countdownTxt"
+	countdownTxt = viewTrans:GetComponentAtPath(path, CLS_TEXT)
+	path = "Top/Countdown/countdownHeaderTxt"
+	countdownHeaderTxt = viewTrans:GetComponentAtPath(path, CLS_TEXT)
+	path = "Top/SeasonFinishedTips/tipsTxt"
+	tipsTxt = viewTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	champion = {}
+	path = "Center/Winner"
+	champion.gameObject = viewTrans:GetGameObjectAtPath(path)
+	path = "Center/Winner/PlayerBase"
+	champion.baseObj = viewTrans:GetGameObjectAtPath(path)
+	path = "Center/Winner/nameTxt"
+	champion.nameTxt = viewTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	CacheLocks()
+	CachePlayerList()
+	CacheLightList()
+end
+
+function CachePlayerList()
+	local selfTrans = self.transform
+
+	playerList = {}
+	local path = "Center/Players"
+	local playersRoot = selfTrans:Find(path)
+	local playerTrans, player
+	for playerIdx = 1, playersRoot.childCount do
+		local childPath = "Player0" .. tostring(playerIdx)
+		player = {}
+		playerList[playerIdx] = player
+
+		playerTrans = playersRoot:Find(childPath)
+		path = "PlayerBase"
+		player.baseObj = playerTrans:GetGameObjectAtPath(path)
+		path = "shadowImg"
+		player.shadowObj = playerTrans:GetGameObjectAtPath(path)
+		path = "resultTxt"
+		player.resultTxt = playerTrans:GetComponentAtPath(path, CLS_TEXT)
+		path = "nameTxt"
+		player.nameTxt = playerTrans:GetComponentAtPath(path, CLS_TEXT)
+	end
+end
+
+function CacheLightList()
+	local selfTrans = self.transform
+
+	lightList = {}
+	local path = "Center/Lights"
+	local lightsRoot = selfTrans:Find(path)
+
+	path = "Player0"
+	local playerCount = 8
+	for playerIdx = 1, playerCount do
+		local playerRoot = lightsRoot:Find(path .. tostring(playerIdx))
+		local playerPathList = {}
+		lightList[playerIdx] = playerPathList
+		local pathCount = 5
+		local lightPath = "path0"
+		for pathIdx = 1, pathCount do
+			local light = CacheLight(playerRoot, lightPath .. tostring(pathIdx))
+			light.index = pathIdx
+			playerPathList[pathIdx] = light
+		end
+	end
+end
+
+function CacheLight(lightsRoot, path)
+	local light = {}
+	light.gameObject = lightsRoot:GetGameObjectAtPath(path)	
+	light.hPathTrans = lightsRoot:Find(path .. "/horizontalImg")
+	light.hPathObj = light.hPathTrans and light.hPathTrans.gameObject or nil
+	light.hPathLength = light.hPathTrans and GetPathLength(light.hPathTrans) or 0
+	
+	light.chamferTrans = lightsRoot:Find(path .. "/chamferImg")
+	light.chamferObj = light.chamferTrans and lightsRoot:GetGameObjectAtPath(path .. "/chamferImg") or nil
+	light.vPathTrans = lightsRoot:Find(path .. "/verticalImg") or nil
+	light.vPathObj = light.vPathTrans and light.vPathTrans.gameObject or nil
+	light.vPathLength = light.vPathTrans and GetPathLength(light.vPathTrans) or 0
+	
+	return light
+end
+
+function CacheLocks()
+	local selfTrans = self.transform
+	lockList = {}
+	fightSpineList = {}
+
+	local path = "Center/Locks"
+	local locksRoot = selfTrans:Find(path)
+	path = "lock0"
+	local lockCount = 7
+	local lock, fightSpine
+	for idx = 1, lockCount do
+		local childPath = path .. tostring(idx)
+		lock = {}
+		lock.gameObject = locksRoot:GetGameObjectAtPath(childPath .. "/Lock")
+		lockList[idx] = lock
+		
+		fightSpine = {}
+		fightSpine.gameObject = locksRoot:GetGameObjectAtPath(childPath .. "/FightSpine")
+		fightSpine.spine = fightSpine.gameObject:GetComponent(CLS_SKELETONGRAPHIC)
+		fightSpineList[idx] = fightSpine
+	end
+end
+
+--UIController events handlers-------------------------------------------------------
+function OnNotification_RefreshFinalView(objs)
+	if self.gameObject.activeInHierarchy then
+		local viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function RefreshView(data)
+	maskObj:SetActive(data.showMask)
+	if not data.showMask then
+		UpdateCoundown(data.countdownData)
+		UpdatePlayerList(data.playerData)
+		RefreshCurrentPlayers(data.leftPlayerData, data.rightPlayerData)
+		if data.championData then
+			champion.gameObject:SetActive(true)
+			UpdatePlayerBaseInfo(champion, data.championData)
+		else
+			champion.gameObject:SetActive(false)
+		end
+
+		ShowAllLocks()
+		UpdateLightList(data.pathsData)
+		UpdateNodes(data.nodeData)
+
+		prevBtnObj:SetActive(data.showPrevBtn)
+		nexBtnObj:SetActive(data.showNextBtn)
+	end
+end
+
+function OnNotification_RefreshFinalViewPlayer(objs)
+	if self.gameObject.activeInHierarchy then
+		local data = objs[0]
+		RefreshCurrentPlayers(data.leftPlayerData, data.rightPlayerData)
+		prevBtnObj:SetActive(data.showPrevBtn)
+		nexBtnObj:SetActive(data.showNextBtn)
+	end
+end
+
+function RefreshCurrentPlayers(leftPlayerData, rightPlayerData)
+	UpdatePlayerBaseInfo(leftPlayer, leftPlayerData)
+	UpdatePlayerBaseInfo(rightPlayer, rightPlayerData)
+	leftPlayer.votedImgObj:SetActive(leftPlayerData.betted)
+	rightPlayer.votedImgObj:SetActive(rightPlayerData.betted)
+end
+
+function OnNotification_RefreshFinalViewCD(objs)
+	if self.gameObject.activeInHierarchy then
+		local data = objs[0]
+		UpdateCoundown(data.countdownData)
+		UpdateNodes(data.nodeData)
+	end
+end
+
+function OnNotification_ShowRoundResult(objs)
+	if self.gameObject.activeInHierarchy then
+		local data = objs[0]
+		ShowRoundResult(data.pathsData)
+	end
+end
+
+function ShowRoundResult(viewData)
+	for k, pathData in pairs(viewData) do
+		PlayPathAnimation(pathData)
+	end
+end
+
+--UI event handlers-------------------------------------------------------------------
+function OnTipsBtnClick(sender)
+	self:SendCommand("OpenHelpView", self.gameObject.name)
+end
+
+function OnPlayerBaseClick(sender)
+	local parentName = sender.transform.parent.name
+	if parentName == "Winner" then
+		self:SendCommand("FinalViewWinnerClicked")
+	elseif parentName == "PlayerLeft" then
+		self:SendCommand("FinalViewLeftPlayerClicked")
+	elseif parentName == "PlayerRight" then
+		self:SendCommand("FinalViewRightPlayerClicked")
+	else
+		self:SendCommand("FinalViewPlayerClicked", parentName)
+	end
+end
+
+function OnReplayBtnClick(sender)
+	self:SendCommand("FinalViewReplayBtnClicked")
+end
+
+function OnDetailsBtnClick(sender)
+	self:SendCommand("FinalViewDetailsBtnClick")
+end
+
+function OnPreviousBtnClick(sender)
+	local dir = -1
+	self:SendCommand("FinalViewSwitch", dir)
+end
+
+function OnNextBtnClick(sender)
+	local dir = 1
+	self:SendCommand("FinalViewSwitch", dir)
+end
+
+--On closing--------------------------------------------------------------------------
+function OnNotification_CloseLeagueView(obj)
+	self:HideView("LeagueFinalMatchView")
+end
+
+--Helper functions---------------------------------------------------------------------
+function UpdateCoundown(viewData)
+	countdownObj:SetActive(viewData.countdownVisible)
+	seasonTipsObj:SetActive(not viewData.countdownVisible)
+	
+	if viewData.countdownVisible then
+		countdownTxt.text = viewData.countdownText
+		countdownHeaderTxt.text = viewData.countdownHeader
+	else
+		tipsTxt.text = viewData.tipsText
+	end
+end
+
+function UpdatePlayerList(viewData)
+	for k, playerData in pairs(viewData) do
+		UpdatePlayer(playerList[playerData.idx], playerData)
+	end
+end
+
+function UpdatePlayer(player, data)
+	player.nameTxt.text = data.playerName or ""
+	player.shadowObj:SetActive(data.showMask or false)
+	player.resultTxt.text = data.resultText or ""
+	local textColor = data.resultColor
+	if textColor then
+		local r, g, b = textColor[1], textColor[2], textColor[3]
+		CsBridge.UnityHelper.SetTextColor(player.resultTxt, r, g, b)
+	end
+	BindPlayerBaseInfoValue(player.baseObj.transform, data.playerBaseInfo)
+end
+
+function UpdatePlayerBaseInfo(player, data)
+	BindPlayerBaseInfoValue(player.baseObj.transform, data.playerBaseInfo)
+	player.nameTxt.text = data.playerName or ""
+end
+
+function ShowAllLocks()
+	for k, lock in pairs(lockList) do
+		lock.gameObject:SetActive(true)
+	end
+end
+
+function UpdateNodes(nodeData)
+	for k, itemData in pairs(nodeData) do
+		local idx = itemData.idx
+		local lock = lockList[idx]
+		if lock then
+			lock.gameObject:SetActive(itemData.showLock)
+		end
+		local fightSpine = fightSpineList[idx]
+		if fightSpine then
+			if itemData.showAnim then
+				if not fightSpine.gameObject.activeInHierarchy then
+					fightSpine.gameObject:SetActive(itemData.showAnim)
+					fightSpine.spine:PlayAnimation(ANIMATION_FIGHT, true, nil, nil)
+				end
+			else
+				fightSpine.gameObject:SetActive(itemData.showAnim)
+			end
+		end
+	end
+end
+
+function UpdateLightList(viewData)
+	HideAllLights()
+
+	for k, pathData in pairs(viewData) do
+		PlayPathAnimation(pathData)
+	end
+end
+
+function HideAllLights()
+	for k, playerLightList in pairs(lightList) do
+		for i, light in pairs(playerLightList) do
+			SetLightVisible(light, false)
+		end
+	end
+end
+
+function SetLightVisible(light, visible)
+	if visible then
+		light.gameObject:SetActive(true)
+		if light.hPathObj then
+			SetLocalScale(light.hPathTrans, 1, 1, 1)
+		end
+		if ligth.chamferObj then
+			light.chamferObj:SetActive(true)
+		end
+		if light.vPathObj then
+			SetLocalScale(light.vPathTrans, 1, 1, 1)
+		end
+	else
+		light.gameObject:SetActive(false)
+	end
+end
+
+function ResetLight(light)
+	light.gameObject:SetActive(true)
+	if light.hPathObj then
+		SetLocalScale(light.hPathTrans, 0, 1, 1)
+	end
+	if light.chamferObj then
+		light.chamferObj:SetActive(false)
+	end
+	if light.vPathObj then
+		SetLocalScale(light.vPathTrans, 1, 0, 1)
+	end
+end
+
+function SetLocalScale(trans, x, y, z)
+	local scale = trans:CheckLocalScale()
+	scale.x = x
+	scale.y = y
+	scale.z = z
+	trans:ResetLocalScale(scale)
+end
+
+function PlayPathAnimation(pathData)
+	local playerIdx = pathData.idx
+	local firstLightIdx = pathData.firstLightIdx and pathData.firstLightIdx or 1
+	local lastLightIdx = pathData.lastLightIdx
+
+	local lights = GetLights(playerIdx, firstLightIdx, lastLightIdx)
+	local delay, duration, scale = 0, 0, 1
+	local lastLight = lights[#lights]
+	for k, light in pairs(lights) do
+		ResetLight(light)
+
+		local hPathTrans = light.hPathTrans
+		if hPathTrans then
+			duration = light.hPathLength / SPEED_LIGHT
+			local tweener = CsBridge.TweenUtils.ScaleTo(hPathTrans, scale, scale, duration)
+			tweener:DoDelay(delay)
+			tweener:OnCompleteAction(
+				function()
+					if light.chamferObj then
+						light.chamferObj:SetActive(true)
+					end
+				end
+			)
+			tweener:DoPlay()
+			delay = delay + duration
+		end
+
+		local vPathTrans = light.vPathTrans
+		if vPathTrans then
+			duration = light.vPathLength / SPEED_LIGHT
+			tweener = CsBridge.TweenUtils.ScaleTo(vPathTrans, scale, scale, duration)
+			tweener:DoDelay(delay)
+			tweener:DoPlay()	
+			delay = delay + duration
+		end
+
+		if light ~= lastLight then
+			tweener:OnCompleteAction(function()
+				local lock = GetLock(playerIdx, light.index)
+				if lock then				
+					lock.gameObject:SetActive(false)
+				end
+			end)
+		end	
+	end
+end
+
+function GetLights(playerIdx, firstLightIdx, lastLightIdx)
+	local lights = {}
+	local playerLightList = lightList[playerIdx]
+	for i = firstLightIdx, lastLightIdx do
+		table.insert(lights, playerLightList[i])
+	end
+	return lights
+end
+
+function GetLock(playerIdx, lightIdx)
+	local lock = nil
+	local lockIdx = -1
+	if lightIdx == 2 then
+		lockIdx = math.floor((playerIdx + 1) / 2)
+	elseif lightIdx == 4 then
+		lockIdx = 4 + (playerIdx > 4 and 2 or 1)
+	elseif lightIdx == 5 then
+		lockIdx = 7
+	end
+
+	if lockIdx > 0 then
+		lock = lockList[lockIdx]
+	end
+	return lock
+end
+
+function GetFightSpine(level, idx)
+	local spine = nil
+	local idx = -1
+	if level == LeagueMatchLevel.QuaterFinal then
+		idx = (idx + 1) / 2
+	elseif level == LeagueMatchLevel.SemiFinal then
+		idx = 4 + idx
+	end
+
+	if idx > 0 then
+		spine = fightSpineList[idx]
+	end
+	return spine
+end
+
+function GetPathLength(pathTrans)
+	local rect = pathTrans.rect
+	local width, height = rect.width, rect.height
+	return width > height and width or height
+end
+
+function DoExit()
+	SEQUENCE_LIGHT = nil
+	SPEED_LIGHT  = nil
+	ANIMATION_FIGHT  = nil
+
+	playerList = nil
+	lockList = nil 
+	fightSpineList = nil
+	lightList = nil
+	leftPlayer = nil 
+	rightPlayer = nil 
+	champion = nil
+	maskObj = nil 
+	countdownObj = nil 
+	progressObj = nil 
+	seasonTipsObj = nil 
+	replayBtnObj = nil
+	countdownTxt = nil 
+	countdownHeaderTxt = nil 
+	tipsTxt = nil
+	prevBtnObj = nil 
+	nexBtnObj = nil
+end

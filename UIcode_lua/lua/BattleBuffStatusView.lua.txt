@@ -1,0 +1,49 @@
+local buffGrid
+local buffData = {}
+local NORMAL_HEIGHT = 82
+function DoInit()
+    self.Shadow=1
+    buffGrid = self:GetComponentAtPath("ScrollRect/Viewport/Grid", CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+	
+end
+
+function SetData(data)
+	buffData = data
+	RefreshBuffGrid()
+end
+
+function RefreshBuffGrid()
+	buffGrid:RefreshItemSlots(buffData,self.gameObject,"BattleBuffStatusItemSlot")
+end
+
+function OnBattleBuffStatusItemSlotBindValue(slot, data)
+	local iconImg = slot:GetGameObjectAtPath("iconImg")
+	local cutLine = slot:GetGameObjectAtPath("cutLineImg")
+	local dexTxt = slot:GetComponentAtPath("decTxt",CLS_TEXT)
+	local slotTF = slot.transform
+	if data then
+		CsBridge.IconData.SetIconByName(iconImg,data.icon)
+		dexTxt.text = data.desc
+	end
+	local dexTxtHeight = dexTxt:GetPreferredValues().y
+	if dexTxtHeight > NORMAL_HEIGHT then
+		CsBridge.UnityHelper.SetUISizeDelta(slotTF,slotTF.sizeDelta.x,dexTxtHeight)
+	else
+		CsBridge.UnityHelper.SetUISizeDelta(slotTF,slotTF.sizeDelta.x,NORMAL_HEIGHT)
+	end
+end
+
+function OnMaskClick(sender)
+    DoClose()
+end
+
+function DoClose()
+    self:HideView("BattleBuffStatusView")
+end
+
+function DoExit()
+	buffGrid = nil
+end

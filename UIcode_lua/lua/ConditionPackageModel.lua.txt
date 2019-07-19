@@ -1,0 +1,147 @@
+--
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-11-16 10:13:38
+
+require "CommPayutils"
+
+local curConditionPackage
+local conditionPackageArr
+
+local bgImgArr = {
+    "ui_bg_dianjin3",
+    "ui_bg_dianjin1",
+    "ui_bg_dianjin2"
+}
+
+function DoInit()
+    MsgCenter:Subscribe(Notify_ConditionPackageTimeOver, OnConditionPackageTimeOver)
+end
+
+function OnCommand_InitPackageConfigData(objs)
+    UpdateConditionPackage(objs[0])
+    MsgCenter:Broadcast(Notify_ConditionPackageChanged)
+end
+
+function OnCommand_InitConditionPackageListData(objs)
+    UpdateConditionPackageArr(function()
+        self:SendNotification("RefreshConditionPackageListView",conditionPackageArr)
+    end)
+end
+
+function OnCommand_SelectConditionPackage(objs)
+    curConditionPackage = objs[0]
+    curConditionPackage.effect = false
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        CsBridge.OpenView("ConditionPackageView","ConditionPackageModel",false,true)
+    end,"ConditionPackageView","ConditionPackageEffectView","ItemSlot",curConditionPackage.icon)
+end
+
+function OnCommand_UpdateConditionPackageArr(objs)
+    UpdateConditionPackageArr(function()
+        self:SendNotification("RefreshConditionPackageListView",conditionPackageArr)
+    end)
+end
+
+function OnCommand_InitConditionPackageData(objs)
+    self:SendNotification("RefreshConditionPackageView",curConditionPackage)
+end
+
+function OnCommand_ConditionPackageTimeOver(objs)
+    self:SendNotification("CloseConditionPackageView")
+    curConditionPackage = nil
+    MsgCenter:Broadcast(Notify_ConditionPackageChanged)
+end
+
+function OnCommand_UpdateConditionPackageArr(objs)
+    UpdateConditionPackageArr(function()
+        self:SendNotification("RefreshConditionPackageListView",conditionPackageArr)
+    end)
+end
+
+function OnConditionPackageTimeOver()
+    UpdateConditionPackageArr(function()
+        self:SendNotification("RefreshConditionPackageListView",conditionPackageArr)
+        MsgCenter:Broadcast(Notify_ConditionPackageChanged)
+    end)
+end
+
+function UpdateConditionPackageArr(onFinished)
+    conditionPackageArr = {}
+    local req = {
+        useless = 0
+    }
+    HttpRequest("checkAllConditionPackage","CheckAllConditionPackageReq","CheckAllConditionPackageResp",req,function(resp)
+        if resp and resp.packages then
+            for i,v in ipairs(resp.packages) do
+                local overTime = v.time + GetMillisecondFromHours(v.continuedTime)
+                if overTime >= CsBridge.timeManager.ServerTime then
+                    local payData = CheckPayData(v.payId)
+                    conditionPackage = {
+                        activityId = v.id,
+                        id = payData.id,
+                        bg = bgImgArr[i%3+1],
+                        icon = v.icon,
+                        oldPrice = GetShowPrice(payData.currencySign,v.packagePrice),
+                        newPrice = payData.showPrice,
+                        rewards = v.rewards,
+                        pid = payData.pid,
+                        currency = payData.currency,
+                        targetTime = overTime,
+                        name = v.packageName,
+                        desp = v.packageSlogen,
+                        payData = payData
+                    }
+                    table.insert(conditionPackageArr, conditionPackage)
+                end
+            end
+        end    
+        if onFinished then
+            onFinished()
+        end
+    end)
+end
+
+function UpdateConditionPackage(pb)
+    local payData = CheckPayData(pb.payId)
+    curConditionPackage = {
+        activityId = pb.id,
+        id = payData.id,
+        icon = pb.icon,
+        oldPrice = GetShowPrice(payData.currencySign,pb.packagePrice),
+        newPrice = payData.showPrice,
+        rewards = pb.rewards,
+        pid = payData.pid,
+        currency = payData.currency,
+        targetTime = pb.time+GetMillisecondFromHours(pb.continuedTime),
+        desp = pb.packageSlogen,
+        effect = true,
+        payData = payData
+    }
+end
+
+function OnCommand_BuyConditionPackage(objs)
+    DoPayActivity(curConditionPackage.activityId,curConditionPackage.payData,function()
+        local req = {
+            id = curConditionPackage.activityId
+        }
+        HttpRequest("removeConditionPackageRecord","RemoveConditionPackageRecordReq","RemoveConditionPackageRecordResp",req,function(resp)            
+            local confirmCbk = function()
+                self:SendNotification("CloseConditionPackageView")
+                curConditionPackage = nil
+                MsgCenter:Broadcast(Notify_ConditionPackageChanged)
+                MsgCenter:Broadcast(Notify_ConditionPackageBuy)
+            end
+            PopRewardView(self,curConditionPackage.rewards, confirmCbk)
+        end)
+    end)
+end
+
+function DoOnExit()
+	MsgCenter:Unsubscribe(Notify_ConditionPackageTimeOver, OnConditionPackageTimeOver)
+	self.Module = nil
+    curConditionPackage = nil
+    conditionPackageArr = nil
+    bgImgArr = nil
+end 

@@ -1,0 +1,47 @@
+local rewardItemsGrid
+
+local isInit = false
+
+function DoInit()
+	self.Shadow=1
+	self.Anim = 8
+end 
+
+function InitUI()
+	rewardItemsGrid = self:GetComponentAtPath("other/ScrollRect/Viewport/RewardItemsGrid" ,CLS_UI_ITEM_GRID) --self.transform:Find("other/ScrollRect/Viewport/RewardItemsGrid"):GetComponent("UIItemGrid")
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+	end 
+	self:SendCommand("InitPreviewData")
+end
+
+function OnClose()
+	rewardItemsGrid:ClearItems()
+end 
+
+function OnNotification_RefreshPreviewView(objs)
+	local rewardItems = objs[0]
+	rewardItemsGrid:RefreshItemSlots(rewardItems,self.gameObject,"ItemSlot")
+end
+
+function OnRewardItemsGridItemSlotClick(obj)
+	local data = obj.m_data
+	ShowTip(self, data.typeId, data.id)
+end
+
+function OnSureBtnClick(sender)
+	self:HideView(self.gameObject.name)
+end 
+
+function OnMaskClick(sender)
+	self:HideView(self.gameObject.name)
+end 
+
+function DoExit()
+	rewardItemsGrid = nil
+	isInit = nil
+end

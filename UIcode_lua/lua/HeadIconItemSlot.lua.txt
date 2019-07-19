@@ -1,0 +1,7 @@
+function OnHeadIconItemSlotBindValue(slot, data)
+	local iconImg = slot:GetComponentAtPath("iconImg" ,CLS_IMAGE)
+	SetIconByHeadId(iconImg, data.icon)
+
+	local selectedFlagObj = slot:GetGameObjectAtPath("selection")
+	selectedFlagObj:SetActive(data.selected)
+end

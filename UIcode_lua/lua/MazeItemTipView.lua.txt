@@ -1,0 +1,88 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-05-08 21:25:32
+
+local isInit = false
+
+local nameTxt
+local iconImg
+local despTxt
+local despSizeDelta
+local btnsObj
+local useBtnObj
+
+local ItemType = {
+    Use = 1
+}
+
+function DoInit()	
+    self.Anim = 8
+    self.Shadow = 1
+end
+
+local function InitUI()
+    nameTxt = self:GetComponentAtPath("Center/Base/NameTxt",CLS_TEXT)
+    iconImg = self:GetGameObjectAtPath("Center/Base/Item/IconImg")
+    despTxt = self:GetComponentAtPath("Center/DespTxt",CLS_TEXT)
+    despSizeDelta = despTxt.transform:CheckSizeDelta()
+    btnsObj = self:GetGameObjectAtPath("Center/Btns")
+    useBtnObj = self:GetGameObjectAtPath("Center/Btns/UseBtn")
+end
+
+function OnOpen()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+end
+
+function SetParamDataList(objs)
+    local data = objs[0]
+    self:SendCommand("InitData",data)
+end
+
+function DoExit()
+    isInit = nil
+    
+    nameTxt = nil
+    iconImg = nil
+    despTxt = nil
+    despSizeDelta = nil
+    useBtnObj = nil
+    ItemType = nil
+end
+
+local function HideView()
+    self:HideView(self.gameObject.name)
+end
+
+local function RefreshBtns(type)
+    btnsObj:SetSelfActive(type ~= 0)
+    useBtnObj:SetSelfActive(type == ItemType.Use)
+end
+
+function OnNotification_RefreshMazeItemTipView(objs)
+    local data = objs[0]
+    nameTxt.text = data.name
+    SetSpriteByModule(iconImg,data.icon,self.Module)
+    despTxt.text = data.desp
+    local size = {
+        x = despSizeDelta.x,
+        y = despTxt.preferredHeight
+    }
+    despTxt.transform:ResetSizeDelta(size)
+    RefreshBtns(data.type)
+end
+
+function OnNotification_HideView(objs)
+    HideView()
+end
+
+function OnMaskClick(sender)
+    HideView()
+end
+
+function OnUseBtnClick(objs)
+    self:SendCommand("UseItem")
+end

@@ -1,0 +1,520 @@
+local CrossArenaFormationTypeList =
+{
+    [1] = FormationTypeEnum.FormationType_Cross_One,
+    [2] = FormationTypeEnum.FormationType_Cross_Two,
+    [3] = FormationTypeEnum.FormationType_Cross_Three,
+}
+
+local arenaDataArr = {}
+
+local curType = 0
+local selfRankInfo
+local seasonEndTime
+local APArenaRewardDataArr = {}
+local CrossArenaRewardDataArr = {}
+local isSkip = false
+
+local battleInfos
+local battleIndex = 1
+
+function RefreshFlag()
+    local vipLv = appData:checkData("PlayerInfo").vip
+    local vipCanBought = ResTblContainer:GetPropToInt(vipLv,VipTbl.arenaCountAdd,VipTbl.tblName)
+    local flagData = {}
+    flagData.apArenaFlag = RefreshSingleFlag(UI_OPEN_TYPE_PVP,1,vipCanBought)
+    flagData.crossArenaFlag = RefreshSingleFlag(UI_OPEN_TYPE_PVPCROSS,2,0)
+    local SoulPalaceUtils = require "SoulPalaceUtils"
+    flagData.soulFlag = SoulPalaceUtils.GetSoulSingFlag()
+    self:SendNotification("RefreshFlag",flagData)
+end
+
+function RefreshSingleFlag(openId,type,vipCanBought)
+    if UIOpen(openId,false) then
+        local basicInfo = appData:checkItem("ArenaBasicInfo",tostring(type))
+        if basicInfo==nil then
+            return false
+        end
+        local RENEW_INTERVAL_CONST=0
+        if type==1 then
+            RENEW_INTERVAL_CONST = GetConstValue("TeamArenaRenewCD")*1000 
+        elseif type==2 then
+            RENEW_INTERVAL_CONST = GetConstValue("aPArenaRenewCD")*1000 
+        elseif type==3 then
+        end
+        local remains = basicInfo.remains
+        local extraRemains=basicInfo.extraRemains
+        if remains+extraRemains>0 then
+            return true
+        end
+        local lastRenewTime=basicInfo.lastRenewTime
+        local apArenaNormalMaxCount = ResTblContainer:GetPropToInt(openId,UIOpenBase.normalMaxCount,UIOpenBase.actorTbl)
+        local COUNT_Limit_CONST=apArenaNormalMaxCount+vipCanBought
+        local count = 0
+        while(lastRenewTime+RENEW_INTERVAL_CONST<CsBridge.timeManager.ServerTime)
+        do
+            lastRenewTime = lastRenewTime+RENEW_INTERVAL_CONST
+            count=count+1
+        end
+        remains=basicInfo.remains+count
+        if	remains>=COUNT_Limit_CONST then
+            remains=COUNT_Limit_CONST
+        end
+
+        return remains>0
+    end
+    return false
+end
+
+function OnCommand_InitArenaData(objs)
+    InitArena()
+end
+
+function InitArenaView()
+    InitArenaData()
+    RefreshFlag()
+    self:SendNotification("InitArenaData")
+end
+
+function InitArena()
+    local req = {}
+    req.id=3
+    HttpRequest("initPBItem", "InitPBItemReq", "InitPBItemResp", req,
+        function (resp)
+            if resp~=nil then
+                InitArenaView()
+            end
+        end)
+end
+
+function InitArenaData()
+    arenaDataArr = {}
+    local arenaBasicInfos=appData:checkAllItems("ArenaBasicInfo")
+    local playerInfo = appData:checkData("PlayerInfo")
+    for i=0,arenaBasicInfos.Length-1 do
+        table.insert(arenaDataArr,arenaBasicInfos[i])
+    end
+end
+
+function OnCommand_ArenaTypeChanged(objs)
+    curType = objs[0]
+    local isOn = objs[1]
+    if curType==1 then
+        if isOn then
+            CsBridge.CacheAssetsByModule(self.Module,
+                function()
+                    CsBridge.OpenView("APArenaView","ArenaModel",false,false)
+                end, "APArenaView","APArenaRankItemSlot")
+        else
+            self:HideView("APArenaView",nil,false)
+        end
+    elseif curType==2 then
+        if isOn then
+            CsBridge.CacheAssetsByModule(self.Module,
+                function()
+                    CsBridge.OpenView("CrossArenaView","ArenaModel",false,false)
+                end, "CrossArenaView","APArenaRankItemSlot")
+        else
+            self:HideView("CrossArenaView",nil,false)
+        end
+    elseif curType==3 then
+        if isOn then
+            CsBridge.CacheAssetsByModule(self.Module,
+                function()
+                    local view = CsBridge.OpenView("SoulPalaceView","SoulPalaceModel",false,false)
+                    local refreshFlagCallback = RefreshFlag
+                    view:SetData(refreshFlagCallback)
+                end, "SoulPalaceView","SoulPalaceItemSlot")
+        else
+            self:HideView("SoulPalaceView",nil,false)
+        end
+    end
+end
+
+function OnCommand_InitAPArenaData(objs)
+    local basicInfo = appData:checkItem("ArenaBasicInfo",tostring(curType))
+    local req = {}
+    req.count=50
+    local urlStr = ""
+    local reqStr = ""
+    local RespStr = ""
+    if curType==1 then
+        urlStr="getAPArenaRank"
+        reqStr="GetAPArenaRankReq"
+        RespStr="GetAPArenaRankResp"
+    elseif curType==2 then
+        urlStr="getMulTeamArenaRank"
+        reqStr="GetMulTeamArenaRankReq"
+        RespStr="GetMulTeamArenaRankResp"
+    end
+    HttpRequest(urlStr,reqStr,RespStr, req,
+        function (resp)
+            selfRankInfo=resp.selfRankInfo
+            seasonEndTime=resp.seasonEndTime
+            self:SendNotification("InitAPArenaData",basicInfo,resp)
+            if objs.Length > 0 and (not objs[0].isRecord or objs[0].isRecord == nil) and objs[0].battleEndInfo.type == UI_OPEN_TYPE_PVP and objs[0].battleEndInfo.result ~= 1 then
+                CheckAndShowConditionPackageView(self,GetConditionReqData(ConditionPackageType.APArena,selfRankInfo.score))
+            end
+        end)
+end
+
+function UpdateRemains()
+    local basicInfo = appData:checkItem("ArenaBasicInfo",tostring(curType))
+    self:SendNotification("UpdateRemains",basicInfo)
+end
+
+function OnCommand_APArenaDefFormation(objs)
+
+end
+
+function OnCommand_OpenAPArenaRecordView(objs)
+    local req={}
+    req.id=1
+    local urlStr = ""
+    local reqStr = ""
+    local RespStr = ""
+    if curType==1 then
+        urlStr="getAPArenaDefRecord"
+        reqStr="GetAPArenaDefRecordReq"
+        RespStr="GetAPArenaDefRecordResp"
+    elseif curType==2 then
+        urlStr="getMulTeamArenaDefRecord"
+        reqStr="GetMulTeamArenaDefRecordReq"
+        RespStr="GetMulTeamArenaDefRecordResp"
+    end
+    HttpRequest(urlStr,reqStr,RespStr, req,
+        function(resp)
+            CsBridge.CacheAssetsByModule(self.Module,
+            function()
+                local view = CsBridge.OpenView("APArenaRecordView","ArenaModel")
+                self:SendNotification("UpdateAPArenaRecordView",resp)
+            end, "APArenaRecordView","APArenaRecordItemSlot")
+        end)
+end
+
+function OnCommand_OpenAPArenaDetailsView(objs)
+    isSkip = objs[0]
+    CsBridge.CacheAssetsByModule(self.Module,
+        function()
+            local view = CsBridge.OpenView("APArenaDetailsView","ArenaModel")
+            view:SetData(isSkip)
+        end, "APArenaDetailsView","APArenaItemSlot","CrossArenaItemSlot")
+end
+
+function OnCommand_InitArenaDetailsData(objs)
+    local req = {}
+    req.id=1
+    local urlStr = ""
+    local reqStr = ""
+    local RespStr = ""
+    if curType==1 then
+        urlStr="getAPArenaTargets"
+        reqStr="GetAPArenaTargetsReq"
+        RespStr="GetAPArenaTargetsResp"
+    elseif curType==2 then
+        urlStr="getMulTeamArenaTargets"
+        reqStr="GetMulTeamArenaTargetsReq"
+        RespStr="GetMulTeamArenaTargetsResp"
+    end
+    HttpRequest(urlStr,reqStr,RespStr, req,
+        function (resp)
+            if resp==nil then
+                return
+            end
+            self:SendNotification("InitArenaDetailsData",resp.targets,curType)
+        end) 
+end
+
+function OnCommand_OpenDefFormationView(objs)
+    if curType==1 then
+        local saveCallback = function(formationPos)
+            local req={}
+            req.id=FormationTypeEnum.FormationType_PVP
+            req.heroIds=formationPos
+            HttpRequest("updateFormation", "Formation", "UpdateFormationResp", req)
+        end
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            local view=CsBridge.OpenView("FormationView","FormationModel",true,true)
+            view.transform.parent:SetAsLastSibling()
+            view:SetParamDataList(2,nil,
+            saveCallback,1,false)
+        end, "FormationView","HeroItemSlot")
+    elseif curType==2 then
+        local saveCallback = function (formations,isClose)
+            local req = {}
+            req.formation_1 = formations[1]
+            req.formation_2 = formations[2]
+            req.formation_3 = formations[3]
+            HttpRequest("updateMultipleTeamFormation","UpdateMultipleTeamFormationReq","UpdateMultipleTeamFormationResp", req,
+            function (resp)
+                if resp.result==0 then
+                    local close = isClose == nil and true or isClose
+                    if close then
+                        self:HideView("CrossFormationView")
+                    end
+                end
+            end) 
+        end
+        local updateCallback = UpdateOneFormation
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            local view=CsBridge.OpenView("CrossFormationView","CrossArenaFormationModel",true,true)
+            view:SetParamDataList(1, saveCallback, updateCallback, CrossArenaFormationTypeList)
+        end, "CrossFormationView","CrossFormationItemSlot","HeroItemSlot")
+    end
+end
+
+function UpdateOneFormation(index, formation, finishedCallback)
+    local req = {}
+    req.type = index
+    req.formationPos = formation
+    HttpRequest(
+        "updateMultipleTeamSingleFormation",
+        "UpdateMultipleTeamSingleFormationReq",
+        "UpdateMultipleTeamSingleFormationResp", 
+        req,
+        finishedCallback
+    ) 
+end
+
+function OnCommand_OpenFormationView(objs)
+    local data = objs[0]
+    isSkip = objs[1]
+    if curType==1 then
+        local saveCallback = function (formationPos)
+            local req={}
+            req.zone=data.playerBaseInfo.zone
+            req.userId=data.playerBaseInfo.userId
+            req.robot=data.robot
+            req.formationPos=formationPos
+            HttpBattle("challengeInAPArena", "ChallengeInAPArenaReq", req,OnAPArenaBattle)
+        end
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            local view=CsBridge.OpenView("FormationView","FormationModel")
+            view:SetParamDataList(2,saveCallback,nil,0,false)
+        end, "FormationView","HeroItemSlot")
+    elseif curType==2 then
+        local updateCallback = UpdateOneFormation
+        local saveCallback = function (formations, isClose)
+            local close = isClose == nil and true or isClose
+            if close then
+                local req={}
+                req.zone=data.playerBaseInfo.zone
+                req.userId=data.playerBaseInfo.userId
+                req.robot=data.robot
+                req.formation_1=formations[1]
+                req.formation_2=formations[2]
+                req.formation_3=formations[3]
+                HttpRequest("challengeInMulTeamArena","ChallengeInMulTeamArenaReq","BattleInfosResp", req,LoadBattleInfos)     
+            else
+                local req = {}
+                req.formation_1 = formations[1]
+                req.formation_2 = formations[2]
+                req.formation_3 = formations[3]
+                HttpRequest("updateMultipleTeamFormation","UpdateMultipleTeamFormationReq","UpdateMultipleTeamFormationResp", req)  
+            end
+        end
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            local view=CsBridge.OpenView("CrossFormationView","CrossArenaFormationModel")
+            view:SetParamDataList(0, saveCallback, updateCallback, CrossArenaFormationTypeList)
+        end, "CrossFormationView","CrossFormationItemSlot","HeroItemSlot")
+    end
+end
+
+local function EnterBattle(battleInfo)
+    ShowBattleModule(battleInfo, self)
+end
+
+function LoadBattleInfos(resp)
+    if resp ~= nil then
+        battleInfos = resp.battleInfos
+        battleIndex = 1
+    end
+    self:HideView("APArenaDetailsView", nil, false)
+    if isSkip then
+        battleIndex = #battleInfos
+        local battleInfo = battleInfos[battleIndex]
+        local onFinished = function(battleInfo)
+            self:HideView("CrossFormationView", nil, false)
+            if (not battleInfo.isRecord or battleInfo.isRecord == nil) and battleInfo.battleEndInfo.type == UI_OPEN_TYPE_PVP and battleInfo.battleEndInfo.result ~= 1 then
+                CheckAndShowConditionPackageView(self,GetConditionReqData(ConditionPackageType.APArena,selfRankInfo.score))
+            end
+        end
+        ShowBattleSwept(battleInfo,self,onFinished)
+    else
+        local cbk = function()
+            self:HideView("CrossFormationView", nil, false)
+            local battleInfo = battleInfos[battleIndex]
+            battleIndex = battleIndex+1
+            EnterBattle(battleInfo)
+        end
+        CsBridge.timeManager:WaitForNextFrame(cbk)
+    end
+end
+
+function OnAPArenaBattle(battleInfo)
+    self:SendNotification("APArenaBattle")
+    if isSkip then
+        ShowBattleSwept(battleInfo,self)
+    else
+        EnterBattle(battleInfo)
+    end
+end
+
+function OnCommand_RecordVedio(objs)
+    local req = {}
+    req.id=objs[0]
+    if curType==1 then
+        HttpBattle("getAPArenaDefBattleInfo", "GetAPArenaDefBattleInfoReq", req,OnRecordVedio)
+    elseif curType==2 then
+        HttpRequest("getMulTeamArenaDefBattleInfo","GetMulTeamArenaDefBattleInfoReq","BattleInfosResp",req,
+            function(resp)
+                battleInfos = resp.battleInfos
+                battleIndex = 1
+                for i,battleInfo in ipairs(battleInfos) do
+                    battleInfo.isRecord=true
+                end
+                self:HideView("APArenaDetailsView", nil, false)
+                local battleInfo = battleInfos[battleIndex]
+                battleIndex = battleIndex+1
+                EnterBattle(battleInfo)
+            end)
+    end
+
+end
+
+function OnRecordVedio(battleInfo)
+    battleInfo.isRecord = true
+    EnterBattle(battleInfo)
+end
+
+function OnCommand_InitAPArenaRewardData(objs)
+    if next(APArenaRewardDataArr)==nil then
+        local ids = ResTblContainer:GetIds(APArenaRankReward.tblName)
+        local tbl = ResTblContainer:GetTable(APArenaRankReward.tblName)
+        for i=0,ids.Length-1 do
+            local data = {}
+            local id = tonumber(ids[i])
+            data.id = id
+            data.min = tbl:GetInt(id,APArenaRankReward.min)
+            data.max = tbl:GetInt(id,APArenaRankReward.max)
+            data.dailyRewardStr = tbl:Get(id,APArenaRankReward.dailyRewardStr)
+            data.seasonRewardStr = tbl:Get(id,APArenaRankReward.seasonRewardStr)
+            table.insert(APArenaRewardDataArr,data)
+        end
+    end
+    if next(CrossArenaRewardDataArr)==nil then
+        local ids = ResTblContainer:GetIds(TeamArenaRankReward.tblName)
+        local tbl = ResTblContainer:GetTable(TeamArenaRankReward.tblName)
+        for i=0,ids.Length-1 do
+            local data = {}
+            local id = tonumber(ids[i])
+            data.id = id
+            data.min = tbl:GetInt(id,TeamArenaRankReward.min)
+            data.max = tbl:GetInt(id,TeamArenaRankReward.max)
+            data.dailyRewardStr = tbl:Get(id,TeamArenaRankReward.dailyRewardStr)
+            data.seasonRewardStr = tbl:Get(id,TeamArenaRankReward.seasonRewardStr)
+            table.insert(CrossArenaRewardDataArr,data)
+        end
+    end
+    
+    self:SendNotification("InitAPArenaRewardData")
+end
+
+function OnCommand_InitAPArenaDailyRewardData(objs)
+    local aPArenaBasicInfo = appData:checkItem("ArenaBasicInfo",tostring(curType))
+    local maxRank = aPArenaBasicInfo.hisHighestRank
+    local curRank = selfRankInfo.rank
+    local dailyRewardDataArr = {}
+    local dataArr={}
+    if curType == 1 then
+        dataArr=APArenaRewardDataArr
+    elseif curType == 2 then
+        dataArr=CrossArenaRewardDataArr
+    end
+    for i,rewardData in ipairs(dataArr) do
+        local data = {}
+        data.min=rewardData.min
+        data.max=rewardData.max
+        data.rewardStr=rewardData.dailyRewardStr
+        table.insert(dailyRewardDataArr,data)
+    end
+    self:SendNotification("InitAPArenaDailyRewardData",maxRank,curRank,dailyRewardDataArr)
+end
+
+function OnCommand_InitAPArenaSeasonRewardData(objs)
+    local curRank = selfRankInfo.rank
+    local seasonRewardDataArr = {}
+    local dataArr={}
+    if curType == 1 then
+        dataArr=APArenaRewardDataArr
+    elseif curType == 2 then
+        dataArr=CrossArenaRewardDataArr
+    end
+    for i,rewardData in ipairs(dataArr) do
+        local data = {}
+        data.min=rewardData.min
+        data.max=rewardData.max
+        data.rewardStr=rewardData.seasonRewardStr
+        table.insert(seasonRewardDataArr,data)
+    end
+    self:SendNotification("InitAPArenaSeasonRewardData",curRank,seasonRewardDataArr,seasonEndTime)
+end
+
+function OnCommand_OpenExchangeItemView(objs)
+    local id = objs[0]
+	local itemData = appData:checkItem("PackItem",tostring(id))
+	local count = 0
+	if itemData~=nil then
+		count=itemData.count
+	end
+    ShowExchangeView(self,2,id,count,function()
+        UpdateRemains()
+        self:SendNotification("RefreshAddRedFlag")
+    end)
+end
+
+function OnCommand_ReloadFormBattle(objs)
+    if curType~=2 then
+        return 
+    end
+
+    if battleIndex>#battleInfos then
+        local req = {}
+        req.count=50
+        HttpRequest("getMulTeamArenaRank","GetMulTeamArenaRankReq","GetMulTeamArenaRankResp", req,
+            function (resp)
+                local basicInfo = appData:checkItem("ArenaBasicInfo",tostring(curType))
+                selfRankInfo=resp.selfRankInfo
+                seasonEndTime=resp.seasonEndTime
+                battleIndex = 1
+                battleInfos = {}
+                RefreshFlag()
+                self:SendNotification("InitAPArenaData",basicInfo,resp)
+                if objs.Length > 0 and (not objs[0].isRecord or objs[0].isRecord == nil) and objs[0].battleEndInfo.type == UI_OPEN_TYPE_PVPCROSS and objs[0].battleEndInfo.result ~= 1 then
+                    CheckAndShowConditionPackageView(self,GetConditionReqData(ConditionPackageType.MultiArena,selfRankInfo.score))
+                end
+            end)
+        return 
+    end
+
+    LoadBattleInfos(nil)
+end
+
+function OnCommand_ShopBtnClicked(objs)
+    local IDX_SHOP_UNION = 5
+	self:ShowModule("ShopModule",{IDX_SHOP_UNION},false)
+end
+
+function DoOnExit()
+	self.Module = nil
+    CrossArenaFormationTypeList = nil
+    arenaDataArr = nil
+
+    curType = nil
+    selfRankInfo = nil
+    seasonEndTime = nil
+    APArenaRewardDataArr = nil
+    CrossArenaRewardDataArr = nil
+
+    battleInfos = nil
+    battleIndex = nil
+end

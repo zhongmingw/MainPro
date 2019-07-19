@@ -1,0 +1,82 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-08-15 10:43:04
+
+require "AssistItemSlot"
+require "SubAssistItemSlot"
+
+local isInit = false
+
+local assistGrid
+local subAssistGrid
+
+function DoInit()	
+    self.Shadow = 1
+end
+
+function IsSetAnchor()
+    return true
+end
+
+function InitUI()
+    local centerTrans = self:GetComponentAtPath("Center",CLS_RECTTRANSFORM)
+    assistGrid = centerTrans:GetComponentAtPath("AssistSV/ScrollRect/Viewport/AssistGrid",CLS_UI_ITEM_GRID)
+    subAssistGrid = centerTrans:GetComponentAtPath("SubAssistSV/ScrollRect/Viewport/SubAssistGrid",CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitAssistData")
+end
+
+function OnNotification_RefreshAssistView(objs)
+    local assistArr = objs[0]
+    local id = objs[1]
+    assistGrid:RefreshItemSlots(assistArr,self.gameObject,"AssistItemSlot")
+    subAssistGrid:RefreshItemSlots(assistArr[id].subAssistArr,self.gameObject,"SubAssistItemSlot")
+end
+
+function OnNotification_SelectAssist(objs)
+    local assist = objs[0]
+    assistGrid:SingleRefreshSlot(assist)
+    subAssistGrid:RefreshItemSlots(assist.subAssistArr,self.gameObject,"SubAssistItemSlot")
+end
+
+function OnNotification_CancelSelectAssist(objs)
+    local assist = objs[0]
+    assistGrid:SingleRefreshSlot(assist)
+end
+
+function OnAssistGridAssistItemSlotClick(obj)
+    self:SendCommand("SelectAssist",obj.m_data)
+end
+
+function OnSubAssistGridJumpBtnClick(obj)
+    local systemId = obj.m_data.systemId
+    if systemId == UI_OPEN_TYPE_GUILD then
+        if not UIOpen(systemId,true) then
+            return
+        end 
+        if appData:checkData("PlayerInfo").union and appData:checkData("PlayerInfo").union ~= "0" then
+            LinkSystem(systemId, self)
+        else
+            CsBridge.hintUILayer:ShowHintBox(Language:getStr("canNotLegion"),2)
+        end
+    else
+        LinkSystem(systemId, self)
+    end
+end
+
+function OnCloseBtnClick(sender)
+    self:ReturnBack()
+end
+
+function DoExit()
+    isInit = nil
+    assistGrid = nil
+    subAssistGrid = nil
+end

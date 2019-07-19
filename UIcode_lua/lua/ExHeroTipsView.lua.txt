@@ -1,0 +1,57 @@
+---@type UnityEngine.GameObject
+local leftHeroBaseObj
+---@type UnityEngine.GameObject
+local rightHeroBaseObj
+---@type UnityEngine.GameObject
+local heroLeftLvObj
+---@type UnityEngine.GameObject
+local heroRightLvObj
+
+function DoInit()
+    leftHeroBaseObj = self:GetGameObjectAtPath("Center/LeftHeroBase")
+    rightHeroBaseObj = self:GetGameObjectAtPath("Center/RightHeroBase")
+    heroLeftLvObj = leftHeroBaseObj.transform:GetGameObjectAtPath("LvTxt")
+    heroRightLvObj = rightHeroBaseObj.transform:GetGameObjectAtPath("LvTxt")
+end
+
+function OnAnimationFinished()
+    self:SendCommand("InitHeroTipsViewData")
+end
+
+function OnNotification_InitHeroTipsViewData(objs)
+    if objs ~= nil then
+        BindHeroBaseValue(leftHeroBaseObj, objs[0])
+        BindHeroBaseValue(rightHeroBaseObj, objs[1])
+        heroLeftLvObj.gameObject:SetActive(false)
+        heroRightLvObj.gameObject:SetActive(false)
+    end
+end
+
+---清理界面
+function OnNotification_ClearView()
+    BindHeroBaseValue(leftHeroBaseObj, nil)
+    BindHeroBaseValue(rightHeroBaseObj, nil)
+end
+
+function OnMaskClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function OnCancelBtnClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function OnSureBtnClick(sender)
+    self:SendCommand("TwiceSureExchange")
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+    leftHeroBaseObj = nil
+    rightHeroBaseObj = nil
+    heroLeftLvObj = nil
+    heroRightLvObj = nil
+end

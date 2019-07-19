@@ -1,0 +1,83 @@
+local auraArr
+local curAura
+local backAction
+
+local grid
+local initialized = false
+
+function DoInit()
+    self.Shadow = 1
+end
+
+function OnClose()
+    grid:ClearItems()
+end
+
+function SetParamDataList(objs)
+    auraArr = objs[0]
+    curAura = objs[1]
+    if objs.Length > 2 then
+        backAction=objs[2]
+    end
+end
+
+function OnAnimationFinished()
+    if not initialized then
+        initialized = true
+        doInitUI()
+    end
+    grid:RefreshItemSlots(auraArr,self.gameObject,"aureoleItemSlot")
+end
+
+function doInitUI()
+    grid = self:GetComponentAtPath("aureoleSV/ScrollRect/Viewport/Grid" ,CLS_UI_ITEM_GRID)
+end
+
+function OnaureoleItemSlotBindValue(slot,data)
+    local iconImag = slot:GetComponentAtPath("iconImg" ,CLS_IMAGE)
+    local condTxt = slot:GetComponentAtPath("condTxt" ,CLS_TEXT)
+    local title1Txt = slot:GetComponentAtPath("title1Txt" ,CLS_TEXT)
+    local val1Txt = slot:GetComponentAtPath("val1Txt" ,CLS_TEXT)
+    local title2Txt = slot:GetComponentAtPath("title2Txt" ,CLS_TEXT)
+    local val2Txt = slot:GetComponentAtPath("val2Txt" ,CLS_TEXT)
+    CsBridge.IconData.SetIconByName(iconImag.gameObject,data.icon)
+    if data.condDesp ~= nil or data.condDesp ~= "" then
+        condTxt.gameObject:SetActive(true)
+        condTxt.text=data.condDesp
+    else
+        condTxt.gameObject:SetActive(false)
+    end
+    if data.des ~= nil or data.des ~= "" then
+        title1Txt.text = data.des
+	else
+	    title1Txt.gameObject:SetActive(false)
+	    val1Txt.gameObject:SetActive(false)
+	    title2Txt.gameObject:SetActive(false)
+	    val2Txt.gameObject:SetActive(false)
+	end
+
+	if not data.isOn then
+	    CsBridge.IconData.ChangeImageMaterial(iconImag.gameObject,"SpriteGray")
+	else
+	    CsBridge.IconData.ChangeImageMaterial(iconImag.gameObject,"")
+	end
+end
+
+function IsSetAnchor()
+    return true
+end
+
+function OnMaskClick(sender)
+    if backAction ~= nil then
+        backAction()
+    end
+    self:HideView("aureoleView")
+end
+
+function DoExit()
+    auraArr = nil
+    curAura = nil
+    backAction = nil
+    grid = nil
+    initialized = nil
+end

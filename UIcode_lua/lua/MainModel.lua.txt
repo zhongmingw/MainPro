@@ -1,0 +1,1538 @@
+require "ChatWorldData"
+require "LeagueUtils"
+require "LeaderboardUtils"
+local QueueActionMgr = require "QueueActionMgr"
+local SysPreUtils = require "SysPreUtils"
+local dailyTaskUtils = require "DailyTaskUtils"
+local realNameCheckUtils = require "RealNameCheckUtils"
+local UpRewardVedioUtils = require "UpRewardVedioUtils"
+
+local autoTaskRedFlag = false
+local expeditionRedFlag = false
+local lotteryRedFlag = false
+local formationRedFlag = false
+
+local autoTaskBlueFlag = false
+local apArenaBlueFlag = false
+local challengeBlueFlag = false
+local skyscraperBlueFlag = false
+
+local playerInfo
+local tbcInfo
+
+--online reward
+local curOnlineReward
+
+local getActiveIconsReqTimes = 0 ---getActiveIcons这个url请求的次数
+
+----------------------------Activity----------------------------------------
+
+local curActivityIconData
+local curSelectActivityIcon
+local activityIconCountDownDic
+local ACTIVITY_ICON_TIMER = "ActivityIconTimer"
+local SUB_ACTIVITY_ICON_TIMER = "SubActivityIconTimer"
+local ActivityIconType = {
+	DEFAULT = 0,
+	SPECIAL = 1,
+	REALNAME = 2,
+}
+local sysPreTblData
+
+local function OpenLeaderboardView()
+	CsBridge.textureRender:RendererScreen(
+		self.Module.rawImage,
+		function ()
+			OpenLeaderboard(self, PlayerLeaderboardType.Power)
+		end)
+end
+
+
+local function GetActivityIconData(activityIcon)
+	return activityIcon
+end
+
+local function GetSpecialActivityIconData(activityIcon)
+	local level = appData:checkData("PlayerInfo").level
+	local count = 1
+	local openSys = SysPreUtils.GetOpenSysClosestLevel(level,count,sysPreTblData)
+	openSys = openSys[count]
+	if openSys == nil then
+		return nil
+	end
+	activityIcon.icon = openSys.icon
+	activityIcon.name = openSys.name
+	activityIcon.desp = string.format(Language:getStr("SysPreview_OpenLv"),openSys.level)
+	return activityIcon
+end
+
+local function GetActivityIconDataByType(type)
+	local data = {}
+	local func = {
+		[ActivityIconType.DEFAULT] = GetActivityIconData,
+		[ActivityIconType.SPECIAL] = GetSpecialActivityIconData,
+	}
+	for i,activityIcon in ipairs(curActivityIconData) do
+		if activityIcon.type == type then
+			activityIcon = func[type](activityIcon)
+			table.insert(data, activityIcon)
+		end
+	end
+	return data
+end
+
+--TODO:red tip
+local function CheckActivityIconClientRedFlag(activityIcon)
+	if activityIcon.client and activityIcon.subActivities == nil then
+		local notifyName = activityIcon.fatherActivity and "RefreshSubActivityIcon" or "RefreshActivityIcon"
+		if activityIconRedDic[activityIcon.id] == nil then
+			activityIcon.redFlag = false
+			activityIconRedDic[activityIcon.id] = true
+			self:SendNotification(notifyName,activityIcon)
+		end
+	end
+	if activityIcon.fatherActivity then
+		for i,v in ipairs(activityIcon.fatherActivity.subActivities) do
+			if v.redFlag then
+				activityIcon.fatherActivity.redFlag = true
+				self:SendNotification("RefreshActivityIcon",activityIcon.fatherActivity)
+				return
+			end
+		end
+		activityIcon.fatherActivity.redFlag = false
+		self:SendNotification("RefreshActivityIcon",activityIcon.fatherActivity)
+	end
+end
+--TODO:red tip
+
+local function OpenActivityView(activityIcon,data)
+	local id = activityIcon.id
+	if id == ActivityIcon.LeaderBoard then
+		OpenLeaderboardView()
+	elseif id == ActivityIcon.WonderActivity then
+		self:ShowModule("ActivityModule",{data})
+	elseif id == ActivityIcon.LimitWelfare then
+		self:ShowModule("ServerActivityModule",{ServerActivityType.LimitWelfare,activityIcon.name,data})
+	elseif id == ActivityIcon.League then
+		self:ShowModule("LeagueModule",{data})
+	elseif id == ActivityIcon.FirstCharge then
+		self:ShowModule("TripleGiftModule",nil)
+	elseif id == ActivityIcon.SevenTarget then
+		self:ShowModule("WeeklyTaskModule",nil)
+	elseif id == ActivityIcon.FormationRecommend then
+		self:ShowModule("FormationRecommendModule",{data})
+	elseif id == ActivityIcon.Investment then
+		self:ShowModule("InvestmentModule",{data})
+	elseif id == ActivityIcon.ConditionPackage then
+		self:ShowModule("ConditionPackageModule",{data})
+	elseif id == ActivityIcon.LimitActivity then
+		self:ShowModule("ServerActivityModule",{ServerActivityType.LimitActivity,activityIcon.name,data})
+	elseif id == ActivityIcon.LimitTurnTable then
+		if not UIOpen(UI_OEPN_TYPE_LIMIT_TURNTABLE) then
+			return
+		end
+		self:ShowModule("LimitTurnTableModule",{data},false)
+	elseif id == ActivityIcon.UpLottery then
+		self:ShowModule("UpLotteryModule",{activityIcon.name,data},false)
+	elseif id == ActivityIcon.DaliLotteryActivity then
+		self:ShowModule("DailyLotteryModule",{id,data},false)
+	elseif id == ActivityIcon.WorldBoss then
+		if not UIOpen(UI_OPEN_TYPE_WORLD_BOSS) then
+			return
+		end
+		self:ShowModule("WorldBossModule",nil)
+	elseif id == ActivityIcon.SevenDaysLogin then
+		self:ShowModule("SevenDaysLoginModule",nil)
+	elseif id == ActivityIcon.SysPre then
+		self:ShowModule("SysPreModule",{activityIcon.name})
+	elseif id == ActivityIcon.HonorCity then
+		self:ShowModule("HonorCityModule",{activityIcon.endTime})
+	end
+end
+
+---是否请求次数超过1次
+local function GetActiveIconsReqTimesMoreOne()
+	getActiveIconsReqTimes = getActiveIconsReqTimes or 0
+	return getActiveIconsReqTimes > 0
+end
+
+local function UpdateCurActivityIconData(onFinished)
+	local req = {
+		useless = 0
+	}
+	HttpBackgroundRequest("getActiveIcons","GetActiveIconsReq","GetActiveIconsResp",req,function(resp)
+		curActivityIconData = {}
+		if resp and resp.iconItems then
+			local groupName = self.Module.ModuleName
+			for i,iconItem in ipairs(resp.iconItems) do
+				local activity = {
+					id = iconItem.id,
+					level = iconItem.level,
+					type = iconItem.type,
+					icon = iconItem.icon == "" and nil or iconItem.icon,
+					priority = iconItem.priority,
+					fatherIconId = iconItem.fatherIconId,
+					name = iconItem.iconName,
+					spine = iconItem.spineName == "" and nil or iconItem.spineName,
+					endTime = CheckTimeRemain(math.abs(iconItem.endTime), false) == "" and 0 or iconItem.endTime,
+					redFlag = iconItem.redDot,
+					groupName = groupName,
+				}
+				local parentActivity = table.get(curActivityIconData, function(v)
+					return v.id == activity.fatherIconId
+				end)
+				if parentActivity then
+					parentActivity.subActivities = parentActivity.subActivities or {}
+					table.insert(parentActivity.subActivities, activity)
+				else
+					table.insert(curActivityIconData, activity)
+				end
+			end
+
+			table.sort(curActivityIconData, function(a,b)
+				return a.priority < b.priority
+			end)
+		end
+		if onFinished then
+			onFinished()
+		end
+	end)
+end
+
+local function UpdateActivityIconCountDown()
+	if activityIconCountDownDic == nil then
+		activityIconCountDownDic = {}
+	end
+	Timer:AddNonstopTicker(ACTIVITY_ICON_TIMER,function()
+        for i,v in ipairs(curActivityIconData) do
+            if v.endTime ~= 0 then
+                local remainTime = CheckTimeRemain(math.abs(v.endTime),false)
+				if remainTime == "" then
+					if v.endTime > 0 then
+						table.removebyvalue(curActivityIconData,v)
+					end
+					v.endTime = 0
+					local activityIconData = GetActivityIconDataByType(ActivityIconType.DEFAULT)
+					self:SendNotification("RefreshActivityIconView",activityIconData)
+                else
+                    activityIconCountDownDic[v.id] = {
+                        remainTime = remainTime
+                    }
+                end
+            end
+        end
+        self:SendNotification("UpdateActivityIconCountDown",activityIconCountDownDic)
+	end,1)
+end
+
+---获取广告列表信息
+local function GetAdEndlessInfo(exit)
+	local req = {}
+	req.useless = 1
+	local function onFinished(resp)
+		local data = resp
+		if data ~= nil and data.list ~= nil and #data.list > 0 then
+			self:OpenModule("AdEndlessModule", { data, exit }, 0, false, nil, false)
+		else
+			exit()
+		end
+	end
+	HttpRequest("getActivitySlideshow","GetActivitySlideshowReq","GetActivitySlideshowResp",req,onFinished)
+end
+
+local function RealNamePop(exit)
+	local hasRealName = table.get(curActivityIconData, function(activitIcon)
+		return activitIcon.id == ActivityIcon.RealNameCheck
+	end)
+	if hasRealName then
+		PopRealNameCheckView(self.Module,exit)
+	else
+		exit()
+	end
+end
+
+---添加更多的弹窗
+local function AddMorePopView()
+	local QueueAction = QueueActionMgr:CreateQueueAction()
+	QueueAction
+	:Condition(QueueActionMgrCondition)
+	:Add(GetAdEndlessInfo)
+	:Add(RealNamePop)
+	:Start()
+end
+
+local function UpdateSubActivityIconCountDown()
+	if activityIconCountDownDic == nil then
+		activityIconCountDownDic = {}
+	end
+	Timer:AddNonstopTicker(SUB_ACTIVITY_ICON_TIMER,function()
+		for i,v in ipairs(curSelectActivityIcon.subActivities) do
+			if v.endTime ~= 0 then
+				local remainTime = CheckTimeRemain(v.endTime,false)
+                if remainTime == "" then
+					table.removebyvalue(curSelectActivityIcon.subActivities,v)
+					self:SendNotification("RefreshActivityIconView",curActivityIconData)
+                else
+                    activityIconCountDownDic[v.id] = {
+                        remainTime = remainTime
+                    }
+                end
+			end
+		end
+		self:SendNotification("UpdateSubActivityIconCountDown",activityIconCountDownDic)
+	end,1)
+end
+
+local function SelectActivityIcon(activityIcon, pos)
+	if activityIcon.subActivities then
+		curSelectActivityIcon = activityIcon
+		CsBridge.CacheAssetsByModule(self.Module,function()
+			CsBridge.OpenView("SubActivityIconView",self.ModelName,false,true)
+			self:SendNotification("RefreshSubActivityCenterPos", pos.y)
+		end,"SubActivityIconView")
+	else
+		OpenActivityView(activityIcon)	
+	end
+end
+
+local function UpdateActivityIconData()
+	UpdateCurActivityIconData(function()
+		local activityIconData = GetActivityIconDataByType(ActivityIconType.DEFAULT)
+		self:SendNotification("RefreshActivityIconView", activityIconData)
+		UpdateActivityIconCountDown()
+
+		local specailActivityIconData = GetActivityIconDataByType(ActivityIconType.SPECIAL)
+		self:SendNotification("RefreshSpecialActivityIconView", specailActivityIconData)
+		
+		if not GetActiveIconsReqTimesMoreOne() then
+			AddMorePopView()
+		end
+		getActiveIconsReqTimes = getActiveIconsReqTimes + 1
+	end)
+end
+
+local function OnOpenActivityView(obj)
+	local id = obj.id
+	if curActivityIconData then
+		local activity
+		for i,v in ipairs(curActivityIconData) do
+			if v.subActivities then
+				activity = table.get(v.subActivities, function(k)
+					return k.id == id
+				end)
+				if activity then
+					OpenActivityView(activity, obj.data)
+					return
+				end
+			else
+				if v.id == id then
+					OpenActivityView(v, obj.data)
+					return
+				end
+			end
+		end
+	end
+end
+
+local function OnCheckFailedOrder(obj)
+	local node = obj or self
+	CheckFailedOrder(function(rewards)
+		ShowRewardReceivedTip(node,rewards)
+	end)
+end
+
+local function OnLanguageChanged()
+	self:SendNotification("LanguageChanged")
+end
+
+local function OnPlayerLevelUp()
+	UpdateActivityIconData()
+end
+
+---------------------------Activity-----------------------------------------
+
+function DoInit()
+	QueueActionMgr:Init()
+	MsgCenter:Subscribe(CsBridge.SysMsgDef.Notify_ItemDataChanged, OnItemDataChanged)
+	MsgCenter:Subscribe(CsBridge.SysMsgDef.Notify_SingleDataChanged, OnSingleDataChanged)
+	MsgCenter:Subscribe(Notify_FriendRedFlagChanged, OnFriendFlagChanged)
+	MsgCenter:Subscribe(Notify_WithdrawUnion, OnWithdrawUnion)
+	MsgCenter:Subscribe(Notify_JoinUnion, EnterUnion)
+	MsgCenter:Subscribe(Notify_ConditionPackageChanged,OnConditionPackageChanged)
+	MsgCenter:Subscribe(Notify_MainCityUpRewardVedioGetReward,CheckUpRewardVedio)
+	MsgCenter:Subscribe(NOtify_CheckFailedOrder, OnCheckFailedOrder)
+	MsgCenter:Subscribe(Notify_PlayerLevelUp,OnPlayerLevelUp)
+	CsBridge.MsgCenter.Subscribe(CsBridge.SysMsgDef.Notify_LanguageChanged, OnLanguageChanged)
+	RefreshFriendRedFlag()
+	sysPreTblData = SysPreUtils.GetSysPreTblData()
+end
+
+function InitProperties()
+end
+
+function RefreshTotalFlag()
+	RefreshAutoTaskFlag()
+	RefreshExpeditionFlag()
+	RefreshLotteryFlag()
+	RefreshArenaFlag()
+	RefreshSkyTowerFlag()
+	RefreshChallengeFlag()
+	RefreshEquipComposeRedFlag()
+	RefreshHeroComposeRedFlag()
+	RefreshHeroBagRedFlag()
+	RefreshMailRedFlag()
+	RefreshDailyTaskRedFlag()
+	RefreshBagRedFlag()
+	RefreshDragonRedFlag()
+	RefreshWonderActivityRefFlag()
+	RefreshFormationRedFlag()
+	RefreshTurnTableRedFlag()
+	RefreshElementFusionRedFlag()
+	RefreshChatWorldRedFlag()
+	RefreshMonopolyRedFlag()
+end 
+
+function DoEnable()
+	RefreshTotalFlag()
+end
+
+function RefreshAutoTaskFlag()
+	if not UIOpen(UI_OPEN_TYPE_AUTOTASK, false) then
+		return 
+	end
+
+	local autoTaskInfo=appData:checkData("AutoTaskInfo")
+	if autoTaskInfo==nil then
+		return 
+	end
+
+	if (not autoTaskRedFlag or not autoTaskBlueFlag) and autoTaskInfo.autoTasks~=nil then
+		for id,autoTask in pairs(autoTaskInfo.autoTasks) do
+			if not autoTaskBlueFlag and autoTask.endTime== 0 then
+				autoTaskBlueFlag=true
+			end
+
+			if not autoTaskRedFlag and autoTask.endTime~= 0 and  autoTask.endTime<=CsBridge.timeManager.ServerTime then
+				autoTaskRedFlag=true
+			end
+			if autoTaskRedFlag and autoTaskBlueFlag then
+				break
+			end
+		end
+	end
+	self:SendNotification("AutoTaskRed",autoTaskRedFlag)
+	self:SendNotification("AutoTaskBlue",autoTaskBlueFlag)
+end
+
+function RefreshExpeditionFlag()
+	if not UIOpen(UI_OPEN_TYPE_EXPEDITIOIN, false) then
+		return 
+	end
+
+	local tbcInfo=appData:checkData("TBCInfo")
+	if tbcInfo==nil then
+		return 
+	end
+
+	if not expeditionRedFlag then
+		expeditionRedFlag = tbcInfo.passedStage==0 and tbcInfo.heroInfos==nil
+	end
+	self:SendNotification("ExpeditionRed",expeditionRedFlag)
+end
+
+function OnWithdrawUnion(data)
+	self:HideView("UnionSceneView")
+	self:SendNotification("TurnUnionTogOff")
+end
+
+function EnterUnion()
+	self:SendNotification("TurnUnionTogOn")
+end
+
+function RefreshLotteryFlag()
+	if not UIOpen(UI_OPEN_TYPE_HEROSUMMON, false) then
+		return 
+	end
+
+	local callHeroInfo=appData:checkData("CallHeroInfo")
+	if callHeroInfo==nil then
+		return 
+	end
+
+	local playerInfo=appData:checkData("PlayerInfo")
+	if not lotteryRedFlag then
+		local normalCallHeroCD = ResTblContainer:GetPropToInt(1,HeroSummon.cd,HeroSummon.tblName)
+		local advancedCallHeroCD = ResTblContainer:GetPropToInt(2,HeroSummon.cd,HeroSummon.tblName)
+		local const_HeroSummonRewardCost=GetConstValue("heroSummonRewardCost")
+		lotteryRedFlag=callHeroInfo.lastNormalCallTime+normalCallHeroCD*1000<=CsBridge.timeManager.ServerTime or callHeroInfo.lastAdvanceCallTime+advancedCallHeroCD*1000<=CsBridge.timeManager.ServerTime
+		               or playerInfo.exchangeCoin>=const_HeroSummonRewardCost
+	end
+	if not lotteryRedFlag then
+		local tmp1=GetRewardFromTbl(ResTblContainer:GetPropToStr(1,HeroSummon.consume1,HeroSummon.tblName))[1]
+		local tmp2=GetRewardFromTbl(ResTblContainer:GetPropToStr(2,HeroSummon.consume1,HeroSummon.tblName))[1]
+		local item1 = appData:checkItem("PackItem",tostring(tmp1.id))
+		local item2 = appData:checkItem("PackItem",tostring(tmp2.id)) 
+		lotteryRedFlag= (item1~=nil and item1.count>=tmp1.count) or (item2~=nil and item2.count>=tmp2.count) 
+	end
+
+	self:SendNotification("LotteryRed",lotteryRedFlag)
+end
+
+function RefreshArenaFlag()
+	if not UIOpen(UI_OPEN_TYPE_PVP, false) then
+		return 
+	end
+
+	local apArenaInfo=appData:checkItem("ArenaBasicInfo","1")
+	if apArenaInfo==nil then
+		return 
+	end
+
+	local playerInfo=appData:checkData("PlayerInfo")
+	local vipCanBought = ResTblContainer:GetPropToInt(playerInfo.vipLv,VipTbl.arenaCountAdd,VipTbl.tblName)
+	apArenaBlueFlag = RefreshSingleArenaFlag(UI_OPEN_TYPE_PVP,1,vipCanBought)
+	apArenaBlueFlag = RefreshSingleArenaFlag(UI_OPEN_TYPE_PVPCROSS,2,0)
+	if not apArenaBlueFlag then
+		local SoulPalaceUtils = require "SoulPalaceUtils"
+	    apArenaBlueFlag = SoulPalaceUtils.GetSoulSingFlag()
+	end
+	self:SendNotification("APArenaBlue",apArenaBlueFlag)
+end
+
+function RefreshSingleArenaFlag(openId,type,vipCanBought)
+    if UIOpen(openId,false) and not apArenaBlueFlag then
+        local basicInfo = appData:checkItem("ArenaBasicInfo",tostring(type))
+        if basicInfo==nil then
+            return false
+        end
+        local RENEW_INTERVAL_CONST=0
+        if type==1 then
+            RENEW_INTERVAL_CONST = GetConstValue("TeamArenaRenewCD")*1000 
+        elseif type==2 then
+            RENEW_INTERVAL_CONST = GetConstValue("aPArenaRenewCD")*1000 
+        elseif type==3 then
+        end
+        local remains = basicInfo.remains
+        local extraRemains=basicInfo.extraRemains
+        if remains+extraRemains>0 then
+            return true
+        end
+        local lastRenewTime=basicInfo.lastRenewTime
+        local apArenaNormalMaxCount = ResTblContainer:GetPropToInt(openId,UIOpenBase.normalMaxCount,UIOpenBase.actorTbl)
+        local COUNT_Limit_CONST=apArenaNormalMaxCount+vipCanBought
+        local count = 0
+        while(lastRenewTime+RENEW_INTERVAL_CONST<CsBridge.timeManager.ServerTime)
+        do
+            lastRenewTime = lastRenewTime+RENEW_INTERVAL_CONST
+            count=count+1
+        end
+        remains=basicInfo.remains+count
+        if	remains>=COUNT_Limit_CONST then
+            remains=COUNT_Limit_CONST
+        end
+
+        return remains>0
+    end
+    return apArenaBlueFlag
+end
+
+function RefreshSkyTowerFlag()
+	if not UIOpen(UI_OPEN_TYPE_TOWER, false) then
+		return 
+	end
+
+	local skyTowerItem = appData:checkData("SkyTowerItem")
+	if skyTowerItem==nil then
+		return 
+	end
+	if not skyscraperBlueFlag then
+		local RENEW_INTERVAL_CONST=GetConstValue("skyScraperKeyRenewDuration")*1000
+		local normalMaxCount = ResTblContainer:GetPropToInt(UI_OPEN_TYPE_TOWER,UIOpenBase.normalMaxCount,UIOpenBase.actorTbl)
+		local curFreeRemains=skyTowerItem.remains
+		local lastRenewTime=skyTowerItem.lastRenewTime
+		local count = 0
+		while(lastRenewTime+RENEW_INTERVAL_CONST<CsBridge.timeManager.ServerTime)
+		do
+			lastRenewTime = lastRenewTime+RENEW_INTERVAL_CONST
+			count=count+1
+		end
+		curFreeRemains=skyTowerItem.remains+count
+		skyscraperBlueFlag=curFreeRemains>=normalMaxCount
+	end
+	local skyscraperUtils = require "SkyscraperUtils"
+	local openType = GetConstValue("SkyScraperSwitch")
+	local redFlag = skyscraperUtils.CheckSkyTowerRedFlagByOpenType(openType)
+	if redFlag then
+		skyscraperBlueFlag = false
+	end
+	local viewData = {
+		redFlag = redFlag,
+		blueFlag = skyscraperBlueFlag,
+	}
+	self:SendNotification("SkyscraperFlags",viewData)
+end
+
+function RefreshChallengeFlag()
+	if not UIOpen(UI_OPEN_TYPE_GOLD, false) then
+		return 
+	end
+	if not UIOpen(UI_OPEN_TYPE_SOUL, false) then
+		return 
+	end
+	if not UIOpen(UI_OPEN_TYPE_CHIP , false) then
+		return 
+	end
+
+	local challengeItems=appData:checkAllItems("ChallengeItem")
+	if challengeItems==nil then
+		return 
+	end
+
+	if not challengeBlueFlag then
+	    local tbl=ResTblContainer:GetTable(UIOpenBase.actorTbl)
+		for i=0,challengeItems.Length-1 do
+			if challengeItems[i].remains>0 then
+				challengeBlueFlag = true
+				break
+			end
+		end
+	end
+	self:SendNotification("ChallengeRed",challengeBlueFlag)
+end
+
+function DoOnExit()
+	QueueActionMgr:Clear()
+	MsgCenter:Unsubscribe(CsBridge.SysMsgDef.Notify_ItemDataChanged, OnItemDataChanged)
+	MsgCenter:Unsubscribe(CsBridge.SysMsgDef.Notify_SingleDataChanged, OnSingleDataChanged)
+	MsgCenter:Unsubscribe(Notify_FriendRedFlagChanged, OnFriendFlagChanged)
+	MsgCenter:Unsubscribe(Notify_ConditionPackageChanged,OnConditionPackageChanged)
+	MsgCenter:Unsubscribe(Notify_MainCityUpRewardVedioGetReward,CheckUpRewardVedio)
+	MsgCenter:Unsubscribe(Notify_OpenActivityView,OnOpenActivityView)
+	MsgCenter:Unsubscribe(NOtify_CheckFailedOrder, OnCheckFailedOrder)
+	MsgCenter:Unsubscribe(Notify_PlayerLevelUp,OnPlayerLevelUp)
+	Timer:StopTicker(ACTIVITY_ICON_TIMER)
+	Timer:StopTicker(SUB_ACTIVITY_ICON_TIMER)
+	self.Module = nil
+	
+	autoTaskRedFlag = nil
+	expeditionRedFlag  = nil
+	lotteryRedFlag = nil
+	formationRedFlag  = nil
+	autoTaskBlueFlag = nil
+	apArenaBlueFlag = nil
+	challengeBlueFlag = nil
+	skyscraperBlueFlag  = nil
+	playerInfo = nil
+	tbcInfo = nil
+	curOnlineReward = nil
+	curActivityIconData = nil
+	curSelectActivityIcon = nil
+	activityIconCountDownDic = nil
+	ACTIVITY_ICON_TIMER = nil
+	SUB_ACTIVITY_ICON_TIMER  = nil
+	ActivityIconType = nil
+	SysPreUtils = nil
+	sysPreTblData = nil
+	getActiveIconsReqTimes = nil
+end 
+
+function OnItemDataChanged(objs)
+	RefreshRedFlag(objs[0])
+end
+
+function OnSingleDataChanged(obj)
+	RefreshRedFlag(obj)
+end
+
+--online reard logic
+function OnCommand_InitOnlineRewardData(objs)
+	UpdateOnlineReward()
+end
+
+function OnCommand_OnlineTimeCanReceived(objs)
+	curOnlineReward.status = 1
+	self:SendNotification("RefreshOnlineReward", curOnlineReward)
+end
+
+function OnCommand_ReceivedOnlineReward(objs)
+	if curOnlineReward == nil then
+		return
+	end 
+	if curOnlineReward.status == 0 then
+		ShowTip(self,curOnlineReward.reward.typeId,curOnlineReward.reward.id)
+	elseif curOnlineReward.status == 1  then
+		local req = {
+			id = curOnlineReward.activityId,
+			rewardId = curOnlineReward.rewardId
+		}
+		curOnlineReward = nil
+		HttpRequest("onlineReward","OnlineRewardReq","OnlineRewardResp",req,function(resp)
+			if resp.rewardItems ~= nil then
+				local reward = resp.rewardItems[1]
+				CsBridge.hintUILayer:ShowRewardBox(reward.typeId,reward.id,reward.count)
+				self:SendNotification("ReceivedOnlineReward")
+				UpdateOnlineReward()
+			end
+		end)
+	end 
+end 
+
+function OnCommand_RevertOnlineRewardTimer(objs)
+	self:SendNotification("RefreshOnlineReward", curOnlineReward)
+end
+
+function UpdateOnlineReward()
+    local types = {}
+    table.insert(types,ACTIVITY_TYPE_ONLINE_REWARD)
+    local req = {
+        types = types
+    }
+	HttpRequest("getActivity","GetActivityReq","GetActivityResp",req,function(resp)
+        if resp.activities ~= nil then
+			for i,activity in ipairs(resp.activities) do
+                if activity.type == ACTIVITY_TYPE_ONLINE_REWARD then
+                    req = {
+                        id = activity.id
+                    }
+					local reward = HttpRequest("getOnlineRewardActivity","GetOnlineRewardActivityReq","GetOnlineRewardActivityResp",req,function(resp)
+						if resp.rewardId == -1 then
+							curOnlineReward = nil
+							self:SendNotification("RefreshOnlineReward", curOnlineReward)
+						else
+							local reward = GetOnlineRewardByRewardId(resp.activities,resp.rewardId)
+							curOnlineReward = {
+								activityId = activity.id,
+								rewardId = reward.rewardId,
+								startTime = resp.onlineRewardStartTime,
+								time = reward.time*1000,
+								reward = {
+									id = reward.rewards[1].id,
+									typeId = reward.rewards[1].typeId,
+									count = reward.rewards[1].count
+								}
+							}
+							curOnlineReward.status = curOnlineReward.startTime+curOnlineReward.time > CsBridge.timeManager.ServerTime and 0 or 1
+							self:SendNotification("RefreshOnlineReward", curOnlineReward)
+						end
+                    end)
+                    return
+                end
+            end
+        end
+    end)
+end
+
+function GetOnlineRewardByRewardId(rewardArr,rewardId)
+    for i,reward in ipairs(rewardArr) do
+        if reward.rewardId == rewardId then
+            return reward
+        end
+    end
+end
+
+---------------------check failed order--------------------------
+function OnCommand_CheckFaildPayOrder(objs)
+	CheckFailedOrder(function(rewards)
+		ShowRewardReceivedTip(self,rewards)
+	end)
+end
+
+---up reward vedio
+function OnCommand_CheckUpRewardVedioBtn(objs)
+	CheckUpRewardVedio()
+end
+
+function CheckUpRewardVedio()
+	local data = UpRewardVedioUtils.CheckUpRewardVedio(UpRewardVedioID.MainCity)
+	self:SendNotification("RefreshUpRewardVedio",data)
+end
+
+---------------------------------Activity---------------------------
+
+function OnCommand_InitActivityIconData(objs)
+	MsgCenter:Subscribe(Notify_OpenActivityView, OnOpenActivityView)
+	UpdateActivityIconData()
+end
+
+function OnCommand_SelectActivityIcon(objs)
+	local activityIcon, pos = objs[0], objs[1]
+	SelectActivityIcon(activityIcon, pos)
+end
+
+function OnCommand_SelectSubActivity(objs)
+	local activity = objs[0]
+	OpenActivityView(activity)
+end
+
+function OnCommand_InitSubActivityIconData(objs)
+	self:SendNotification("RefreshSubActivityIconView",curSelectActivityIcon.subActivities)
+	UpdateSubActivityIconCountDown()
+end
+
+---------------------------------Activity---------------------------
+
+--red tips
+function OnCommand_RefreshMainTipRedFlag(objs)
+	RefreshTotalFlag()
+	RefreshFormationRedFlag()
+end 
+
+function OnCommand_RefreshMainRedFlag(objs)
+	RefreshAutoTaskFlag()
+	RefreshExpeditionFlag()
+	RefreshLotteryFlag()
+	RefreshArenaFlag()
+	RefreshSkyTowerFlag()
+	RefreshTurnTableRedFlag()
+	RefreshElementFusionRedFlag()
+	RefreshEquipComposeRedFlag()
+	RefreshHeroComposeRedFlag()
+	RefreshDragonRedFlag()
+	RefreshMonopolyRedFlag()
+end 
+
+function RefreshRedFlag(clsName)
+	if clsName == "AutoTaskInfo" then
+		autoTaskRedFlag = false
+		autoTaskBlueFlag = false
+	elseif clsName == "TBCInfo" then
+		expeditionRedFlag = false
+	elseif clsName == "CallHeroInfo" then
+		lotteryRedFlag = false
+	elseif clsName == "ArenaBasicInfo" then
+		apArenaBlueFlag = false
+	elseif clsName == "ChallengeItem" then
+		challengeBlueFlag = false
+	elseif clsName == "SkyTowerItem" then
+		skyscraperBlueFlag = false 
+	end
+end 
+
+function RefreshEquipComposeRedFlag()
+	if UIOpen(UI_OPEN_TYPE_EQUIPCOMPOSE, false) then
+		local result = CheckRedTipEquipmentCompose()
+		self:SendNotification("EquipComposeRedFlagChanged", result.redFlag)
+	end 
+end 
+
+function RefreshHeroComposeRedFlag()
+	if UIOpen(UI_OPEN_TYPE_HEROCOMPOSE, false) then
+		 local result = CheckRedTipHeroCompose()
+		   self:SendNotification("HeroComposeRedFlagChanged", result.redFlag)
+	end 
+end 
+
+function RefreshHeroBagRedFlag()
+	MsgCenter:Broadcast(Notify_HeroBagRedFlagChanged, CheckHeroUpLevelOrUpGradeRedFlag().redFlag or CheckHeroEquipRedFlag().redFlag or CheckHeroCanDistillationRedFlag().redFlag or CheckHeroesJewelEquipRedFlag().redFlag)
+end 
+
+function RefreshMailRedFlag()
+	if UIOpen(UI_OPEN_TYPE_MAIL, false) then
+		local systemMailItem = appData:checkAllItems("SystemMailItem")
+		if systemMailItem ~= nil then
+			for i = 0, systemMailItem.Length - 1 do
+				if systemMailItem[i].attach ~= nil then
+					if systemMailItem[i].attachTaken == false then 
+						MsgCenter:Broadcast(Notify_MailRedFlagChanged, true)
+						return
+					end
+				else
+					if systemMailItem[i].mailItem.read == false then
+						MsgCenter:Broadcast(Notify_MailRedFlagChanged, true)
+						return
+					end 
+				end
+			end	
+		end 
+		local playerMailItem = appData:checkAllItems("PlayerMailItem")
+		if playerMailItem ~= nil then
+			for i = 0, playerMailItem.Length - 1 do
+				if playerMailItem[i].mailItem.read == false then
+					MsgCenter:Broadcast(Notify_MailRedFlagChanged, true)
+					return
+				end
+			end
+		end 
+		MsgCenter:Broadcast(Notify_MailRedFlagChanged, false)
+	end 
+end 
+
+function RefreshDailyTaskRedFlag()
+	if UIOpen(UI_OPEN_TYPE_DAILYTASK,false) then
+		dailyTaskUtils.HaveRewardToGet(function (haveReward)
+			MsgCenter:Broadcast(Notify_DailyTaskRedFlagChanged, haveReward)
+		end)
+	end
+end 
+
+function RefreshBagRedFlag()
+	local result = CheckBagItem()
+	MsgCenter:Broadcast(Notify_BagRedFlagChanged, result.redFlag)
+end 
+
+function RefreshDragonRedFlag()
+	if UIOpen(UI_OPEN_TYPE_DROGAN,false) then
+		local result = CheckElemetnSummon()
+		self:SendNotification("DragonRedFlagChanged", result.redFlag)
+	end
+end 
+
+function RefreshWonderActivityRefFlag()
+	if UIOpen(UI_OPEN_TYPE_LOGINREWARD,false) then
+		local result = false
+		if next(WonderActivityFlags)==nil then
+			result = true
+		else
+			for i,flag in pairs(WonderActivityFlags) do
+				result = result or flag
+			end
+		end
+
+		MsgCenter:Broadcast(Notify_WonderActivityRedFlagChanged, result)
+	end 
+end 
+
+function RefreshTurnTableRedFlag()
+	if UIOpen(UI_OPEN_TYPE_TRUNTABLE,false) then
+		local result = CheckPackItemEnough(1017,1,false)
+		self:SendNotification("TurnTableRedFlagChanged", result)
+	end
+end
+
+function RefreshElementFusionRedFlag()
+	if UIOpen(UI_OPEN_TYPE_ELEMENT_FUSION,false) then
+		local result = CheckHeroCanElementFusionRedFlag()
+		self:SendNotification("ElementFusionRedFlagChanged", result.redFlag)
+	end
+end
+
+function RefreshChatWorldRedFlag()
+	if UIOpen(UI_OPEN_TYPE_TALK,false) then
+		MsgCenter:Broadcast(Notify_ChatWorldRedFlagChanged,true)
+	end
+end
+
+function InitAutoRewardHeroTbl()
+    local autoRewardHeroArr={}
+    local ids = ResTblContainer:GetIds(AutoRewardHero.tblName)
+	local tbl=ResTblContainer:GetTable(AutoRewardHero.tblName)
+    for i=0,ids.Length-1 do
+        local autoRewardHeroData = {}
+        autoRewardHeroData.id=tonumber(ids[i])
+        autoRewardHeroData.level=tbl:GetInt(autoRewardHeroData.id,AutoRewardHero.level)
+        autoRewardHeroData.heroCount=tbl:GetInt(autoRewardHeroData.id,AutoRewardHero.heroNum)
+        table.insert(autoRewardHeroArr,autoRewardHeroData)
+	end
+	return autoRewardHeroArr
+end
+
+function GetCurAutoRewardHeroCount(autoRewardHeroArr)
+    local playerInfo = appData:checkData("PlayerInfo")
+    local level = playerInfo.level
+    for i=1,#autoRewardHeroArr do
+        if level>=autoRewardHeroArr[#autoRewardHeroArr].level then
+            return autoRewardHeroArr[#autoRewardHeroArr].heroCount
+        end
+        if level<=autoRewardHeroArr[1].level then
+            return autoRewardHeroArr[1].heroCount
+        end 
+        if level>=autoRewardHeroArr[i].level and level<autoRewardHeroArr[i+1].level then
+            return autoRewardHeroArr[i].heroCount
+        end
+    end
+end
+
+function RefreshFormationRedFlag(data)
+	local autoRewardHeroArr=InitAutoRewardHeroTbl()
+	local heroCount = GetCurAutoRewardHeroCount(autoRewardHeroArr)
+	local formation=appData:checkItem("Formation","3") 
+	local upHeroCount = 0   
+    if formation ~= nil and formation.heroIds~=nil then 
+        upHeroCount = #formation.heroIds
+	end
+	formationRedFlag=upHeroCount<heroCount
+	self:SendNotification("RefreshFormationRedFlag",formationRedFlag)
+end
+
+function RefreshFriendRedFlag()
+	local result = false
+	if UIOpen(UI_OPEN_TYPE_FRIIEND,false) then
+		HttpRequest("myApplys", "MyApplysReq", "MyApplysResp", {useless=0}, function(resp)
+			result = resp ~= nil and resp.applys and #resp.applys~=0
+			self:SendNotification("RefreshFriendRedFlag",result)
+			if UIOpen(UI_OPEN_TYPE_LIMIT_FRIENDHELP,false) then
+				HttpRequest("refreshMonsterInfo", "RefreshMonsterInfoReq", "RefreshMonsterInfoResp", {useless=0}, function(resp)
+					local rec = resp.playerMonsterSearchRecord
+					local nextSearchTime = rec and GetConstValue("friendHelpPeriod")*1000 + rec.lastSearchTime or 0
+					result = result or CsBridge.timeManager.ServerTime >= nextSearchTime
+					self:SendNotification("RefreshFriendRedFlag",result)
+				end)
+			end
+		end)
+	end 
+end 
+
+function OnFriendFlagChanged(redFlag)
+	self:SendNotification("RefreshFriendRedFlag",redFlag)
+end 
+
+function RefreshMonopolyRedFlag()
+	local flag = false
+	self:SendNotification("RefreshMonopolyRedFlag",flag)
+end
+
+--一进游戏就刷新日常和登录奖励和通天塔
+function OnCommand_RefreshDailyTask(objs)
+	if appData:isValueLoaded("DailyTaskInfo") then
+		return
+	end 
+    local req = {
+        id = 0
+	}
+	HttpRequest("refreshDailyTask", "RefreshDailyTaskReq", "RefreshDailyTaskResp", req, function(resp)
+	end, true, true)
+end
+
+function OnCommand_RefreshDailyReward(objs)
+	if appData:isValueLoaded("DailyRewardInfo") then
+		return
+	end 
+    local req = {
+        id = 0
+    }
+    HttpRequest("refreshDailyReward", "RefreshDailyRewardReq", "RefreshDailyRewardResp", req,OnRefreshDailyReward, true, true)
+end
+
+function OnCommand_RefreshSkyTower(objs)
+	if appData:isValueLoaded("SkyTowerItem") then
+		return
+	end 
+	local req = {
+		id = 2
+	}
+	HttpRequest("initPBItem", "InitPBItemReq", "InitPBItemResp", req, OnRefreshSkyTower, true, true)
+end 
+
+function OnCommand_RefreshChallenge(objs)
+	if appData:isValueLoaded("ChallengeItem") then
+		return
+	end 
+	local req = {
+		id = 1
+	}
+	HttpRequest("initPBItem", "InitPBItemReq", "InitPBItemResp", req, OnRefreshChallenge, true, true)
+end 
+
+function OnCommand_RefreshArena(objs)
+	if appData:isValueLoaded("ArenaBasicInfo") then
+		return
+	end 
+	local req = {
+		id = 3
+	}
+	HttpRequest("initPBItem", "InitPBItemReq", "InitPBItemResp", req, OnRefreshArena, true, true)
+end 
+
+function OnRefreshDailyTask(resp)
+    if(resp.result == 0) then
+        self:SendNotification("RefreshDailyTask")
+    end
+end
+
+function OnRefreshDailyReward(resp)
+	if(resp.result == 0) then
+        self:SendNotification("RefreshDailyReward")
+    end
+end 
+
+function OnRefreshSkyTower(resp)
+	if(resp~=nil) then
+        self:SendNotification("RefreshSkyTower")
+    end
+end 
+
+function OnRefreshChallenge(resp)
+	if(resp~=nil) then
+        self:SendNotification("RefreshChallenge")
+    end
+end
+
+function OnRefreshArena(resp)
+	if(resp~=nil) then
+        self:SendNotification("RefreshArena")
+    end
+end 
+
+function OnCommand_AddHero(objs)
+	local heroId=objs[0]
+
+	local req={}
+	req.heroIds={}
+	req.level = objs[1]
+	table.insert(req.heroIds,heroId)
+
+    HttpRequest("gmAddHero", "HeroAddGMReq", "GMResp", req,OnGMResp, true, true)
+end
+
+function OnGMResp(resp)
+	self:SendNotification("OnGMResp",resp)
+end
+
+function OnCommand_RemoveHero(objs)
+	local heroId=objs[0]
+
+	
+	local req={}
+	req.heroIds={}
+	table.insert(req.heroIds,heroId)
+	req.removeAll=objs[1]
+
+    HttpRequest("gmRemoveHero", "GMRomoveHeroReq", "GMResp", req,OnGMResp, true, true)
+end
+
+function OnCommand_RemoveItem(objs)
+	local itemId=objs[0]
+
+	local req={}
+	req.itemIds={}
+	table.insert(req.itemIds,itemId)
+	req.removeAll=objs[1]
+
+    HttpRequest("gmRemoveItem", "GMRomoveItemReq", "GMResp", req,OnGMResp, true, true)
+end
+function OnCommand_FixHeroLv(objs)
+	local lv=objs[0]
+	local vip=objs[1]
+
+	local req={}
+	req.level=lv
+	req.vipLevel=vip
+
+    HttpRequest("gmUpgradePlayerLevel", "GMUpgradePlayerLevelReq", "GMResp", req,OnGMResp, true, true)
+end
+
+function OnCommand_AddItem(objs)
+	local itemId=objs[0]
+	local count=objs[1]
+
+	local req={}
+	req.items={}
+	local data={}
+	data.itemId=itemId
+	data.count=count
+	table.insert(req.items,data)
+
+    HttpRequest("gmAddPack", "PackGMReq", "PackGMResp", req,OnPackGMResp, true, true)
+end
+
+function OnCommand_Pass(objs)
+	local difficulty=objs[0]
+	local chapter=objs[1]
+	local stage=objs[2]
+
+	local req={}
+	req.difficulty=difficulty
+	req.chapter=chapter
+	req.stage=stage
+
+    HttpRequest("gmPassSpecifyStage", "GMPassSpecifyStageReq", "GMPassSpecifyStageResp", req,OnGMPassSpecifyStageResp, true, true)
+end
+
+function OnGMPassSpecifyStageResp(resp)
+	if(resp.result==0)then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("passOK"))
+	end
+end
+
+function OnCommand_AddRes(objs)
+	local itemId=objs[0]
+	local count=objs[1]
+
+	local req={}
+	req.items={}
+	local data={}
+	data.itemId=itemId
+	data.count=count
+	table.insert(req.items,data)
+
+    HttpRequest("gmAddCoin", "PackGMReq", "PackGMResp", req,OnPackGMResp, true, true)
+end
+
+function OnCommand_CostRes(objs)
+	local itemId=objs[0]
+	local count=objs[1]
+
+	local req={}
+	req.items={}
+	local data={}
+	data.itemId=itemId
+	data.count=count
+	table.insert(req.items,data)
+
+    HttpRequest("gmSpendCoin", "PackGMReq", "PackGMResp", req,OnPackGMResp, true, true)
+end
+
+function OnCommand_FinishDailyTask(objs)
+	local req = {
+		id = objs[0]
+	}
+	HttpRequest("gmFinishDailyTask","GMFinishDailyTaskReq","GMFinishDailyTaskResp",req,OnGMResp)
+end
+
+function OnCommand_ResetAllDailyTask(objs)
+	local req = {
+		id = 0
+	}
+	HttpRequest("gmResetAllDailyTask","GMResetAllDailyTaskReq","GMResetAllDailyTaskResp",req,OnGMResp)
+end
+
+function OnCommand_resetsign(objs)
+    local round=objs[0]
+    local id=objs[1]
+    local req={}
+    req.round=round
+    req.id=id
+    HttpRequest("gmResetDailyRewardRound","GMResetDailyRewardRoundReq","GMResetDailyRewardRoundResp",req,OnGMResp)
+end
+
+function OnCommand_RuneDowngrade(objs)
+	local req = {
+		heroUid = objs[0],
+		level = objs[1]
+	}
+	HttpRequest("gmRuneDowngrade","GmRuneDowngradeReq","GmRuneDowngradeResp",req,OnGMResp)
+end 
+
+function OnCommand_SendMail(objs)
+	local req = {
+		zone = "2",
+		nick = "战场雪莉", 
+		content = "金币金币金币",
+		attachment = {
+			{
+				id = 2,
+				typeId = 1,
+				count = 5000
+			},
+			{
+				id = 1,
+				typeId = 1,
+				count = 3000
+			}
+		},
+		title = "标题"
+	}
+	HttpRequest("gmSendMail","GMSendMailReq","GMSendMailResp",req,OnSendMail)
+end 
+
+function OnSendMail(resp)
+	if resp.result == 0 then
+	end 
+end 
+
+function OnPackGMResp(resp)
+	self:SendNotification("OnPackGMResp",resp)
+end
+
+function OnCommand_ResetGetGold()
+	local req = {}
+    req.id = 0
+    HttpRequest("gmResetGetGold", "GMResetGetGoldReq", "GMResetGetGoldResp", req, OnGMResp, true, true)
+end
+
+function OnCommand_ResetUnionDungeon()
+	local req = {}
+    req.useless = 0
+    HttpRequest("gmUnionDungeonChallengeReset", "GmUnionDungeonChallengeResetReq", "GmUnionDungeonChallengeResetResp", req, OnGMResp, true, true)
+end
+
+function OnCommand_AddRelic(objs)
+	local req = {
+		id = objs[0],
+		count = objs[1]
+	}
+	HttpRequest("gmGetRelic","GmGetRelicReq","GmGetRelicResp",req,OnGMResp)
+end 
+
+function OnCommand_UpgradeRelic(objs)
+	local req = {
+		id = objs[0],
+		level = objs[1]
+	}
+	HttpRequest("gmUpgradeRelic","GmUpgradeRelicReq","GmUpgradeRelicResp",req,OnGMResp)
+end 
+
+function OnCommand_TopRelic(objs)
+	local req = {
+		id = objs[0]
+	}
+	HttpRequest("gmTopRelic","GmTopRelicReq","GmTopRelicResp",req,OnGMResp)
+end 
+
+function OnCommand_GMOnlineReward(objs)
+	local req = {
+		useless = 0
+	}
+	HttpRequest("gmOnlineReward","GmOnlineRewardReq","GmOnlineRewardResp",req,function(resp)
+		UpdateOnlineReward()
+		OnGMResp(resp)
+	end)
+end 
+
+function OnCommand_GMBeAGod(objs)
+	local req = {
+		useless = 0
+	}
+	HttpRequest("gmBeAGod","GmBeAGodReq","GmBeAGodResp",req,OnGMResp)
+end
+
+function OnCommand_GMGetOnlineReward(objs)
+	local req = {
+		id = curOnlineReward.activityId,
+		rewardId = objs[0]
+	}
+	HttpRequest("gmGetOnlineReward","GmGetOnlineRewardReq","GmGetOnlineRewardResp",req,function(resp)
+		ShowRewardReceivedTip(self,resp.rewardItems, UpdateOnlineReward)
+	end)
+end
+
+function OnCommand_GMResetOnlineReward(objs)
+	local req = {
+		useless = 0
+	}
+	HttpRequest("gmResetOnlineReward","GmResetOnlineRewardReq","GmResetOnlineRewardResp",req,function(resp)
+		UpdateOnlineReward()
+		OnGMResp(resp)
+	end)
+end 
+
+function OnCommand_AddJewel(objs)
+	local req = {
+		jewelId = objs[0],
+		count = objs[1]
+	}
+	HttpRequest("gmGetJewel","GmGetJewelReq","GmGetJewelResp",req,OnGMResp)
+end 
+
+function OnCommand_GMGetFriendMonster(objs)
+	local req = {
+		useless = 0
+	}
+	HttpRequest("gmGetMonster","GmGetMonsterReq","GmGetMonsterResp",req,OnGMResp)
+end
+
+function OnCommand_resetGuide(objs)
+    local req = {
+	    moduleId=objs[0]
+	}
+	HttpRequest("gmGuide","GmGuideReq","GmGuideResp",req,function(resp)
+	end)
+end
+
+function OnCommand_ResetUnionRequestPiecesCD(objs)
+	local req = {
+		useless = 0
+	}
+	HttpRequest("gmUnionResetReinforcementCd","GmUnionResetReinforcementCdReq","GmUnionResetReinforcementCdResp",req,OnGMResp)
+end
+
+function OnCommand_ResetUnionDonationCount(objs)
+	local req = {
+		useless = 0
+	}
+	HttpRequest("gmUnionResetReinforcementDonation","GmUnionResetReinforcementDonationReq","GmUnionResetReinforcementDonationResp",req,OnGMResp)
+end
+
+---发送重置日常抽取的GM指令
+function OnCommand_ResetDailyLottery(objs)
+	local req = {}
+	req.useless = 1
+	HttpRequest("gmRefreshRandomPackage", "GmRefreshRandomPackageReq", "GmRefreshRandomPackageResp", req, OnGMResp, true, false)
+end
+
+function OnCommand_EnterUnion(objs)
+	local finishedCbk = objs[0]
+	CheckUnionData(finishedCbk)
+end
+
+function CheckUnionData(onFinished)
+	local req = {}
+	req.useless = 0
+	local returnedCbk = function(resp)
+		OnGetUnionInfoFinished(resp, onFinished)
+	end
+	HttpRequest("checkMyUnion", "CheckMyUnionReq", "CheckMyUnionResp", req, returnedCbk, true, true)
+end
+
+function OnGetUnionInfoFinished(resp, onLoaded)
+	local joined = false	
+	local authority_member = 2
+	if resp~= nil and resp.unionUserRecord ~= nil then
+		local data = resp.unionUserRecord
+		joined = data.authority >= authority_member
+	end
+
+	local view
+	if joined then
+		view = CsBridge.OpenView("UnionSceneView","UnionSceneModel",false,true)
+		if(onLoaded ~= nil)then
+			onLoaded(view, joined)  
+		end
+	else
+		if(onLoaded ~= nil)then
+			onLoaded(view, joined)  
+		end
+		CsBridge.textureRender:RendererScreen(
+			self.Module.rawImage,
+			function ()
+				view = CsBridge.OpenView("UnionApplyView","UnionApplyModel", true, true)
+			end)
+	end
+
+end
+
+function OnCommand_UnionGM(inputArray)
+	local cmdIdx = 0
+	local subCmd = inputArray[cmdIdx];
+
+	local reqClassName, respClassName, url = "", "", ""
+	local req = {}
+	req.useless = 0
+
+	if subCmd == "Upgrade" then
+		url = "gmUnionUpgrade"
+		reqClassName, respClassName = "GmUnionUpgradeReq", "GmUnionUpgradeResp"
+		req.level = tonumber(inputArray[cmdIdx + 1])
+	elseif subCmd == "CleanExp" then
+		url = "gmUnionCleanExp"
+		reqClassName, respClassName = "GmUnionCleanExpReq", "GmUnionCleanExpResp"
+	elseif subCmd == "AddExp" then
+		url = "gmUnionAddExp"
+		reqClassName, respClassName = "GmUnionAddExpReq", "GmUnionAddExpResp"
+		req.exp = tonumber(inputArray[cmdIdx + 1])
+	elseif subCmd == "Dismiss" then
+		url = "gmUnionDismiss"
+		reqClassName, respClassName = "GmUnionDismissReq", "GmUnionDismissResp"
+	elseif subCmd == "Demise" then
+		url = "gmUnionPresidentTransfer"
+		reqClassName, respClassName = "GmUnionPresidentTransferReq", "GmUnionPresidentTransferResp"
+	elseif subCmd == "ResetCheckin" then
+		url = "gmUnionResetSignIn"
+		reqClassName, respClassName = "GmUnionResetSignInReq", "GmUnionResetSignInResp"
+	elseif subCmd == "SetTech" then
+		url = "gmUnionTechUpgrade"
+		reqClassName, respClassName = "GmUnionTechUpgradeReq", "GmUnionTechUpgradeReq"
+		req.id = tonumber(inputArray[cmdIdx + 1])
+		req.level = tonumber(inputArray[cmdIdx + 2])
+	elseif subCmd == "ResetTech" then
+		url = "gmUnionTechClean"
+		reqClassName, respClassName = "GmUnionTechCleanReq", "GmUnionTechCleanResp"
+	elseif subCmd == "ClearDungeon" then
+		url = "gmUnionDungeonAccomplish"
+		reqClassName, respClassName = "GmUnionDungeonAccomplishReq", "GmUnionDungeonAccomplishResp"
+		req.id = tonumber(inputArray[cmdIdx + 1])
+	elseif subCmd == "ResetDungeon" then
+		url = "gmUnionDungeonChallengeReset"
+		reqClassName, respClassName = "GmUnionDungeonChallengeResetReq", "GmUnionDungeonChallengeResetResp"
+	elseif subCmd == "ClaimDungeonBonus" then
+		url = "gmUnionDungeonReward"
+		reqClassName, respClassName = "GmUnionDungeonRewardReq", "GmUnionDungeonRewardReq"
+		req.id = tonumber(inputArray[cmdIdx + 1])
+	elseif subCmd == "FinishAllOrder" then
+		url = "gmUnionTradeAccomplish"
+		reqClassName, respClassName = "GmUnionTradeAccomplishReq", "GmUnionTradeAccomplishResp"
+	elseif subCmd == "ResetHarborCD" then
+		url = "gmUnionTradeResetCd"
+		reqClassName, respClassName = "GmUnionTradeResetCdReq", "GmUnionTradeResetCdResp"
+	elseif subCmd == "UpgradeOrder" then
+		url = "gmUnionTradeUpgrade"
+		reqClassName, respClassName = "GmUnionTradeUpgradeReq", "GmUnionTradeUpgradeResp"
+		req.level = tonumber(inputArray[cmdIdx + 1])
+	elseif subCmd == "ResetHarborDonation" then
+		url = "gmUnionTradeResetDonation"
+		reqClassName, respClassName = "GmUnionTradeResetDonationReq", "GmUnionTradeResetDonationResp"
+	elseif subCmd == "ResetDonationCD" then
+		url = "gmUnionResetReinforcementCd"
+		reqClassName, respClassName = "GmUnionResetReinforcementCdReq", "GmUnionResetReinforcementCdResp"
+	elseif subCmd == "ResetDonation" then
+		url = "gmUnionResetReinforcementDonation"
+		reqClassName, respClassName = "GmUnionResetReinforcementDonationReq", "GmUnionResetReinforcementDonationResp"
+	end
+
+	HttpRequest(url, reqClassName, respClassName, req, OnGMResp, true, true)
+end
+
+function OnCommand_GMaddavatarbox(objs)
+	local req = {
+		id = objs[0]
+	}
+	HttpRequest("gmGetBox","GmGetBoxReq","GmGetBoxResp",req,OnGMResp)
+end
+
+local function CheckActiveOpen(type,onFinished)
+	local req = {
+        types = {
+            type
+        }
+    }
+    HttpRequest("getActivity","GetActivityReq","GetActivityResp",req,function(resp)
+        if resp == nil or resp.activities == nil then
+			if onFinished then onFinished(false) end
+			return
+		end
+		for i,activity in ipairs(resp.activities) do
+            if activity.type == type then
+                if onFinished then onFinished(true) end
+                return
+            end
+		end
+		if onFinished then onFinished(false) end
+	end)
+end
+
+function OnCommand_GMWorldBoss(objs)
+	local url,param = objs[0],objs[1]
+	local req = {
+		parm = param
+	}
+	HttpRequest(url,"GmReq","GmResp",req,OnGMResp)
+end
+
+---设置限定任务的状态
+function OnCommand_SetLimitedTaskState(objs)
+	local targetType = objs[0]
+	local req = {}
+	req.type = targetType
+	HttpRequest("gmDailyTaskActivity","GMLimitedTaskActivityReq","GMLimitedTaskActivityResp",req,OnGMResp)
+end
+
+function OnCommand_GMResetMaze(objs)
+	local req = {
+		useless = 0
+	}
+	HttpRequest("GMDeleteLabyrinth","DeleteLabyrinthReq","DeleteLabyrinthResp",req,OnGMResp)
+end
+
+function OnCommand_GMMazeSkipFloor(objs)
+	local floor = objs[0]
+	local req = {
+		floor = floor
+	}
+	HttpRequest("gmSkipFloor","GMSkipFloorReq","DeleteLabyrinthResp",req,OnGMResp)
+end
+
+function OnCommand_GMMazeGetItem(objs)
+	local itemId,count = objs[0],objs[1]
+	local req = {
+		itemId = itemId,
+		count = count,
+	}
+	HttpRequest("gmGetItem","GMGetItemReq","DeleteLabyrinthResp",req,OnGMResp)
+end
+
+---GM完成实名认证
+function OnCommand_GMFinishRealNameCheck()
+	local req = {}
+	req.useless = 1
+	HttpRequest("gmIdentityVerify","GMIdentityVerifyReq","GMIdentityVerifyResp",req,OnGMResp)
+end

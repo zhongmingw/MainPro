@@ -1,0 +1,11 @@
+package Guide;
+
+message GmGuideReq
+{
+    required int32 moduleId = 1;
+}
+
+message GmGuideResp
+{
+	required int32 status = 1;
+}

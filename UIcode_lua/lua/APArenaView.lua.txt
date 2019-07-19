@@ -1,0 +1,253 @@
+require "APArenaRankItemSlot"
+
+local RENEW_INTERVAL_CONST 
+local COUNT_Limit_CONST
+local APARENA_ADD_ID
+
+local curFreeRemains
+local curExtraRemains
+local curTotalRemains
+local lastRenewTime
+
+local player_TF
+
+local rank_Lab
+local score_Lab
+local count_Lab
+local time_Lab
+
+local redFlag_GO
+local none_GO 
+
+local aPAreanaRankGrid
+
+local isInit = false
+
+local TICKER_NAME = "ticker_ApArenaView"
+
+local function RefreshAddRedFlag()
+	local itemData = appData:checkItem("PackItem",tostring(APARENA_ADD_ID))
+	redFlag_GO:SetSelfActive(itemData~=nil and itemData.count~=0)
+end
+
+function DoInit()
+	RENEW_INTERVAL_CONST=GetConstValue("aPArenaRenewCD")*1000
+	local vipLv = appData:checkData("PlayerInfo").vip
+	local vipCanBought = ResTblContainer:GetPropToInt(vipLv,VipTbl.arenaCountAdd,VipTbl.tblName)
+	local infos = ResTblContainer:GetRowFromTbl(UIOpenBase.actorTbl,"18",UIOpenBase.normalMaxCount,UIOpenBase.addCountItemId)
+    COUNT_Limit_CONST=tonumber(infos[0]) +vipCanBought
+    APARENA_ADD_ID=tonumber(infos[1])
+end 
+
+function InitUI()
+	rank_Lab=self:GetComponentAtPath("Center/RankTxt",CLS_TEXT)
+	score_Lab=self:GetComponentAtPath("Center/ScoreTxt",CLS_TEXT)
+	count_Lab=self:GetComponentAtPath("Center/CountTxt",CLS_TEXT)
+	time_Lab=self:GetComponentAtPath("Center/TimeTxt",CLS_TEXT)
+
+	redFlag_GO=self:GetGameObjectAtPath("Center/AddBtn/CountFlag")
+	none_GO=self:GetGameObjectAtPath("Center/None")
+	player_TF=self:GetComponentAtPath("Center/PlayerBase",CLS_RECTTRANSFORM)
+
+	aPAreanaRankGrid= self:GetComponentAtPath("Center/ScrollRect/Viewport/APArenaRankGrid",CLS_UI_ITEM_GRID)
+end
+
+function ReloadFormBattle(data)
+	if self.gameObject.activeInHierarchy then
+		self:SendCommand("InitAPArenaData",data)
+	end
+end
+
+function OnDoUnhide()
+
+end
+
+function Active()
+	self:SendCommand("InitAPArenaData")
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+	end 
+	MsgCenter:Subscribe(Notify_OnBattleEnd,ReloadFormBattle)
+	self:SendCommand("InitAPArenaData")
+end 
+
+function OnNotification_InitAPArenaData(objs)
+	if not self.gameObject.activeInHierarchy then
+		return 
+	end
+	local aPArenaBasicInfo = objs[0]
+	local resp = objs[1]
+	UpdateRemains(aPArenaBasicInfo)
+	local selfRankInfo  = resp.selfRankInfo
+	local rankInfos = resp.rankInfos
+	if selfRankInfo.rank==-1 then
+		rank_Lab.text="-"
+	else
+		rank_Lab.text=tostring(selfRankInfo.rank)
+	end
+	RefreshAddRedFlag()
+	score_Lab.text=tostring(selfRankInfo.score)
+	BindPlayerBaseInfoValue(player_TF,selfRankInfo.playerBaseInfo)
+	none_GO:SetSelfActive(rankInfos==nil)
+	aPAreanaRankGrid:RefreshItemSlots(rankInfos,self.gameObject,"APArenaRankItemSlot")
+end
+
+function OnNotification_RefreshAddRedFlag(objs)
+	RefreshAddRedFlag()
+end
+
+function OnNotification_UpdateRemains(objs)
+	if not self.gameObject.activeInHierarchy then
+		return 
+	end
+	UpdateRemains(objs[0])
+end
+
+function UpdateRemains(aPArenaBasicInfo)
+	time_Lab.gameObject:SetActive(true)	
+	curFreeRemains=aPArenaBasicInfo.remains
+	curExtraRemains=aPArenaBasicInfo.extraRemains
+	lastRenewTime=aPArenaBasicInfo.lastRenewTime
+	local count = 0
+	while(lastRenewTime+RENEW_INTERVAL_CONST<CsBridge.timeManager.ServerTime)
+	do
+		lastRenewTime = lastRenewTime+RENEW_INTERVAL_CONST
+		count=count+1
+	end
+	curFreeRemains=aPArenaBasicInfo.remains+count
+	if	curFreeRemains>=COUNT_Limit_CONST then
+		curFreeRemains=COUNT_Limit_CONST
+		time_Lab.text="00:00:00"
+	else
+		local endTime = lastRenewTime+RENEW_INTERVAL_CONST
+		StartRenewTicker(endTime)
+	end
+	curTotalRemains=math.floor(curFreeRemains+curExtraRemains)
+	count_Lab.text=tostring(curTotalRemains)
+end
+
+function OnUpdate(targetTime)
+	if self == nil or self.Module == nil then
+		return
+	end
+	local timeStr = CheckTimeRemain(targetTime,false)
+	time_Lab.text=timeStr;
+end
+
+function OnFinished()
+	curFreeRemains=curFreeRemains+1
+	if	curFreeRemains>=COUNT_Limit_CONST then
+		curFreeRemains=COUNT_Limit_CONST
+		time_Lab.text="00:00:00"
+	else
+		local endTime = lastRenewTime+RENEW_INTERVAL_CONST
+		StartRenewTicker(endTime)
+	end
+	curTotalRemains=curFreeRemains+curExtraRemains
+	count_Lab.text=tostring(curTotalRemains)
+end
+
+function StartRenewTicker(endTime)
+	local onLooping = function()
+		if time_Lab then
+			time_Lab.text = CheckTimeRemain(endTime,false)
+		end
+	end
+	local onFinished = OnFinished
+	Timer:AddTicker(TICKER_NAME, endTime, onLooping, onFinished)
+end
+
+function OnAPArenaRankGridPlayerBaseClick(obj)
+	local data = obj.m_data
+	CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			local view = CsBridge.OpenView("PlayerInfoView", "PlayerInfoModel",true,true)
+			view.transform.parent:SetAsLastSibling()
+			local isLocal = false
+			local uid = data.playerBaseInfo.userId
+			local zone = data.playerBaseInfo.zone
+			view:SetParamDataList(isLocal, uid, zone)
+		end, "PlayerInfoView","AchievementItemSlot")
+end
+
+function OnRewardBtnClick(sender)
+	CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			CsBridge.OpenView("APArenaRewardView","ArenaModel",true,true)
+		end, "APArenaRewardView")
+end
+
+function OnRecordBtnClick(sender)
+	self:SendCommand("OpenAPArenaRecordView")
+end
+
+function OnFormationBtnClick(sender)
+	self:SendCommand("OpenDefFormationView")
+end
+
+function FormationCallBack(formationPos)
+	self:SendCommand("APArenaDefFormation",formationPos)  
+end
+
+local function CheckFight()
+	if curTotalRemains == nil or curTotalRemains<=0 then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("1042"))
+		return false
+	end
+	local formation=appData:checkItem("Formation","2")   
+    if formation == nil or formation.heroIds==nil then 
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("1059"))
+		return false
+	end
+	return true
+end
+
+function OnFightBtnClick(sender)
+	if CheckFight() then
+		self:SendCommand("OpenAPArenaDetailsView",false)
+	end
+end
+
+function OnSkipBtnClick(sender)
+	if CheckFight() then
+		if CheckUILevelOpen(UI_OPEN_QUICK_FIGHT) then
+			self:SendCommand("OpenAPArenaDetailsView",true)
+		end
+	end
+end
+
+function OnAddBtnClick(sender)
+	self:SendCommand("OpenExchangeItemView",APARENA_ADD_ID)
+end
+
+function OnClose()
+	Timer:StopTicker(TICKER_NAME)
+	MsgCenter:Unsubscribe(Notify_OnBattleEnd,ReloadFormBattle)
+end
+
+function DoExit()
+	MsgCenter:Unsubscribe(Notify_OnBattleEnd,ReloadFormBattle)
+	Timer:StopTicker(TICKER_NAME)
+	self.Module=nil
+	RENEW_INTERVAL_CONST =nil
+	COUNT_Limit_CONST=nil
+	APARENA_ADD_ID=nil
+	curFreeRemains=nil
+	curExtraRemains=nil
+	curTotalRemains=nil
+	lastRenewTime=nil
+	player_TF=nil
+	rank_Lab=nil
+	score_Lab=nil
+	count_Lab=nil
+	time_Lab=nil
+	redFlag_GO=nil
+	none_GO =nil
+	aPAreanaRankGrid=nil
+	isInit=nil
+	TICKER_NAME = nil
+end

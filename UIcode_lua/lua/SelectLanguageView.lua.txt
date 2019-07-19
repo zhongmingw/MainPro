@@ -1,0 +1,59 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-03-09 14:35:50
+
+require "LanguageItemSlot"
+
+local languageGrid
+
+local isInit = false
+
+function DoInit()
+    self.Shadow = 1
+end
+
+function InitUI()
+    languageGrid = self:GetComponentAtPath("Center/LanguageSV/ScrollRect/Viewport/LanguageGrid" ,CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitSelectLanguageData")
+end
+
+function OnNotification_RefreshSelectLanguageView(objs)
+    languageGrid:RefreshItemSlots(objs[0],self.gameObject,"LanguageItemSlot")
+end
+
+function OnLanguageGridLanguageItemSlotClick(obj)
+    if not obj.m_data.IsSelected then
+        self:SendCommand("SelectLanguage",obj.m_data)
+        self:HideView(self.gameObject.name)
+    end
+end
+
+function OnNotification_CancelSelectLanguage(objs)
+    local data = objs[0]
+    data.IsSelected = false
+    languageGrid:SingleRefreshSlot(data)
+end
+
+function OnNotification_SelectLanguage(objs)
+    local data = objs[0]
+    data.IsSelected = true
+    languageGrid:SingleRefreshSlot(data)
+end
+
+function OnClose() 
+    languageGrid:ClearItems()
+    languageGrid = nil
+    isInit = nil
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name)
+end

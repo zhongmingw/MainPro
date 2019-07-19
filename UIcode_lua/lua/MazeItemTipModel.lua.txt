@@ -1,0 +1,37 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-05-08 21:25:53
+
+local data
+
+local function GetItemTipData(it)
+    local data = {
+        id = it.id,
+        name = it.name,
+        icon = it.icon,
+        desp = it.desp,
+        type = it.type
+    }
+    return data
+end
+
+local function HideView()
+    self:SendNotification("HideView")
+end
+
+function DoOnExit()
+    data = nil
+end
+
+function OnCommand_InitData(objs)
+    data = objs[0]
+    local itemData = GetItemTipData(data.item)
+    self:SendNotification("RefreshMazeItemTipView",itemData)
+end
+
+function OnCommand_UseItem(objs)
+    if data.useFinished then
+        data.useFinished(HideView)
+    end
+end

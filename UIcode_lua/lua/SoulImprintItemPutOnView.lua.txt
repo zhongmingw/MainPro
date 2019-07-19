@@ -1,0 +1,385 @@
+local soulImprintItemSlot = require('SoulImprintItemSlot')
+local soulAttrNameTxtItemSlot = require('SoulAttrNameTxtItemSlot')
+local luaAttrEffectItemSlot = require "AttrEffectItemSlot"
+
+---@type UnityEngine.GameObject 还没有嵌入的框框
+local iconBoxObj
+---@type UnityEngine.UI.Image 加号按钮
+local addFlagImg
+---@type UnityEngine.GameObject 加号按钮
+local addFlagObj
+---@type UnityEngine.GameObject 快速镶嵌按钮
+local quickPutOnBtnObj
+
+---@type UnityEngine.GameObject 嵌入之后的中间那个
+local centerObj
+---@type UnityEngine.GameObject 纹章
+local soulImprintItemSlotObj
+---@type Client.Library.ItemSlot 纹章上面的组件
+local soulImprintItemSlotCp
+---@type Client.Library.UIItemGrid 刷属性的
+local bgContentItemGrid
+---@type UnityEngine.TextMesh 英雄名字
+local nameTxt
+---@type UnityEngine.RectTransform 英雄星级
+local starRootRectTrans
+
+---@type UnityEngine.GameObject 特效父节点的父节点
+local effectObj
+---@type Client.Library.UIItemGrid 特效的grid
+local attrEffectGrid
+---@type UnityEngine.CanvasGroup
+local attrEffectCG
+
+---@type UnityEngine.Transform 白光动画的父节点
+local updateSpParentTrans
+---@type UnityEngine.Transform common动画的父节点
+local commonSpParentTrans
+---@type UnityEngine.Transform 装备的动画父节点
+local equipSpParentTrans
+---@type UnityEngine.Transform 卸载动画父节点
+local unWearSpParentTrans
+---@type UnityEngine.Transform 转圈动画父节点
+local roundSpParentTrans
+---@type UnityEngine.Transform 爆点动画父节点
+local pointSpParentTrans
+
+---@type table 属性集合
+local propTxtArr = {}
+---@type table 界面数据
+local viewData
+--- 加号按钮的动画
+local addFade
+
+--- 属性移动动画
+local moveAnim
+--- 渐隐动画
+local fadeAnim
+
+local TICKER_NAME = "ticker_SoulImprintItemPutOnView"
+
+---公共的spine资源
+local COMMON_SPINE_NAME = "SoulPutOnCommonSpine"
+---没有装备纹章时候的动画
+local EMPTY_ANIM_NAME = "nomosaic_loop"
+---装备了纹章的动画
+local EQUIPED_ANIM_NAME = "mosaic_loop"
+---装备纹章动画1
+local EQUIP_ANIM_NAME_COMMON = "mosaic"
+---装备纹章动画资源2
+local EQUIP_SPINE_NAME = "SoulPutOnEquipSpine"
+---装备纹章动画2
+local EQUIP_ANIM_NAME = "nongsuo"
+---装备纹章资源3
+local EQUIP_POINT_SPINE_NAME = "SoulPutOnEquipPointSpine"
+---装备纹章动画3
+local EQUIP_POINT_ANIM_NAME = "baodian"
+---卸载纹章动画资源
+local UNWEAR_SPINE_NAME = "SoulPutOnUnWearSpine"
+---卸载纹章的动画名称
+local UNWEAR_ANIM_NAME = "shifang"
+---更新白光动画资源
+local HERO_UPDATE_SPINE_NAME = "IconUpdateSpine"
+---更新白光动画名称
+local HERO_UPDATE_ANIM_NAME = "a_1"
+---旋转动画资源
+local ROUND_SPINE_NAME = "SoulPutOnRoundSpine"
+---旋转动画的名字
+local ROUND_ANIM_NAME = "loop"
+
+function DoInit()
+    self.Shadow = 1
+    local selfTrans = self.transform
+    iconBoxObj = self:GetGameObjectAtPath("IconBox")
+    addFlagImg = self:GetComponentAtPath("IconBox/AddFlag", CLS_IMAGE)
+    addFlagObj = addFlagImg.gameObject
+    quickPutOnBtnObj = self:GetGameObjectAtPath("IconBox/QuickPutOnBtn")
+    centerObj = self:GetGameObjectAtPath("Center")
+    soulImprintItemSlotObj = self:GetGameObjectAtPath("Center/SoulImprintParent/SoulImprintItemSlot")
+    soulImprintItemSlotCp = CsBridge.UnityHelper.GetOrAddComponent(soulImprintItemSlotObj, CLS_ITEM_SLOT)
+    bgContentItemGrid = self:GetComponentAtPath("Center/BgContent", CLS_UI_ITEM_GRID)
+    nameTxt = self:GetComponentAtPath("Center/NameTxt", CLS_TEXT)
+    starRootRectTrans = self:GetComponentAtPath("Center/StarRoot", CLS_RECTTRANSFORM)
+    effectObj = self:GetGameObjectAtPath("Effect")
+    local effectTrans = effectObj.transform
+    attrEffectGrid = effectTrans:GetComponentAtPath("AttrEffect", CLS_UI_ITEM_GRID)
+    attrEffectCG = effectTrans:GetComponentAtPath("AttrEffect", CLS_CANVAS_GROUP)
+
+    updateSpParentTrans = selfTrans:Find("UpdateParent")
+    commonSpParentTrans = selfTrans:Find("CommonParent")
+    equipSpParentTrans = selfTrans:Find("EquipParent")
+    unWearSpParentTrans = selfTrans:Find("UnWearParent")
+    roundSpParentTrans = selfTrans:Find("RoundParent")
+    pointSpParentTrans = selfTrans:Find("PointParent")
+end
+
+---开始加号按钮的动画
+local function StartAddTransAnima()
+    addFlagObj:SetActive(true)
+    if addFade then
+        addFade:DoKill()
+        addFade = nil
+    end
+    addFade = CsBridge.TweenUtils.DoImageFadeInAndOut(addFlagImg, 2)
+    addFade:DoPlay()
+end
+
+---根据父节点清理动画资源
+---@param parent UnityEngine.Transform
+local function ClearSpineObjFromParent(parent)
+    if parent and parent.childCount > 0 then
+        local spineTrans = parent:GetChild(0)
+        ClearSpineObj(spineTrans.gameObject)
+    end
+end
+
+---播放初始动画
+local function PlayDefaultAnimation()
+    local commonSpData = GetSpineData(COMMON_SPINE_NAME, EQUIPED_ANIM_NAME, true)
+    if viewData then
+        ClearSpineObjFromParent(roundSpParentTrans)
+    else
+        commonSpData = GetSpineData(COMMON_SPINE_NAME, EMPTY_ANIM_NAME, true)
+        local roundSpData = GetSpineData(ROUND_SPINE_NAME, ROUND_ANIM_NAME, true)
+        StartSpineAnimation(self, roundSpData, roundSpParentTrans)
+        addFlagObj:SetActive(true)
+    end
+    StartSpineAnimation(self, commonSpData, commonSpParentTrans)
+    ClearSpineObjFromParent(equipSpParentTrans)
+    ClearSpineObjFromParent(unWearSpParentTrans)
+    ClearSpineObjFromParent(pointSpParentTrans)
+    ClearSpineObjFromParent(updateSpParentTrans)
+end
+
+---初始化界面
+local function InitSoulImprintItemInfo()
+    if viewData then
+        bgContentItemGrid.gameObject:SetActive(true)
+        iconBoxObj:SetActive(false)
+        centerObj:SetActive(true)
+        local itemInfo = viewData.itemInfo
+        OnSoulImprintItemSlotBindValue(soulImprintItemSlotCp, itemInfo)
+        ShowHeroQuality(itemInfo.heroId, starRootRectTrans, nil, itemInfo.distillationStar)
+        nameTxt.text = itemInfo.name
+    else
+        iconBoxObj:SetActive(true)
+        quickPutOnBtnObj:SetActive(true)
+        centerObj:SetActive(false)
+        bgContentItemGrid:ClearItems()
+        StartAddTransAnima()
+    end
+end
+
+---显示属性
+local function ShowProps(props, enableAnimation)
+    if props and #props > 0 then
+        bgContentItemGrid.gameObject:SetActive(true)
+        bgContentItemGrid:RefreshItemSlots(props, self.gameObject, "SoulAttrNameTxtItemSlot")
+        local slotArr = bgContentItemGrid:GetAllItems()
+        for i = 0, slotArr.Length - 1 do
+            slotArr[i].gameObject:FadeAlpha(0, 0)
+        end
+        if enableAnimation then
+            local codeTime = 0.15
+            local passedTime = 0
+            local lastTime = CsBridge.timeManager.ServerTime
+            local index = 0
+            Timer:AddTicker(TICKER_NAME, codeTime * (#props + 4) * 1000 + CsBridge.timeManager.ServerTime, function(targetTime)
+                local delatTime = CsBridge.timeManager.ServerTime - lastTime
+                lastTime = CsBridge.timeManager.ServerTime
+                passedTime = passedTime + delatTime
+                if passedTime >= codeTime * 1000 then
+                    passedTime = 0
+                    if index > #props - 1 then
+                        return
+                    end
+                    slotArr[index].gameObject:FadeAlpha(1, 0)
+                    index = index + 1
+                end
+            end, nil)
+        else
+            for i = 0, slotArr.Length - 1 do
+                slotArr[i].gameObject:FadeAlpha(1, 1)
+            end
+        end
+    else
+        bgContentItemGrid.gameObject:SetActive(false)
+        bgContentItemGrid:RefreshItemSlots({}, self.gameObject, "SoulAttrNameTxtItemSlot")
+        bgContentItemGrid:ClearItems()
+    end
+end
+
+---显示属性的增减特效
+local function ShowAttrEffect(attrs)
+    if attrs and #attrs > 0 then
+        CsBridge.CacheAssetsByModule(self.Module, function()
+            if moveAnim then
+                moveAnim:DoKill()
+            end
+            if fadeAnim then
+                fadeAnim:DoKill()
+            end
+            attrEffectGrid:ClearItems()
+            attrEffectGrid.gameObject:SetPosition(0, 178)
+            attrEffectCG.alpha = 1
+            attrEffectGrid.gameObject:SetSelfActive(true)
+            moveAnim = CsBridge.TweenUtils.MoveTo(attrEffectGrid.transform, 0, 193, 0.8)
+            attrEffectGrid:RefreshItemSlots(attrs, self.gameObject, "AttrEffectItemSlot")
+            moveAnim:OnCompleteAction(function()
+                fadeAnim = CsBridge.TweenUtils.FadeTo(attrEffectCG, 0, 0.5)
+                fadeAnim:OnCompleteAction(function()
+                    attrEffectGrid.gameObject:SetSelfActive(false)
+                end)
+                fadeAnim:DoPlay()
+            end)
+            moveAnim:DoPlay()
+        end, "AttrEffectItemSlot")
+    end
+end
+
+---播放穿戴纹章的动画
+local function PlayWearSPAnimation(itemData)
+    local commonSpData = GetSpineData(COMMON_SPINE_NAME, EQUIP_ANIM_NAME_COMMON, false, false)
+    local equipSpData = GetSpineData(EQUIP_SPINE_NAME, EQUIP_ANIM_NAME, false)
+    local pointSpData = GetSpineData(EQUIP_POINT_SPINE_NAME, EQUIP_POINT_ANIM_NAME, false)
+    local updateSpData = GetSpineData(HERO_UPDATE_SPINE_NAME, HERO_UPDATE_ANIM_NAME, false)
+    addFlagObj:SetActive(false)
+    StartSpineAnimation(self, equipSpData, equipSpParentTrans)
+    StartSpineAnimation(self, pointSpData, pointSpParentTrans)
+    StartSpineAnimation(self, commonSpData, commonSpParentTrans, function()
+        InitSoulImprintItemInfo()
+        StartSpineAnimation(self, updateSpData, updateSpParentTrans, function()
+            PlayDefaultAnimation()
+        end)
+        ShowAttrEffect(itemData.changedProps)
+        if viewData then
+            local props = viewData.props
+            ShowProps(props, true)
+        end
+        CsBridge.TweenUtils.ScaleInAndOut(soulImprintItemSlotObj.transform)
+    end)
+end
+
+---播放卸载纹章的动画
+local function PlayUnWearSPAnimation(itemData)
+    local unWearSpData = GetSpineData(UNWEAR_SPINE_NAME, UNWEAR_ANIM_NAME, false)
+    local updateSpData = GetSpineData(HERO_UPDATE_SPINE_NAME, HERO_UPDATE_ANIM_NAME, false)
+    StartSpineAnimation(self, unWearSpData, unWearSpParentTrans, function()
+        StartSpineAnimation(self, updateSpData, updateSpParentTrans, function()
+            PlayDefaultAnimation()
+        end)
+        addFlagObj:SetActive(true)
+        ShowAttrEffect(itemData.changedProps)
+        InitSoulImprintItemInfo()
+    end)
+end
+
+function SetParamDataList(objs)
+    if objs then
+        viewData = objs[0]
+        InitSoulImprintItemInfo()
+        if viewData then
+            local props = viewData.props
+            ShowProps(props, false)
+        end
+        PlayDefaultAnimation()
+        local curHero = objs[1]
+        self:SendCommand("SetCurHeroData", curHero)
+    end
+end
+
+function OnAnimationFinished()
+
+end
+
+---卸载纹章
+function OnNotification_UnWearSoulImprintItem(objs)
+    viewData = nil
+    local tempSoulInfo = objs[0]
+    PlayUnWearSPAnimation(tempSoulInfo)
+end
+
+---穿上纹章
+function OnNotification_WearSoulImprintItem(objs)
+    viewData = objs[0]
+    quickPutOnBtnObj:SetActive(false)
+    bgContentItemGrid.gameObject:SetActive(false)
+    CsBridge.UnityHelper.SetlocalScale(soulImprintItemSlotObj, 1, 1, 1)
+    PlayWearSPAnimation(viewData)
+end
+
+---已装备的纹章点击按钮
+function OnSoulImprintItemSlotClick()
+    self:SendCommand("ShowSoulImprintItemTipsFromPutOnView", viewData)
+end
+
+---未装备点击中间空的框框
+function OnIconBGBtnClick()
+    self:SendCommand("OpenSoulImprintItemBag")
+end
+
+---关闭按钮点击
+function OnCloseBtnClick()
+    self:HideView(self.gameObject.name)
+end
+
+---遮罩点击
+function OnMaskClick()
+    self:HideView(self.gameObject.name)
+end
+
+---快速镶嵌按钮
+function OnQuickPutOnBtnClick()
+    self:SendCommand("QuickPutOnSoulImprintItem")
+end
+
+---帮助按钮点击
+function OnHelpBtnClick()
+    self:SendCommand("OpenSoulImprintPutOnHelpInfo")
+end
+
+function OnClose()
+
+end
+
+function DoExit()
+    iconBoxObj = nil
+    addFlagImg = nil
+    addFlagObj = nil
+    quickPutOnBtnObj = nil
+    centerObj = nil
+    soulImprintItemSlotObj = nil
+    soulImprintItemSlotCp = nil
+    bgContentItemGrid = nil
+    nameTxt = nil
+    starRootRectTrans = nil
+    effectObj = nil
+    attrEffectGrid = nil
+    attrEffectCG = nil
+    updateSpParentTrans = nil
+    commonSpParentTrans = nil
+    equipSpParentTrans = nil
+    unWearSpParentTrans = nil
+    roundSpParentTrans = nil
+    pointSpParentTrans = nil
+    propTxtArr = nil
+    viewData = nil
+    addFade = nil
+    moveAnim = nil
+    fadeAnim = nil
+    TICKER_NAME = nil
+    COMMON_SPINE_NAME = nil
+    EMPTY_ANIM_NAME = nil
+    EQUIPED_ANIM_NAME = nil
+    EQUIP_ANIM_NAME_COMMON = nil
+    EQUIP_SPINE_NAME = nil
+    EQUIP_ANIM_NAME = nil
+    EQUIP_POINT_SPINE_NAME = nil
+    EQUIP_POINT_ANIM_NAME = nil
+    UNWEAR_SPINE_NAME = nil
+    UNWEAR_ANIM_NAME = nil
+    HERO_UPDATE_SPINE_NAME = nil
+    HERO_UPDATE_ANIM_NAME = nil
+    ROUND_SPINE_NAME = nil
+    ROUND_ANIM_NAME = nil
+end

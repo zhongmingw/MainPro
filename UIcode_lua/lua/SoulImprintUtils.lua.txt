@@ -1,0 +1,27 @@
+---和服务器进行灵魂印刻
+local HeroToSoulImprint = function(targetData, callback)
+    local req = {}
+    req.heroUid = targetData.uid
+    HttpRequest("emblemEngrave", "EmblemEngraveReq", "EmblemEngraveResp", req, function(resp)
+        callback(resp)
+    end)
+end
+
+---解封
+local DesSoulImprintItem = function(selectedArr, callback)
+    if selectedArr then
+        local req = {}
+        req.heroUids = {}
+        for i = 1, #selectedArr do
+            table.insert(req.heroUids, selectedArr[i].uid)
+        end
+        HttpRequest("emblemReset", "EmblemRenewReq", "EmblemRenewResp", req, function(resp)
+            callback(resp)
+        end)
+    end
+end
+
+return {
+    HeroToSoulImprint = HeroToSoulImprint,
+    DesSoulImprintItem = DesSoulImprintItem,
+}

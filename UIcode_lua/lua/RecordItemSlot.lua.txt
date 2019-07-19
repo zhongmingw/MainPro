@@ -1,0 +1,53 @@
+
+function OnRecordItemSlotBindValue(slot,data)
+	local img_icon
+	local txt_lv
+	local txt_grade
+	local txt_num
+	local slider
+
+	local go_bg1
+	local go_bg2
+
+
+	local starListObj
+	local starArr={}
+
+	local star_6
+	local star_7
+	
+	img_icon=self.transform:Find("item/icon"):GetComponent("UnityEngine.UI.Image")
+	txt_lv=self.transform:Find("item/lv"):GetComponent(CLS_TEXT)
+	txt_grade=self.transform:Find("item/gradeNum"):GetComponent(CLS_TEXT)
+	txt_num=self.transform:Find("num"):GetComponent(CLS_TEXT)
+	slider=self.transform:Find("Slider"):GetComponent("UnityEngine.UI.Slider")
+
+	go_bg1=self.transform:Find("bg1").gameObject
+	go_bg2=self.transform:Find("bg2").gameObject
+
+	starListObj=self.transform:Find("item/Stars/starList").gameObject
+	star_6=self.transform:Find("item/Stars/star6").gameObject
+	star_7=self.transform:Find("item/Stars/star7").gameObject
+	for  i = 1,5 do
+		local obj=starListObj.transform:Find("star"..i)
+		table.insert(starArr,obj)
+	end
+
+	SetIconByHeroId(img_icon.gameObject,data.heroId)
+
+	ShowStar(data.heroId,starListObj,starArr,star_6,star_7)
+
+	txt_lv.text= tostring(data.level)
+	txt_grade.text= tostring(data.grade)
+	txt_num.text= tostring(data.hurtNum)
+	slider.value=tonumber(data.hurtNum/data.maxHurt)
+	
+	if(slot.m_index%2==0)then
+		go_bg1:SetActive(true)
+		go_bg2:SetActive(false)
+	else
+		go_bg1:SetActive(false)
+		go_bg2:SetActive(true)
+	end
+
+end

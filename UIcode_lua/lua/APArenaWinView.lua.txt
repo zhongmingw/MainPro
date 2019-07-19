@@ -1,0 +1,102 @@
+local selfName_Lab
+local enemyName_Lab
+local selfScore_Lab
+local enemyScore_Lab
+local selfScoreDelta_Lab
+local enemyScoreDelta_Lab
+
+local selfHead_TF
+local enemyHead_TF
+
+local winSpine
+local battleInfo={}
+
+local getReward=false
+local isGot=false
+
+function DoInit()
+	self.Shadow = 2
+	selfName_Lab=self:GetComponentAtPath("Center/PlayerGO/NameTxt",CLS_TEXT)
+	enemyName_Lab=self:GetComponentAtPath("Center/EnemyGO/NameTxt",CLS_TEXT)
+	selfScore_Lab=self:GetComponentAtPath("Center/PlayerGO/ScoreTxt",CLS_TEXT)
+	enemyScore_Lab=self:GetComponentAtPath("Center/EnemyGO/ScoreTxt",CLS_TEXT)
+	selfScoreDelta_Lab=self:GetComponentAtPath("Center/PlayerGO/DetalTxt",CLS_TEXT)
+	enemyScoreDelta_Lab=self:GetComponentAtPath("Center/EnemyGO/DetalTxt",CLS_TEXT)
+
+	selfHead_TF=self:GetComponentAtPath("Center/PlayerGO/PlayerBase",CLS_RECTTRANSFORM)
+	enemyHead_TF=self:GetComponentAtPath("Center/EnemyGO/PlayerBase",CLS_RECTTRANSFORM)
+
+	winSpine = self:GetComponentAtPath("SpineGO/WinSpine",CLS_SKELETONGRAPHIC)
+end
+
+function SetData(data)
+	battleInfo=data
+	local playerInfo = battleInfo.battleEndInfo.selfPlayerBaseInfo
+	local enemyInfo = battleInfo.battleEndInfo.targetPlayerBaseInfo
+	BindPlayerBaseInfoValue(selfHead_TF,playerInfo)
+	BindPlayerBaseInfoValue(enemyHead_TF,enemyInfo)
+	selfName_Lab.text=playerInfo.name
+	enemyName_Lab.text=enemyInfo.name
+	selfScore_Lab.text=tostring(battleInfo.battleEndInfo.apArenaResult.redScore)
+	enemyScore_Lab.text=tostring(battleInfo.battleEndInfo.apArenaResult.blackScore)
+	selfScoreDelta_Lab.text="(+"..battleInfo.battleEndInfo.apArenaResult.deltaScore..")"
+	enemyScoreDelta_Lab.text="(-"..battleInfo.battleEndInfo.apArenaResult.deltaScore..")"
+end
+
+function OnOpen()
+	winSpine:PlayAnimation("apear",false,nil,
+	function ()
+		winSpine:PlayAnimation("stand",true,nil,nil)
+	end)
+	CsBridge.audioManager:PlayUI(ResTblContainer:GetPropToStr(1,sound.name,sound.tblName))
+end
+
+function OnAnimationFinished()
+	if battleInfo.battleEndInfo==nil then
+		return 
+	end
+	if battleInfo.battleEndInfo.dropItems~=nil then
+		dropGrid:RefreshItemSlots(MergeRewards(battleInfo.battleEndInfo.dropItems),self.gameObject,"ItemSlot")
+	end
+	if battleInfo.battleEndInfo.randomReward~=nil and battleInfo.isRecord~=true then
+		CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			local view = CsBridge.OpenView("RandomRewardView", "WinModel",false,true)
+			view:SetData(battleInfo.battleEndInfo.randomReward)
+		end,"RandomRewardView")
+	end
+end
+
+function OnDetailBtnClick(sender)
+	ShowBattleRecordView({battleInfo},self)
+end
+
+local function Close(onClose)
+	self:HideView(self.gameObject.name)
+	if onClose then
+		onClose()
+	end
+end
+
+function OnCloseBtnClick(sender)
+	Close(battleInfo.onClose)
+end
+
+function OnMaskClick()
+	Close(battleInfo.onClose)
+end
+
+function DoExit()
+	selfName_Lab = nil
+	enemyName_Lab = nil
+	selfScore_Lab = nil
+	enemyScore_Lab = nil
+	selfScoreDelta_Lab = nil
+	enemyScoreDelta_Lab = nil
+	selfHead_TF = nil
+	enemyHead_TF = nil
+	winSpine = nil
+	battleInfo = nil
+	getReward = nil
+	isGot = nil
+end

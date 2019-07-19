@@ -1,0 +1,16 @@
+
+function OnHeroGangItemSlotBindValue(slot, data)
+
+    local spine_TF = slot.transform:Find("SpineGO")
+    local detailsBtn_GO = slot:GetGameObjectAtPath("DetailsBtn") --slot.transform:Find("DetailsBtn").gameObject
+    local active_GO = slot:GetGameObjectAtPath("ActiveGO") --slot.transform:Find("ActiveGO").gameObject
+    local complete_GO = slot:GetGameObjectAtPath("CompleteGO") --slot.transform:Find("CompleteGO").gameObject
+    
+    if spine_TF.childCount==0  then
+        local spineModel=ResTblContainer:GetPropToStr(data.heroId,"model","HeroBase")
+		CsBridge.SpineHelper.CreatSpineModel(spineModel,"stand",spine_TF,true)
+    end
+    detailsBtn_GO:SetSelfActive(data.remain~=0)
+    active_GO:SetSelfActive(data.remain~=0)
+    complete_GO:SetSelfActive(data.remain==0)
+end

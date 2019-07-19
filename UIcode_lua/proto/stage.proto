@@ -1,0 +1,114 @@
+package stage;
+
+message BeginOnHookReq 
+{
+	required int32 difficulty = 1;
+	required int32 chapter = 2;
+	required int32 stage = 3;
+}
+message BeginOnHookResp 
+{
+	required int32 result = 1;
+}
+
+message SwitchOnHookStageReq 
+{
+	required int32 difficulty = 1;
+	required int32 chapter = 2;
+	required int32 stage = 3;
+}
+message SwitchOnHookStageResp 
+{
+	required int32 result = 1;
+	repeated RewardItem rewardItems =2;
+	repeated RewardItem upLevelRewardItems = 3;
+}
+
+message TakeOnHookRewardsReq 
+{
+	required int32 id = 1;
+}
+
+message TakeOnHookRewardsResp 
+{
+	required int32 result = 1;
+	repeated RewardItem rewardItems =2;
+	repeated RewardItem upLevelRewardItems = 3;
+}
+
+message FightStageReq 
+{
+	repeated FormationPos heroIds =1;
+}
+
+message Formation 
+{
+	required int32 id = 1;
+	repeated FormationPos heroIds =2;
+	required int32 order = 3;
+}
+message FormationPos 
+{
+	required int32 pos = 1;
+	required int32 uid = 2;
+	required int32 heroId = 3;
+}
+
+message UpdateFormationResp 
+{
+	required int32 result = 1;
+}
+
+message RewardItem  
+{
+	required int32 typeId =1;
+	required int32 id =2;
+	required int32 count =3;
+}
+
+
+message GMPassSpecifyStageReq 
+{
+	required int32 difficulty = 1;
+	required int32 chapter = 2;
+	required int32 stage = 3;
+}
+message GMPassSpecifyStageResp 
+{
+	required int32 result = 1;
+}
+
+message GMGetSpecifyStageRewardReq 
+{
+	required int32 difficulty = 1;
+	required int32 chapter = 2;
+	required int32 stage = 3;
+	required int32 type = 4;
+}
+
+message GMGetSpecifyStageRewardResp 
+{
+	repeated RewardItem rewardItems =1;
+}
+
+message RemoveHeroFormationReq 
+{
+	required int32 heroUid = 1; //英雄uid
+}
+
+message RemoveHeroFormationResp 
+{
+	required int32 status = 1;  
+}
+
+message CheckCanOnHookReq
+{
+	required int32 difficulty = 1;
+	required int32 chapter = 2;
+	required int32 stage = 3;
+}
+
+message CheckCanOnHookResp
+{
+	required bool result = 1;
+}

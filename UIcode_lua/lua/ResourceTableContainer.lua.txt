@@ -1,0 +1,147 @@
+local ResTable=require "ResourceTable"
+
+ResTblContainer={}
+local tables={}
+local localTbl
+
+function ResTblContainer:UpdateTbl(resRoot)
+    tables={}
+    local tblName
+    local tbl
+	local lan = CS.Client.Library.LocalizationHelper.instance.Language
+	for i = 0,resRoot.fileNames.Count-1 do
+	   tblName=resRoot.fileNames[i]
+	   if(not string.startswith(tblName,"Guide") and ((not string.startswith(tblName, "local_") or (string.endswith(tblName, lan))))) then
+		   tbl=ResTable:New(tblName)
+		   local cols = resRoot.files[i].items
+		   local col
+		   for i=0,cols.Count - 1 do
+		       col = cols[i]
+			   local vals={}
+			   local val=col.value
+			   local data = val:ToArray()
+			   for j=0,data.Length - 1 do
+			       vals[j]=data[j]
+			   end
+			   vals.Length=data.Length
+		       tbl:AssignCol(col.key,vals,i==0)
+		   end
+	       tables[tblName]=tbl
+	   end
+	end
+end
+
+function ResTblContainer:GetTable(tblName)
+    return tables[tblName]
+end
+
+function ResTblContainer:GetPropToStr(id, propName, clsName)
+    local tbl=tables[clsName]
+	if(tbl==nil) then
+	    return ""
+	else
+	    return tbl:Get(tostring(id), propName)
+	end
+end
+
+function ResTblContainer:GetPropToInt(id, propName, clsName)
+    local tbl=tables[clsName]
+	if(tbl==nil) then
+	    return 0
+	else
+	    local val = tbl:Get(tostring(id), propName)
+		if(val == nil or val == "") then
+		    return 0
+		else
+		    return tonumber(val)
+		end
+	end
+end
+
+function ResTblContainer:GetPropToFloat(id, propName, clsName)
+    local tbl=tables[clsName]
+	if(tbl==nil) then
+	    return 0
+	else
+	    local val = tbl:Get(tostring(id), propName)
+		if(val == nil or val == "") then
+		    return 0
+		else
+		    return tonumber(val)
+		end
+	end
+end
+
+function ResTblContainer:TblHasId(id,clsName)
+    local tbl=tables[clsName]
+	if tbl == nil then
+	    return false
+	else
+	    return tbl:HasKey(tostring(id))
+	end
+end
+
+function ResTblContainer:GetIds(clsName)
+    local tbl=tables[clsName]
+	if tbl == nil then
+	    local result={}
+		result.Length=0
+		return result
+	else
+	    return tbl:GetCol("id")
+	end
+end
+
+function ResTblContainer:GetCol(clsName, colName)
+    local tbl=tables[clsName]
+	if tbl == nil then
+		local result={}
+		result.Length=0
+		return result
+	else
+	    return tbl:GetCol(colName)
+	end
+end
+
+function ResTblContainer:GetRowFromTbl(tblName, key, ...)
+    local tbl=tables[tblName]
+	if tbl == nil then
+	    local idx=0
+		result={}
+		for k,v in pairs{...} do
+		    result[idx]=""
+		    idx=idx+1
+		end
+		return result
+	else
+	    return tbl:GetRow(key,...)
+	end
+end
+
+function ResTblContainer:GetGameBaseInfo(id)
+    local tbl=tables["GameBaseInfo"]
+	if tbl == nil then
+	    return ""
+	else
+	    return tbl:Get(id,"value")
+	end
+end
+
+function ResTblContainer:GetAllTableInfo(tableConst)
+    local tbl=tables[tableConst.tblName]
+	if tbl == nil then
+	    return nil
+	end
+	local tableInfo = {}
+	local data = {}
+	local ids = tbl:GetCol("id")
+	for i=0,ids.Length-1 do
+		for key,value in pairs(tableConst) do
+			if key~="tblName" then 
+				value[value] = tbl:Get(id,value)
+			end
+		end
+		tableInfo[id] = data
+	end
+	return tableInfo
+end

@@ -1,0 +1,456 @@
+require "ExpeditionHeroItemSlot"
+
+local downHeroArray={}
+local upHeroArray={}
+local fight=0
+local auraArr={}
+local curAura
+
+local formationHeros={}
+
+local txt_fight
+local heroGrid
+local upHeroGrid
+local togGroup
+-- local togs
+local skipBtn
+local skipCheckObj
+local raceFlag
+local aura
+local none_GO
+
+local raceId = 0
+local sortId = 1
+local canSkip=false
+local skipChecked = false
+local backAction
+local heroEffect
+
+local draggingItem
+
+local exchanged = false
+local hasItemSlot = false
+local cnt=0
+local battled = false
+local initialized = false
+
+local enable = true
+
+function DoInit()
+    self.Shadow = 1
+    MsgCenter:Subscribe(Notify_OnBattle, DoEnterBattle);
+end
+
+function doInitUI()
+    heroGrid = self:GetComponentAtPath("heroSV/ScrollRect/Viewport/Grid" ,CLS_UI_ITEM_GRID)
+	upHeroGrid = self:GetComponentAtPath("UP/UpHeroGrid" ,CLS_UI_ITEM_GRID)
+	txt_fight = self:GetComponentAtPath("UP/numberTxt" ,CLS_TEXT)
+    togGroup = self:GetComponentAtPath("TOG" ,CLS_TOGGLE_GROUP_ARCHLY)
+	skipBtn = self:GetGameObjectAtPath("skip")
+	skipCheckObj = skipBtn.transform:GetGameObjectAtPath("iconImg")
+	raceFlag=self.transform:Find("TOG/raceTog")
+	aura = self:GetComponentAtPath("UP/aureole/icon01Img" ,CLS_IMAGE)
+	heroEffect=self.transform:Find("HeroBase")
+	none_GO = self:GetGameObjectAtPath("None")
+end
+
+function OnAnimationFinished()
+    if not initialized then
+        initialized = true
+        doInitUI()
+    end
+	hasItemSlot = false
+	cnt = 0
+	self:SendCommand("InitFormationData")
+end
+
+function OnNotification_InitFormationData(objs)
+    upHeroArray = objs[0]
+    downHeroArray = objs[1]
+    fight = objs[2]
+    auraArr=objs[3]
+    curAura=objs[4]
+    if(canSkip)then
+        skipBtn:SetActive(true)
+        if(skipChecked)then
+            skipCheckObj:SetActive(true)
+        else
+            skipCheckObj:SetActive(false)
+        end
+    else
+        skipBtn:SetActive(false)
+    end
+	txt_fight.text=tostring(fight)
+	for i,Hero in ipairs(downHeroArray) do
+		-- print(i,Hero.uid)
+	end
+	none_GO:SetSelfActive(downHeroArray==nil or #downHeroArray==0)
+    heroGrid:RefreshItemSlots(downHeroArray,self.gameObject,"ExpeditionHeroItemSlot")
+	upHeroGrid:RefreshItemSlots(upHeroArray,self.gameObject,"HeroItemSlot")
+	ShowAura()
+	hasItemSlot = true
+end
+
+function OnTOGClick(isOn,index)
+    if not isOn then
+        return 
+    end
+	ScreenHeroView(index)
+end
+
+function ScreenHeroView(race)
+    local tog = togGroup:GetToggleByIndex(race)
+    --move animation
+    local offset = 10
+    if raceId > race then
+        offset = -offset
+    end
+    raceId = race
+    local targetX = tog.transform.localPosition.x
+    local t1 = CsBridge.TweenUtils.MoveTo(raceFlag,targetX+offset,raceFlag.localPosition.y,0.15,function()
+        local t2 = CsBridge.TweenUtils.MoveTo(raceFlag,targetX,raceFlag.localPosition.y,0.05)
+        t2:DoPlay()
+    end)
+    t1:DoPlay()
+    self:SendCommand("ScreenHero",raceId)
+end
+
+function OnNotification_ScreenHero(objs)
+    downHeroArray = objs[0]
+    heroGrid:RefreshItemSlots(downHeroArray,self.gameObject,"ExpeditionHeroItemSlot")
+	none_GO:SetSelfActive(downHeroArray==nil or #downHeroArray==0)
+end
+
+function IsSetAnchor()
+    return true
+end
+
+function OnMaskClick(sender)
+    DoClose()
+end
+
+function OncloseBtnClick(sender)
+    DoClose()
+end
+
+function DoClose()
+    if backAction ~= nil then
+        backAction()
+    end
+    self:HideView(self.gameObject.name,true)
+end
+
+--点击上面格子
+function OnUpHeroGridHeroItemSlotClick(obj)
+	local data=obj:GetItemData().data
+	if(data.heroId~=0)then
+		self:SendCommand("DownHero",data.pos)
+	end
+end
+
+function OnNotification_DownHero(objs)
+    ChangedHeros(objs[0],objs[1],objs[2],objs[3])
+end
+
+function ChangedHeros(changedHero,changedUpHero,fight,validAura)
+    curAura=validAura
+    txt_fight.text=tostring(fight)
+    upHeroGrid:SingleRefreshSlot(changedUpHero)
+    for i=1,#changedHero do
+        heroGrid:SingleRefreshSlot(changedHero[i])
+    end
+    ShowAura()
+end
+
+--检测上阵位是否已经满了
+function CheckUpFull()
+	local isCanUp=false
+	for i,data in pairs(upHeroArray) do
+		if(data.heroId==0)then
+			isCanUp=true
+			break
+		end
+	end
+	return isCanUp
+end
+
+--点击下面格子
+function OnGridExpeditionHeroItemSlotClick(obj)
+	local data=obj:GetItemData().data
+	if ShowSoulImprintedTip(data) then
+		return
+	end
+	if(data.IsSelected==false)then--未上阵
+		--是否已经上阵满了
+		if data.curHp~=nil and data.curHp<=0 then
+			CsBridge.hintUILayer:ShowHintBox(Language:getStr("Hero_Dead"))
+			return
+		end
+		local isCanUp=CheckUpFull()
+		if(isCanUp==false)then
+			CsBridge.hintUILayer:ShowHintBox(Language:getStr("heroFull"))
+			return
+		end
+
+		if(data.isRepeat==true)then--重复英雄
+			CsBridge.hintUILayer:ShowHintBox(Language:getStr("heroRepeat"))
+			return
+		end
+		local result = ""
+		if formationType==5 then
+			result = CheckHeroInLockStateName(data,HeroDuty.CROSS_2,HeroDuty.CROSS_3)
+		end
+		if formationType==6 then
+			result = CheckHeroInLockStateName(data,HeroDuty.CROSS_1,HeroDuty.CROSS_3)
+		end
+		if formationType==7 then
+			result = CheckHeroInLockStateName(data,HeroDuty.CROSS_1,HeroDuty.CROSS_2)
+		end
+		if result ~= nil 
+		and (formationType==FormationTypeEnum.FormationType_Cross_One 
+		or formationType==FormationTypeEnum.FormationType_Cross_Two
+		or formationType==FormationTypeEnum.FormationType_Cross_Three) then
+			CsBridge.hintUILayer:ShowHintBox(Language:getStr(result))
+			return
+		end
+		self:SendCommand("SelectHeroEffect",data.uid,obj)
+	else--已经上阵,点击下阵
+		local upHero=GetUpHeroInfo(data.uid)
+		if(upHero~=nil)then
+			self:SendCommand("DownHero",upHero.pos)
+		end
+	end
+end
+
+function OnNotification_SelectHeroEffect(objs)
+	local uid = objs[0]
+	local pos = objs[1]
+	local slot = objs[2]
+	if enable then
+		ShowHeroEffect(slot.m_data,slot.transform.position,upHeroGrid.transform:GetChild(pos-1).position,
+		function()
+			self:SendCommand("UpHero",slot.m_data)
+		end)
+	end
+end 
+
+function ShowHeroEffect(hero,startPos,endPos,onFinish)
+	enable = false
+	heroEffect.gameObject:SetSelfActive(true)
+	heroEffect.position = startPos
+	BindHeroBaseValue(heroEffect,hero)
+	local t = CsBridge.TweenUtils.MoveToByWorld(heroEffect,endPos.x,endPos.y,0.2,
+		function()
+			enable = true
+			heroEffect.gameObject:SetSelfActive(false)
+			onFinish()
+		end)
+	t:DoPlay()
+end 
+
+--获取对应已上阵英雄数据
+function GetUpHeroInfo(_uid)
+	for i, data in pairs(upHeroArray) do  
+		if(data.srcUid==_uid)then
+			return data
+		end
+	end
+	return nil
+end
+
+function OnNotification_UpHero(objs)
+    local changedUpHero=objs[1]
+    changedUpHero.anim=true
+    ChangedHeros(objs[0],objs[1],objs[2],objs[3])
+    changedUpHero.anim=false
+end
+
+--点击进入战斗
+function OnstartbtnClick(sender)
+	local isOwnUpHero=CheckOwnUpHero()
+	if(isOwnUpHero==false) then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("noUpHero"))
+		return
+	end
+
+	local heroIds={}
+	for i,data in pairs(upHeroArray) do
+		if(data.heroId~=0)then
+			local newData={}
+			newData.pos=data.pos
+			newData.uid=data.srcUid
+			newData.heroId=data.heroId
+			table.insert(heroIds,newData)
+		end
+	end
+	self:HideView(self.gameObject.name,true)
+	if not skipChecked then
+		self:SendCommand("GoToBattle",heroIds)
+	end
+	if backAction ~= nil then
+	    backAction()
+	end
+end
+
+--检测是否至少有一个上阵英雄
+function CheckOwnUpHero()
+	local isOwnUpHero=false
+	for i,data in pairs(upHeroArray) do
+		if(data.heroId~=0)
+		then
+			isOwnUpHero=true
+			break
+		end
+	end
+	return isOwnUpHero
+end
+
+function OnHeroItemSlotBeginDrag(obj)
+	local btn = obj:GetComponent(CLS_BUTTON_ARCHLY)
+	btn:StopRunningClickAnim()
+	btn.ClickAnim = false
+
+	local data = obj:GetComponent("ItemSlot"):GetItemData().data
+	if data.heroId == 0 then
+		return
+	end 
+	local dragObj = obj:GetComponent("TestDrag").dragObj 
+	SetDragItem(dragObj, data)
+	CsBridge.UnityHelper.SetAnchoredPosition(dragObj.gameObject,obj.transform.localPosition.x,obj.transform.localPosition.y)
+	dragObj:SetActive(true)
+	BindHeroBaseValue(obj.transform:Find("HeroBase").gameObject,nil)
+	draggingItem = obj
+end 
+
+function OnHeroItemSlotEndDrag(obj)
+	local btn = obj:GetComponent(CLS_BUTTON_ARCHLY)
+	btn.ClickAnim = true
+
+	local data = obj:GetComponent("ItemSlot"):GetItemData().data
+	if data.heroId == 0 then
+		return
+	end
+	if draggingItem ~= nil then
+		draggingItem = nil
+	end 
+	if dropItem ~= nil then
+		local dragIndex = obj:GetComponent("ItemSlot").m_index
+		local dragData = obj:GetComponent("ItemSlot").m_data
+		local dropIndex = dropItem.m_index
+		local dropData = dropItem.m_data
+	
+		upHeroGrid:RefreshSlot(dragData, dropIndex)
+		upHeroGrid:RefreshSlot(dropData, dragIndex)
+		local temp = dragData.pos
+		dragData.pos = dropData.pos
+		dropData.pos = temp
+		upHeroArray[dropIndex+1] = dragData
+		upHeroArray[dragIndex+1] = dropData
+		dropItem = nil
+		exchanged = true
+	else
+		BindHeroBaseValue(obj.transform:Find("HeroBase").gameObject, data)
+	end 
+end 
+
+function OnHeroItemSlotDrop(obj)
+	if obj.name == "HeroItemSlot" then
+		if obj ~= draggingItem then
+			dropItem = obj:GetComponent("ItemSlot")
+		end
+	end 
+end
+
+function SetDragItem(obj, data)
+	BindHeroBaseValue(obj.transform:Find("HeroBase").gameObject,data)
+end 
+
+function ShowAura()
+    if(curAura == nil) then
+        CsBridge.IconData.SetIconByName(aura.gameObject,"new_com_guanghuan11")
+    else
+        CsBridge.IconData.SetIconByName(aura.gameObject,curAura.icon)
+    end
+end
+
+function OnaureoleClick(sender)
+	CsBridge.CacheAssetsByModule(self.Module,
+    function()
+		local view = CsBridge.OpenView("aureoleView","FormationModel",true,true)
+		view:SetParamDataList(auraArr, curAura)
+	end, "aureoleView","aureoleItemSlot")
+end
+
+function OnskipClick(sender)
+    if(canSkip) then
+        skipChecked = not skipChecked
+        skipCheckObj:SetActive(skipChecked)
+    end
+end
+
+function CheckHasItemSlot()
+    if (hasItemSlot) then
+	    cnt=cnt+1
+		if (cnt > 1) then
+		    return true
+		else
+		    return false
+		end
+	else
+	    cnt = 0
+	    return false
+	end
+end
+
+function HeroExchanged()
+    return exchanged
+end
+
+function OnClose()
+	heroGrid:ClearItems()
+end
+
+function DoExit()
+	MsgCenter:Unsubscribe(Notify_OnBattle, DoEnterBattle);
+	self.Module=nil
+	downHeroArray =nil
+	upHeroArray =nil
+	fight=nil
+	auraArr =nil
+	curAura =nil
+	formationHeros =nil
+	txt_fight =nil
+	heroGrid =nil
+	upHeroGrid =nil
+	togGroup =nil
+	skipBtn =nil
+	skipCheckObj =nil
+	raceFlag =nil
+	aura =nil
+	none_GO =nil
+	raceId =nil
+	sortId =nil
+	canSkip =nil
+	skipChecked =nil
+	backAction =nil
+	heroEffect =nil
+	draggingItem =nil
+	exchanged =nil
+	hasItemSlot =nil
+	cnt =nil
+	battled =nil
+	initialized =nil
+	enable =nil
+end
+
+function DoEnterBattle(obj)
+    battled = true
+end
+
+function ResetBattleStatus()
+    battled = false
+end
+
+function FinishStartBattle()
+    return battled
+end

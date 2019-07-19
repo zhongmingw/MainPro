@@ -1,0 +1,26 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-03-08 16:09:50
+
+function DoInit()
+end
+
+function ResourceIds(objs)
+    local arr={}
+    return arr
+end
+
+function AssetNames(objs)
+    local arr = {"UpLotteryView","ItemSlot"}
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    local name = objs[0]
+    local view = self:OpenView("UpLotteryView", "UpLotteryModel")
+    view:SendCommand("InitData", name)
+    if(onFinished ~= nil) then
+        onFinished()
+    end
+end

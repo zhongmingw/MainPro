@@ -1,0 +1,116 @@
+
+ 
+local strsub = string.sub
+
+local getFreeGoldBtn, GetGoldBtn, getLotsGoldBtn
+local currentGetGoldID
+
+function DoInit()
+	local buttonClsName = "Client.Library.ButtonArchly"
+	getFreeGoldBtn = self:GetComponentAtPath("money01/GetGoldBtn", buttonClsName)
+	GetGoldBtn = self:GetComponentAtPath("money02/GetGoldBtn", buttonClsName)
+	getLotsGoldBtn = self:GetComponentAtPath("money03/GetGoldBtn", buttonClsName)	
+	self.Shadow = 1
+
+	MsgCenter:Subscribe(CsBridge.SysMsgDef.Notify_SingleDataChanged, OnSingleDataChanged)
+end
+
+function DoExit()
+	MsgCenter:Unsubscribe(CsBridge.SysMsgDef.Notify_SingleDataChanged, OnSingleDataChanged)
+	self.Module=nil
+	getFreeGoldBtn = nil
+	GetGoldBtn = nil 
+	getLotsGoldBtn = nil
+	currentGetGoldID = nil
+end
+
+function OnOpen()
+	SetButtonsEnabled()
+	self:SendCommand("GetGoldPrice")
+	self:SendCommand("RefreshGetGold")
+end
+
+function OnGetGoldBtnClick(sender)
+	local parentName = sender.transform.parent.gameObject.name
+	local GOLD_ID_INDEX = 6
+	local getGoldID = tonumber(strsub(parentName, GOLD_ID_INDEX))
+	currentGetGoldID = getGoldID
+
+	self:SendCommand("GetGold", getGoldID)
+end
+
+function OnNotification_GetGoldResp(objs)
+	SetButtonsEnabled()
+	PlayFlyEffect()
+end
+
+function PlayFlyEffect()
+	local path = "money0" .. currentGetGoldID .. "/rewardImg"
+	local startPos = self.transform:Find(path).position
+	CsBridge.MoneyBanner.PlayCoinFlyEffect(startPos)
+end
+
+function OnSingleDataChanged(obj)
+	if obj == "GetGoldInfo" then
+		SetButtonsEnabled()
+	end 
+end
+
+function SetButtonsEnabled()
+	getFreeGoldBtn.interactable = true
+	GetGoldBtn.interactable = true
+	getLotsGoldBtn.interactable = true
+
+	local goldInfo = appData:checkData("GetGoldInfo")
+	if goldInfo == nil then
+		return
+	end
+
+	local getGoldStatus = goldInfo.takenIds
+	
+	if getGoldStatus ~= nil then
+		for k, typeID in pairs(getGoldStatus) do
+			if typeID == 1 then
+				getFreeGoldBtn.interactable = false
+			elseif typeID == 2 then
+				GetGoldBtn.interactable = false
+			else
+				getLotsGoldBtn.interactable = false
+			end
+		end
+	end
+end
+
+function OnNotification_GetGoldPriceResp(priceTbl)
+	local id = 1
+	local amountLabel, priceLabel, priceTrans
+	local priceTypeObject, priceTypeTrans
+	local amountPath, pricePath, priceTypePath
+
+	for k, goldPrice in pairs(priceTbl[0]) do
+		amountPath = "money0"..tostring(goldPrice.id) .. "/numberTxt"
+		pricePath = "money0" .. tostring(goldPrice.id) .. "/GetGoldBtn/numberTxt"
+		priceTypePath = "money0" .. tostring(goldPrice.id) .. "/GetGoldBtn/iconImg"
+		amountLabel = self.transform:Find(amountPath):GetComponent(CLS_TEXT)
+		priceTrans = self.transform:Find(pricePath)
+		if priceTrans ~= nil then
+			priceLabel = priceTrans:GetComponent(CLS_TEXT)
+		end
+		priceTypeTrans = self.transform:Find(priceTypePath)
+		if priceTypeTrans ~= nil then
+			priceTypeObject = priceTypeTrans.gameObject
+		end
+
+		amountLabel.text = GetValueAbbreviation(goldPrice.amount)
+		if goldPrice.price > 0 and priceLabel ~= nil then
+			priceLabel.text = tostring(goldPrice.price)
+		end
+		if goldPrice.priceType > 0 and priceTypeObject ~= nil then
+			SetIconByResourceId(priceTypeObject, goldPrice.priceType)
+		end
+	end
+end
+
+function OnCloseBtnClick(sender)
+	self:ReturnBack()
+end

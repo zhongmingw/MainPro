@@ -1,0 +1,314 @@
+local portData = {}
+local tradeUpgradeConsumptionData
+local guildTradeCD
+
+function DoInit()
+    guildTradeCD = GetConstValue("guildTradeCD") * 1000
+end 
+
+function DoOnExit()
+	Timer:StopTicker(self.ModelName)
+    portData = nil
+    tradeUpgradeConsumptionData = nil
+    guildTradeCD = nil
+end
+
+function Updating()
+    local endTime = CsBridge.timeManager.ServerTime * 2
+    local onLooping = RefreshCountdown
+    local interval = 0.5
+    Timer:AddNonstopTicker(self.ModelName, onLooping, interval)
+end
+
+function RefreshCountdown()
+    UpdateOrderViewCD()
+end
+
+function UpdateOrderViewCD()
+    local now = CsBridge.timeManager.ServerTime
+    if portData.lastTradeTime ~= 0 then
+        local delay = 5000
+        local finishedTime = now - (portData.lastTradeTime + guildTradeCD)
+        if finishedTime < 0 then
+            local newOrderCD = CheckTimeRemain(portData.lastTradeTime + guildTradeCD,false)
+            self:SendNotification("UpdateNewOrderCD", newOrderCD)
+        elseif finishedTime < delay then
+            self:SendNotification("SetNewOrderEnabled")
+            self:SendNotification("UpdateNewOrderCD", "00:00:00")
+        end
+    end
+
+    local ordersCD = {}
+    for k, order in pairs(portData.trades) do
+        if order.startTime ~= 0 and order.status ~= 1 then
+            local itemViewData = {}
+            itemViewData.id = order.id
+            itemViewData.CD = CheckTimeRemain(order.endTime)
+            itemViewData.progress = 1 - (order.endTime - now) / order.duration
+            itemViewData.finished = order.endTime <= now
+            table.insert(ordersCD, itemViewData)
+
+            if itemViewData.finished  then
+                order.status = 1
+                itemViewData.CD = "00:00:00"
+            end
+        end
+    end
+    if #ordersCD > 0 then
+        self:SendNotification("UpdateOrdersCD", ordersCD)
+    end
+end
+
+function OnCommand_InitPortData(objs)
+    local req = {}
+    req.id=7
+    HttpRequest("initPBItem", "InitPBItemReq", "InitPBItemResp", req,
+        function (resp)
+            if resp~=nil then
+                InitPortData()
+                Updating()
+                self:SendNotification("InitPortView")
+            end
+        end)
+end
+
+function InitPortData()
+    --portData = {}
+    local playerUnionRecord = appData:checkData("PlayerUnionRecord")
+    portData.millDonateCount = playerUnionRecord.millDonateCount
+    portData.lastTradeTime = playerUnionRecord.lastTradeTime
+    portData.lastMillDonateTime = playerUnionRecord.lastMillDonateTime
+    portData.tradeCount = playerUnionRecord.trades~=nil and #playerUnionRecord.trades or 0
+    portData.trades = {}
+    local tbl=ResTblContainer:GetTable(GuildTradeUpgrade.tblName)
+    if playerUnionRecord.trades~=nil then
+        for index,trade in ipairs(playerUnionRecord.trades) do
+            local data = {}
+            data.id = trade.id
+            data.tradeId = trade.tradeId
+            data.level = trade.level
+            data.startTime = trade.startTime
+            data.duration = CaculateOrderDuration(data.tradeId)
+            data.endTime = data.startTime + data.duration                
+            data.status = trade.status
+            if portData.level~=nil then
+                data.rate = tbl:GetInt(portData.level,GuildTradeUpgrade.productIncrease)  
+            end
+            table.insert(portData.trades, data)
+        end
+    end 
+end
+
+function CaculateOrderDuration(tradeId)
+    local duration = (ResTblContainer:GetPropToInt(tradeId,GuildTrade.time,GuildTrade.tblName)) * 1000
+    local tbl=ResTblContainer:GetTable(GuildTradeUpgrade.tblName)
+    local timeReduceRate = tbl:GetInt(portData.level,GuildTradeUpgrade.timeReduction) / 10000
+    duration = duration * (1 - timeReduceRate)
+    return duration
+end
+
+function OnCommand_InitOrderData(objs)
+    local req = {}
+    req.useless=1
+    HttpRequest("unionMill", "UnionMillReq", "UnionMillResp", req,
+        function (resp)
+            if resp~=nil then
+                InitPortLevel(resp)
+                self:SendNotification("InitOrderView",portData)
+            end
+        end)
+end
+
+function InitPortLevel(resp)
+    if resp~=nil then
+        portData.level = resp.level
+        portData.exp = resp.exp
+        portData.needExp = ResTblContainer:GetPropToInt(portData.level,GuildTradeUpgrade.exp,GuildTradeUpgrade.tblName)
+        portData.maxLevel = resp.maxLevel
+        if portData.trades~=nil and next(portData.trades)~=nil then
+            local tbl=ResTblContainer:GetTable(GuildTradeUpgrade.tblName) 
+            for k,trade in pairs(portData.trades) do
+                trade.rate = tbl:GetInt(resp.level,GuildTradeUpgrade.productIncrease)  
+                trade.duration = CaculateOrderDuration(trade.tradeId)
+                trade.endTime = trade.startTime + trade.duration       
+            end
+        end
+    end
+end
+
+function OnCommand_InitPortLevelupData(objs)
+    tradeUpgradeConsumptionData = {}
+    local ids = ResTblContainer:GetIds(GuildTradeUpgradeConsumption.tblName)
+    local tbl=ResTblContainer:GetTable(GuildTradeUpgradeConsumption.tblName)
+    for i=0,ids.Length-1 do
+        local data = {}
+        data.id = ids[i]
+        data.consumptionStr = tbl:Get(data.id,GuildTradeUpgradeConsumption.consumption)
+        local rewards = GetRewardFromTbl(data.consumptionStr)
+        data.consumption = rewards[1]
+        data.exp = tbl:GetInt(data.id,GuildTradeUpgradeConsumption.exp)
+        table.insert(tradeUpgradeConsumptionData,data)
+    end
+    local req = {}
+    req.useless=1
+    HttpRequest("unionMill", "UnionMillReq", "UnionMillResp", req,
+        function (resp)
+            if resp~=nil then
+                InitPortLevel(resp)
+                self:SendNotification("InitPortLevelupView",portData,tradeUpgradeConsumptionData)
+            end
+        end)
+end
+
+function OnCommand_OpenDailyView(objs)
+    CsBridge.CacheAssetsByModule(self.Module,
+    function()
+        local view = CsBridge.OpenView("UnionPortDailyView", "UnionPortModel", true, true)
+    end, "UnionPortDailyView","DonateRankItemSlot")
+end
+
+function OnCommand_InitDonateRankData(objs)
+    local req = {}
+    req.useless=1
+    HttpRequest("unionMillRank", "UnionMillRankReq", "UnionMillRankResp", req,
+        function (resp)
+            if resp~=nil then
+                self:SendNotification("InitDonateRankView",resp.donateList)
+            end
+        end)
+end
+
+function OnCommand_GetDailyViewData(objs)
+    local req = {}
+    req.useless=1
+    HttpRequest("millDailyRank", "MillDailyRankReq", "MillDailyRankResp", req,
+        function (resp)
+            if resp~=nil then
+                self:SendNotification("RefreshDailyView",resp.rankResps)
+            end
+        end)
+end
+
+function OnCommand_TradeGet(objs)
+    local req = {}
+    req.useless=1
+    HttpRequest("unionTradeGet", "UnionTradeGetReq", "UnionTradeGetResp", req,
+        function (resp)
+            if resp.status==0 then
+                InitPortData()
+                self:SendNotification("InitOrderView",portData)
+            end
+        end)
+end
+
+function OnCommand_TradeUpgrade(objs)
+    local req = {}
+    req.id=objs[0]
+    HttpRequest("unionTradeUpgrade", "UnionTradeUpgradeReq", "UnionTradeUpgradeResp", req,
+        function (resp)
+            if resp.status==0 then
+                CsBridge.hintUILayer:ShowHintBox(Language:getStr("TradeUpgrade_Success"))
+                InitPortData()
+                self:SendNotification("InitOrderView",portData)
+            end
+        end)
+end
+
+function OnCommand_TradeStart(objs)
+    local req = {}
+    req.id=objs[0]
+    HttpRequest("unionTradeStart", "UnionTradeStartReq", "UnionTradeStartResp", req,
+        function (resp)
+            if resp.status==0 then
+                InitPortData()
+                self:SendNotification("InitOrderView",portData)
+            end
+        end)
+end
+
+function OnCommand_TradePay(objs)
+    local req = {}
+    req.id=objs[0]
+    HttpRequest("unionTradePay", "UnionTradePayReq", "UnionTradePayResp", req,
+        function (resp)
+            for i,reward in ipairs(resp.rewards) do
+                CsBridge.hintUILayer:ShowRewardBox(reward.typeId,reward.id,reward.count)
+            end
+            InitPortData()
+            self:SendNotification("InitOrderView",portData)
+        end)
+end
+
+function OnCommand_MillDonate(objs)
+    local max = objs[0]
+    local id = objs[1]
+    if portData.level == portData.maxLevel then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionDonate_MaxLevel"))
+        return 
+    end
+    if portData.millDonateCount==max then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("UnionDonate_NoCount"))
+        return 
+    end
+    local playerInfo = appData:checkData("PlayerInfo")
+    local count = tradeUpgradeConsumptionData[id].consumption.count
+    local own = 0 
+    if id==1 then
+        own = playerInfo.coin
+    else
+        own = playerInfo.payGem+playerInfo.rewardGem
+    end
+    if own<count then
+        if id==1 then
+            CsBridge.hintUILayer:ShowHintBox(Language:getStr("1002"))
+        elseif id==2 then
+            CsBridge.hintUILayer:ShowHintBox(Language:getStr("1001"))
+        end
+        return 
+    end
+    local req = {}
+    req.id=id
+    req.count=1
+    local str = ""
+    if id==1 then
+        str = "UnionDonate_CoinCheck"
+    elseif id==2 then
+        str = "UnionDonate_GemCheck"
+    end
+    CsBridge.messageManager:FristConfirmBox("MillDonate","",string.format(Language:getStr(str),count),Language:getStr("local_cancel"),nil,Language:getStr("local_confirm"),
+        function()
+            HttpRequest("unionMillDonate", "UnionMillDonateReq", "UnionMillDonateResp", req,
+            function (resp)
+                if resp.status==0 then
+                    InitPortData()
+                    ShowDonateReward(id)
+                    local req = {}
+                    req.useless=1
+                    HttpRequest("unionMill", "UnionMillReq", "UnionMillResp", req,
+                        function (resp)
+                            if resp~=nil then
+                                InitPortLevel(resp)
+                                self:SendNotification("InitPortLevelupView",portData,tradeUpgradeConsumptionData)
+                            end
+                        end)
+                end
+            end)
+        end)
+end
+
+function ShowDonateReward(donateTypeID)
+    local rewardStr = ResTblContainer:GetPropToStr(donateTypeID, GuildTradeUpgradeConsumption.Reward, GuildTradeUpgradeConsumption.tblName)
+    local item = GetRewardFromTbl(rewardStr)[1]
+    CsBridge.hintUILayer:ShowRewardBox(item.typeId, item.id, item.count)
+end
+
+function OnCommand_OpenHelpView(objs)
+	local parentViewName = objs[0]
+	local instuctionID = parentViewName == "UnionOrderView" and 39 or 38
+    CsBridge.CacheAssetsByModule( self.Module,
+		function()
+			local view = CsBridge.OpenView("HelpView","UnionPortModel", false, true)
+			view:SetData(instuctionID)
+		end,
+		"HelpView")    
+end

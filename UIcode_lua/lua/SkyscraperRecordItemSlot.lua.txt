@@ -1,0 +1,14 @@
+
+function OnSkyscraperRecordItemSlotBindValue(slot,data)
+	local slotTrans = slot.transform
+	local player_TF=slotTrans:Find("PlayerBase")
+    local name_Lab=slotTrans:GetComponentAtPath("NameTxt" ,CLS_TEXT)
+	local timePassed_Lab=slotTrans:GetComponentAtPath("TimePassedTxt" ,CLS_TEXT)
+	if data.playerBaseInfo.haveGroup then
+		name_Lab.text= FormatWorldPlayerName(data.playerBaseInfo.name, data.playerBaseInfo.zone)
+	else
+		name_Lab.text=data.playerBaseInfo.name
+	end
+	BindPlayerBaseInfoValue(player_TF,data.playerBaseInfo)
+	timePassed_Lab.text=CsBridge.timeManager:checkTimePass(data.time)
+end

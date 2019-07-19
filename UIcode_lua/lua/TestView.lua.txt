@@ -1,0 +1,39 @@
+local CurrentCoins
+local MaxCoins
+local Progress
+
+function DoInit()
+  CurrentCoins=self.transform:Find("value"):GetComponent(CLS_TEXT)
+  MaxCoins=self.transform:Find("MaxValue"):GetComponent(CLS_TEXT)
+  Progress=self.transform:Find("Slider"):GetComponent("UnityEngine.UI.Slider")
+end
+
+
+
+function OnButtonClick(sender)
+	self.BindingContext:ReceiveCommand("Submit")
+end
+
+function OnShowWindowClick(sender)
+	self:ShowModule("TestShowModule", nil)
+end
+
+function OnSliderValueChanged(sender, progress)
+  self.BindingContext:SetProperty("Progress",progress)
+end
+
+function OnChanged_CurrentValue(oldValue, newValue)
+  CurrentCoins.text = string.format("���׽��:%d",newValue)
+end
+
+function OnChanged_Progress(oldValue, newValue)
+  Progress.value = newValue
+end
+
+function OnChanged_CurrentValue(oldValue, newValue)
+  CurrentCoins.text = string.format("���׽��:%d",newValue)
+end
+
+function OnChanged_MaxValue(oldValue, newValue)
+  MaxCoins.text = string.format("�ܽ��:%d",newValue)
+end

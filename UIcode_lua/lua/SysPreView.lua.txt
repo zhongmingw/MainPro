@@ -1,0 +1,60 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-05-30 17:29:26
+
+local isInit = false
+
+local sysGrid
+
+function DoInit()	
+    self.Shadow = 1
+end
+
+local function InitUI()
+    sysGrid = self:GetComponentAtPath("ScrollRect/Viewport/SysGrid",CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitSysPreData")
+end
+
+function DoExit()
+    isInit = nil
+    sysGrid = nil
+end
+
+local function HideView()
+    self:HideView(self.gameObject.name)
+end
+
+local function ReturnBack()
+    self:ReturnBack()
+end
+
+function OnNotification_RefreshSysPreView(objs)
+    local data = objs[0]
+    sysGrid:RefreshItemSlots(data,self.gameObject,"SysPreItemSlot")
+end
+
+function OnSysPreItemSlotBindValue(slot, data)
+    local iconImgObj = slot:GetGameObjectAtPath("Icon/IconImg")
+    local iconNameTxt = slot:GetComponentAtPath("Icon/NameTxt",CLS_TEXT)
+    local nameTxt = slot:GetComponentAtPath("NameTxt",CLS_TEXT)
+    local openLvTxt = slot:GetComponentAtPath("OpenLvTxt",CLS_TEXT)
+    local despTxt = slot:GetComponentAtPath("DespTxt",CLS_TEXT)
+    
+    SetSpriteByModule(iconImgObj,data.icon)
+    iconNameTxt.text = data.name
+    nameTxt.text = data.name
+    openLvTxt.text = data.openLvDesp
+    despTxt.text = data.desp
+end
+
+function OnMaskClick(objs)
+    ReturnBack()
+end

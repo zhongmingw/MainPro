@@ -1,0 +1,80 @@
+
+
+function OnShopItemSlotBindValue(slot, data)
+	local slotTrans = slot.transform
+    local itemBaseTrans = slotTrans:Find("Item")
+	BindItemBaseValue(itemBaseTrans, data.reward)
+	local itemBoundObj = itemBaseTrans:GetGameObjectAtPath("FrameSprite")
+	itemBoundObj:SetActive(data.reward.showItemBound)
+
+	local bottomTrans = slotTrans:Find("Bottom")
+
+	local path = "priceImg"
+	local priceImageTrans = bottomTrans : Find(path)
+	if priceImageTrans then
+		if data.priceType == ItemTypeEnum.Resource then
+			SetIconByResourceId(priceImageTrans.gameObject, data.priceTypeId)
+		elseif data.priceType == ItemTypeEnum.Item then
+			SetIconByItemId(priceImageTrans.gameObject, data.priceTypeId)
+		end
+	end
+    
+	path = "basePriceTxt"
+	local basePriceText = bottomTrans : GetComponentAtPath(path ,CLS_TEXT)
+	if basePriceText then
+		basePriceText.text = tostring(GetValueAbbreviation(data.basePrice))
+	end
+
+	path = "discountPriceTxt"
+	local discountTrans = bottomTrans : Find(path)
+	if false and data.discountPrice ~= data.basePrice then
+		discountTrans.gameObject:SetActive(true)
+		local discountPriceText = itemBaseTF : GetComponentAtPath(path ,CLS_TEXT)
+		discountPriceText.text = tostring(data.discountPrice)
+	elseif discountTrans then
+		discountTrans.gameObject:SetActive(false)
+	end
+
+	path = "countdownTxt"
+	local countdownTrans = bottomTrans : Find(path)
+	if countdownTrans then
+		local countdownText = countdownTrans:GetComponent(CLS_TEXT)
+		local text = ""
+		if data.restTime then
+			text = data.restTime
+		end
+		countdownText.text = text
+	end
+
+	path = "inventoryTxt"
+	local inventoryText = bottomTrans : GetComponentAtPath(path ,CLS_TEXT)
+	inventoryText.text = data.inventoryText
+	local fontColor = data.inventoryTextColor
+	local r, g, b = fontColor[1], fontColor[2], fontColor[3]
+	CsBridge.UnityHelper.SetFontColor(inventoryText, r, g, b)
+
+	path = "buyTxt"
+	local buyLabel = bottomTrans : GetComponentAtPath(path ,CLS_TEXT)
+	buyLabel.alignment = data.buyLblAnchor
+
+	path = "BuyBtn"
+	local buyBtn = slotTrans : GetComponentAtPath(path ,CLS_BUTTON_ARCHLY)
+	buyBtn.interactable = data.inventory ~= 0
+
+	path = "BuyBtn/buyBg"
+	local buyImageObj = slotTrans:GetGameObjectAtPath(path)
+	local materialName = data.inventory == 0 and "SpriteGray" or ""
+	CsBridge.IconData.ChangeImageMaterial(buyImageObj, materialName)
+
+	path = "DiscountImg"
+	local discountImgObj = slotTrans:GetGameObjectAtPath(path)
+	path = "DiscountImg/DiscountTxt"
+	local discountTxt = slotTrans:GetComponentAtPath("DiscountImg/DiscountTxt",CLS_TEXT)
+
+	if data.discount and data.discount > 0 then
+		discountImgObj:SetSelfActive(true)
+		discountTxt.text = data.showDiscountStr
+	else
+		discountImgObj:SetSelfActive(false)
+	end
+end

@@ -1,0 +1,11 @@
+function copy(clsName,obj)
+  local pb = require "pb"
+  local protoMan=CsBridge.protoManager
+  local reqPbFile = protoMan:checkProtoFile(clsName)
+  local reqMsg=protoMan:checkProtoMessage(clsName)
+  local luaHelper=CsBridge.luaHelper
+  local pbfile = luaHelper:loadPbFile(reqPbFile)
+  pb.load(pbfile)
+  local data = assert(pb.encode(reqMsg, req))
+  return pb.decode(reqMsg, data)
+end

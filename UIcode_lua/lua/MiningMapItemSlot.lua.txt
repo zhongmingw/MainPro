@@ -1,0 +1,45 @@
+require "StagePlayerBaseItemSlot"
+
+---每一个矿点
+
+---绑定数据
+function OnMiningMapItemSlotBindValue(slot, data)
+    local slotTrans = slot.transform
+    ---@type UnityEngine.UI.Image
+    local iconImg = slotTrans:GetComponentAtPath("iconImg", CLS_IMAGE)
+    ---@type UnityEngine.TextMesh
+    local nameTxt = slotTrans:GetComponentAtPath("nameTxt", CLS_TEXT)
+    ---@type UnityEngine.GameObject
+    local selfSpriteObj = slotTrans:GetGameObjectAtPath("PlayerInfo/StagePlayerBaseItemSlot/SelfSprite")
+    ---@type UnityEngine.GameObject
+    local stagePlayerBaseItemSlotObj = slotTrans:GetGameObjectAtPath("PlayerInfo/StagePlayerBaseItemSlot")
+    ---@type UnityEngine.Transform
+    local playerBaseTrans = slotTrans:Find("PlayerInfo/StagePlayerBaseItemSlot/PlayerBase")
+    ---@type UnityEngine.GameObject
+    local timeBgObj = slotTrans:GetGameObjectAtPath("timeBg")
+    ---@type UnityEngine.TextMesh
+    local timeTxt = slotTrans:GetComponentAtPath("timeBg/timeTxt", CLS_TEXT)
+
+    CsBridge.IconData.SetIconByName(iconImg.gameObject, data.mapIcon)
+    nameTxt.text = data.name
+    SetGradientColor(nameTxt, data.gradientTopColor, data.gradientBottomColor)
+
+    if data.host then
+        if data.host.isSelf then
+            selfSpriteObj:SetActive(true)
+        else
+            selfSpriteObj:SetActive(false)
+        end
+        stagePlayerBaseItemSlotObj:SetActive(true)
+        BindPlayerBaseInfoValue(playerBaseTrans, data.host)
+    else
+        stagePlayerBaseItemSlotObj:SetActive(false)
+    end
+    if data.protectionEndTime > 0 and data.protectionEndTimeStr ~= "" then
+        timeBgObj:SetActive(true)
+        timeTxt.text = data.protectionEndTimeStr
+    else
+        timeBgObj:SetActive(false)
+    end
+
+end

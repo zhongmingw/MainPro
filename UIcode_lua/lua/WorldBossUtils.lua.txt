@@ -1,0 +1,184 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-03-30 12:43:50
+]]
+
+local HurtRankUpdateType = {
+    Update = 1,
+    Add = 2,
+    Remove = 3
+}
+
+local function ShowHintBox(desp, level)
+    local ERROR_LEVEL = 2
+    CsBridge.hintUILayer:ShowHintBox(desp, level or ERROR_LEVEL)
+end
+
+local function ShowMsgBox(desp, confirmCallback, cancelCallback)
+    CsBridge.messageManager:PopMsgBox(
+    Language:getStr("local_confirm"),
+    desp,
+    Language:getStr("local_cancel"),cancelCallback,
+    Language:getStr("local_confirm"),confirmCallback)
+end
+
+local function ShowConfirmMsgBox(desp, confirmCallback)
+    CsBridge.messageManager:PopMsgBox(
+    Language:getStr("local_confirm"),
+    desp,
+    Language:getStr("local_confirm"),confirmCallback)
+end
+
+local function ShowFirstMsgBox(name, desp, confirmCallback)
+    CsBridge.messageManager:FristConfirmBox(name,
+    Language:getStr("local_confirm"),
+    desp,
+    Language:getStr("local_cancel"),nil,
+    Language:getStr("local_confirm"),confirmCallback)
+end
+
+local function ShowWorldBossQuality(heroId,qualityImg,distillationStar)
+    local quality = ResTblContainer:GetPropToInt(heroId,HeroBase.quality,HeroBase.actorTbl) 
+    if quality== nil or quality<=0 then
+        return
+    end
+    if qualityImg ~= nil then
+        SetQuality(qualityImg.gameObject,quality)
+    end
+end
+
+local function BindWorldBossBaseValue(worldBossTF,worldBoss)
+    local qualityImg=worldBossTF:GetComponentAtPath("qualityImg",CLS_IMAGE)
+	local icon_Sprite=worldBossTF:GetComponentAtPath("IconSprite",CLS_IMAGE)
+	local race_Sprite=worldBossTF:GetComponentAtPath("RaceSprite",CLS_IMAGE)
+    local race_di=worldBossTF:GetGameObjectAtPath("iocn02Img")
+	local lv_Lab=worldBossTF:GetGameObjectAtPath("LvTxt")
+    local starRoot=worldBossTF:GetGameObjectAtPath("StarRoot")
+    local heroBaseData = worldBoss and table.copy(worldBoss) or nil
+    starRoot:SetSelfActive(false)
+    lv_Lab:SetSelfActive(false)
+    if heroBaseData == nil or heroBaseData.heroId == 0 then
+        SetDefaultQuality(qualityImg.gameObject)
+        icon_Sprite.gameObject:SetSelfActive(false)
+        race_Sprite.gameObject:SetSelfActive(false)
+        race_di:SetSelfActive(false)
+    else
+        icon_Sprite.gameObject:SetSelfActive(true)
+        race_Sprite.gameObject:SetSelfActive(true)
+        race_di:SetSelfActive(true)
+        SetIconByHeroId(icon_Sprite.gameObject,heroBaseData.heroId)
+        ShowWorldBossQuality(heroBaseData.heroId,qualityImg,heroBaseData.distillationStar)
+        SetRaceIconByHeroId(race_Sprite.gameObject,heroBaseData.heroId)
+    end
+end
+
+local function CheckPlayerHasUnion()
+    local playerInfo = appData:checkData("PlayerInfo")
+    return playerInfo.union and playerInfo.union ~= "0"
+end
+
+local function CheckLeaveInviteCount()
+    local wbpInfo = appData:checkData("WorldBossPlayerInfo")
+    local leaveCount = GetConstValue("WorldBossHeroInvite") - wbpInfo.sixManCount
+    return math.max(leaveCount, 0)
+end
+
+local function CheckHasInviteCount()
+    return CheckLeaveInviteCount() > 0
+end
+
+local function ShowPlayerTip(self, playerInfo)
+    local uid = tostring(playerInfo.userId)
+	local cachedOwnPlayerInfo = appData:checkData("PlayerInfo")
+	local zone = tostring(playerInfo.zone)
+	local isLocal = uid == cachedOwnPlayerInfo.userId and zone == cachedOwnPlayerInfo.zone
+	local showUnionInfoBtn = true
+    local siblingIdx = -1
+    CsBridge.CacheAssetsByModule( self.Module,
+		function()
+			local view = CsBridge.OpenView("PlayerInfoView", "PlayerInfoModel", true, true)
+			view:SetParamDataList(isLocal, uid, zone, siblingIdx, showUnionInfoBtn)
+		end, 
+		"PlayerInfoView","AchievementItemSlot")
+
+end
+
+local function RequestGetWorldBoss(onFinished)
+    local req = {
+        useless = 0
+    }
+    HttpRequest("getWorldBoss","GetWorldBossReq","GetWorldBossResp",req,onFinished)
+end
+
+local function RequestGetWorldBossUnionScoreRank(count, onFinished)
+    local req = {
+        count = count
+    }
+    HttpBackgroundRequest("getWorldBossUnionScoreRank","GetRankReq","GetUnionScoreRankResp",req,onFinished)
+end
+
+local function RequestGetWorldBossUnionMemberRank(count, onFinished)
+    local req = {
+        count = count
+    }
+    HttpBackgroundRequest("getWorldBossUnionMemberRank","GetRankReq","GetUnionMemberRankResp",req,onFinished)
+end
+
+local function RequestSixManList(data, onFinished)
+    local req = {
+        formationPos = data.formationPos,
+        sixManPos = data.sixManPos,
+    }
+    HttpRequest("sixManList","SixManListReq","SixManListResp",req,onFinished)
+end
+
+local function RequestSixMan(data, onFinished)
+    local req = {
+        zone = data.zone,
+        userid = data.userId,
+        sixManPos = data.sixManPos
+    }
+    HttpRequest("sixMan","SixManReq","SixManResp",req,function(resp)
+        if resp and onFinished then
+            onFinished(resp)
+        end
+    end)
+end
+
+local function RequestBuyExtraChance(count, onFinished)
+    local req = {
+        type = UI_OPEN_TYPE_WORLD_BOSS,
+        count = count
+    }
+    HttpRequest("buyExtraChance","BuyExtraChanceReq","BuyExtraChanceResp",req,onFinished)
+end
+
+local function RequestChallengeBoss(data, onFinished)
+    local req = {
+        formationPos = data.formationPos,
+        sixManPos = data.sixManPos,
+    }
+    HttpBattle("challengeBoss","ChallengeBossReq",req,onFinished)
+end
+
+return {
+    BindWorldBossBaseValue = BindWorldBossBaseValue,
+    HurtRankUpdateType = HurtRankUpdateType,
+    RequestGetWorldBoss = RequestGetWorldBoss,
+    ShowMsgBox = ShowMsgBox,
+    ShowFirstMsgBox = ShowFirstMsgBox,
+    ShowConfirmMsgBox = ShowConfirmMsgBox,
+    ShowHintBox = ShowHintBox,
+    RequestSixManList = RequestSixManList,
+    CheckPlayerHasUnion = CheckPlayerHasUnion,
+    RequestSixMan = RequestSixMan,
+    RequestGetWorldBossUnionScoreRank = RequestGetWorldBossUnionScoreRank,
+    RequestGetWorldBossUnionMemberRank = RequestGetWorldBossUnionMemberRank,
+    RequestChallengeBoss = RequestChallengeBoss,
+    RequestBuyExtraChance = RequestBuyExtraChance,
+    CheckHasInviteCount = CheckHasInviteCount,
+    CheckLeaveInviteCount = CheckLeaveInviteCount,
+    ShowPlayerTip = ShowPlayerTip,
+}

@@ -1,0 +1,92 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-02-27 15:14:16
+
+require "ActivityIconItemSlot"
+
+local isInit = false
+
+local centerPos
+local centerTrans
+local grid
+
+function DoInit()	
+    self.Anim = 8
+    self.Shadow = 1
+
+    --need first confirm pos before anim
+    centerTrans = self:GetComponentAtPath("Center",CLS_RECTTRANSFORM)
+    centerPos = centerTrans:CheckLocalPosition()
+end
+
+function InitUI()
+    grid = self:GetComponentAtPath("Center/activitySV/ScrollRect/Viewport/Grid",CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitSubActivityIconData")
+end
+
+function IsSetAnchor()
+    self.transform.parent:SetAsLastSibling()
+    return true
+end
+
+function OnDoUnhide()
+    self.transform.parent:SetAsLastSibling()
+end
+
+function OnClose()
+    centerTrans:ResetPosition(centerPos)
+    grid:ClearItems()
+end
+
+function OnNotification_RefreshSubActivityCenterPos(objs)
+    local posY = objs[0]
+    local pos = {
+        x = centerPos.x,
+        y = posY,
+        z = centerPos.z
+    }
+    centerTrans:ResetLocalPosition(pos)
+end
+
+function OnNotification_RefreshSubActivityIconView(objs)
+    local activities = objs[0]
+    grid:RefreshItemSlots(activities,self.gameObject,"ActivityIconItemSlot")
+end
+
+function OnNotification_UpdateSubActivityIconCountDown(objs)
+	local dic = objs[0]
+	local slots = grid:GetAllItems()
+	if slots then
+		for i=0, slots.Length-1 do
+			local slot = slots[i]
+			if slot.m_data then
+				local data = dic[slot.m_data.id]
+				if data then
+					local timeTxt = slot:GetComponentAtPath("bgImg/TimeTxt", CLS_TEXT)
+					timeTxt.text = data.remainTime
+				end
+			end
+		end
+	end
+end
+
+function OnGridActivityIconItemSlotClick(obj)
+    local data = obj.m_data
+	self:SendCommand("SelectActivityIcon",data,0)
+end
+
+function DoExit()
+    isInit = nil
+
+    centerPos = nil
+    centerTrans = nil
+    grid = nil
+end

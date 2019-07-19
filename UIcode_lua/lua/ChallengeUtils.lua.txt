@@ -1,0 +1,83 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-07-13 12:07:09
+]]
+
+local OpenType = {
+    Level = 1,
+    Fight = 2,
+}
+
+local function GetLevelData(challengeDataArr)
+    local datas = {}
+    local ids = GetIds(Challenge.tblName)
+    local levels = {}
+    local challengeTbl=ResTblContainer:GetTable(Challenge.tblName)
+    for  i = 0,ids.Length-1 do
+        local id = tonumber(ids[i])
+        local levelData = {}
+        local type=challengeTbl:GetInt(id,Challenge.type)
+        local curDifficulty = challengeDataArr[type].challengeItem.difficulty
+        levelData.type=type
+        levelData.difficulty=challengeTbl:GetInt(id,Challenge.difficulty)
+        levelData.rewardStr=challengeTbl:Get(id,Challenge.rewardStr)
+        levelData.recommendFight=challengeTbl:GetInt(id,Challenge.recommendFight)
+        levelData.icon=challengeTbl:Get(id,Challenge.icon)
+        levelData.canDiff=curDifficulty+1>=levelData.difficulty
+        levelData.requiredCond=challengeTbl:GetInt(id,Challenge.requiredLevel)
+        local playerInfo = appData:checkData("PlayerInfo")
+        levelData.canCond=playerInfo.level>=levelData.requiredCond
+        levelData.showLab = true
+        table.insert(datas, levelData)
+    end
+    return datas
+end
+
+local function GetFightData(challengeDataArr)
+    local datas = {}
+    local ids = GetIds(Challenge.tblName)
+    local levels = {}
+    local challengeTbl=ResTblContainer:GetTable(Challenge.tblName)
+    for  i = 0,ids.Length-1 do
+        local id = tonumber(ids[i])
+        local levelData = {}
+        local type=challengeTbl:GetInt(id,Challenge.type)
+        local curDifficulty = challengeDataArr[type].challengeItem.difficulty
+        levelData.type=type
+        levelData.difficulty=challengeTbl:GetInt(id,Challenge.difficulty)
+        levelData.rewardStr=challengeTbl:Get(id,Challenge.rewardStr)
+        levelData.recommendFight=challengeTbl:GetInt(id,Challenge.recommendFight)
+        levelData.icon=challengeTbl:Get(id,Challenge.icon)
+        levelData.canDiff=curDifficulty+1>=levelData.difficulty
+        levelData.requiredCond = GetValueAbbreviation(levelData.recommendFight)
+        local requireFight = challengeTbl:GetInt(id,Challenge.requireFight)
+        levelData.canCond=challengeDataArr[levelData.type].combat>=requireFight
+        levelData.showLab = false
+        table.insert(datas, levelData)
+    end
+    return datas
+end
+
+local function GetLevelDataByOpenType(challengeDataArr, openType)
+    if openType == OpenType.Level then
+        return GetLevelData(challengeDataArr)
+    elseif openType == OpenType.Fight then
+        return GetFightData(challengeDataArr)
+    end
+end
+
+local function GetDespByOpenType(openType)
+    if openType == OpenType.Level then
+        return Language:getStr("Challenge_Need_Level")
+    elseif openType == OpenType.Fight then
+        return Language:getStr("Challenge_Need_Fight")
+    end
+end
+
+return {
+    GetLevelDataByOpenType = GetLevelDataByOpenType,
+    GetDespByOpenType = GetDespByOpenType,
+    OpenType = OpenType,
+}

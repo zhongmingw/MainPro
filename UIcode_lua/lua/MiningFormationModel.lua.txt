@@ -1,0 +1,330 @@
+local miningFormationUtils = require "MiningFormationUtils"
+local miningHolderInfoUtils = require "MiningHolderInfoUtils"
+local miningTechnologyUtils = require "MiningTechnologyUtils"
+
+---@type number 阵容类型
+local formationType = 0
+---@type number 英雄分页类型
+local raceId = HeroGroupType.AllGroupType
+---@type table 矿点信息
+local caveInfo
+---@type table 购买保护时间的消耗
+local buyRecoverConsumeArr = nil
+---@type table 下一次购买保护的消耗
+local nextBuyRecoverConsume = nil
+---@type number 自己能占领的最大矿点数
+local MY_CAVE_HOLD_MAX = 0
+---@type boolean 是否超过购买恢复最大次数
+local isMoreRecoverTimeMax = false
+
+local downHeroDic = {}
+local upHeroArray = {}
+local formationHeros = {}
+local downHeroArray = {}
+local fight = 0
+local auraArr = {}
+local curAura
+local titleType
+local infoData
+
+---设置一个英雄的duty
+local function SetHeroDutyToNil(uid)
+    for i, kv in pairs(downHeroDic) do
+        for key, data in pairs(kv) do
+            if data.uid == uid then
+                data.showDuty = false
+                data.duty = 0
+            end
+        end
+    end
+end
+
+---改变重复的上阵英雄
+local function ChangeRepeatHero(heroId, active)
+    local changedHero = {}
+    local tbl = ResTblContainer:GetTable(Hero.actorTbl)
+    local relationId = tbl:GetInt(heroId, Hero.relationId)
+    for i, kv in pairs(downHeroDic) do
+        for key, data in pairs(kv) do
+            local relationId_i = tbl:GetInt(data.heroId, Hero.relationId)
+            if (data.heroId == heroId or (relationId ~= 0 and relationId == relationId_i)) then
+                data.isRepeat = active
+                table.insert(changedHero, data)
+            end
+        end
+    end
+    return changedHero
+end
+
+---下方英雄选择状态
+local function SetDownHeroSelected(heroData)
+    if upHeroArray == nil or #upHeroArray <= 0 then
+        return
+    end
+    for i = 1, #upHeroArray do
+        if heroData.uid == upHeroArray[i].uid then
+            heroData.IsSelected = true
+            heroData.showDuty = false
+        end
+    end
+end
+
+---切换英雄类型
+local function RefreshAllDownHero()
+    local dataArray = {}
+    local tbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    for i, kv in pairs(downHeroDic) do
+        for key, data in pairs(kv) do
+            local race = tbl:GetInt(data.heroId, HeroBase.group)
+            if (raceId == 0) then
+                table.insert(dataArray, data)
+            elseif (raceId == race) then
+                table.insert(dataArray, data)
+            end
+            SetDownHeroSelected(data)
+        end
+    end
+    table.sort(dataArray, SortHeroByQuality)
+    return dataArray
+end
+
+---刷新购买保护显示
+local function RefreshRecoverBtnState()
+    nextBuyRecoverConsume, isMoreRecoverTimeMax = miningFormationUtils.GetBuyRecoverCostConsume(buyRecoverConsumeArr)
+    local selfConsume = miningTechnologyUtils.GetSelfConsume(nextBuyRecoverConsume.costConsume)
+    self:SendNotification("InitBuyRecover", selfConsume, nextBuyRecoverConsume, isMoreRecoverTimeMax)
+end
+
+---初始化
+function DoInit()
+    MY_CAVE_HOLD_MAX = GetConstValue("MineralNumber")
+    buyRecoverConsumeArr = miningFormationUtils.GetBuyRecoverCostConsumeArr()
+    auraArr = miningFormationUtils.GetAuraArr()
+end
+
+---发送通知
+local function SendInitNotification()
+    local initData = {}
+    initData.upHeroArray = upHeroArray
+    initData.downHeroArray = downHeroArray
+    initData.fight = fight
+    initData.curAura = curAura
+    self:SendNotification("InitData", initData)
+end
+
+---初始化界面数据
+local function RefreshViewData()
+    auraArr = miningFormationUtils.GetAuraArr()
+    miningFormationUtils.GetDownHeroDic(caveInfo, function(dic)
+        downHeroDic = dic
+        for i, data in pairs(upHeroArray) do
+            if (data.heroId ~= 0) then
+                ChangeRepeatHero(data.heroId, true)
+            end
+        end
+        downHeroArray = RefreshAllDownHero()
+        fight = miningFormationUtils.GetFormationHeroFight(upHeroArray)
+        curAura = miningFormationUtils.CalcAura(upHeroArray, auraArr)
+        SendInitNotification()
+    end)
+end
+
+---获取上阵或下阵的数据
+local function GetDownOrUpHeroData(changedHero, upHero, fight, curAura)
+    local data = {}
+    data.changedHero = changedHero
+    data.upHero = upHero
+    data.fight = fight
+    data.curAura = curAura
+    return data
+end
+
+---初始化界面数据
+function OnCommand_InitData(objs)
+    infoData = objs[0]
+    caveInfo = infoData.caveInfo
+    formationType = infoData.formationType
+    raceId = infoData.raceId
+    upHeroArray = table.copy(infoData.upHeroArray)
+    RefreshViewData()
+end
+
+---初始化购买保护按钮
+function OnCommand_InitBuyRecover(objs)
+    caveInfo = objs[0]
+    titleType = objs[1]
+    RefreshRecoverBtnState()
+end
+
+---切换英雄类型
+function OnCommand_ScreenHero(objs)
+    raceId = objs[0]
+    downHeroArray = RefreshAllDownHero()
+    self:SendNotification("ScreenHero", downHeroArray)
+end
+
+---英雄下阵
+function OnCommand_DownHero(objs)
+    local index = objs[0]
+    local changedHero = {}
+    local upHero = upHeroArray[index]
+    if ShowSoulImprintedTip(upHero) then
+        return
+    end
+    if (upHero.heroId ~= 0) then
+        local heros = ChangeRepeatHero(upHero.heroId, false)
+        SetHeroDutyToNil(upHero.uid)
+        for i = 1, #heros do
+            table.insert(changedHero, heros[i])
+        end
+        for i, kv in pairs(downHeroDic) do
+            for key, data in pairs(kv) do
+                if (key == upHero.srcUid) then
+                    data.IsSelected = false
+                    break
+                end
+            end
+        end
+        --置0
+        upHero.srcUid = 0
+        upHero.heroId = 0
+        upHero.uid = 0
+    end
+    fight = miningFormationUtils.GetFormationHeroFight(upHeroArray)
+    curAura = miningFormationUtils.CalcAura(upHeroArray, auraArr)
+    local downHeroData = GetDownOrUpHeroData(changedHero, upHero, fight, curAura)
+    self:SendNotification("DownHero", downHeroData)
+end
+
+---上阵英雄判定
+function OnCommand_SelectHeroEffect(objs)
+    local uid = objs[0]
+    local pos = 0
+    for i = 1, #upHeroArray do
+        if upHeroArray[i].heroId == 0 then
+            pos = i
+            break
+        end
+    end
+    self:SendNotification("SelectHeroEffect", uid, pos, objs[1])
+end
+
+---上阵
+function OnCommand_UpHero(objs)
+    local downHero = objs[0]
+    local upHero
+    local changedHero = {}
+    downHero.IsSelected = true
+    for i, data in pairs(upHeroArray) do
+        if (data.heroId == 0) then
+            data.uid = downHero.uid
+            data.srcUid = downHero.uid
+            data.heroId = downHero.heroId
+            data.level = downHero.level
+            data.grade = downHero.grade
+            data.distillationStar = downHero.distillationStar
+            data.distillationLevel = downHero.distillationLevel
+            data.breakLevel = downHero.breakLevel
+            local heros = ChangeRepeatHero(data.heroId, true)
+            for i = 1, #heros do
+                table.insert(changedHero, heros[i])
+            end
+            upHero = data
+            break
+        end
+    end
+    fight = miningFormationUtils.GetFormationHeroFight(upHeroArray)
+    curAura = miningFormationUtils.CalcAura(upHeroArray, auraArr)
+    local downHeroData = GetDownOrUpHeroData(changedHero, upHero, fight, curAura)
+    self:SendNotification("UpHero", downHeroData)
+end
+
+---展示光环界面
+function OnCommand_ShowAureoleView(objs)
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("aureoleView", "MiningFormationModel", true, true)
+        view:SetParamDataList(auraArr, curAura)
+        view.transform.parent:SetAsLastSibling()
+    end, "aureoleView", "aureoleItemSlot")
+end
+
+---开始战斗
+function OnCommand_GoToBattle(objs)
+    if caveInfo.myCaveItemCount.count >= MY_CAVE_HOLD_MAX then
+        CsBridge.ShowHintBoxTwo(Language:getStr("HoldMaxCaveItemNumber"))
+        return
+    end
+    if caveInfo.myHoldCaveArr[caveInfo.type] >= caveInfo.mostNum and caveInfo.mostNum ~= -1 then
+        CsBridge.ShowHintBoxTwo(string.format(Language:getStr("SameTypeHoldTip"), caveInfo.mostNum))
+        return
+    end
+    miningFormationUtils.GoTakeHoldCaveItem(caveInfo, upHeroArray, function(resp)
+        MsgCenter:Broadcast(Notify_MiningHolderChanged, caveInfo)
+        if resp.result == 0 and resp.battleInfo == nil then
+            ---没有战斗就占领了矿产
+            CsBridge.ShowHintBoxTwo(Language:getStr("HoldSuccess"))
+            self:HideView("MiningFormationView")
+        elseif resp.result == 0 and resp.battleInfo ~= nil then
+            ---开启战斗，成功了
+            self:HideView("MiningFormationView")
+            ShowBattleModule(resp.battleInfo, self)
+        elseif resp.result ~= 0 and resp.battleInfo ~= nil then
+            ---开启战斗，失败了
+            self:HideView("MiningFormationView")
+            upHeroArray = miningHolderInfoUtils.GetNilFormationHeroArr()
+            RefreshViewData()
+            ShowBattleModule(resp.battleInfo, self)
+        else
+            --- 未知错误
+            RefreshViewData()
+            if resp.mineDetail.host then
+                self:HideView("MiningFormationView")
+            end
+        end
+    end)
+end
+
+---保存阵容
+function OnCommand_SaveFormation(objs)
+    miningFormationUtils.SaveFormation(caveInfo, upHeroArray, function()
+        MsgCenter:Broadcast(Notify_MiningHolderFormationChanged)
+        self:HideView("MiningFormationView")
+    end)
+end
+
+--- 购买恢复
+function OnCommand_BuyRecover()
+    if isMoreRecoverTimeMax then
+        CsBridge.ShowHintBoxTwo(Language:getStr("BuyRecoverTimeMax"))
+        return
+    end
+    local selfCostConsume = miningTechnologyUtils.GetSelfConsume(nextBuyRecoverConsume.costConsume)
+    if selfCostConsume.count < nextBuyRecoverConsume.costConsume.count then
+        CsBridge.ShowHintBoxTwo(string.format(Language:getStr("ResNotEnough"), GetNameByResId(selfCostConsume.id)))
+        return
+    end
+    miningFormationUtils.BuyRecover(caveInfo, upHeroArray, downHeroDic, function()
+        SendInitNotification()
+        RefreshRecoverBtnState()
+        MsgCenter:Broadcast(Notify_MiningHolderFormationChanged)
+    end)
+end
+
+function DoOnExit()
+    formationType = nil
+    raceId = nil
+    caveInfo = nil
+    buyRecoverConsumeArr = nil
+    nextBuyRecoverConsume = nil
+    downHeroDic = nil
+    upHeroArray = nil
+    formationHeros = nil
+    downHeroArray = nil
+    fight = nil
+    auraArr = nil
+    curAura = nil
+    titleType = nil
+    MY_CAVE_HOLD_MAX = nil
+    isMoreRecoverTimeMax = nil
+    infoData = nil
+end

@@ -1,0 +1,33 @@
+
+õ
+ComposeData.protoComposeDatastage.proto",
+ComposeEquipReq
+
+id (
+count (":
+ComposeEquipResp&
+rewardItems (2.stage.RewardItem"#
+DeComposeHeroReq
+uidList ("7
+DeComposeHeroResp"
+results (2.stage.RewardItem"v
+ComposeHeroReq
+
+id (
+mainMaterialId (
+subMaterial1 (
+subMaterial2 (
+subMaterial3 ("F
+ComposeHeroResp
+uid (&
+rewardItems (2.stage.RewardItem"u
+HeroBreakReq
+
+id (
+mainMaterialUId (
+subMaterial1 (
+subMaterial2 (
+subMaterial3 ("G
+HeroBreakResp&
+rewardItems (2.stage.RewardItem
+status (

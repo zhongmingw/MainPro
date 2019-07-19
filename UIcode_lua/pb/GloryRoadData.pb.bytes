@@ -1,0 +1,36 @@
+
+Ð
+GloryRoadData.protoGloryRoadDatastage.proto"«
+GloryRoadRecord
+
+id (
+pass_1 (
+pass_2 (
+remains (
+
+payRemains (
+lastRenewTime (
+payCount (
+uids_1 (
+uids_2	 ("J
+TryGloryRoadReq
+type ()
+formationPos (2.stage.FormationPos"
+RaidGloryRoadReq
+
+id (";
+RaidGloryRoadResp&
+rewardItems (2.stage.RewardItem"5
+GetPassGloryRoadPlayerReq
+
+id (
+type ("C
+GetPassGloryRoadVideoReq
+
+id (
+type (
+index ("$
+ResetGloryRoadReq
+useless ("$
+ResetGloryRoadResp
+status (

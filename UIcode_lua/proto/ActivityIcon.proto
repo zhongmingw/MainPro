@@ -1,0 +1,55 @@
+package ActivityIcon;
+
+message GetActiveIconsReq
+{
+    required int32 useless = 1;
+}
+
+message GetActiveIconsResp
+{
+    repeated ActiveIconItem iconItems = 1;
+}
+
+message ActiveIconItem
+{
+    /**
+    *ID
+    */
+    required int32 id = 1;
+    /**
+    *显示层级
+    */
+    required int32 level = 2;
+    /**
+    *类型
+    */
+    required int32 type = 3;
+    /**
+    *图标
+    */
+    required string icon = 4;
+    /**
+    *优先级
+    */
+    required int32 priority = 5;
+    /**
+    *所属图标
+    */
+    required int32 fatherIconId = 6;
+    /**
+    *标题
+    */
+    required string iconName = 7;
+    /**
+    *结束时间
+    */
+    required int64 endTime = 8;
+    /**
+    *是否有红点
+    */
+    required bool redDot = 9;
+    	/**
+	 *spineName
+	 */
+	required string spineName = 10;
+}

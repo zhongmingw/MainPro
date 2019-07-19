@@ -1,0 +1,356 @@
+---获取光环数组
+local function GetAuraArr()
+    local auraArr = {}
+    for i, data in pairs(global_auraArr) do
+        local newData = {}
+        newData.id = data.id
+        newData.title = data.title
+        newData.icon = data.icon
+        newData.des = data.desp
+        newData.condition = data.cond
+        newData.isOn = false
+        newData.pos = i
+        newData.condDesp = data.condDesp
+        table.insert(auraArr, newData)
+    end
+    return auraArr
+end
+
+---计算光环数量
+local function DoCheckAuraNum(upHeroArray, raceId, num)
+    local isEnough = false
+    local col = 0
+    local tbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    for i, data in pairs(upHeroArray) do
+        if (data.heroId ~= 0) then
+            local race = tbl:GetInt(data.heroId, HeroBase.group)
+            if (raceId == race) then
+                col = col + 1
+            end
+        end
+    end
+    if (col >= num) then
+        isEnough = true
+    end
+    return isEnough
+end
+
+--- 获取阵容的光环
+local function CalcAura(upHeroArray, auraArr)
+    local validAura = nil
+    for i, data in pairs(auraArr) do
+        data.isOn = false
+        local result = SplitString(data.condition, ";")
+        local isAllOK = true
+        for i = 0, result.Length - 1 do
+            local str = SplitString(result[i], ",")
+            local raceId = tonumber(str[0])
+            local num = tonumber(str[1])
+            local isEnough = DoCheckAuraNum(upHeroArray, raceId, num)
+            if (isEnough == false) then
+                isAllOK = false
+                break
+            end
+        end
+        data.isOn = isAllOK
+        if (isAllOK == true) then
+            validAura = data
+            break
+        end
+    end
+    return validAura
+end
+
+---购买恢复的消耗数组
+local function GetBuyRecoverCostConsumeArr()
+    local miningHolderInfoUtils = require "MiningHolderInfoUtils"
+    local mineralHeroTbl = ResTblContainer:GetTable(MineralHero.actorTbl)
+    local ids = ResTblContainer:GetIds(MineralHero.actorTbl)
+    local costArr = {}
+    for i = 0, ids.Length - 1 do
+        local item = {}
+        item.id = tonumber(ids[i])
+        item.numMix = tonumber(mineralHeroTbl:Get(item.id, MineralHero.numMix))
+        item.numMax = tonumber(mineralHeroTbl:Get(item.id, MineralHero.numMax))
+        item.expend = tostring(mineralHeroTbl:Get(item.id, MineralHero.expend))
+        item.costConsume = miningHolderInfoUtils.GetConsumeByString(item.expend)
+        for j = item.numMix, item.numMax do
+            costArr[j] = item
+        end
+    end
+    return costArr
+end
+
+---获取购买这次恢复需要的消耗
+local function GetBuyRecoverCostConsume(consumeArr)
+    local MineInfo = appData:checkData("MineInfo")
+    local nextId = (MineInfo.recoverTimes or 0) + 1
+    local moreMax = false
+    local consume = nil
+    if consumeArr[nextId] == nil then
+        moreMax = true
+        consume = consumeArr[#consumeArr]
+    else
+        moreMax = false
+        consume = consumeArr[nextId]
+    end
+    return consume, moreMax
+end
+
+---按英雄数组回满血量
+local function RecoverHeroHpByArr(upHeroArr)
+    for i = 1, #upHeroArr do
+        local hero = upHeroArr[i]
+        hero.curHp = hero.hp
+        hero.maxHp = hero.hp
+        hero.lastRecoverTime = CsBridge.timeManager.ServerTime
+        hero.showHpStr = ""
+        hero.sliderValue = 1
+        hero.dead = false
+    end
+end
+
+---按英雄dic恢复英雄血量
+local function RecoverHeroHpByDic(downHeroDic)
+    for i = 1, #downHeroDic do
+        for k, v in pairs(downHeroDic[i]) do
+            v.curHp = v.hp
+            v.maxHp = v.hp
+            v.lastRecoverTime = CsBridge.timeManager.ServerTime
+            v.showHpStr = ""
+            v.sliderValue = 1
+            v.dead = false
+        end
+    end
+end
+
+---初始化英雄的血量信息
+local function InitHeroHp(heroInfo, heroInfos)
+    heroInfo.curHp = 1
+    heroInfo.hp = heroInfo.curHp
+    heroInfo.maxHp = heroInfo.hp
+    heroInfo.lastRecoverTime = CsBridge.timeManager.ServerTime
+    heroInfo.showHpStr = ""
+    heroInfo.sliderValue = heroInfo.curHp / heroInfo.hp
+    heroInfo.canUpFormation = true
+    heroInfo.dead = false
+
+    if heroInfos == nil then
+        return
+    end
+    for k = 1, #heroInfos do
+        if heroInfos[k].uid == heroInfo.uid then
+            local targetHeroInfo = heroInfos[k]
+            heroInfo.curHp = targetHeroInfo.curHp
+            heroInfo.hp = targetHeroInfo.hp
+            heroInfo.maxHp = targetHeroInfo.hp
+            heroInfo.lastRecoverTime = targetHeroInfo.lastRecoverTime
+            heroInfo.showHpStr = ""
+            heroInfo.sliderValue = heroInfo.curHp / heroInfo.hp
+        end
+    end
+    if heroInfo.curHp <= 0 then
+        heroInfo.canUpFormation = false
+        heroInfo.dead = true
+    else
+        heroInfo.canUpFormation = true
+        heroInfo.dead = false
+    end
+end
+
+---初始化下方的英雄信息
+local function InitDownHeroDic(caveInfo, checkMineHeroInfoResp)
+    local downHeroDic = {}
+    local pbs = appData:checkAllItems("HeroItem")
+    local heroBaseTbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    if pbs == nil then
+        return downHeroDic
+    end
+    for i = 0, pbs.Length - 1 do
+        local pbHero = pbs[i]
+        local curGroup = heroBaseTbl:GetInt(pbHero.heroId, HeroBase.group)
+        local curStar = pbHero.distillationStar
+        local curQuality = heroBaseTbl:GetInt(pbHero.heroId, HeroBase.quality)
+
+        local hero = {
+            uid = pbHero.uid,
+            heroId = pbHero.heroId,
+            grade = pbHero.grade,
+            level = pbHero.level,
+            weaponId = pbHero.weaponId or 0,
+            hatId = pbHero.hatId or 0,
+            clothId = pbHero.clothId or 0,
+            shoesId = pbHero.shoesId or 0,
+            distillationStar = curStar,
+            distillationLevel = pbHero.distillationLevel,
+            breakLevel = pbHero.breakLevel,
+            race = curGroup,
+            relicId = pbHero.relicId,
+            runeData = pbHero.rune,
+            showDuty = CheckHeroInDuty(pbHero, HeroDuty.Mining),
+            lock = CheckHeroInDuty(pbHero, HeroDuty.LOCK),
+            quality = curQuality,
+            model = heroBaseTbl:Get(pbHero.heroId, HeroBase.model),
+            name = heroBaseTbl:Get(pbHero.heroId, HeroBase.title),
+            jewelIds = pbHero.jewelIds,
+            duty = pbHero.duty,
+            IsSelected = false,
+            showHpSlider = true,
+        }
+        if checkMineHeroInfoResp and checkMineHeroInfoResp.heroInfos then
+            InitHeroHp(hero, checkMineHeroInfoResp.heroInfos)
+        else
+            InitHeroHp(hero, nil)
+        end
+        hero.job = heroBaseTbl:GetInt(hero.heroId, HeroBase.job)
+        hero.skill = GetHeroSkillArr(hero)
+        hero.distillation = GetHeroDistillation(hero)
+        hero.showLevel = tonumber(GetHeroAllLevel(hero.grade, hero.level, hero.distillationLevel, hero.breakLevel))
+        if curQuality >= caveInfo.heroQuality and
+                hero.showLevel >= caveInfo.heroLevel then
+            local kv = { [hero.uid] = hero }
+            table.insert(downHeroDic, kv)
+        end
+    end
+    return downHeroDic
+end
+
+---初始化抢占矿点的请求数据
+local function InitTakeMineReq(caveInfo, formationPos)
+    local req = {}
+    req.mineId = caveInfo.idStr
+    req.formationPos = {}
+    for i = 1, #formationPos do
+        local temp = {}
+        if formationPos[i].uid ~= 0 then
+            local posInfo = formationPos[i]
+            temp.pos = posInfo.pos
+            temp.uid = posInfo.uid
+            temp.heroId = posInfo.heroId
+            table.insert(req.formationPos, temp)
+        end
+    end
+    return req
+end
+
+---更新一个矿点信息
+local function UpdateCaveInfoItem(caveInfo, result, mineDetail)
+    local miningUtils = require "MiningUtils"
+    miningUtils.AddMiningMapItemServerData(caveInfo, mineDetail)
+    if result == 0 then
+        caveInfo.myHoldCaveArr[caveInfo.type] = caveInfo.myHoldCaveArr[caveInfo.type] + 1
+        caveInfo.myCaveItemCount.count = caveInfo.myCaveItemCount.count + 1
+    end
+end
+
+---向服务器获取英雄信息
+local function HttpGetDownHeroDic(callback)
+    local req = {}
+    req.useless = 1
+    HttpRequest("checkMineHeroInfo", "CheckMineHeroInfoReq", "CheckMineHeroInfoResp", req, function(resp)
+        if callback then
+            callback(resp)
+        end
+    end)
+end
+
+---获取阵容下方英雄
+local function GetDownHeroDic(caveInfo, callback)
+    HttpGetDownHeroDic(function(resp)
+        local downHeroDic = InitDownHeroDic(caveInfo, resp)
+        if callback then
+            callback(downHeroDic)
+        end
+    end)
+end
+
+---获取自己阵容的战力
+local function GetFormationHeroFight(upHeroArray)
+    local allFight = 0
+    for i, data in pairs(upHeroArray) do
+        if (data.heroId ~= 0) then
+            local uid = data.uid
+            if uid == nil or uid == 0 then
+                uid = data.srcUid
+            end
+            local heroInfo = appData:checkItem("HeroItem", tostring(uid))
+            allFight = allFight + GetHeroFight(heroInfo)
+        end
+    end
+    return allFight
+end
+
+---保存阵容
+local function SaveFormation(caveInfo, formationPos, callback)
+    local req = InitTakeMineReq(caveInfo, formationPos)
+    HttpRequest("updateMineDefFormation", "UpdateMineDefFormationReq", "UpdateMineDefFormationResp", req, function(resp)
+        if resp.result == 0 then
+            CsBridge.ShowHintBoxTwo(Language:getStr("saveFormationOK"))
+            if callback then
+                callback()
+            end
+        else
+            CsBridge.ShowHintBoxTwo(Language:getStr("saveFormationFail"))
+        end
+    end)
+end
+
+---抢占矿点
+local function GoTakeHoldCaveItem(caveInfo, formationPos, callback)
+    local req = InitTakeMineReq(caveInfo, formationPos)
+    HttpRequest("takeMine", "TakeMineReq", "TakeMineResp", req, function(resp)
+        if resp then
+            if resp.mineDetail then
+                UpdateCaveInfoItem(caveInfo, resp.result, resp.mineDetail)
+            end
+            if callback then
+                callback(resp)
+            end
+        end
+    end)
+end
+
+---向服务器请求恢复血量
+local function HttpRecoverHp(upHeroArr, downHeroDic, callback)
+    local req = {}
+    req.useless = 0
+    HttpRequest("recoverMineHero", "RecoverMineHeroReq", "RecoverMineHeroResp", req, function(resp)
+        if resp.result == 0 then
+            CsBridge.ShowHintBoxTwo(Language:getStr("HeroHpCovered"))
+            RecoverHeroHpByArr(upHeroArr)
+            RecoverHeroHpByDic(downHeroDic)
+            if callback then
+                callback()
+            end
+        end
+    end)
+end
+
+---购买恢复
+local function BuyRecover(caveInfo, upHeroArr, downHeroDic, callback)
+    HttpGetDownHeroDic(function(resp)
+        if resp and resp.heroInfos then
+            HttpRecoverHp(upHeroArr, downHeroDic, callback)
+
+        else
+            CsBridge.ShowHintBoxTwo(Language:getStr("AllHeroNoHurt"))
+            downHeroDic = InitDownHeroDic(caveInfo, resp)
+            if callback then
+                callback()
+            end
+        end
+    end)
+end
+
+return {
+    GetBuyRecoverCostConsumeArr = GetBuyRecoverCostConsumeArr,
+    GetBuyRecoverCostConsume = GetBuyRecoverCostConsume,
+    GetAuraArr = GetAuraArr,
+    GetDownHeroDic = GetDownHeroDic,
+    GetFormationHeroFight = GetFormationHeroFight,
+    CalcAura = CalcAura,
+    SaveFormation = SaveFormation,
+    GoTakeHoldCaveItem = GoTakeHoldCaveItem,
+    BuyRecover = BuyRecover,
+    InitHeroHp = InitHeroHp,
+}

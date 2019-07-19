@@ -1,0 +1,74 @@
+--[[
+	file: FriendUtils.lua
+	author: hangang
+	description: Friend system logics
+
+	version 1.0:File created
+]]
+
+local OfflineTimeType = {
+	Recent = 0,
+    WeekAgo = 1,
+    TwoWeekAgo = 2,
+    MonthAgo = 3,
+}
+
+------Http requet-----------------------------------------------------------------
+local function FetchFriends(finishedCallback)
+    local req = {}
+    req.useless = 0
+	local url, requestCls, responseCls = "myFriends", "MyFriendsReq", "MyFriendsResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+local function RemoveFriends(finishedCallback, targetIds)
+    local req = {}
+    req.userIdList = targetIds
+	local url, requestCls, responseCls = "removeFriend", "RemoveFriendReq", "RemoveFriendResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+local function RemoveFriend(finishedCallback, friendId)
+    local list = {}
+    table.insert(list, friendId)
+    RemoveFriends(finishedCallback, list)
+end
+
+------Helpers---------------------------------------------------------------------
+local function GetOfflineTimeType(lastLoginTime)
+	local weekTime = 604800000
+	local twoWeekTime = 1209600000
+	local monthTime = 2592000000
+
+	local offlineType = OfflineTimeType.WeekAgo
+	local diff = CsBridge.timeManager.ServerTime - lastLoginTime
+	if diff > monthTime then
+		offlineType = OfflineTimeType.MonthAgo
+	elseif diff > twoWeekTime then
+		offlineType = OfflineTimeType.TwoWeekAgo
+	elseif diff > weekTime then
+		offlineType = OfflineTimeType.WeekAgo
+	else
+		offlineType = OfflineTimeType.Recent
+	end
+
+	return offlineType
+end
+
+local function GetMaxFriendCount()	
+    local max = GetConstValue("friendCountLimit")
+    local playerInfo=appData:checkData("PlayerInfo")
+	local extraCount = ResTblContainer:GetPropToInt(playerInfo.vip,VipTbl.friendCountAdd,VipTbl.tblName)
+	
+	return max + extraCount
+end
+
+------APIs---------------------------------------------------------------------
+return {
+	OfflineTimeType = OfflineTimeType,
+	FetchFriends = FetchFriends,
+	RemoveFriends = RemoveFriends,
+    RemoveFriend = RemoveFriend,
+	GetOfflineTimeType = GetOfflineTimeType,
+	GetMaxFriendCount = GetMaxFriendCount,
+}

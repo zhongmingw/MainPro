@@ -1,0 +1,129 @@
+local curData
+local curCardData
+
+local iconImg
+local rewardTxt
+local despTxt
+local valTxt
+local nowTxt
+local priceTxt
+local inited = false
+local payBtn
+local payTitleTxt
+local rewardGrid 
+local remainTimeObj
+local remainTimeGreenTxt
+local remainTimeGreenTxtObj
+local remainTimeNormalTxt
+local remainTimeNormalTxtObj
+local remainDayTxt
+
+function DoInit()
+    self.Anim = 0
+    if(not inited) then
+        iconImg=self:GetComponentAtPath("OTHER/monthcard/iconImg",CLS_IMAGE)
+        rewardTxt=self:GetComponentAtPath("OTHER/rewardTxt",CLS_TEXT)
+        despTxt=self:GetComponentAtPath("OTHER/name01Txt",CLS_TEXT)
+        valTxt=self:GetComponentAtPath("OTHER/number01Txt",CLS_TEXT)
+        nowTxt=self:GetComponentAtPath("OTHER/number02Txt",CLS_TEXT)
+        priceTxt=self:GetComponentAtPath("OTHER/numberTxt",CLS_TEXT)
+        payBtn=self:GetComponentAtPath("BUTTON/buyBtn",CLS_BUTTON_ARCHLY)
+        payTitleTxt=self:GetComponentAtPath("BUTTON/buyBtn/nameTxt",CLS_TEXT)
+        rewardGrid=self:GetComponentAtPath("OTHER/RewardGrid",CLS_UI_ITEM_GRID)
+        rewardGrid=self:GetComponentAtPath("OTHER/RewardGrid",CLS_UI_ITEM_GRID)
+        remainTimeObj = self:GetGameObjectAtPath("RemainTime")
+        remainTimeGreenTxt = self:GetComponentAtPath("RemainTime/RemainTimeGreenTxt", CLS_TEXT)
+        remainTimeGreenTxtObj = remainTimeGreenTxt.gameObject
+        remainTimeNormalTxt = self:GetComponentAtPath("RemainTime/RemainTimeNormalTxt", CLS_TEXT)
+        remainTimeNormalTxtObj = remainTimeNormalTxt.gameObject
+        inited=true
+        remainDayTxt = self:GetComponentAtPath("RemainTime/RemainTimeDayTxt", CLS_TEXT)
+    end
+end
+
+function IsSetAnchor()
+	local moduleTrans = self.transform.parent.parent
+	local baseViewTrans = moduleTrans:Find("GiftActivityView")
+	self.transform.parent:SetSiblingIndex(baseViewTrans:GetSiblingIndex() + 1)
+	return true
+end
+
+function BeoforeReturnBack()
+    self.gameObject:SetSelfActive(false)
+end
+
+function SetParamDataList(objs)
+    curData = objs[0]
+    self:SendCommand("InitCard",curData)
+end
+
+function OnNotification_InitCard(objs)
+    curCardData=objs[0]
+    CsBridge.IconData.SetIconByName(iconImg.gameObject,curCardData.icon)
+    rewardTxt.text=curCardData.reward
+    despTxt.text=curCardData.desp
+    valTxt.text=curCardData.value
+    nowTxt.text=curCardData.price
+    priceTxt.text=curCardData.price
+    rewardGrid:RefreshItemSlots(curCardData.vipRewards,self.gameObject,"ItemSlot")
+    if curCardData.itemData == nil then
+        payTitleTxt.text=Language:getStr("buy")
+    else
+        payTitleTxt.text=Language:getStr("rebuy")
+    end
+    if(CheckCanBuy(nil,curCardData.transid)) then
+        payBtn.Gray=false
+    else
+        payBtn.Gray=true
+    end
+    remainTimeObj:SetActive(curCardData.showRemainTime)
+    if curCardData.showRemainTime == true then
+        remainTimeGreenTxtObj:SetActive(curCardData.showGreenTxt)
+        remainTimeNormalTxtObj:SetActive(not curCardData.showGreenTxt)
+        remainTimeNormalTxt.text = curCardData.endDayStr
+        remainTimeGreenTxt.text = curCardData.endDayStr
+        remainDayTxt.text = curCardData.dayStr
+    end
+end
+
+function OnbuyBtnClick(sender)
+    self:SendCommand("BuyCard",curCardData)
+end
+
+function OnNotification_BuyCard(objs)
+    if(CheckCanBuy(nil,curCardData.transid)) then
+        payBtn.Gray=false
+    else
+        payBtn.Gray=true
+    end
+end
+
+function OnVIPBtnClick(sender)
+    LinkSystem(UI_OPEN_TYPE_VIP,self)
+end
+
+function OnRewardGridItemSlotClick(obj)
+    local data = obj.m_data
+    ShowTip(self,data.typeId,data.id)
+end
+
+function DoExit()
+    curData = nil
+    curCardData = nil
+    iconImg = nil
+    rewardTxt = nil
+    despTxt = nil
+    valTxt = nil
+    nowTxt = nil
+    priceTxt = nil
+    inited = nil
+    payBtn = nil
+    payTitleTxt = nil
+    rewardGrid  = nil
+    remainTimeObj = nil
+    remainTimeGreenTxt = nil
+    remainTimeGreenTxtObj = nil
+    remainTimeNormalTxt = nil
+    remainTimeNormalTxtObj = nil
+    remainDayTxt = nil
+end

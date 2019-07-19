@@ -1,0 +1,192 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-10-15 10:32:47
+local cache = CsBridge.objectCache
+local UnityHelper = CsBridge.UnityHelper
+
+local isInit = false
+
+local oldHeroViewData
+local newHeroViewData
+
+local gemConsumeNumTxt
+local itemConsumeObj
+local itemConsumeNumTxt
+
+local resetEffectObj
+local resetEffectTrans
+
+local function InitHeroViewData(heroViewData,trans)
+    heroViewData.nameTxt = trans:GetComponentAtPath("NameTxt",CLS_TEXT)
+    heroViewData.levelTxt = trans:GetComponentAtPath("LevelTxt",CLS_TEXT)
+    heroViewData.raceObj = trans:GetGameObjectAtPath("NameTxt/Race/RaceObj")
+    heroViewData.starRoot = trans:GetComponentAtPath("StarRoot",CLS_RECTTRANSFORM)
+    heroViewData.heroModelRoot = trans:GetComponentAtPath("HeroModelRoot",CLS_RECTTRANSFORM)
+    heroViewData.heroModel = nil
+    heroViewData.flootSpineRoot = trans:GetComponentAtPath("FloorSpineRoot",CLS_RECTTRANSFORM)
+    heroViewData.floorSpine = nil
+end
+
+local function CreateModel(name,root,onFinished)
+	CsBridge.CacheAssetsByGroup(self.gameObject.name,function()
+        local model = cache:CreateObject(name, true)
+        model.transform:SetParent(root, false)
+        UnityHelper.SetAnchoredPosition(model.gameObject,0,0)
+		UnityHelper.SetlocalScale(model.gameObject,-0.7,0.7,1)
+        local skeleton = model.transform:GetChild(0):GetComponent(CLS_SKELETONGRAPHIC)
+        skeleton:PlayAnimation("stand", true)
+        if onFinished then
+            onFinished(model)
+        end
+	end, name)
+end
+
+local function CreateFloorSpine(anim,root,onFinished)
+    local spineName = "HeroFloorSpine"
+    CsBridge.CacheAssetsByGroup(self.gameObject.name,function()
+        local model = cache:CreateObject(spineName, true)
+        model.transform:SetParent(root, false)
+        UnityHelper.SetAnchoredPosition(model.gameObject,0,0)
+        UnityHelper.SetlocalScale(model.gameObject,-0.28,0.28,1)
+        local skeleton = model:GetComponent(CLS_SKELETONGRAPHIC)
+        skeleton:PlayAnimation(anim, true)
+        if onFinished then
+            onFinished(model)
+        end
+    end, spineName)
+end
+
+local function RefreshHeroViewData(heroViewData,hero)
+    heroViewData.levelTxt.text = Language:getStr("LV.")..hero.level
+    heroViewData.nameTxt:SetTextWithSizeChange(hero.name)
+    SetIconByRaceId(heroViewData.raceObj,hero.race)
+    SetHeroStar(hero.quality,heroViewData.starRoot,hero.distillationStar)
+    CreateModel(hero.model,heroViewData.heroModelRoot,function(model)
+        heroViewData.heroModel = model
+    end)
+    CreateFloorSpine(GetPlatformAnim(hero.race),heroViewData.flootSpineRoot,function(model)
+        heroViewData.floorSpine = model
+    end)
+end
+
+local function ClearModel(heroViewData)
+    if heroViewData.heroModel ~= nil then
+        CS.UnityEngine.GameObject.Destroy(heroViewData.heroModel)
+        heroViewData.heroModel = nil
+    end
+    if heroViewData.floorSpine ~= nil then
+        CS.UnityEngine.GameObject.Destroy(heroViewData.floorSpine)
+        heroViewData.floorSpine = nil
+    end
+    cache:ClearGroup(self.gameObject.name,true)
+end
+
+function DoInit()	
+    self.Anim = 8
+    self.Shadow = 1
+end
+
+function InitUI()
+    local oldHeroTrans = self.transform:Find("Center/OldHero")
+    local newHeroTrans = self.transform:Find("Center/NewHero")
+    oldHeroViewData = {}
+    newHeroViewData = {}
+    InitHeroViewData(oldHeroViewData,oldHeroTrans)
+    InitHeroViewData(newHeroViewData,newHeroTrans)
+
+    gemConsumeNumTxt = self:GetComponentAtPath("Center/Consume/GemConsume/NumTxt",CLS_TEXT)
+    itemConsumeObj = self:GetGameObjectAtPath("Center/Consume/ItemConsume")
+    itemConsumeNumTxt = self:GetComponentAtPath("Center/Consume/ItemConsume/NumTxt",CLS_TEXT)
+
+    resetEffectObj = self:GetGameObjectAtPath("Effect")
+    resetEffectTrans = resetEffectObj.transform
+end
+
+function SetParamDataList(objs)
+	local hero = objs[0]
+	self:SendCommand("InitData", hero)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitHeroResetData")
+end
+
+function OnClose()
+    ClearModel(oldHeroViewData)
+    ClearModel(newHeroViewData)
+    self:SendCommand("OnClose")
+end
+
+function DoExit()
+    cache = nil
+    UnityHelper = nil
+    isInit = nil
+
+    oldHeroViewData = nil
+    newHeroViewData = nil
+
+    gemConsumeNumTxt = nil
+    itemConsumeObj = nil
+    itemConsumeNumTxt = nil
+
+    resetEffectObj = nil
+    resetEffectTrans = nil
+end
+
+function OnNotification_RefreshHeroResetView(objs)
+    local data = objs[0]
+    RefreshHeroViewData(oldHeroViewData,data.oldHero)
+    RefreshHeroViewData(newHeroViewData,data.newHero)
+    local consumption = data.resetData.consumption
+    gemConsumeNumTxt.text = GetValueAbbreviation(consumption)
+    SetFontColorWithEnough(gemConsumeNumTxt,function()
+        return CheckResEnough(ResourceEnum.Gem,consumption,false)
+    end,color2)
+    local item = data.resetData.item
+    if item then
+        itemConsumeObj:SetSelfActive(true)
+        itemConsumeNumTxt.text = GetValueAbbreviation(item.count)
+        SetFontColorWithEnough(itemConsumeNumTxt,function()
+            return CheckPackItemEnough(item.id,item.count,false)
+        end,color2)
+    else
+        itemConsumeObj:SetSelfActive(false)
+    end
+end
+
+function OnNotification_ShowHeroResetEffect(objs)
+	local onFinished = objs[0]
+    resetEffectObj:SetSelfActive(true)
+    local spineName = "HeroResetSpine"
+	CsBridge.CacheAssetsByGroup(spineName,function()
+		local obj = cache:CreateObject(spineName, true)
+		obj:SetPosition(0,180)
+		obj.transform:SetParent(resetEffectTrans)
+		obj:GetComponent(CLS_SKELETONGRAPHIC):PlayAnimation("animation",false,function()
+			resetEffectObj:SetSelfActive(false)
+			DestroyModel(obj)
+			onFinished()
+		end)
+	end,spineName)
+end
+
+function OnConfirmBtnClick(objs)
+    self:SendCommand("ResetHero")
+end
+
+function OnHelpBtnClick(sender)
+    ShowHelpTip(self,INSTRUCTION_HERO_RESET)
+end
+
+function OnMaskClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name)
+end

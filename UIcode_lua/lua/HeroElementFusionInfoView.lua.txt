@@ -1,0 +1,41 @@
+
+local isInit = false
+
+local raceObj
+local campExpGrid
+
+function DoInit()
+    self.Shadow = 1
+end
+
+function InitUI()
+    raceObj = self:GetGameObjectAtPath("Center/RaceImg") 
+    campExpGrid = self:GetComponentAtPath("Center/CampExpGrid" ,CLS_UI_ITEM_GRID) 
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitHeroElementFusionInfoData")
+end
+
+function OnNotification_RefreshHeroElementFusionInfoView(objs)
+    local info = objs[0]
+    SetIconByRaceId(raceObj,info.raceId)
+    campExpGrid:RefreshItemSlots(info.campExpArr,self.gameObject,"HeroElementFusionCampExpItemSlot")
+end
+
+function OnHeroElementFusionCampExpItemSlotBindValue(slot,data)
+    local name = slot.transform:Find("NameTxt"):GetComponent(CLS_TEXT)
+    local exp = slot.transform:Find("ExpTxt"):GetComponent(CLS_TEXT)
+    name.text = data.name
+    exp.text = data.exp
+end
+
+function DoExit()
+    isInit = nil
+    raceObj = nil
+    campExpGrid = nil
+end

@@ -1,0 +1,22 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-02-16 16:55:55
+]]
+
+function OnGloryRoadActivityItemSlotBindValue(slot, data)
+    local itemGrid = slot:GetComponentAtPath("ItemGrid",CLS_UI_ITEM_GRID) 
+    local titleTxt = slot:GetComponentAtPath("TitleTxt",CLS_TEXT)
+    local slider = slot:GetComponentAtPath("slider",CLS_SLIDER)
+    local sliderNumTxt = slot:GetComponentAtPath("slider/NumTxt",CLS_TEXT)
+    local buyBtn = slot:GetComponentAtPath("BuyBtn",CLS_BUTTON_ARCHLY)
+    local btnNameTxt = slot:GetComponentAtPath("BuyBtn/nameTxt",CLS_TEXT)
+
+    titleTxt.text = data.title
+    SetSliderProgress(sliderNumTxt,slider,data.curCount,data.count)
+    buyBtn.Gray = not data.active
+    btnNameTxt.text = data.btnName
+    local view = slot.m_grid.viewBase
+    itemGrid:RefreshItemSlots(data.rewards,view.gameObject,"ItemSlot")
+end

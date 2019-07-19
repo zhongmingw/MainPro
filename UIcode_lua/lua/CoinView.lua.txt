@@ -1,0 +1,37 @@
+local class = 0
+local index = 1
+
+local function InitCoin(obj)
+    class=obj
+end
+
+function DoInit()
+    self.Anim=0
+	MsgCenter:Subscribe(Notify_InitCoin,InitCoin)
+end
+
+function OnAnimationFinished()
+    CsBridge.MoneyBanner.SetButtonsEnabled(false)
+    self:SendCommand("InitCoinView")
+end
+
+function OnClose()
+    CsBridge.MoneyBanner.SetButtonsEnabled(true)
+end
+
+function OnTrophyBtnClick(sender)
+    if index<=class then
+        MsgCenter:Broadcast(Notify_TrophyCoin,index)
+        index=index+1
+        if index>class then
+            self:SendCommand("TakeOnHookRewards")
+        end
+    end
+end
+
+function DoExit()
+    MsgCenter:Unsubscribe(Notify_InitCoin,InitCoin)
+    self.Module=nil
+    class = nil
+    index = nil
+end

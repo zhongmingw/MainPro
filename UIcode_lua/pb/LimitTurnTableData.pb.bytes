@@ -1,0 +1,46 @@
+
+ò	
+LimitTurnTableData.protoLimitTurnTableDataTurnTableData.protoplayerData.protostage.proto"­
+RefreshActivityLotteryResp
+result (!
+ActivityLotteryResetPrice (
+ActivityCoinPrice (
+ActivityLotteryDiscount ( 
+ActivityLotteryTenxLimit (",
+GetLotteryActivityHitRecordReq
+
+id ("N
+GetLotteryActivityHitRecordResp+
+records (2.LimitTurnTableData.Record"X
+LotteryActivityHistoryInfo+
+records (2.LimitTurnTableData.Record
+group ("?
+Record
+type (
+
+id (
+count (
+nick (	"
+LotteryActivityInfo*
+	drawItems (2.TurnTableData.DrawItem
+lastRefreshTime (
+hasFreeRefresh (
+count (
+acId ("*
+GetLotteryActivityRankReq
+count ("¡
+GetLotteryActivityRankResp>
+	rankItems (2+.LimitTurnTableData.LotteryActivityRankItemC
+playerRankItem (2+.LimitTurnTableData.LotteryActivityRankItem"j
+LotteryActivityRankItem2
+playerBaseInfo (2.playerData.PlayerBaseInfo
+score (
+rank ("*
+GetLotteryRankRewardReq
+useless ("f
+GetLotteryRankRewardRespJ
+rewardConfigs (23.LimitTurnTableData.LotteryActivityRankRewardConfig"c
+LotteryActivityRankRewardConfig
+min (
+max (&
+rewardItems (2.stage.RewardItem

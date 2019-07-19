@@ -1,0 +1,45 @@
+
+»
+RelicData.proto	RelicDatastage.proto"O
+	RelicItem
+
+id (
+level (
+exp (
+uid (
+owner ("1
+PutOnRelicReq
+relicUid (
+heroId (" 
+PutOnRelicResp
+status ("1
+RelicUpgradeReq
+uid (
+	materials (""
+RelicUpgradeResp
+status ("*
+GmGetRelicReq
+
+id (
+count (" 
+GmGetRelicResp
+result (".
+GmUpgradeRelicReq
+
+id (
+level ("$
+GmUpgradeRelicResp
+result ("
+GmTopRelicReq
+
+id (" 
+GmTopRelicResp
+result ("&
+RelicDecomposeReq
+	relicUids ("8
+RelicDecomposeResp"
+results (2.stage.RewardItem"&
+GmRelicDecomposeReq
+quality ("&
+GmRelicDecomposeResp
+result (

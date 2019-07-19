@@ -1,0 +1,231 @@
+local dailyTaskUtils = require "DailyTaskUtils"
+
+local payTbls
+local maxvip
+local curVIPIndex = 0
+
+function OnCommand_InitPay()
+    maxvip=CheckMaxVip()
+    payTbls = {}
+    payTbls.tbls={}
+    local ids = GetIds(PayTbl.tblName)
+    local tbl=ResTblContainer:GetTable(PayTbl.tblName)
+    for i=0,ids.Length - 1 do
+        local id=tonumber(ids[i])
+        local clientShow=tbl:GetInt(id,PayTbl.clientShow)
+        if(clientShow == 1) then
+            local newData=CheckPayData(id)
+            table.insert(payTbls.tbls,newData)
+        end
+    end
+    table.sort(payTbls.tbls, function(a,b)
+        return a.sortorder < b.sortorder
+    end)
+
+    payTbls.vipPrivilege={}
+    local tbl=ResTblContainer:GetTable(VipTbl.tblName)
+	local vips=tbl:GetCol(VipTbl.vip)
+	for i=0,vips.Length - 1 do
+	    local newData={}
+	    newData.vip=tonumber(vips[i])
+	    newData.privilege={}
+	    local row = tbl:GetRow(vips[i],VipTbl.needExp,VipTbl.heroBagAdd,VipTbl.coinAdd,VipTbl.stageHookAdd,VipTbl.taskCountAdd,
+	                           VipTbl.drawDiscount,VipTbl.challengeCountAdd,VipTbl.arenaCountAdd,VipTbl.quickBattle,VipTbl.donateCountAdd,
+                               VipTbl.friendCountAdd,VipTbl.wishing,VipTbl.advancedSummon,VipTbl.reward,VipTbl.monthcardDailyReward,VipTbl.multifight,
+                                VipTbl.skipPly)
+	    newData.exp=tonumber(row[0])
+	    if row[13] ~= nil and row[13] ~= "" then
+	        table.insert(newData.privilege,SplitVipReward(VipTbl.reward,row[13]))
+	    end
+	    if row[14] ~= nil and row[14] ~= "" then
+	        table.insert(newData.privilege,SplitVipReward(VipTbl.monthcardDailyReward,row[14]))
+	    end
+	    if row[1] ~= nil and row[1] ~= "" then
+	        table.insert(newData.privilege,CheckHint(Language:getStr(VipTbl.heroBagAdd),row[1]))
+	    end
+	    if row[2] ~= nil and row[2] ~= "" then
+	        table.insert(newData.privilege,CheckHint(Language:getStr(VipTbl.coinAdd),tostring(tonumber(row[2])/100).."%"))
+	    end
+	    if row[3] ~= nil and row[3] ~= "" then
+	        table.insert(newData.privilege,CheckHint(Language:getStr(VipTbl.stageHookAdd),tostring(tonumber(row[3])/100).."%"))
+	    end
+	    if row[4] ~= nil and row[4] ~= "" then
+	        table.insert(newData.privilege,CheckHint(Language:getStr(VipTbl.taskCountAdd),row[4]))
+	    end
+	    if row[5] ~= nil and row[5] ~= "" then
+	        table.insert(newData.privilege,CheckHint(Language:getStr(VipTbl.drawDiscount),tostring(tonumber(row[5])/100).."%"))
+	    end
+	    if row[6] ~= nil and row[6] ~= "" then
+	        table.insert(newData.privilege,CheckHint(Language:getStr(VipTbl.challengeCountAdd),row[6]))
+	    end
+	    if row[7] ~= nil and row[7] ~= "" then
+	        table.insert(newData.privilege,CheckHint(Language:getStr(VipTbl.arenaCountAdd),row[7]))
+	    end
+	    if row[8] ~= nil and row[8] ~= "" then
+	        table.insert(newData.privilege,CheckOnlyHint(Language:getStr(VipTbl.quickBattle)))
+	    end
+	    if row[9] ~= nil and row[9] ~= "" then
+	        table.insert(newData.privilege,CheckHint(Language:getStr(VipTbl.donateCountAdd),row[9]))
+	    end
+	    if row[10] ~= nil and row[10] ~= "" then
+	        table.insert(newData.privilege,CheckHint(Language:getStr(VipTbl.friendCountAdd),row[10]))
+	    end
+	    if row[11] ~= nil and row[11] ~= "" then
+	        table.insert(newData.privilege,CheckOnlyHint(Language:getStr(VipTbl.wishing)))
+	    end
+	    if row[12] ~= nil and row[12] ~= "" then
+	        table.insert(newData.privilege,CheckOnlyHint(Language:getStr(VipTbl.advancedSummon)))
+        end
+        if row[15] ~= nil and row[15] ~= "" then
+	        table.insert(newData.privilege,CheckHint(Language:getStr(VipTbl.multifight),row[15]))
+        end
+        if row[16] ~= nil and row[16] ~= "" then
+	        table.insert(newData.privilege,CheckOnlyHint(Language:getStr(VipTbl.skipPly)))
+	    end
+	    table.insert(payTbls.vipPrivilege,newData)
+	end
+	table.sort(payTbls.vipPrivilege, function(a,b)
+        return a.vip < b.vip
+    end)
+
+    payTbls.vip=CheckVip()
+    self:SendNotification("InitPay", payTbls)
+end
+
+local function InitSubscribeItem(callback)
+    dailyTaskUtils.GetCanBuySubscribe(function (stateResult)
+        for i = 1, #payTbls.tbls do
+            local subscribeItem = payTbls.tbls[i]
+            if subscribeItem.type == PayTableTypeEnum.Subscribe then
+                if stateResult.consumeType ~= ConsumeType.Subscribe then
+                    table.remove(payTbls.tbls, i)
+                    break
+                end
+                subscribeItem.showCD = false
+                subscribeItem.buyBtnTxt = Language:getStr("Subscribe")
+                if stateResult.canFree then  --没有订阅过
+                    subscribeItem.buyBtnTxt = string.format(Language:getStr("DayForFree"), GetConstValue("SubscribeFreeDay"))
+                end
+                if not stateResult.canPayBuy and not stateResult.canFree then --订阅生效
+                    subscribeItem.buyBtnTxt = Language:getStr("AlreadySubscribe")
+                    local cardData = {}
+                    cardData.endTime = stateResult.subEndTime
+                    subscribeItem.daysLeft = FormatCardDays(cardData)
+                    subscribeItem.showCD = true
+                end
+                subscribeItem.stateResult = stateResult
+            end
+        end
+        if callback then
+            callback()
+        end
+    end)
+end
+
+function OnCommand_InitPayItem()
+    InitSubscribeItem(function ()
+        self:SendNotification("InitPayItem", payTbls)
+        CheckFailedOrder(function(rewards)
+            self:SendNotification("ShipSuccess", CheckVip(), rewards)
+        end)
+    end)
+end
+
+function OnCommand_InitVIPItem()
+    curVIPIndex=0
+    self:SendNotification("InitVIPItem", payTbls)
+    self:SendNotification("SelectVIP", nil, curVIPIndex)
+end
+
+function OnCommand_SelectVIP(objs)
+    local index = objs[0]
+    if(index ~= curVIPIndex) then
+        local oldIndex=curVIPIndex
+        curVIPIndex = index
+        self:SendNotification("SelectVIP", oldIndex, curVIPIndex)
+    end
+end
+
+function CheckOnlyHint(hint)
+    local newData={}
+    newData.hint=hint
+    return newData
+end
+
+function CheckHint(hint,val)
+    local newData={}
+    newData.hint=hint
+    newData.val=val
+    return newData
+end
+
+function SplitVipReward(type,val)
+    local newData={}
+    newData.hint=Language:getStr(type)
+    newData.reward=GetRewardFromTbl(val)
+    return newData
+end
+
+function CheckVip()
+    local vip={}
+    local playerInfo = appData:checkData("PlayerInfo")
+    vip.level=playerInfo.vip
+    vip.exp=playerInfo.vipExp
+    vip.max=maxvip
+    if(vip.level < maxvip) then
+        vip.next=vip.level+1
+        vip.isMax=false
+        vip.totalExp=ResTblContainer:GetPropToInt(vip.next,VipTbl.needExp,VipTbl.tblName)
+        vip.needExp=vip.totalExp-vip.exp
+    else
+        vip.next=vip.level
+        vip.isMax=true
+    end
+    return vip
+end
+
+function CheckMaxVip()
+    local tbl=ResTblContainer:GetTable(VipTbl.tblName)
+	local ids=tbl:GetCol(VipTbl.vip)
+	return tonumber(ids[ids.Length - 1])
+end
+
+function OnCommand_DoPay(objs)
+    local playerInfo = appData:checkData("PlayerInfo")
+    local gem = playerInfo.payGem + playerInfo.rewardGem
+
+    local data=objs[0]
+    if not CheckCanBuySubscribe(data) then
+        return
+    end
+    if CheckCanBuy(data.type,data.id) then
+        DoPay(data,function(resp)
+            local newItemData = CheckPayData(data.id)
+            data.reward = newItemData.reward
+            data.daysLeft = newItemData.daysLeft
+            data.showCD = newItemData.showCD
+
+            local newData = {}
+            newData.data=data
+            newData.vip=CheckVip()
+            playerInfo = appData:checkData("PlayerInfo")
+            local currentGem = playerInfo.payGem + playerInfo.rewardGem
+            if (currentGem - gem > 0) then
+                self:SendNotification("payed",newData)
+            end
+            if data.type == PayTableTypeEnum.Subscribe then
+                InitSubscribeItem(function ()
+                    self:SendNotification("InitPayItem", payTbls)
+                end)
+            end
+        end)
+    else
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("cannotbuycard"))
+    end
+end
+
+function DoOnExit()
+    payTbls = nil
+    maxvip = nil
+    curVIPIndex = nil
+end

@@ -1,0 +1,33 @@
+
+Ÿ
+testHero.prototestHerostage.proto".
+HeroAddGMReq
+heroIds (
+level ("5
+GMRomoveHeroReq
+heroIds (
+	removeAll ("5
+GMRomoveItemReq
+itemIds (
+	removeAll (":
+GMUpgradePlayerLevelReq
+level (
+vipLevel ("G
+GMResp
+status (-
+upLevelRewardItems (2.stage.RewardItem"0
+	PackGMReq#
+items (2.testHero.PackGMItem"+
+
+PackGMItem
+itemId (
+count ("K
+
+PackGMResp
+status (-
+upLevelRewardItems (2.stage.RewardItem"'
+
+TestSample
+
+id (
+title (	

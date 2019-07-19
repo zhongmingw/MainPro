@@ -1,0 +1,50 @@
+--[[
+	file: UnionTipView.lua
+	author: hangang
+	description: View to show union tips(base information and members)
+]]
+
+local unionID
+local onHide
+
+local viewData
+
+function DoInit()
+	self.Shadow = 1
+	InitUI()
+end 
+
+function InitUI()
+end
+
+function SetParamDataList(obj)
+	unionID = obj[0]
+	onHide = obj[1]
+end
+
+function OnAnimationFinished()
+	self:SendCommand("InitUnionTipView", unionID, "UnionTipView")
+end
+
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close() 
+	self:HideView("UnionInfoView")
+	self:HideView(self.gameObject.name)
+	if onHide then
+		onHide()
+	end
+end
+
+function DoExit()
+	unionID = nil
+	onHide = nil
+
+	viewData = nil
+end

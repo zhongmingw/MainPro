@@ -1,0 +1,116 @@
+--[[
+	file: PlayerPowerRankView.lua
+	author: hangang
+	description: Player power leaderboard panel
+]]
+
+local playerGrid
+local ownItemTrans
+local titleTxt, switchBtnTitleTxt
+
+local cachedViewData
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 0     --shadow type
+	InitUI()            --cache UI items
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	local path = "Center/ScrollRect/Viewport/Grid"
+	playerGrid = selfTrans:GetComponentAtPath(path, CLS_UI_ITEM_GRID)
+
+    path = "Bottom/PlayerPowerItemSlot"
+    ownItemTrans = selfTrans:Find(path)
+
+	path = "Top/titleTxt"
+	titleTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Top/SwitchBtn/nameTxt"
+	switchBtnTitleTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+end
+
+--UIController events handlers-------------------------------------------------------
+function OnNotification_RefreshPowerView(objs)
+	if self.gameObject.activeInHierarchy then
+		local viewData = objs[0]
+		cachedViewData = viewData
+		RefreshView(viewData)
+	end
+end
+
+function RefreshView(data)
+	playerGrid:RefreshItemSlots(data.playerList, self.gameObject, "PlayerPowerItemSlot")
+    BindViewData(ownItemTrans, data.ownData)
+
+	titleTxt.text = data.title
+	switchBtnTitleTxt.text = data.switchBtnTitle
+end
+
+function OnNotification_CloseLeadersView(obj)
+	self:HideView(self.gameObject.name)
+end
+
+--UIController events handlers-------------------------------------------------------
+function OnGridPlayerBaseClick(obj)
+	local playerData = obj.m_data.playerInfo
+	self:SendCommand("PlayerBaseClicked", playerData, self.gameObject.name)
+end
+
+function OnPlayerBaseClick(sender)
+	local trans = sender.transform.parent
+	if trans == ownItemTrans then
+		local playerData = cachedViewData.ownData.playerInfo
+		self:SendCommand("PlayerBaseClicked", playerData, self.gameObject.name)
+	end
+end
+
+function OnSwitchBtnClick(sender)
+	self:SendCommand("SwitchPowerLeaderboard")
+end
+
+function OnTipsBtnClick(sender)
+	self:SendCommand("ShowPowerLeaderboardTips", self.gameObject.name)
+end
+
+--Bind item slots--------------------------------------------------------------------
+function OnPlayerPowerItemSlotBindValue(slot, data)
+	BindViewData(slot.transform, data)
+end
+
+function BindViewData(slotTrans, data)
+	local selfTrans = slotTrans
+
+	path = "NameTxt"
+	local nameText = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+	nameText.text = data.name
+
+	path = "ValueTxt"
+	local valueTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+	valueTxt.text = data.power or ""
+
+	path = "RankTxt"
+	local rankTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+	rankTxt.text = data.rank
+
+	path = "RankSprite"
+	local ribbonImageObj = selfTrans:GetGameObjectAtPath(path)
+	ribbonImageObj:SetActive(data.showRibbon)
+	if data.showRibbon then
+		CsBridge.IconData.SetIconByName(ribbonImageObj, data.ribbonIcon)
+	end
+
+	path = "PlayerBase"
+	local playerRoot = selfTrans:Find(path)
+	BindPlayerBaseInfoValue(playerRoot,data.playerInfo)
+end
+
+function DoExit()
+	playerGrid = nil
+	ownItemTrans = nil
+	titleTxt = nil
+	switchBtnTitleTxt = nil
+
+	cachedViewData = nil
+end

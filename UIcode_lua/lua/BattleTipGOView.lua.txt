@@ -1,0 +1,23 @@
+function DoInit()
+    self.Shadow=1
+end
+
+function IsSetAnchor()
+    return true
+end
+
+function OnCloseBtnClick(sender)
+    DoClose()
+end
+
+function OnMaskClick(sender)
+    DoClose()
+end
+
+function DoClose()
+    self:HideView("BattleTipGOView")
+end
+
+function ResumeGame()
+	self:SendCommand("ResumeGame")
+end

@@ -1,0 +1,139 @@
+
+local cache=CsBridge.objectCache
+
+
+local equipArr={}
+local equipGrid
+
+local effectArr
+
+local isInit = false
+
+local hasItemSlot = false
+local cnt = 0
+
+local function OnCloseHeroShowView(obj)
+	self:HideView(self.gameObject.name)
+end
+
+function DoInit()
+	self.Anim = 0
+	MsgCenter:Subscribe(Notify_CloseHeroShowView,OnCloseHeroShowView)
+end 
+
+function DoExit()
+	MsgCenter:Unsubscribe(Notify_CloseHeroShowView,OnCloseHeroShowView)
+	cache = nil
+	equipArr = nil
+	equipGrid = nil
+
+	effectArr = nil
+
+	isInit = nil
+	hasItemSlot = nil
+	cnt = nil
+end
+
+function InitUI()
+	equipGrid = self:GetComponentAtPath("Bottom/EquipGrid",CLS_UI_ITEM_GRID)
+
+	effectArr = {}
+	effectArr.spines = {}
+	effectArr.tweener = {}
+	local effect = self:GetComponentAtPath("Effect",CLS_RECTTRANSFORM)
+	for i = 0, effect.childCount-1 do
+		table.insert(effectArr.spines,effect:GetChild(i))
+	end
+end
+
+function SetParamDataList(objs)
+	local data = objs[0]
+	hasItemSlot = false
+	cnt = 0
+	self:SendCommand("InitData", data)
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+	end 
+end 
+
+function OnClose()
+	self:SendCommand("OnClose")
+end
+
+function OnNotification_RefreshHeroEquip(objs)
+	local equipArr = objs[0]
+	equipGrid:RefreshItemSlots(equipArr, self.gameObject, "HeroEquipItemSlot")
+	hasItemSlot = true
+end 
+
+function OnNotification_RefreshSingleEquip(objs)
+	local equip = objs[0]
+	equipGrid:SingleRefreshSlot(equip)
+end
+
+function OnNotification_RefreshHeroEquipEffect(objs)
+	local effects = objs[0]
+	if effects ~= nil and #effects ~= 0 then
+		CsBridge.CacheAssetsByGroup("IconUpdateSpine",function()
+			for i,pos in ipairs(effects) do
+				local obj = cache:CreateObject("IconUpdateSpine", true)
+				obj.transform:SetParent(effectArr.spines[pos],false)
+				CsBridge.UnityHelper.SetlocalScale(obj,0.5,0.5,1)
+				obj:GetComponent("SkeletonGraphic"):PlayAnimation("a_1",false,function()
+					local name = obj.name
+					CsBridge.GameObject.Destroy(obj)
+					cache:ClearGroup(name, true)
+				end)
+				if effectArr.tweener[pos] ~= nil and effectArr.tweener[pos]:IsPlaying() then
+					effectArr.tweener[pos]:DoKill(true)
+				end
+				local item = equipGrid.transform:GetChild(pos-1)
+				effectArr.tweener[pos] = CsBridge.TweenUtils.ScaleInAndOut(item)
+			end
+		end,"IconUpdateSpine")
+	end 
+end 
+
+function OnEquipGridHeroEquipItemSlotClick(obj)
+	self:SendCommand("OpenEquip",obj.m_index+1)
+end 
+
+function OnQuickUnWearBtnClick(sender)
+	self:SendCommand("QuickUnWear")
+end 
+
+function OnQuickWearBtnClick(sender)
+	self:SendCommand("QuickWear")
+end 
+
+function OnHeroEquipItemSlotBindValue(slot, data)
+	local trans = slot.transform
+	local redFlagObj = slot:GetGameObjectAtPath("RedFlag")
+	local defaultTxt = slot:GetComponentAtPath("Default/NameTxt",CLS_TEXT)
+	local defaultImgObj = slot:GetGameObjectAtPath("Default/FrameSprite")
+	local lockObj = slot:GetGameObjectAtPath("Default/Lock")
+	BindItemBaseValue(trans, data)
+	redFlagObj.gameObject:SetSelfActive(data.redFlag)
+	defaultTxt.text = data.defaultTxt
+	SetSpriteByModule(defaultImgObj,data.defaultImg)
+	lockObj:SetSelfActive(data.showLock)
+	SetFontColor(defaultTxt,data.defaultColor)
+end
+
+function CheckHasItemSlot()
+    if (hasItemSlot) then
+	    cnt=cnt+1
+		if (cnt > 1) then
+		    return true
+		else
+		    return false
+		end
+	else
+	    cnt = 0
+	    return false
+	end
+end

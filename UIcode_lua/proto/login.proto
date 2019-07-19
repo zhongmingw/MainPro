@@ -1,0 +1,131 @@
+package login;
+
+message GetLoginBroadcastReq 
+{
+    required int32 id = 1;
+}
+message GetLoginBroadcastResp 
+{
+    required LoginBroadcast  info = 1;
+}
+message LoginBroadcast  
+{
+    required string startTime = 1;
+	required string endTime =2;
+	required string content = 3;
+	required int32 type = 4;
+}
+
+message AnonLoginReq 
+{
+	required string uid = 1;
+	required string zone = 2;
+}
+message GlobalAnonLoginResp 
+{
+	required bool isAnonLogin = 1;
+    required string userName = 2;
+	required string pwd=3;
+	required string playerId = 4;
+	required string zone = 5;
+	required string url = 6;
+	required string chName = 7;
+	repeated ZoneStatus zones =8;
+	required bool firstLogin = 9;
+}
+message GlobalLoginResp  
+{
+	required string playerId = 1;
+	required string zone = 2;
+	required string url = 3;
+	required string chName = 4;
+	repeated ZoneStatus zones =5;
+}
+
+message AnonLoginResp
+{
+    required UserLoginResponse  resp = 1;
+    required string userName = 2;
+	required string pwd=3;
+	required bool isAnonLogin = 4;
+}
+message UserLoginResponse  
+{
+	repeated ZoneStatus zones =1;
+	required string playerId = 2;
+	required string ip = 3;
+}
+message ZoneStatus 
+{
+	required string nameId = 1;
+	required string chName = 2;
+	required int32  status = 3;
+	required int32  zoneId = 4;
+}
+message UserLoginRequest  
+{
+	required string userName = 1;
+	required string pwd = 2;
+	required string zone = 3;
+}
+message RegisterRequest   
+{
+	required string userName = 1;
+	required string pwd=2;
+}
+message BindUserReq 
+{
+	required string user = 1;
+	required string pwd=2;
+}
+message BindUserResp 
+{
+	required int32 status = 1;
+}
+message LoginZoneRequest  
+{
+	required string zone = 1;
+}
+message LoginZoneResponse   
+{
+	required bool isNeedNickName = 1;
+	required string url = 2;
+}
+message SetNicknameRequest     
+{
+	required string nickname = 1;
+}
+message SetNicknameResponse    
+{
+	required bool isNicknameUsed = 1;
+}
+message CheckPwdReq
+{
+	required string account = 1;
+	required string pwd = 2;
+}
+message CheckPwdResp
+{
+	required int32 result = 1;
+}
+
+message GetBindAccountReq
+{
+	required string userId = 1;
+}
+
+message GetBindAccountResp
+{
+	required string account = 1;
+	required string pwd = 2;
+}
+
+message JpPwdResp
+{
+	required string pwd = 1;
+} 
+
+message JpCheckPwdResp 
+{
+	required int32 status = 1;//0-yes,1-no
+}

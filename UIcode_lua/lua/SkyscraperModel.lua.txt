@@ -1,0 +1,174 @@
+require "LeaderboardUtils"
+
+local tbl
+local skyTowerItem
+local curId
+local levels
+local index
+local skyScraperKeyLimit
+local skyScraperAddCountItemId
+
+function DoInit()
+	tbl=ResTblContainer:GetTable(Skyscraper.tblName)
+   local infos = ResTblContainer:GetRowFromTbl(UIOpenBase.actorTbl,tostring(UI_OPEN_TYPE_TOWER),UIOpenBase.normalMaxCount,UIOpenBase.addCountItemId)
+   skyScraperKeyLimit=tonumber(infos[0])
+   skyScraperAddCountItemId=tonumber(infos[1])
+   MsgCenter:Subscribe(Notify_OnBattleEnd,OnBattleEndToSkyTower)
+end
+
+function InitProperties()
+
+end
+
+function OnBattleEndToSkyTower(battleInfo)
+	if battleInfo.battleEndInfo.type == UI_OPEN_TYPE_TOWER and (not battleInfo.isRecord or battleInfo.isRecord == nil) and battleInfo.battleEndInfo.result ~= 1 then
+        CheckAndShowConditionPackageView(self,GetConditionReqData(ConditionPackageType.SkyTower,curId))
+    end
+end
+
+function OnCommand_InitSkyScraperView(objs)
+    local req = {}
+    req.id=2
+	HttpRequest("initPBItem", "InitPBItemReq", "InitPBItemResp", req,
+		function (resp)
+			UpdateData()
+		end)
+end
+
+function UpdateKeyRemainsData()
+    skyTowerItem = appData:checkData("SkyTowerItem")
+	self:SendNotification("UpdateKeyRemains",skyTowerItem,skyScraperKeyLimit)
+end
+
+function UpdateData()
+	skyTowerItem = appData:checkData("SkyTowerItem")
+	curId = skyTowerItem.id+1
+	index=0
+    levels = {}
+	for i=-4,10 do
+		local tmpId = curId+i
+		local tmp = {}
+        if tbl:HasKey(tostring(tmpId)) then
+			tmp.id=tmpId
+			if tmpId<curId then
+				tmp.status=0
+				index=index+1
+			elseif tmpId==curId then
+				tmp.status=1
+			else
+				tmp.status=2
+			end
+			table.insert(levels,tmp)
+        end
+	end
+	local skyscraperUtils = require "SkyscraperUtils"
+	local openType = GetConstValue("SkyScraperSwitch")
+	local data = {
+		curId = curId,
+		levels = levels,
+		index = index,
+		skyTowerItem = skyTowerItem,
+		skyScraperKeyLimit = skyScraperKeyLimit,
+	}
+	local viewData = skyscraperUtils.CheckUpdateViewDataByOpenType(openType,data)
+	self:SendNotification("UpdateView",viewData)
+	self:SendNotification("UpdateKeyRemains",skyTowerItem,skyScraperKeyLimit)
+end
+
+function OnCommand_Details(objs)
+	local infos=ResTblContainer:GetRowFromTbl(Skyscraper.tblName,tostring(curId),Skyscraper.monsterStr,Skyscraper.passRewardStr,Skyscraper.fight)
+	local details={}
+	details.id=curId
+	details.monsterStr=infos[0]
+	details.passRewardStr=infos[1]
+	--details.tryRewardStr=infos[2]
+	details.fight=infos[2]
+	local view = CsBridge.OpenView("SkyscraperDetailsView","SkyscraperModel")
+	self:SendNotification("Details",details)
+end
+
+function OnCommand_ShowReward(objs)
+	local id = objs[0]
+	local passRewardStr = ResTblContainer:GetPropToStr(id,Skyscraper.passRewardStr,Skyscraper.tblName)
+	local rewardItems = GetRewardFromTbl(passRewardStr)
+	ShowPreviewView(self,rewardItems,"SkyscraperModel")
+end
+
+function OnCommand_Record(objs)
+	local req = {}
+	req.id=curId
+	HttpRequest("getPassSkyTowerPlayer", "GetPassSkyTowerPlayerReq", "GetPassSkyTowerPlayerResp", req,OnRecordShow)
+end
+
+function OnRecordShow(resp)
+	local hideOther = true
+	CsBridge.OpenView("SkyscraperRecordView","SkyscraperModel", hideOther)
+	self:SendNotification("Record",resp)
+end
+
+function OnCommand_RecordVedio(objs)
+	local req = {}
+	req.id=curId
+	req.index=objs[0]
+	HttpBattle("getPassSkyTowerVideo", "GetPassSkyTowerVideoReq", req,OnRecordVedio)
+end
+
+local function EnterBattle(battleInfo)
+	ShowBattleModule(battleInfo, self)
+end
+
+function OnRecordVedio(battleInfo)	
+	battleInfo.isRecord = true
+	EnterBattle(battleInfo)
+end
+
+function OnCommand_SkyscraperBattle(objs)
+	local req={}
+    req.formationPos=objs[0]
+    HttpBattle("trySkyTower", "TrySkyTowerReq", req,OnSkyscraperBattle)
+end
+
+function OnSkyscraperBattle(battleInfo)	
+	self:SendNotification("SkyscraperBattle")
+	EnterBattle(battleInfo)
+end
+
+function OnCommand_SkyscraperRank(objs)
+	OpenLeaderboard(self, PlayerLeaderboardType.Tower)
+end
+
+function OnCommand_OpenExchangeItemView(objs)
+	local cost = GetConstValue("skyScraperKeyPrice")
+	CsBridge.messageManager:PopMsgBox("",string.format(Language:getStr("Challenge_Count_Check"), cost),Language:getStr("local_cancel"),nil,Language:getStr("local_confirm"),
+	function ()
+		local req = {}
+		req.type = UI_OPEN_TYPE_TOWER
+		req.count = 1
+		HttpRequest("buyExtraChance", "BuyExtraChanceReq", "BuyExtraChanceResp", req,
+			function (resp)
+				if  resp.result==1 then
+					return
+				end
+				skyTowerItem = appData:checkData("SkyTowerItem")
+				self:SendNotification("UpdateKeyRemains",skyTowerItem,skyScraperKeyLimit)
+			end)
+	end)
+end
+
+function OnCommand_OpenExtraReward(objs)
+	CsBridge.CacheAssetsByModule(self.Module,function()
+		CsBridge.OpenView("SkyscraperRewardView","SkyscraperRewardModel",true)
+	end,"SkyscraperRewardView","SkyscraperRewardItemSlot")
+end
+
+function DoOnExit()
+    MsgCenter:Unsubscribe(Notify_OnBattleEnd,OnBattleEndToSkyTower)
+    self.Module = nil
+    tbl = nil
+	skyTowerItem = nil
+	curId = nil
+	levels = nil
+	index = nil
+	skyScraperKeyLimit = nil
+	skyScraperAddCountItemId = nil
+end

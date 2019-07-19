@@ -1,0 +1,229 @@
+require('Timer')
+require('DSGoodsItemSlot')
+
+---@type UnityEngine.TextMesh 活动倒计时
+local activityLastTimeTxt
+---@type UnityEngine.GameObject
+local bgImgObj
+---@type Client.Library.Localize
+local titleImgLocalize
+---@type UnityEngine.GameObject
+local overTipsObj
+
+---@type Client.Library.UIItemGrid 本轮抢购的item 的grid
+local threeGrid
+---@type UnityEngine.RectTransform grid的RectTransform
+local threeGridRectTransform
+---@type UnityEngine.UI.HorizontalLayoutGroup 水平布局
+local threeGridHLayoutGroup
+---@type UnityEngine.TextMesh 本轮抢购倒计时
+local thisTimeTxt
+---@type Client.Library.UIItemGrid 下轮抢购item 的grid
+local equipGrid
+---@type UnityEngine.TextMesh 下轮抢购时间显示
+local nextTimeTxt
+---@type UnityEngine.GameObject 下一轮抢购没有提示
+local nextTimeNoTipsObj
+---@type UnityEngine.GameObject 当前没有抢购提示
+local nothingObj
+---@type UnityEngine.GameObject 自己
+local selfGameObject
+---@type UnityEngine.TextMesh --规则
+local ruleTxt
+
+---@type table 界面数据
+local viewData
+---@type table 下一次抢购数据
+local nexTimeData
+---@type table 当前抢购数据
+local thisTimeData
+
+function DoInit()
+    self.Anim = 0
+    local selfTrans = self.transform
+    activityLastTimeTxt = self:GetComponentAtPath("Other/Banner/ActivityLastTimeTxt", CLS_TEXT)
+    overTipsObj = self:GetGameObjectAtPath("Other/Banner/Over")
+    bgImgObj = self:GetGameObjectAtPath("Other/Banner/BgImg")
+    titleImgLocalize = self:GetComponentAtPath("Other/Banner/TitleImg", CLS_LOCALIZE)
+    threeGrid = self:GetComponentAtPath("Other/ThisTime/ThreeGrid", CLS_UI_ITEM_GRID)
+    threeGridRectTransform = selfTrans:Find("Other/ThisTime/ThreeGrid")
+    threeGridHLayoutGroup = self:GetComponentAtPath("Other/ThisTime/ThreeGrid", CLS_HORIZONTAL_LAYOUT_GROUP)
+    thisTimeTxt = self:GetComponentAtPath("Other/ThisTime/ThisTimeTxt", CLS_TEXT)
+    equipGrid = self:GetComponentAtPath("Other/NextTime/EquipGrid", CLS_UI_ITEM_GRID)
+    nextTimeTxt = self:GetComponentAtPath("Other/NextTime/NextTimeTxt", CLS_TEXT)
+    nextTimeNoTipsObj = self:GetGameObjectAtPath("Other/NextTime/NextTimeNoTips")
+    nothingObj = self:GetGameObjectAtPath("Other/ThisTime/Nothing")
+    ruleTxt = self:GetComponentAtPath("Other/Rule/bgImg/ScrollRect/Viewport/RuleTxt", CLS_TEXT)--规则
+    selfGameObject = self.gameObject
+end
+
+function OnAnimationFinished()
+
+end
+
+---设置活动剩余时间
+local function SetActivityRestTime()
+    activityLastTimeTxt.text = viewData.restTime
+    if viewData.restTime ~= nil and viewData.restTime ~= "" then
+        overTipsObj:SetActive(true)
+    else
+        overTipsObj:SetActive(false)
+    end
+end
+
+---刷新下次抢购的东西
+local function RefreshNextItem()
+    if nexTimeData then
+        nextTimeTxt.text = string.format(Language:getStr("FlashSaleNextTimeTipsTxt"), nexTimeData.showTimeTxt)
+        equipGrid:RefreshItemSlots(nexTimeData.showData, self.gameObject, "ItemSlot")
+        nextTimeNoTipsObj:SetActive(#nexTimeData.showData <= 0)
+    end
+end
+
+---刷新本轮抢购的倒计时
+local function RefreshThisTimeCountDown()
+    if thisTimeData then
+        local result = ""
+        if thisTimeData.isStartSale then
+            result = string.format(Language:getStr("FlashSaleThisTimeTipsTxt"), thisTimeData.showTimeTxt)
+        else
+            result = string.format(Language:getStr("FlashSaleThisTimeNotStartTipsTxt"), thisTimeData.showTimeTxt)
+        end
+        thisTimeTxt.text = result
+    end
+end
+
+---刷新当前抢购的item
+local function RefreshThisTimeItems()
+    if thisTimeData then
+        if #thisTimeData.showData == 3 then
+            local small = 1
+            threeGridRectTransform.localScale = CsBridge.Vector3ForLua.CreateVector3ForLua(small, small, small):ToVector3()
+            threeGridHLayoutGroup.spacing = -4
+        else
+            local big = 1.2
+            threeGridRectTransform.localScale = CsBridge.Vector3ForLua.CreateVector3ForLua(big, big, big):ToVector3()
+            threeGridHLayoutGroup.spacing = -68
+        end
+        nothingObj:SetActive(#thisTimeData.showData == 0)
+        threeGrid:RefreshItemSlots(thisTimeData.showData, selfGameObject, "DSGoodsItemSlot")
+    end
+end
+
+---显示下一轮抢购提示语
+local function RefreshNextTimeCountDown()
+    if nexTimeData then
+        nextTimeTxt.text = string.format(Language:getStr("FlashSaleNextTimeTipsTxt"), nexTimeData.showTimeTxt)
+        nextTimeNoTipsObj:SetActive(#nexTimeData.showData <= 0)
+    end
+end
+
+---刷新整体活动倒计时
+local function RefreshCountdown(countdownData)
+    if not viewData then
+        return
+    end
+    local currentActivityID = viewData.id
+    for activityID, restTime in pairs(countdownData) do
+        if activityID == currentActivityID then
+            activityLastTimeTxt.text = restTime
+            if restTime ~= nil and restTime ~= "" then
+                overTipsObj:SetActive(true)
+            else
+                overTipsObj:SetActive(false)
+            end
+            return
+        end
+    end
+end
+
+---刷新界面显示
+local function RefreshView(objs)
+    if selfGameObject.activeInHierarchy then
+        viewData = objs[0]
+        if viewData then
+            nexTimeData = viewData.nexTimeData
+            thisTimeData = viewData.thisTimeData
+            ruleTxt.text = viewData.desc--规则
+            CsBridge.IconData.SetRawImageByName(bgImgObj, viewData.image)
+            if viewData.image ~= nil and viewData.image ~= "" then
+                titleImgLocalize.gameObject:SetActive(true)
+                SetServerActivityArtFontByImage(titleImgLocalize, viewData.image)
+            else
+                titleImgLocalize.gameObject:SetActive(false)
+            end
+            SetActivityRestTime()
+            RefreshNextTimeCountDown()
+            RefreshNextItem()
+            RefreshThisTimeCountDown()
+            RefreshThisTimeItems()
+        end
+    end
+end
+
+---刷新界面
+function OnNotification_RefreshActivityView(objs)
+    RefreshView(objs)
+end
+
+---通知刷新整体活动倒计时
+function OnNotification_RefreshCountdown(objs)
+    local data = objs[0]
+    RefreshCountdown(data)
+end
+
+---刷新界面中其他的倒计时
+function OnNotification_RefreshSubCountdown(objs)
+    thisTimeData = objs[0]
+    RefreshThisTimeCountDown()
+end
+
+---关闭界面
+function OnNotification_CloseActivityView(obj)
+    self:HideView(selfGameObject.name)
+end
+
+---装备点击
+function OnEquipGridItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("OpenTipView", data)
+end
+
+---点击购买
+function OnThreeGridBuyBtnClick(obj)
+    local currentItemData = obj.m_data
+    self:SendCommand("BuyShopItemWithDealView", currentItemData)
+end
+
+---本轮抢购的item点击
+function OnThreeGridItemSlotClick(obj)
+    local data = obj.m_data.goods
+    self:SendCommand("OpenTipView", data)
+end
+
+function OnClose()
+    equipGrid:ClearItems()
+    equipGrid:RefreshItemSlots({}, self.gameObject, "ItemSlot")
+    threeGrid:ClearItems()
+    threeGrid:RefreshItemSlots({}, selfGameObject, "DSGoodsItemSlot")
+end
+
+function DoExit()
+    activityLastTimeTxt = nil
+    bgImgObj = nil
+    titleImgLocalize = nil
+    overTipsObj = nil
+    threeGrid = nil
+    threeGridRectTransform = nil
+    threeGridHLayoutGroup = nil
+    thisTimeTxt = nil
+    equipGrid = nil
+    nextTimeTxt = nil
+    nextTimeNoTipsObj = nil
+    nothingObj = nil
+    selfGameObject = nil
+    viewData = nil
+    nexTimeData = nil
+    thisTimeData = nil
+    ruleTxt = nil--规则
+end

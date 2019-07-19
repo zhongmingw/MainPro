@@ -1,0 +1,336 @@
+import "stage.proto";
+package playerData;
+
+message PlayerInfo 
+{
+	required string userId = 1;
+	required string zone = 2;
+	required string  nick = 3;
+	required int32  level = 4;
+	required int64  payGem = 5;
+	required int64  rewardGem = 6;
+	required int64  coin = 7;
+	required int32  vip = 8;
+	// required float   money = 9;
+	required string  headTexure = 10;
+	required int64  playerExp = 11;
+	required int64  vipExp = 12;
+    required int64 soulCoin = 13;//战魂
+    required int64 stepStoneCoin = 14;//进阶石
+    required int64 exchangeCoin = 15;//兑换点
+	required int64 friendCoin = 16;//友情点
+	required int32  icon = 17;
+	required string  union = 18;
+	repeated int32 avaliableIcons =19;
+	required int64 lotteryDust=20;//幸运粉尘
+	required int64 lastOnlineTime=21;
+	required bool isOnline=22;
+	required int64 unionCoin=23;//公会币
+	required BanSay banSay=24;
+	required int64 runeDust=25;//符文残渣
+	required int64 strength=26;//体力
+	required int64 heroSoul = 27; //英魂
+	required int64 feather = 28; //羽毛
+	required int32 nickChangedTimes = 29; //昵称修改次数
+    required BoxItem box = 30; //炫彩头像
+	// required int64 ghostBadge = 31; //灵徽
+	required int64 activityPoint = 32;
+	required int64 FTArenaCoin = 33;
+	required int64 FTArenaScore = 34;
+    required int64 petSoulEssence = 35;//宠物升级道具
+    required int64 petSoulStone = 36;//宠物进阶道具
+    required int64 jewelDust = 37;//晶石粉末
+	required int64 jewelExchangeCoin = 38;
+	required int64 zillionaire = 39;//大富翁精力
+	required int32 timeZone = 40;//服务器时区
+}
+
+message PidMapItem
+{
+    required int32 payId = 1;
+    required string pid = 2;
+}
+
+message BanSay
+{
+	required string beginBanSay = 1;
+	required string endBanSay = 2;
+	required string remark = 3;
+}
+message ChangeIconReq 
+{
+	required int32 icon = 1;
+	required int32 box = 2;
+}
+message ChangeIconResp 
+{
+	required int32 result = 1;
+}
+message StageItem  
+{
+	required int32 difficulty =1;
+	required int32 chapter =2;
+	required int32 stage =3;
+	required int64 onHookTime =4;
+}
+message OnHookStageItem   
+{
+	required int32 difficulty =1;
+	required int32 chapter =2;
+	required int32 stage =3;
+	required int64 goldStartTime =4;  //金币挂机起始时间
+	required int64 resourceStartTime =5;
+	required int64 otherStartTime=6;
+    repeated stage.RewardItem preGoldRewards = 7;//之前关卡未领取的挂机金币奖励
+    repeated stage.RewardItem preOtherRewards = 8;//之前关卡未领取的挂机其他奖励
+	required int64 lastSwitchTime=9; //上次切换关卡时间
+}
+message HeroItem 
+{
+	required int32 uid = 1;
+	required int32 heroId = 2;
+	required int32 grade = 3;
+    required int32 level = 4;
+    required int32 weaponId = 5;
+    required int32 hatId = 6;
+    required int32 clothId = 7;
+	required int32 shoesId = 8;
+	required int32 duty = 11; //1 -pve; 2 -pvp; 3 -hook; 11 -挂机任务; 12-锁定
+	required int32 elementLevel = 12;
+	required int32 elementExp = 13;
+    repeated int32 rune = 14;
+    required int32 relicId = 15;
+	required int32 distillationStar = 16;
+	required int32 distillationLevel = 17;
+	required int32 breakLevel = 20;
+	repeated int32 jewelIds = 21;
+	required bool isEmblem = 22;//是否被做成纹章
+	required int32 emblemOwnerUid = 23;//纹章佩戴者
+	required int32 haveEmblemUid = 24;//持有的纹章
+}
+
+message CallHeroInfo  
+{
+	required int64 lastNormalCallTime = 1;
+	required int64 lastAdvanceCallTime = 2;
+	required int32 normalCalledTimes = 3;
+	required int32 advanceCalledTimes = 4;
+	required int32 dailySingleCalledChance = 5;
+	required int32 dailyMultiCalledChance = 6;
+	required int64 lastDailyLimitRefreshTime = 7;
+}
+
+message PackItem  
+{
+	required int32  itemId = 1;
+	required int32  count = 2;
+	required int64  gainTime = 3;
+	required int32  uid = 4;
+}
+
+message PlayerBaseInfo
+{
+	required string userId = 1;
+	required string name = 2;
+	required int32 icon = 3;
+	required int32 level = 4;
+	required string zone = 5;
+	required string union = 6;
+	required int32 vip = 7;
+	required bool haveGroup = 8;
+	required BoxItem box = 9; //炫彩头像
+}
+
+message GetCampaignRankReq 
+{
+	required int32 count = 1;
+}
+
+message GetCampaignRankResp 
+{
+	repeated CampaignRankInfoItem rankInfos = 1;
+	required CampaignRankInfoItem selfRankInfo =2;
+}
+
+message CampaignRankInfoItem
+{
+    required playerData.PlayerBaseInfo playerBaseInfo=1;
+	required int32 score =2;
+	required int32 rank =3;
+}
+
+message ZoneInfo
+{
+	required string nameId = 1;
+	required int32 registeredCnt = 2;
+	required int32 status = 3;
+	required string zoneTag = 4;
+}
+
+message ZoneWithPlayerInfo
+{
+	required ZoneInfo zoneInfo = 1;
+	required PlayerBaseInfo playerBaseInfo = 2;
+}
+
+message ChangeNickReq 
+{
+	required string nick = 1;//new name
+}
+
+message ChangeNickResp 
+{
+	required int32 result = 1;
+}
+
+message LockHeroReq
+{
+	required int32 heroUid = 1;
+}
+
+message LockHeroResp
+{
+	required int32 status = 1;
+}
+
+message UnlockHeroReq
+{
+	required int32 heroUid = 1;
+}
+
+message UnlockHeroResp
+{
+	required int32 status = 1;
+}
+
+message BuyItemReq
+{
+	required int32 id = 1;
+	required int32 count = 2;
+}
+
+message BuyItemResp
+{
+	required int32 result = 1;
+}
+
+message LastJoinTimeInfo
+{
+	required int64 time = 1;
+}
+
+message RecordOnlineReq
+{
+	required int32 type = 1;
+}
+
+message RecordOnlineResp
+{
+	required int32 result = 1;
+}
+
+message ElementCampInfo
+{
+    required int32 id = 1;
+    required int32 level = 2;
+    required int32 exp = 3;
+	repeated int32 collectedHeros = 4;
+}
+
+message HeroCrystalInfo
+{
+    required int32 heroId = 1;
+    required int32 level = 2;
+    required int32 exp = 3;
+}
+
+
+message FriendCampaign
+{
+	repeated FriendCampaignInfo infos =1;
+}
+
+message FriendCampaignInfo 
+{
+	required PlayerBaseInfo playerBaseInfo =1;
+	required int32 difficulty =2;
+	required int32 chapter =3;
+	required int32 stage =4;
+}
+
+message CheckNickNameReq
+{
+	required int32 id = 1;
+}
+
+message CheckNickNameResp
+{
+	required string nick = 1;
+}
+
+message GetBannerReq
+{
+	required int32 useless = 1;
+}
+
+message GetBannerResp
+{
+	repeated Record records = 1;
+}
+
+message Record
+{
+	required int32 id = 1;
+	required string content = 2;
+	required int64 createdTime = 3;
+}
+
+
+message RebornHeroReq
+{
+	required int32 uid = 1;
+	required bool reborn = 2;//false-预览
+}
+    
+message RebornHeroResp
+{
+    repeated stage.RewardItem rewardItems = 1;
+}
+
+message BoxItem
+{    
+	required int32 uid = 1;   
+	required int32 id = 2;      
+	required int64 expireTime = 3;
+}
+
+message GmGetBoxReq 
+{
+	required int32 id = 1; 
+}
+
+message GmGetBoxResp
+{
+	required int32 result = 1;
+}
+
+message ScanOptionalTreasureReq
+{
+	required int32 uid = 1;
+}
+
+message ScanOptionalTreasureResp
+{
+	repeated stage.RewardItem rewardItems = 1;
+}
+
+message OpenOptionalTreasureReq
+{
+	required int32 uid = 1;
+	required stage.RewardItem rewardItem = 2;
+}
+
+message OpenOptionalTreasureResp
+{
+	required int32 status = 1;
+}

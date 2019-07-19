@@ -1,0 +1,95 @@
+--合并多次奖励
+function MergeRewards(data, ignoredType)
+    if not data then 
+        return nil
+    end
+    local length = #data
+    if length == 1 then
+        return data
+    end
+
+    ignoredType = ignoredType or ItemTypeEnum.Hero
+    local mergedData = {}
+    for i = 1, length do
+        local curItem = data[i]
+        local itemType = curItem.typeId
+        local itemId = curItem.id
+        local mergedCount = curItem.count
+
+        if not curItem.merged 
+            and itemType ~= ignoredType
+        then
+            for j = i + 1, length do
+                local otherItem = data[j]
+                if not otherItem.merged
+                    and otherItem.typeId == itemType
+                    and otherItem.id == itemId
+                then
+                    mergedCount = mergedCount + otherItem.count
+                    otherItem.merged = true
+                end
+            end
+
+            local newItem = table.copy(curItem)
+            newItem.count = mergedCount
+            table.insert(mergedData, newItem)
+        elseif itemType == ignoredType then
+            table.insert(mergedData, curItem)
+        end
+    end
+
+    for k, item in pairs(data) do
+        item.merged = nil
+    end
+
+    return mergedData
+end
+
+function MergeSingleRewards(reward, rewards)
+    if rewards == nil then
+        return
+    end
+    local length = #rewards
+    local rewardItems = {}
+    if length>1 then
+        for i=1,length do
+            MergeSingleReward(reward,rewards[i],rewardItems)
+        end
+        local target = rewardItems[2]
+        table.remove(rewardItems, 2)
+        table.insert(rewardItems, target)
+    else
+        rewardItems = rewards
+    end
+    return rewardItems
+end
+
+function MergeReward(reward,rewardItems)
+    local mergeable = false
+    for i,val in ipairs(rewardItems) do
+        if reward.typeId ~= 3 and reward.typeId==val.typeId and reward.id==val.id then
+            val.count=val.count+reward.count
+            mergeable=true
+            break
+        end
+    end
+    if not mergeable then
+        table.insert(rewardItems, reward)
+    end
+end
+
+function MergeSingleReward(target,reward,rewardItems)
+    local mergeable = false
+    for i,val in ipairs(rewardItems) do
+        if reward.typeId==val.typeId and reward.id==val.id then
+            if target.typeId==val.typeId and target.id==val.id then
+                val.count=val.count+reward.count
+                mergeable=true
+                break
+            end
+        end
+    end
+    if not mergeable then
+        table.insert(rewardItems, reward)
+    end
+end

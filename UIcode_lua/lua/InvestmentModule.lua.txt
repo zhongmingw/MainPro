@@ -1,0 +1,21 @@
+--[[
+    版权所有:archly
+	file: InvestmentModule.lua
+	author: zhangyue
+]]
+
+function DoInit()
+    
+end
+
+function AssetNames(objs)
+    local arr = {"InvestmentView", "ServerActivityItemSlot", "InvestmentItemSlot", "ItemSlot"}
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    self:OpenView("InvestmentView", "InvestmentModel")
+    if(onFinished ~= nil) then
+        onFinished()
+    end
+end

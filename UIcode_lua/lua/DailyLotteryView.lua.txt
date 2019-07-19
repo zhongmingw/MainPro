@@ -1,0 +1,509 @@
+local yield_return = require('cs_coroutine').yield_return
+local util = require 'util'
+
+---@type Client.Library.ButtonArchly  抽取和购买按钮
+local randomOrBuyBtn
+---@type UnityEngine.TextMesh 按钮上的显示文字
+local randomOrBuyBtnText
+
+---@type UnityEngine.TextMesh 原价
+local originalPriceTxt
+---@type UnityEngine.TextMesh 现价
+local presentPriceTxt
+---@type UnityEngine.TextMesh 规则
+local ruleTxt
+
+---@type UnityEngine.Transform 向左的按钮
+local goLeftBtnTrans
+---@type UnityEngine.Transform 向右的按钮
+local goRightBtnTrans
+
+---@type UnityEngine.GameObject 左侧宝箱
+local leftBoxObj
+---@type UnityEngine.GameObject 中间宝箱
+local centerBoxObj
+---@type UnityEngine.GameObject 右侧宝箱
+local rightBoxObj
+
+---@type UnityEngine.Vector3 左侧宝箱的位置
+local leftLocalPosition
+---@type UnityEngine.Vector3 中间宝箱的位置
+local centerLocalPosition
+---@type UnityEngine.Vector3 右侧宝箱的位置
+local rightLocalPosition
+
+---@type UnityEngine.GameObject 左侧的光
+local leftLightObj
+---@type UnityEngine.GameObject 中间的光
+local centerLightObj
+---@type UnityEngine.GameObject 右侧的光
+local rightLightObj
+
+---@type Client.Library.UIItemGrid 奖励
+local itemGrid
+---@type UnityEngine.UI.HorizontalLayoutGroup 自动排序组件
+local itemGridHLayout
+
+---@type UnityEngine.GameObject 遮罩
+local colliderBoxObj
+---@type UnityEngine.Transform 箱子的父节点
+local boxParentTrans
+---@type UnityEngine.GameObject 展示的spine父节点
+local showSpineObj
+---@type UnityEngine.GameObject 打开按钮
+local openBtnObj
+
+---@type UnityEngine.Transform 当前左边那一个
+local curLeftTransform
+---@type UnityEngine.Transform 当前中间那一个
+local curCenterTransform
+---@type UnityEngine.Transform 当前右侧那一个
+local curRightTransform
+
+---@type UnityEngine.RectTransform 当前左边那一个
+local curLeftRectTransform
+---@type UnityEngine.RectTransform 当前中间那一个
+local curCenterRectTransform
+---@type UnityEngine.RectTransform 当前右侧那一个
+local curRightRectTransform
+
+---@type UnityEngine.Vector2 中间那一个的大小
+local centerSizeVector
+---@type UnityEngine.Vector2 左边那一个的大小
+local leftSizeVector
+---@type UnityEngine.Vector2 右边那一个的大小
+local rightSizeVector
+
+---@type table 服务器返回的每日随机礼包数据
+local randomPackageData
+
+---@type number 当前下表
+local curIndex = 1
+
+---@type table 位置对应id
+local posIdArr = {
+    center = 1,
+    right = 2,
+    left = 3
+}
+
+--- 当前显示spine
+local curSpine
+
+---移动曲线
+local ease = 1
+---已经移动的次数
+local movedTimes = 0
+---最大移动次数
+local maxMoveTimes = 6
+---剩余次数
+local lastMoveTimes
+---是否是最后的移动
+local isLastMove = false
+---第二轮轮速需要转动的次数
+local secoendTimes = 6
+---@return number 移动时间基数
+local moveDurTimes = 0.2
+
+function DoInit()
+    self.Anim = 1
+    self.Shadow = 1
+
+    ---@type UnityEngine.Transform
+    local selfTrans = self.transform
+
+    randomOrBuyBtn = self:GetComponentAtPath("Btns/RandomBtn", CLS_BUTTON_ARCHLY)
+    randomOrBuyBtnText = self:GetComponentAtPath("Btns/RandomBtn/TitleTxt", CLS_TEXT)
+
+    originalPriceTxt = self:GetComponentAtPath("Other/Price/OriginalPrice/OriginalPriceTxt", CLS_TEXT)
+    presentPriceTxt = self:GetComponentAtPath("Other/Price/PresentPrice/PresentPriceTxt", CLS_TEXT)
+
+    ruleTxt = self:GetComponentAtPath("Other/RuleTxt", CLS_TEXT)
+
+    goLeftBtnTrans = selfTrans:Find("Btns/GoLeftBtn")
+    goRightBtnTrans = selfTrans:Find("Btns/GoRightBtn")
+
+    leftBoxObj = self:GetGameObjectAtPath("Other/Boxs/LeftBox")
+    centerBoxObj = self:GetGameObjectAtPath("Other/Boxs/CenterBox")
+    rightBoxObj = self:GetGameObjectAtPath("Other/Boxs/RightBox")
+
+    boxParentTrans = selfTrans:Find("Other/Boxs")
+
+    leftLightObj = self:GetGameObjectAtPath("Other/Lights/LeftLight")
+    centerLightObj = self:GetGameObjectAtPath("Other/Lights/CenterLight")
+    rightLightObj = self:GetGameObjectAtPath("Other/Lights/RightLight")
+
+    itemGrid = self:GetComponentAtPath("Other/Equips", CLS_UI_ITEM_GRID)
+    itemGridHLayout = self:GetComponentAtPath("Other/Equips", CLS_HORIZONTAL_LAYOUT_GROUP)
+
+    colliderBoxObj = self:GetGameObjectAtPath("ColliderBox")
+    showSpineObj = self:GetGameObjectAtPath("Other/ShowSpine")
+    openBtnObj = self:GetGameObjectAtPath("Other/OpenBtn")
+
+    curLeftTransform = leftBoxObj.transform
+    curCenterTransform = centerBoxObj.transform
+    curRightTransform = rightBoxObj.transform
+
+    curLeftRectTransform = curLeftTransform
+    curCenterRectTransform = curCenterTransform
+    curRightRectTransform = curRightTransform
+
+    leftLocalPosition = curLeftTransform.localPosition
+    centerLocalPosition = curCenterTransform.localPosition
+    rightLocalPosition = curRightTransform.localPosition
+
+    centerSizeVector = curCenterRectTransform.sizeDelta
+    leftSizeVector = curLeftRectTransform.sizeDelta
+    rightSizeVector = curRightRectTransform.sizeDelta
+
+end
+
+function OnAnimationFinished()
+    local offset = 10
+    local dur = 0.5
+    local t1 = CsBridge.TweenUtils.MoveLeftRight(goRightBtnTrans, goRightBtnTrans.localPosition.x - offset, dur)
+    t1:DoPlay()
+    local t2 = CsBridge.TweenUtils.MoveLeftRight(goLeftBtnTrans, goLeftBtnTrans.localPosition.x + offset, dur)
+    t2:DoPlay()
+end
+
+---收到服务器的界面数据
+function OnNotification_InitDailyLotteryView(objs)
+    randomPackageData = objs[0]
+    RefreshDailyLotteryView()
+end
+
+---随机抽取
+function OnNotification_RandomLottery(objs)
+    randomPackageData = objs[0]
+    itemGrid.gameObject:SetActive(false)
+    originalPriceTxt.gameObject:SetActive(false)
+    presentPriceTxt.gameObject:SetActive(false)
+    RandomBoxAnimation()
+    SetLeftRightBtnDis()
+end
+
+---购买
+function OnNotification_BuyLotteryGiftBag(objs)
+    randomPackageData = objs[0]
+    local reward = objs[1]
+    curSpine:PlayAnimation("kai", false, nil, function()
+        local confirmCbk = function()
+            curSpine:PlayAnimation("kai_loop", true)
+        end
+        ShowRewardReceivedTip(self, reward, confirmCbk)
+    end)
+    SetRandomState()
+end
+
+---刷新界面
+function RefreshDailyLotteryView()
+    SetRandomState()
+    openBtnObj:SetActive(randomPackageData.showOpenBtn)
+    if randomPackageData.autoMove then
+        InitAutoMove(randomPackageData.gotId)
+        SetLeftRightBtnDis()
+    else
+        RefreshRewardList()
+    end
+end
+
+---初始化移动
+function InitAutoMove(id)
+    if id == posIdArr.center then
+        RefreshRewardList()
+        ShowResultSpine(true)
+    elseif id == posIdArr.left then
+        GoRight(function()
+            ShowResultSpine(true)
+            RefreshRewardList()
+        end, 1)
+    else
+        GoLeft(function()
+            ShowResultSpine(true)
+            RefreshRewardList()
+        end, 1)
+    end
+end
+
+---显示结果类型的spine
+function ShowResultSpine(loop)
+    curCenterTransform.gameObject:SetActive(false)
+    CsBridge.CacheAssetsByModule( self.Module,  function()
+        local spineGo = CsBridge.objectCache:CreateObject(randomPackageData.spineAssetName, true, showSpineObj.transform)
+        curSpine = spineGo:GetComponent(CLS_SKELETONGRAPHIC)
+        curSpine:PlayAnimation(randomPackageData.spineName, loop, nil, nil)
+    end, randomPackageData.spineAssetName)
+end
+
+---刷新收益显示
+function RefreshRewardList()
+    if #randomPackageData.rewards[curIndex].packageReward == 2 then
+        itemGridHLayout.spacing = -200
+    else
+        itemGridHLayout.spacing = 25
+    end
+    itemGrid:RefreshItemSlots(randomPackageData.rewards[curIndex].packageReward, self.gameObject, "ItemSlot")
+    originalPriceTxt.text = Language:getStr("CardView_name02Txt_6") .. GetShowPrice(randomPackageData.rewards[curIndex].currencySign, randomPackageData.rewards[curIndex].packagePrice)
+    presentPriceTxt.text = Language:getStr("CardView_name03Txt_5") .. GetShowPrice(randomPackageData.rewards[curIndex].currencySign, randomPackageData.rewards[curIndex].price)
+end
+
+---设置不可左右点击滑动
+function SetLeftRightBtnDis()
+    goLeftBtnTrans.gameObject:SetActive(false)
+    goRightBtnTrans.gameObject:SetActive(false)
+end
+
+---箱子随机抽取动画
+function RandomBoxAnimation()
+    colliderBoxObj.gameObject:SetActive(true)
+    lastMoveTimes = randomPackageData.restMoveTimes
+    movedTimes = 1
+
+    if lastMoveTimes == 3 then
+        maxMoveTimes = 10
+        secoendTimes = 7
+    elseif lastMoveTimes == 2 then
+        maxMoveTimes = 9
+        secoendTimes = 6
+    else
+        maxMoveTimes = 11
+        secoendTimes = 8
+    end
+
+    NextLeftMove(function()
+        isLastMove = true
+        MoveBoxToRightPos()
+    end)
+end
+
+---下一步向左移动
+function NextLeftMove(callback)
+    if movedTimes > maxMoveTimes then
+        if callback then
+            callback()
+        end
+        return
+    end
+    GoLeft(function()
+        movedTimes = movedTimes + 1
+        NextLeftMove(callback)
+    end, GetNexLeftMoveDurTimes())
+end
+
+---计算出下一步向左时间的倍数
+function GetNexLeftMoveDurTimes()
+    local orgin = 1.1
+    local times = 0.025
+    local first = 3
+    if movedTimes <= first then
+        return orgin - times * movedTimes
+    elseif movedTimes <= secoendTimes then
+        return orgin - times * first
+    else
+        if isLastMove and maxMoveTimes - movedTimes < 2 then
+            return orgin - times * first + times * 40 * (movedTimes - secoendTimes)
+        else
+            return orgin - times * first + times * 20 * (movedTimes - secoendTimes)
+        end
+    end
+end
+
+---移动箱子到正确的位置上
+function MoveBoxToRightPos()
+    maxMoveTimes = maxMoveTimes + 2
+    NextLeftMove(function()
+        ShowCanBuyState()
+    end)
+end
+
+---显示可购买状态
+function ShowCanBuyState()
+    openBtnObj:SetActive(true)
+    CloseAllLight()
+    ShowCanBuy()
+end
+
+---关闭所有的光
+function CloseAllLight()
+    leftLightObj:SetActive(false)
+    centerLightObj:SetActive(false)
+    rightLightObj:SetActive(false)
+end
+
+---显示可购买
+function ShowCanBuy()
+    SetRandomState()
+    itemGrid.gameObject:SetActive(true)
+    originalPriceTxt.gameObject:SetActive(true)
+    presentPriceTxt.gameObject:SetActive(true)
+    RefreshRewardList()
+    curCenterTransform.gameObject:SetActive(false)
+    ShowResultSpine(true)
+end
+
+---设置按钮状态和显示文字
+function SetRandomState()
+    randomOrBuyBtnText.text = randomPackageData.btnText
+    randomOrBuyBtn.Gray = randomPackageData.btnGray
+end
+
+---随机按钮点击事件
+function OnRandomBtnClick()
+    self:SendCommand("ClickRandomBuy", curIndex)
+end
+
+---开箱按钮点击事件
+function OnOpenBtnClick()
+    self:SendCommand("ClickOpenBox")
+end
+
+---向左点击
+function OnGoLeftBtnClick()
+    GoLeft(function()
+        RefreshRewardList()
+    end, 1)
+end
+
+---向左移动
+function GoLeft(callback, dur)
+    colliderBoxObj:SetActive(true)
+    curCenterTransform:SetAsLastSibling()
+    curLeftTransform:SetAsFirstSibling()
+    local duration = moveDurTimes * dur
+    local t1 = CsBridge.TweenUtils.MoveTo(curCenterTransform, leftLocalPosition.x, leftLocalPosition.y, duration, nil, ease)
+    local t2 = CsBridge.TweenUtils.MoveTo(curLeftTransform, rightLocalPosition.x, rightLocalPosition.y, duration, nil, ease)
+    local t3 = CsBridge.TweenUtils.MoveTo(curRightTransform, centerLocalPosition.x, centerLocalPosition.y, duration, nil, ease)
+    local t4 = CsBridge.TweenUtils.SizeDeltaTo(curCenterRectTransform, leftSizeVector.x, leftSizeVector.y, duration, nil)
+    local t5 = CsBridge.TweenUtils.SizeDeltaTo(curLeftRectTransform, rightSizeVector.x, rightSizeVector.y, duration, nil)
+    local t6 = CsBridge.TweenUtils.SizeDeltaTo(curRightRectTransform, centerSizeVector.x, centerSizeVector.y, duration, function()
+        curLeftRectTransform = boxParentTrans:GetChild(2):GetComponent(CLS_RECTTRANSFORM)
+        curLeftTransform = curLeftRectTransform.transform
+
+        curCenterRectTransform = boxParentTrans:GetChild(1):GetComponent(CLS_RECTTRANSFORM)
+        curCenterTransform = curCenterRectTransform.transform
+
+        curRightRectTransform = boxParentTrans:GetChild(0):GetComponent(CLS_RECTTRANSFORM)
+        curRightTransform = curRightRectTransform.transform
+        colliderBoxObj:SetActive(false)
+        curIndex = curIndex + 1
+        if curIndex >= 4 then
+            curIndex = 1
+        end
+        if callback then
+            callback()
+        end
+    end)
+
+    t1:DoPlay()
+    t2:DoPlay()
+    t3:DoPlay()
+    t4:DoPlay()
+    t5:DoPlay()
+    t6:DoPlay()
+end
+
+---向右点击
+function OnGoRightBtnClick()
+    GoRight(function()
+        RefreshRewardList()
+    end, 1)
+end
+
+function GoRight(callback, dur)
+    colliderBoxObj:SetActive(true)
+    curRightTransform:SetAsFirstSibling()
+    curCenterTransform:SetAsLastSibling()
+    local duration = moveDurTimes * dur
+    local t1 = CsBridge.TweenUtils.MoveTo(curCenterTransform, rightLocalPosition.x, rightLocalPosition.y, duration, nil, ease)
+    local t2 = CsBridge.TweenUtils.MoveTo(curRightTransform, leftLocalPosition.x, leftLocalPosition.y, duration, nil, ease)
+    local t3 = CsBridge.TweenUtils.MoveTo(curLeftTransform, centerLocalPosition.x, centerLocalPosition.y, duration, nil, ease)
+    local t4 = CsBridge.TweenUtils.SizeDeltaTo(curLeftRectTransform, centerSizeVector.x, centerSizeVector.y, duration, nil)
+    local t5 = CsBridge.TweenUtils.SizeDeltaTo(curRightRectTransform, leftSizeVector.x, leftSizeVector.y, duration, nil)
+    local t6 = CsBridge.TweenUtils.SizeDeltaTo(curCenterRectTransform, rightSizeVector.x, rightSizeVector.y, duration, function()
+        curCenterRectTransform = boxParentTrans:GetChild(1):GetComponent(CLS_RECTTRANSFORM)
+        curCenterTransform = curCenterRectTransform.transform
+
+        curLeftRectTransform = boxParentTrans:GetChild(0):GetComponent(CLS_RECTTRANSFORM)
+        curLeftTransform = curLeftRectTransform.transform
+
+        curRightRectTransform = boxParentTrans:GetChild(2):GetComponent(CLS_RECTTRANSFORM)
+        curRightTransform = curRightRectTransform.transform
+        colliderBoxObj:SetActive(false)
+        curIndex = curIndex - 1
+        if curIndex <= 0 then
+            curIndex = 3
+        end
+        if callback then
+            callback()
+        end
+    end)
+    t1:DoPlay()
+    t2:DoPlay()
+    t3:DoPlay()
+    t4:DoPlay()
+    t5:DoPlay()
+    t6:DoPlay()
+end
+
+---收益点击
+function OnEquipsItemSlotClick(obj)
+    local data = obj:GetItemData().data
+    self:SendCommand("OpenTipView", data)
+end
+
+---关闭按钮点击事件
+function OnCloseBtnClick()
+    self:ReturnBack()
+end
+
+function OnMaskClick(sender)
+    self:ReturnBack()
+end
+
+function DoExit()
+    randomOrBuyBtn = nil
+    randomOrBuyBtnText = nil
+    originalPriceTxt = nil
+    presentPriceTxt = nil
+    ruleTxt = nil
+    goLeftBtnTrans = nil
+    goRightBtnTrans = nil
+    leftBoxObj = nil
+    centerBoxObj = nil
+    rightBoxObj = nil
+    leftLocalPosition = nil
+    centerLocalPosition = nil
+    rightLocalPosition = nil
+    leftLightObj = nil
+    centerLightObj = nil
+    rightLightObj = nil
+    itemGrid = nil
+    itemGridHLayout = nil
+    colliderBoxObj = nil
+    boxParentTrans = nil
+    showSpineObj = nil
+    openBtnObj = nil
+    curLeftTransform = nil
+    curCenterTransform = nil
+    curRightTransform = nil
+    curLeftRectTransform = nil
+    curCenterRectTransform = nil
+    curRightRectTransform = nil
+    centerSizeVector = nil
+    leftSizeVector = nil
+    rightSizeVector = nil
+    randomPackageData = nil
+    curIndex = nil
+    posIdArr = nil
+    curSpine = nil
+    ease = nil
+    movedTimes = nil
+    maxMoveTimes = nil
+    lastMoveTimes = nil
+    isLastMove = nil
+    secoendTimes = nil
+    moveDurTimes = nil
+    yield_return = nil
+    util = nil
+end

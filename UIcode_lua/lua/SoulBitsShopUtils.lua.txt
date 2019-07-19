@@ -1,0 +1,79 @@
+--[[
+	file: SoulBitsShopUtils.lua
+	author: zhangyue
+	description: SoulBitsShopUtils utilities
+]]
+
+local function BuySoulBitsShopItem(currentItemData, buyCount, currentActivityID, onFinished, model)
+    local price = currentItemData.price
+    if not CheckItemEnough(currentItemData.priceTypeId, currentItemData.priceType, price, true) then
+        return
+    end
+
+    local req = {}
+    req.activityId = currentActivityID
+    req.id = currentItemData.id
+    req.count = buyCount
+    HttpRequest("limitLotteryShopping", "LimitLotteryShoppingReq", "LimitLotteryShoppingResp", req, function(resp)
+        local rewards = {}
+        local reward = {}
+        reward.id = currentItemData.reward.id
+        reward.count = currentItemData.reward.count * buyCount
+        reward.typeId = currentItemData.reward.typeId,
+        table.insert(rewards, reward)
+        local confirmCbk = function()
+            onFinished(currentActivityID)
+        end
+        ShowRewardReceivedTip(model, rewards, confirmCbk)
+    end)
+end
+
+local function GetItemViewData(activityData)
+    local allItemData = {}
+    local tripShopUtils = require "TripShopUtils"
+    for i, item in ipairs(activityData.items) do
+        local itemViewData = tripShopUtils.ChangShopItemDataForView(item)
+        table.insert(allItemData, itemViewData)
+    end
+    if allItemData ~= nil and #allItemData > 0 then
+        tripShopUtils.UpdateCountdown(allItemData)
+    end
+    return allItemData
+end
+
+local GetDespByItemType = function(id, type)
+    if type == ItemTypeEnum.Item then
+        return ResTblContainer:GetPropToStr(id, ItemBase.title, ItemBase.actorTbl)
+    elseif type == ItemTypeEnum.Resource then
+        return ResTblContainer:GetPropToStr(id, Resource.desp, Resource.ResourceTbl)
+    end
+end
+
+local function InitData(data, activityData)
+    activityData.consumes = {}
+    activityData.items = {}
+    if data then
+        if data.priceType ~= nil then
+            activityData.consumes = GetRewardFromTbl(tostring(ItemTypeEnum.Resource) .. ',' .. data.priceType)
+            for i, consume in ipairs(activityData.consumes) do
+                consume.count = GetCountByItemType(consume.id, consume.typeId)
+                consume.desp = GetDespByItemType(consume.id, consume.typeId)
+            end
+        end
+
+        if data.results ~= nil then
+            local items = {}
+            activityData.items = items
+            for k, itemData in ipairs(data.results) do
+                table.insert(items, itemData)
+            end
+        end
+    end
+end
+
+return {
+    BuySoulBitsShopItem = BuySoulBitsShopItem,
+    GetItemViewData = GetItemViewData,
+    InitData = InitData,
+    GetDespByItemType = GetDespByItemType,
+}

@@ -1,0 +1,289 @@
+--[[
+	file:Marquee.lua
+	author: hangang
+	description: Marquee logic
+]]
+
+local json = require "json"
+
+local TIMER_LOOP = "MarqueeTimer"
+local ClientMarqueeDataTbl = {
+	tblName = "BannerClient",
+	id = "id",
+	content = "content",
+	type = "type",
+	times = "times",
+	priority = "priority",
+	cooldown = "cooldown",
+}
+
+local MarqueeType = {
+	Startup = 1,	--Play on start up
+	Endless = 2,	--Play after "Startup"s finished, always loop
+	Server = 3,		--Marquee from server
+}
+
+local refreshInterval
+
+local cachedData = {}
+local bannerObj
+local currentItemIdx = 1
+local lastFectchTime = 0
+
+local lastLocalPlayTime = 0
+local localMarqueeInterval = 600000
+
+local isMarqueeOn = true
+local isLocalPlaying = false
+
+local httpReq = {
+	useless = 0,
+}
+
+local TICKER_NAME = "ticker_StartLooping_Marquee"
+
+--Client marquees
+local startupMarquees = {}
+local endlessMarquees = {}
+
+function DoInit()
+	CsBridge.MsgCenter.Subscribe(CsBridge.SysMsgDef.Notify_ReLaunch, StopLooping)
+	CsBridge.MsgCenter.Subscribe(CsBridge.SysMsgDef.Notify_SessionExpired, StopLooping)
+	CsBridge.MsgCenter.Subscribe(CsBridge.SysMsgDef.Notify_ReturnHome, StopLooping)
+	CsBridge.MsgCenter.Subscribe(CsBridge.SysMsgDef.Notify_Reload, StopLooping)
+	CsBridge.MsgCenter.Subscribe(CsBridge.SysMsgDef.Notify_LanguageChanged, LoadClientMarquees)
+	refreshInterval = tonumber(GetConstValue("bannerTimeLimit")) * 1000
+	LoadMarqueeConfig()
+	MsgCenter:Subscribe(Notify_Settings_Marquee, LoadMarqueeConfig)
+
+	LoadClientMarquees()
+	PlayLocalMarquees()
+end 
+
+function OnDoExit()
+	TICKER_NAME = nil
+	TIMER_LOOP = nil
+	ClientMarqueeDataTbl = nil
+	MarqueeType = nil
+	currentItemIdx = nil
+	lastFectchTime = nil
+	lastLocalPlayTime = nil
+	localMarqueeInterval = nil
+	isMarqueeOn = nil
+	isLocalPlaying = nil
+	httpReq = nil
+	MsgCenter:Unsubscribe(Notify_Settings_Marquee, LoadMarqueeConfig)
+	Timer:StopTicker(TICKER_NAME)
+end
+
+function StopLooping()
+	Timer:StopTicker(TICKER_NAME)
+	ResetData()
+	CsBridge.MsgCenter.Unsubscribe(CsBridge.SysMsgDef.Notify_ReLaunch, StopLooping)
+	CsBridge.MsgCenter.Unsubscribe(CsBridge.SysMsgDef.Notify_SessionExpired, StopLooping)
+	CsBridge.MsgCenter.Unsubscribe(CsBridge.SysMsgDef.Notify_ReturnHome, StopLooping)
+	CsBridge.MsgCenter.Unsubscribe(CsBridge.SysMsgDef.Notify_Reload, StopLooping)
+	CsBridge.MsgCenter.Unsubscribe(CsBridge.SysMsgDef.Notify_LanguageChanged, LoadClientMarquees)
+end
+
+function StartLooping()
+	bannerObj = CsBridge.marquee:GetBannerObject()
+	local endTime = CsBridge.timeManager.ServerTime * 2
+	local interval = 10
+	local finishedCbk = nil
+	Timer:AddTicker(TICKER_NAME,endTime,OnLooping,finishedCbk,interval)
+end
+
+function OnLooping()	
+	local now = CsBridge.timeManager.ServerTime
+
+	if #endlessMarquees > 0 then
+		if now - lastLocalPlayTime >= localMarqueeInterval then
+			lastLocalPlayTime = now
+			table.insertto(cachedData, endlessMarquees)
+			currentItemIdx = 0
+			isLocalPlaying = true
+			PlayMarquee()
+
+			return
+		end
+	end
+	
+	if not isLocalPlaying and now - lastFectchTime >= refreshInterval then
+		lastFectchTime = now
+		FetchData()
+	end
+end
+
+function FetchData()
+    if CsBridge.appData.IsLogined and isMarqueeOn then
+	    local showLoading = false
+	    local retryOnFailed = false
+	    HttpBackgroundRequest("getBanner", "GetBannerReq", "GetBannerResp", httpReq, OnFetchDataFinished)
+	end
+end
+
+function OnFetchDataFinished(resp)
+	if resp and resp.records then
+		local records = resp.records
+		for k, record in pairs(records) do
+			local item = {}
+			item.content = FormatContent(record.content, record.id)
+			item.id = record.id
+			item.createdTime = record.createdTime
+			item.loopCount = ResTblContainer:GetPropToInt(item.id, BannerTbl.times, BannerTbl.tblName)
+			item.priority = ResTblContainer:GetPropToInt(item.id, BannerTbl.priority, BannerTbl.tblName)
+			item.type = MarqueeType.Server
+
+			table.insert(cachedData, item)
+		end
+	end
+
+	if #cachedData > 0 then
+		table.sort(cachedData, 
+			function(a, b)
+				if a.ordpriorityer ~= b.priority then
+					return a.priority > b.priority
+				else
+					return a.createdTime < b.createdTime
+				end
+			end
+		)
+
+		PlayMarquee()
+	end
+end
+
+function PlayMarquee(finishedCbk)
+	CsBridge.marquee:ShowBanner()
+	currentItemIdx = currentItemIdx + 1
+	if currentItemIdx <= #cachedData then
+		local data = cachedData[currentItemIdx]
+		CsBridge.marquee:Play(
+			data.content, 
+			data.loopCount, 
+			function()
+				PlayMarquee(finishedCbk)
+			end)
+	else
+		CsBridge.marquee:HideBanner()
+		ResetData()
+		if finishedCbk then
+			finishedCbk()
+		end
+	end
+end
+
+function ResetData()
+	cachedData = {}
+	currentItemIdx = 0
+	isLocalPlaying = false
+end
+
+function LoadMarqueeConfig()
+	local marqueeEnabled = true
+    local marqueeConfig = CsBridge.UnityHelper.GetString("local_marqueeEnabled")
+    if not IsNilOrEmpty(marqueeConfig) then
+        marqueeEnabled = marqueeConfig == "true"
+    end
+
+	isMarqueeOn = marqueeEnabled
+end
+
+function FormatContent(jsonStr, bannerID)
+	local paramTbl = json.decode(jsonStr)
+	local dataTbl = ResTblContainer:GetTable(BannerTbl.tblName)
+	local logStr = dataTbl:Get(bannerID, BannerTbl.content)
+	
+	logStr = string.gsub(logStr, "{name}", paramTbl.name or "")
+	if bannerID == 1 or bannerID == 3 then
+		local heroName = ResTblContainer:GetPropToStr(paramTbl.hero, HeroBase.title, HeroBase.actorTbl)
+		logStr = string.gsub(logStr, "{hero}", heroName)
+	elseif bannerID == 2 then
+		logStr = string.gsub(logStr, "{rank}", paramTbl.rank)
+	elseif bannerID == 4 then
+		local item = GetRewardFromTbl(paramTbl.object)[1]
+		logStr = string.gsub(logStr, "{object}", GetRewardName(item))
+		logStr = string.gsub(logStr, "{count}", item.count)
+	elseif bannerID == 5 then
+		logStr = string.gsub(logStr, "{quality}", paramTbl.quality)
+		local heroName = ResTblContainer:GetPropToStr(paramTbl.hero, HeroBase.title, HeroBase.actorTbl)
+		logStr = string.gsub(logStr, "{hero}", heroName)
+	elseif bannerID == 6 then
+		logStr = string.gsub(logStr, "{area}", paramTbl.area)
+	end
+
+	return logStr
+end
+
+function LoadClientMarquees()
+	startupMarquees = {}
+	endlessMarquees = {}
+
+	local marqueeItem
+	local dataTableName = ClientMarqueeDataTbl.tblName
+	local tbl = ResTblContainer:GetTable(dataTableName)
+	local marqueeIDs = GetIds(dataTableName)
+	for i = 0, marqueeIDs.Length - 1 do
+		local marqueeID = tonumber(marqueeIDs[i])
+		marqueeItem = {}
+		marqueeItem.id = marqueeID
+		marqueeItem.content = tbl:Get(marqueeID, ClientMarqueeDataTbl.content)
+		marqueeItem.type = tbl:GetInt(marqueeID, ClientMarqueeDataTbl.type)
+		marqueeItem.loopCount = tbl:GetInt(marqueeID, ClientMarqueeDataTbl.times)
+		marqueeItem.priority = tbl:GetInt(marqueeID, ClientMarqueeDataTbl.priority)
+		marqueeItem.cooldown = tbl:GetInt(marqueeID, ClientMarqueeDataTbl.cooldown) * 1000
+		if marqueeItem.type == MarqueeType.Startup then
+			table.insert(startupMarquees, marqueeItem)
+		elseif marqueeItem.type == MarqueeType.Endless then
+			table.insert(endlessMarquees, marqueeItem)
+			localMarqueeInterval = marqueeItem.cooldown
+		end
+	end
+
+	local sortFunction = function(a, b)
+		return a.priority > b.priority
+	end
+	table.sort(startupMarquees, sortFunction)
+	table.sort(endlessMarquees, sortFunction)
+end
+
+function PlayLocalMarquees()
+	local count = #startupMarquees + #endlessMarquees
+	if count == 0 then
+		StartLooping()
+		return 
+	end
+
+	cachedData = {}
+	for k, marquee in pairs(startupMarquees) do
+		table.insert(cachedData, marquee)
+	end
+	for k, marquee in pairs(endlessMarquees) do
+		table.insert(cachedData, marquee)
+	end
+	table.sort(cachedData, function(a, b)
+		if a.type == b.type then
+			return a.priority > b.priority
+		else
+			return a.type < b.type
+		end
+	end)
+
+	
+	if isMarqueeOn then
+		currentItemIdx = 0
+		local finishedCbk = function()
+			lastLocalPlayTime = CsBridge.timeManager.ServerTime
+			cachedData = {}
+			StartLooping()
+		end
+		PlayMarquee(finishedCbk)
+	else
+		StartLooping()
+	end
+end
+
+function OnClose()
+	Timer:StopTicker(TICKER_NAME)
+end

@@ -1,0 +1,36 @@
+--[[
+	file: UnionModule.lua
+	author: hangang
+	description:Union context
+]]
+
+function DoInit()
+
+end
+
+function AssetNames(objs)
+	local arr={
+		"UnionApplyView", 
+		"UnionView",
+		"UnionTechView",
+		"UnionDungeonView",
+		"ItemSlot",
+		"UnionBossRankItemSlot",
+		"UnionPortView",
+		"UnionBattleView",		
+		"UnionBossDailyItemSlot",
+	}
+	return arr
+end
+
+function OnEnter(objs,onFinished)
+	if objs and objs.Length >= 2 then
+		local viewName, modelName = objs[0], objs[1]
+		local view = self:OpenView(viewName, modelName)
+	end
+
+	if onFinished then
+		onFinished()
+	end
+end
+

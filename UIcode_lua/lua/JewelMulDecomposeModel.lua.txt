@@ -1,0 +1,190 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-04-15 10:17:07
+
+local HINT_LEVEL = {
+    NORMAL = 1,
+    ERROR = 2,
+}
+local HIGH_QUALITY = 4
+local NO_OWNER_UID = 0
+local QUALITY_NAME_DIC = {
+    [1] = "green",
+    [2] = "blue",
+    [3] = "purple",
+    [4] = "orange",
+    [5] = "red",
+}
+local curOwnDecomposeJewelArr
+local curSelectQualityArr
+
+local function GetJewelQualityIconName(quality)
+    local iconQuality = quality+7
+    return string.format("new_com_pinzhi%s",iconQuality)
+end
+
+local function GetJewelQualityName(quality)
+    return Language:getStr(QUALITY_NAME_DIC[quality])
+end
+
+local function GetOwnDecomposeJewelArrByQuality(data)
+    local arr = {}
+    for i,v in ipairs(data) do
+        if arr[v.quality] == nil then
+            arr[v.quality] = {}
+        end
+        table.insert(arr[v.quality],v)
+    end
+    return arr
+end
+
+local function UpdateCurOwnCanDecomposeJewelArr()
+    local data = {}
+    local pbs = appData:checkAllItems("JewelItem")
+    if pbs then
+        for i = 0, pbs.Length - 1 do
+            local pb = pbs[i]
+            local jewel = {
+                uid = pb.uid,
+                quality = ResTblContainer:GetPropToInt(pb.id,Jewel.quality,Jewel.tblName),
+                isEquip = pb.owner ~= nil and pb.owner ~= NO_OWNER_UID
+            }
+            table.insert(data, jewel)
+        end
+    end
+    curOwnDecomposeJewelArr = GetOwnDecomposeJewelArrByQuality(data)
+end
+
+local function GetJewelMulDecomposeData()
+    local data = {}
+    for i,v in ipairs(QUALITY_NAME_DIC) do
+        local decomposeData = {
+            icon = GetJewelQualityIconName(i),
+            name = GetJewelQualityName(i),
+            quality = i,
+            selected = false
+        }
+        table.insert(data, decomposeData)
+    end
+    return data
+end
+
+local function SelectQuality(data)
+    data.selected = true
+    table.insert(curSelectQualityArr,data.quality)
+    self:SendNotification("RefrshSingleDecomposeQuality",data)
+end
+
+local function CancelSelectQuality(data)
+    data.selected = false
+    table.removebyvalue(curSelectQualityArr,data.quality)
+    self:SendNotification("RefrshSingleDecomposeQuality",data)
+end
+
+function DoInit()
+end
+
+function InitProperties()
+end
+
+function DoOnExit()
+    HINT_LEVEL = nil
+    HIGH_QUALITY = nil
+    QUALITY_NAME_DIC = nil
+    NO_OWNER_UID = nil
+    curOwnDecomposeJewelArr = nil
+    curSelectQualityArr = nil
+end
+
+function OnCommand_InitJewelMulDecomposeData(objs)
+    UpdateCurOwnCanDecomposeJewelArr()
+    curSelectQualityArr = {}
+    local data = GetJewelMulDecomposeData()
+    self:SendNotification("RefreshJewelMulDecomposeView",data)
+end
+
+function OnCommand_SelectQuality(objs)
+    local data = objs[0]
+    if data.selected then
+        CancelSelectQuality(data)
+    else
+        SelectQuality(data)
+    end
+end
+
+local function DoMulCompose(decomposeUidArr)
+    local req = {
+        jewelIds = decomposeUidArr
+    }
+    HttpRequest("jewelDecompose","JewelDecomposeReq","JewelDecomposeResp",req,function(resp)
+        self:SendNotification("ShowMulDecomposeEffect",function()
+            local confirmCbk = function()
+                UpdateCurOwnCanDecomposeJewelArr()
+                curSelectQualityArr = {}
+                local data = GetJewelMulDecomposeData()
+                self:SendNotification("RefreshJewelMulDecomposeView",data)
+                MsgCenter:Broadcast(Notify_ResetJewelDecompose)
+            end
+            ShowRewardReceivedTip(self,resp.result, confirmCbk)
+        end)
+    end)
+end
+
+local function ShowEquipConfirm(uidArr)
+    CsBridge.messageManager:PopMsgBox(Language:getStr("local_confirm"),
+    Language:getStr("JewelDecomposeHasEquip_Confirm"),
+    Language:getStr("local_cancel"),nil,
+    Language:getStr("local_confirm"),function()
+        DoMulCompose(uidArr)
+    end)
+end
+
+local function ShowHighQualityConfirm(showEquipConfirm,uidArr)
+    CsBridge.messageManager:PopMsgBox(Language:getStr("local_confirm"),
+    Language:getStr("JewelMulDecompose_ShowHighQualityConfirm"),
+    Language:getStr("local_cancel"),nil,
+    Language:getStr("local_confirm"),function()
+        if showEquipConfirm then
+            ShowEquipConfirm(uidArr)
+        else
+            DoMulCompose(uidArr)
+        end
+    end)
+end
+
+function OnCommand_ConfirmDecompose(objs)
+    if #curSelectQualityArr == 0 then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("NoSelectJewelMulDecompose"),HINT_LEVEL.ERROR)
+        return
+    end
+    local showHighQualityConfirm = false
+    local showEquipConfirm = false
+    local decomposeUidArr ={}
+    for i,quality in ipairs(curSelectQualityArr) do
+        if not showHighQualityConfirm and quality >= HIGH_QUALITY then
+            showHighQualityConfirm = true
+        end
+        local jewels = curOwnDecomposeJewelArr[quality]
+        if jewels then
+            for i,jewel in ipairs(jewels) do
+                if not showEquipConfirm and jewel.isEquip then
+                    showEquipConfirm = true
+                end
+                table.insert(decomposeUidArr, jewel.uid)
+            end
+        end
+    end
+    if #decomposeUidArr == 0 then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("NoJewelMulDecompose"),HINT_LEVEL.ERROR)
+        return
+    end
+    if showHighQualityConfirm then
+        ShowHighQualityConfirm(showEquipConfirm,decomposeUidArr)
+    elseif showEquipConfirm then
+        ShowEquipConfirm(decomposeUidArr)
+    else
+        DoMulCompose(decomposeUidArr)
+    end
+end
+

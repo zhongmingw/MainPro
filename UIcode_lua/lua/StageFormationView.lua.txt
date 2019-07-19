@@ -1,0 +1,294 @@
+local cambat_Lab
+local goldRate_Lab
+local soulRate_Lab
+local expRate_Lab
+
+local upHeroGrid
+local downHeroGrid
+local heroEffect
+
+local draggingItem
+local dropItem
+local AutoRewardLineupArr = {}
+
+local hasItemSlot = false
+local enable = true
+local cnt = 0
+local savedStage = false
+
+function DoInit()
+	self.Shadow = 1
+end 
+
+function IsSetAnchor()
+	return true
+end
+
+function InitUI()
+	cambat_Lab=self:GetComponentAtPath("Center/CambatGO/CambatTxt" ,CLS_TEXT)
+	goldRate_Lab=self:GetComponentAtPath("Center/GoldGO/GoldRateTxt" ,CLS_TEXT)
+	soulRate_Lab=self:GetComponentAtPath("Center/SoulGO/SoulRateTxt" ,CLS_TEXT)
+	expRate_Lab=self:GetComponentAtPath("Center/ExpGO/ExpRateTxt" ,CLS_TEXT)
+
+	upHeroGrid=self:GetComponentAtPath("Center/UpHeroGrid" ,"UIItemGrid")
+	downHeroGrid=self:GetComponentAtPath("Center/heroSV/ScrollRect/Viewport/HeroGrid" ,"UIItemGrid")
+
+	heroEffect=self.transform:Find("Center/HeroBase")
+
+	if next(AutoRewardLineupArr)==nil then
+		GetAutoRewardLineupTbl()
+	end
+end
+
+function GetAutoRewardLineupTbl()
+    AutoRewardLineupArr={}
+	local tbl=ResTblContainer:GetTable(AutoRewardLineup.tblName)
+    local ids = ResTblContainer:GetIds(AutoRewardLineup.tblName)
+    for i=0,ids.Length-1 do
+        local AutoRewardLineupData = {}
+        AutoRewardLineupData.id=tonumber(ids[i])
+        AutoRewardLineupData.fight=tbl:GetInt(AutoRewardLineupData.id,AutoRewardLineup.fight)
+        AutoRewardLineupData.extraResource=tbl:GetInt(AutoRewardLineupData.id,AutoRewardLineup.extraResource)
+        table.insert(AutoRewardLineupArr,AutoRewardLineupData)
+    end
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+	end 
+	hasItemSlot = false
+	cnt = 0
+	self:SendCommand("InitStageFormation")
+end 
+
+function OnNotification_InitStageFormation(objs)
+   local upHeroArr = objs[0]
+   local dowmHeroArr = objs[1]
+   local cambat = objs[2]
+   upHeroGrid:RefreshItemSlots(upHeroArr,self.gameObject,"HeroItemSlot")
+   downHeroGrid:RefreshItemSlots(dowmHeroArr,self.gameObject,"HeroItemSlot")
+   SetExtraResource(cambat)
+   hasItemSlot = true
+end
+
+function SetExtraResource(cambat)
+	local rate = 0
+    for i=1,#AutoRewardLineupArr do
+        if cambat>=AutoRewardLineupArr[#AutoRewardLineupArr].fight then
+			rate = AutoRewardLineupArr[#AutoRewardLineupArr].extraResource
+			break
+		elseif cambat<=AutoRewardLineupArr[1].fight then
+			rate = 0
+			break
+		elseif cambat>=AutoRewardLineupArr[i].fight and cambat<AutoRewardLineupArr[i+1].fight then
+			rate = AutoRewardLineupArr[i].extraResource
+			break
+        end
+    end
+	cambat_Lab.text=tostring(cambat)
+	goldRate_Lab.text=tostring(rate/100).."%"
+	expRate_Lab.text=tostring(rate/100).."%"
+	soulRate_Lab.text=tostring(rate/100).."%"
+end
+
+function OnNotification_UpHeroChanged(objs)
+	local upHeroData = objs[0]
+	local pos = objs[1]
+	upHeroGrid:RefreshSlot(upHeroData,pos-1)
+end
+
+function OnNotification_DownHeroChanged(objs)
+	local changedHeroArr = objs[0]
+	for i,heroData in ipairs(changedHeroArr) do
+        downHeroGrid:SingleRefreshSlot(heroData)
+	end
+end
+
+function OnNotification_CambatChanged(objs)
+	local cambat = objs[0]
+	SetExtraResource(cambat)
+end
+
+function OnRuleBtnClick(sender)
+	CsBridge.CacheAssetsByModule(self.Module,function()
+		local view = CsBridge.OpenView("HelpView","StageModel",false,true)
+		view:SetData(28)
+    end,"HelpView")
+end
+
+function OnSaveBtnClick(sender)
+	self:SendCommand("StageFormationChanged")
+end
+
+function OnCloseBtnClick(sender)
+	self:SendCommand("CloseStageFormationView")
+end
+
+function OnMaskClick(sender)
+	self:SendCommand("CloseStageFormationView")
+end
+
+function OnNotification_CloseStageFormationView(objs)
+	self:ReturnBack()
+	--self:HideView(self.gameObject.name)
+	savedStage = true
+end
+
+--点击上面格子
+function OnUpHeroGridHeroItemSlotClick(obj)
+	local data=obj.m_data
+	if(data.heroId~=0)then
+		self:SendCommand("DownHero",data.uid)
+	else
+		self:SendCommand("UpHeroTip",obj.m_index)
+	end
+end
+
+function OnHeroGridHeroItemSlotClick(obj)
+	local data=obj.m_data
+	if(data.IsSelected==false)then--未上阵
+		self:SendCommand("SelectHeroEffect",data.uid,obj)
+		--self:SendCommand("UpHero",data.uid)
+	else--已经上阵,点击下阵
+		self:SendCommand("DownHero",data.uid)
+	end
+end
+
+function OnNotification_SelectHeroEffect(objs)
+	local uid = objs[0]
+	local pos = objs[1]
+	local slot = objs[2]
+	if enable then
+		ShowHeroEffect(slot.m_data,slot.transform.position,upHeroGrid.transform:GetChild(pos-1).position,
+			function()
+				self:SendCommand("UpHero",uid,pos)
+			end)
+	end
+end 
+
+function ShowHeroEffect(hero,startPos,endPos,onFinish)
+	enable=false
+	heroEffect.gameObject:SetSelfActive(true)
+	heroEffect.position = startPos
+	BindHeroBaseValue(heroEffect,hero)
+	local t = CsBridge.TweenUtils.MoveToByWorld(heroEffect,endPos.x,endPos.y,0.2,
+		function()
+			enable=true
+			heroEffect.gameObject:SetSelfActive(false)
+			onFinish()
+		end)
+	t:DoPlay()
+end 
+
+function OnHeroItemSlotBeginDrag(obj)
+	local btn = obj:GetComponent(CLS_BUTTON_ARCHLY)
+	btn:StopRunningClickAnim()
+	btn.ClickAnim = false
+
+	local data = obj:GetComponent("ItemSlot").m_data
+	if data.heroId == 0 then
+		return
+	end 
+	local dragObj = obj:GetComponent("TestDrag").dragObj 
+	SetDragItem(dragObj, data)
+	CsBridge.UnityHelper.SetAnchoredPosition(dragObj.gameObject,obj.transform.localPosition.x,obj.transform.localPosition.y)
+	dragObj:SetActive(true)
+	BindHeroBaseValue(obj.transform:Find("HeroBase").gameObject,nil)
+	draggingItem = obj
+end 
+
+function OnHeroItemSlotEndDrag(obj)
+	local btn = obj:GetComponent(CLS_BUTTON_ARCHLY)
+	btn.ClickAnim = true
+
+	local slot = obj:GetComponent("ItemSlot")
+	local data = slot.m_data
+	if data.heroId == 0 then
+		return
+	end 
+	if draggingItem ~= nil then
+		draggingItem = nil
+	end 
+	if dropItem ~= nil and dropItem.m_data.isLocked~=true then
+		local dragPos = slot.m_index+1
+		local dropPos = dropItem.m_index+1
+		self:SendCommand("ExchangeUpHeroData",dragPos,dropPos)
+	else
+		BindHeroBaseValue(obj.transform:Find("HeroBase").gameObject, data)
+	end 
+end 
+
+function OnNotification_ExchangeUpHeroData(objs)
+	local dragPos = objs[0]
+	local dragData = objs[1]
+	local dropPos = objs[2]
+	local dropData = objs[3]
+	upHeroGrid:RefreshSlot(dragData, dropPos-1)
+	upHeroGrid:RefreshSlot(dropData, dragPos-1)
+	dropItem = nil
+end
+
+function OnHeroItemSlotDrop(obj)
+	if obj.name == "HeroItemSlot" then
+		if obj ~= draggingItem then
+			dropItem = obj:GetComponent("ItemSlot")
+		end
+	end 
+end
+
+function OnHeroBagBtnClick(sender)
+    self:ShowModule("HeroBookModule", {}, false)
+end
+
+function SetDragItem(obj, data)
+	BindHeroBaseValue(obj.transform:Find("HeroBase").gameObject,data)
+end
+
+function CheckHasItemSlot()
+    if (hasItemSlot) then
+	    cnt=cnt+1
+		if (cnt > 1) then
+		    return true
+		else
+		    return false
+		end
+	else
+	    cnt = 0
+	    return false
+	end
+end
+
+function OnClose()
+	downHeroGrid:ClearItems()
+end
+
+function ResetSaveStage()
+    savedStage = false
+end	
+
+function FinishSaveStageFormation()
+    return savedStage
+end
+
+function DoExit()
+	self.Module=nil
+	cambat_Lab  = nil
+	goldRate_Lab = nil
+	soulRate_Lab = nil
+	expRate_Lab = nil
+
+	upHeroGrid = nil
+	downHeroGrid = nil
+	heroEffect = nil
+
+	draggingItem = nil
+	dropItem = nil
+	AutoRewardLineupArr = nil
+
+	hasItemSlot = nil
+	enable = nil
+	cnt = nil
+	savedStage = nil
+end

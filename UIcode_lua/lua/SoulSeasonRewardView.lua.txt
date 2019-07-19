@@ -1,0 +1,79 @@
+require "APArenaRewardItemSlot"
+local soulSeasonRewardGrid
+local rewardGrid
+
+local rank_Lab
+local rule_Lab
+local time_Lab
+
+local TICKER_NAME = "SoulSeasonRewardView"
+
+function InitUI()
+	soulSeasonRewardGrid=self:GetComponentAtPath("Center/ScrollRect/Viewport/SoulSeasonRewardGrid",CLS_UI_ITEM_GRID)
+	local aPArenaSeasonRewardTrans = soulSeasonRewardGrid.transform
+    rank_Lab=aPArenaSeasonRewardTrans:GetComponentAtPath("RankGO/RankTxt",CLS_TEXT)
+	rule_Lab=aPArenaSeasonRewardTrans:GetComponentAtPath("RuleGO/RuleTxt",CLS_TEXT)
+    time_Lab=aPArenaSeasonRewardTrans:GetComponentAtPath("TimerGO/TimeTxt",CLS_TEXT)
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+    end 
+    self:SendCommand("InitSoulSeasonRewardData")
+end 
+
+function OnNotification_InitSoulSeasonRewardData(objs)
+    local curRank = objs[0]
+	local rewardDataArr = objs[1]
+	local seasonEndTime = objs[2]
+	rank_Lab.text=(curRank~=nil and curRank~=-1) and tostring(curRank) or "-"
+	rule_Lab.text=Language:getStr("SoulPalace_SeasonAwardsRule")
+	soulSeasonRewardGrid:RefreshItemSlots(rewardDataArr,self.gameObject,"APArenaRewardItemSlot")
+
+	local onLooping = function()
+		if time_Lab then
+			time_Lab.text=CheckTimeRemain(seasonEndTime)
+		end
+	end
+	Timer:AddTicker(TICKER_NAME, seasonEndTime, onLooping)
+end
+
+function OnRewardGridItemSlotClick(obj)
+	local item = obj.m_data
+	if item.typeId == 3 then
+		return
+	end
+	CsBridge.CacheAssetsByModule(self.Module,
+	function()
+		local item = obj.m_data
+		local view = CsBridge.OpenView("ItemTipView", "ItemTipModel",false,true)
+		local rewardTmp={}
+		rewardTmp.id=item.id
+		rewardTmp.typeId=item.typeId
+		rewardTmp.count=1
+		if item.typeId == 0 then
+			rewardTmp.attrs = item.attrs
+		end 
+		if item.typeId == 4 then
+			rewardTmp.level = item.level
+		end 
+		view:SetParamDataList(rewardTmp,itemBaseIndex+itemDespIndex+PropsIndex+itemSuitIndex)
+		view:SendCommand("InitItemData")
+	end,"ItemTipView")
+end
+
+function OnClose()
+	Timer:StopTicker(TICKER_NAME)
+end
+
+function DoExit()
+	self.Module=nil
+	soulSeasonRewardGrid = nil
+	TICKER_NAME = nil
+	rewardGrid = nil
+	rank_Lab = nil
+	rule_Lab = nil
+	time_Lab = nil
+end

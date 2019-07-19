@@ -1,0 +1,389 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-05-18 16:58:24
+
+local cache = CsBridge.objectCache
+local centerObj
+local bottomObj
+
+local levelUpObj
+local conversionObj
+
+local levelUpCoinNumTxt 
+local levelUpDiamondNumTxt
+local levelUpRuneDustNumTxt
+local conversionCoinNumTxt
+local conversionRuneDustNumTxt
+
+local coinTweener
+local diamondTweener
+local runeDustTweener
+
+local oldRuneTF
+local oldAttrArr
+local oldNameTxt
+local newRuneTF
+local newAttrArr
+local newNameTxt
+local unknownFlag
+local newObj
+
+local coinConsumeNumTxt
+local runeConsumeDustTxt
+
+local saveBtnObj
+local convertMoreBtnObj
+local convertBtnObj
+
+local lockObj
+local lockCheckObj
+local lockCostObj
+local lockCostNumTxt
+
+local effectObj 
+local runeEffect
+
+local isInit = false
+
+function DoInit()
+    self.Shadow = 1
+end
+
+function InitUI()
+    centerObj = self:GetGameObjectAtPath("Center")
+    bottomObj = self:GetGameObjectAtPath("Bottom")
+
+    levelUpObj = self:GetGameObjectAtPath("LevelUpObj")
+    conversionObj = self:GetGameObjectAtPath("ConversionObj")
+    local levelUpTrans = levelUpObj.transform
+    levelUpCoinNumTxt = levelUpTrans:GetComponentAtPath("Res/Coin/numberTxt",CLS_TEXT)
+    levelUpDiamondNumTxt = levelUpTrans:GetComponentAtPath("Res/Diamond/numberTxt",CLS_TEXT)
+    levelUpRuneDustNumTxt = levelUpTrans:GetComponentAtPath("Res/RuneDust/numberTxt",CLS_TEXT)
+
+    local conversionTrans = conversionObj.transform
+    conversionCoinNumTxt = conversionTrans:GetComponentAtPath("Res/Coin/numberTxt",CLS_TEXT)
+    conversionRuneDustNumTxt = conversionTrans:GetComponentAtPath("Res/RuneDust/numberTxt",CLS_TEXT)
+
+    oldRuneTF = self:GetComponentAtPath("Center/OldRune",CLS_RECTTRANSFORM)
+    oldAttrArr = {}
+    local oldAttr = self:GetComponentAtPath("Center/OldAttrs",CLS_RECTTRANSFORM)
+    for i=0,oldAttr.transform.childCount-1 do
+        local propTxt = oldAttr:GetChild(i):GetComponent(CLS_TEXT)
+        local nameTxt = propTxt.transform:GetComponentAtPath("NameTxt",CLS_TEXT)
+        propTxt.gameObject:SetSelfActive(false)
+        table.insert(oldAttrArr, {valTxt = propTxt,nameTxt = nameTxt})
+    end
+    oldNameTxt = self:GetComponentAtPath("Center/OldNameTxt",CLS_TEXT)
+
+    newObj = self:GetGameObjectAtPath("Center/NewObj")
+    local newTrans = newObj.transform
+    newRuneTF = newTrans:Find("NewRune")
+    newAttrArr = {}
+    local newAttr = newTrans:Find("NewAttrs")
+    for i=0,newAttr.transform.childCount-1 do
+        local propTxt = newAttr:GetChild(i):GetComponent(CLS_TEXT)
+        local nameTxt = propTxt.transform:GetComponentAtPath("NameTxt",CLS_TEXT)
+        propTxt.gameObject:SetSelfActive(false)
+        table.insert(newAttrArr, {valTxt = propTxt,nameTxt = nameTxt})
+    end
+    newNameTxt = newTrans:GetComponentAtPath("NewNameTxt",CLS_TEXT)
+
+    coinConsumeNumTxt = self:GetComponentAtPath("Bottom/Consume/CoinNumTxt",CLS_TEXT)
+    runeConsumeDustTxt = self:GetComponentAtPath("Bottom/Consume/RuneDustNumTxt",CLS_TEXT)
+
+    lockObj = levelUpTrans:GetGameObjectAtPath("lock")
+    lockCheckObj = levelUpTrans:GetGameObjectAtPath("lock/CheckImg")
+    lockCostObj = levelUpTrans:GetGameObjectAtPath("LevelUpBtn/LockCost")
+    lockCostNumTxt = lockCostObj.transform:GetComponentAtPath("NumTxt",CLS_TEXT)
+
+    unknownFlag = self:GetGameObjectAtPath("Center/UnknownFlag")
+    saveBtnObj = conversionTrans:GetGameObjectAtPath("SaveBtn")
+    convertMoreBtnObj = conversionTrans:GetGameObjectAtPath("ConvertMoreBtn")
+    convertBtnObj = conversionTrans:GetGameObjectAtPath("ConvertBtn")
+
+    effectObj = self:GetGameObjectAtPath("Effect")
+    runeEffect = effectObj.transform:Find("RuneEffect")
+end
+
+function SetParamDataList(objs)
+    local hero,type = objs[0],objs[1]
+    self:SendCommand("InitData", hero, type)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitRuneLevelUpConversionData")
+end
+
+function DoExit()
+    cache = nil
+    centerObj = nil
+    bottomObj = nil
+
+    levelUpObj = nil
+    conversionObj = nil
+
+    levelUpCoinNumTxt  = nil
+    levelUpDiamondNumTxt = nil
+    levelUpRuneDustNumTxt = nil
+    conversionCoinNumTxt = nil
+    conversionRuneDustNumTxt = nil
+
+    coinTweener = nil
+    diamondTweener = nil
+    runeDustTweener = nil
+
+    oldRuneTF = nil
+    oldAttrArr = nil
+    oldNameTxt = nil
+    newRuneTF = nil
+    newAttrArr = nil
+    newNameTxt = nil
+    unknownFlag = nil
+    newObj = nil
+
+    coinConsumeNumTxt = nil
+    runeConsumeDustTxt = nil
+
+    saveBtnObj = nil
+    convertMoreBtnObj = nil
+    convertBtnObj = nil
+
+    lockObj = nil
+    lockCheckObj = nil
+    lockCostObj = nil
+    lockCostNumTxt = nil
+
+    effectObj  = nil
+    runeEffect = nil
+
+    isInit = nil
+end
+
+function OnNotification_RefreshLevelUpConversionView(objs)
+    centerObj:SetSelfActive(true)
+    bottomObj:SetSelfActive(true)
+    local viewData = objs[0]
+    if viewData.refreshOldRune then
+        RefreshOldRuneView(viewData.oldRune)
+    end
+
+    if viewData.refreshNewRune then
+        RefreshRuneConsume(viewData.newRune)
+    end
+
+    if viewData.lockCost then
+        lockCheckObj:SetSelfActive(true)
+        lockCostObj:SetSelfActive(true)
+        lockCostNumTxt.text = viewData.lockCost[1].count
+    else
+        lockCostObj:SetSelfActive(false)
+        lockCheckObj:SetSelfActive(false)
+    end
+end
+
+function OnNotification_RefreshNewRune(objs)
+    local newRune = objs[0]
+    local runeLevelUp = objs[1]
+    levelUpObj:SetSelfActive(runeLevelUp)
+    conversionObj:SetSelfActive(not runeLevelUp)
+    if runeLevelUp then
+        RefreshNewLevelUpRune(newRune)
+    else
+        RefreshNewConversionRune(newRune)
+    end
+end
+
+function RefreshNewLevelUpRune(newRune)
+    if newRune == nil then
+        newObj:SetSelfActive(false)
+        lockObj:SetSelfActive(false)
+        unknownFlag:SetSelfActive(true)
+    else
+        newObj:SetSelfActive(true)
+        lockObj:SetSelfActive(true)
+        unknownFlag:SetSelfActive(false)
+
+        BindItemBaseValue(newRuneTF,{id = newRune.level,typeId = 0})
+        newNameTxt:SetText(newRune.name)
+        for i,attr in ipairs(newRune.attrs) do
+            newAttrArr[i].valTxt.gameObject:SetSelfActive(true)
+            newAttrArr[i].valTxt:SetTextWithSizeChange(attr.val)
+            newAttrArr[i].nameTxt.text = attr.name
+        end
+    end
+end
+
+function RefreshNewConversionRune(newRune)
+    newObj:SetSelfActive(true)
+    BindItemBaseValue(newRuneTF,{id = newRune.level,typeId = 0})
+    newNameTxt:SetText(newRune.name)
+    for i,attr in ipairs(newRune.attrs) do
+        newAttrArr[i].valTxt.gameObject:SetSelfActive(true)
+        newAttrArr[i].valTxt:SetTextWithSizeChange(attr.val)
+        newAttrArr[i].nameTxt.text= attr.name
+    end
+end
+
+function RefreshOldRuneView(rune)
+    saveBtnObj:SetSelfActive(false)
+    convertMoreBtnObj:SetSelfActive(false)
+    convertBtnObj:SetSelfActive(true)
+
+    BindItemBaseValue(oldRuneTF,{id = rune.level,typeId = 0})
+    oldNameTxt:SetText(rune.name)
+    for i,attr in ipairs(rune.attrs) do
+        oldAttrArr[i].valTxt.gameObject:SetSelfActive(true)
+        oldAttrArr[i].valTxt:SetTextWithSizeChange(attr.val)
+        oldAttrArr[i].nameTxt.text= attr.name
+    end
+    convertBtnObj:SetSelfActive(true)
+end
+
+function OnNotification_WaitConfirmConvertion(objs)
+    saveBtnObj:SetSelfActive(true)
+    convertMoreBtnObj:SetSelfActive(true)
+    convertBtnObj:SetSelfActive(false)
+end
+
+function RefreshRuneConsume(consumeArr)
+    local coinConsume = consumeArr[1].count
+    local runeConsume = consumeArr[2].count
+    if coinConsume == "-" then
+        coinConsumeNumTxt:SetText(coinConsume)
+    else
+        coinConsumeNumTxt:SetText(GetValueAbbreviation(coinConsume))
+        SetFontColor(coinConsumeNumTxt,CheckResEnough(ResourceEnum.Coin,coinConsume) and color25 or color30)
+    end
+    if runeConsume == "-" then
+        runeConsumeDustTxt:SetText(runeConsume)
+    else
+        runeConsumeDustTxt:SetText(GetValueAbbreviation(runeConsume))
+        SetFontColor(runeConsumeDustTxt,CheckResEnough(ResourceEnum.Rune,runeConsume) and color25 or color30)
+    end
+end
+
+function OnLevelUpBtnClick(sender)
+    self:SendCommand("RuneLevelUp")
+end
+
+function OnConvertBtnClick(sender)
+    self:SendCommand("RuneConversion")
+end
+
+function OnConvertMoreBtnClick(sender)
+    self:SendCommand("RuneConversion")
+end
+
+function OnSaveBtnClick(sender)
+    self:SendCommand("RuneSaveConversion")
+end
+
+local function TextChangeColor(txt,color,duration,onFinished)
+    return CsBridge.TweenUtils.TextChangeColor(txt,color.r,color.g,color.b,duration,onFinished)
+end
+
+function OnNotification_RefreshRuneTopView(objs)
+    if coinTweener ~= nil then
+        coinTweener:Kill(true)
+    end
+    if diamondTweener ~= nil then
+        diamondTweener:Kill(true)
+    end
+    if runeDustTweener ~= nil then
+        runeDustTweener:Kill(true)
+    end
+    local runeLevelUp = objs[0]
+    local anim = objs[1]
+    local coin, runeDust, gem = objs[2],objs[3],objs[4]
+    local changeColor = {
+        r = 1,
+        g = 0,
+        b = 42/255
+    }
+    local duration = 0.15
+    if runeLevelUp then
+        if anim then
+            coinTweener = TextChangeColor(levelUpCoinNumTxt,changeColor,duration,function()
+                levelUpCoinNumTxt.text = GetValueAbbreviation(coin)
+            end)
+            runeDustTweener = TextChangeColor(levelUpRuneDustNumTxt,changeColor,duration,function()
+                levelUpRuneDustNumTxt.text = GetValueAbbreviation(runeDust)
+            end)
+            if gem then
+                diamondTweener = TextChangeColor(levelUpDiamondNumTxt,changeColor,duration,function()
+                    levelUpDiamondNumTxt.text = GetValueAbbreviation(gem)
+                end)
+            end    
+        else
+            levelUpCoinNumTxt.text = GetValueAbbreviation(coin)
+            levelUpRuneDustNumTxt.text = GetValueAbbreviation(runeDust)
+            levelUpDiamondNumTxt.text = GetValueAbbreviation(gem)
+        end
+    else
+        if anim then
+            coinTweener = TextChangeColor(conversionCoinNumTxt,changeColor,duration,function()
+                conversionCoinNumTxt.text = GetValueAbbreviation(coin)
+            end)
+            runeDustTweener = TextChangeColor(conversionRuneDustNumTxt,changeColor,duration,function()
+                conversionRuneDustNumTxt.text = GetValueAbbreviation(runeDust)
+            end)
+        else
+            conversionCoinNumTxt.text = GetValueAbbreviation(coin)
+            conversionRuneDustNumTxt.text = GetValueAbbreviation(runeDust)
+        end
+    end
+end
+
+function OnNotification_ShowRuneEffect(objs)
+    effectObj:SetSelfActive(true)
+    local spineName = "IconUpdateSpine"
+    CsBridge.CacheAssetsByGroup(spineName,function()
+        local obj = cache:CreateObject(spineName, true)
+        obj.transform:SetParent(runeEffect,false)
+        CsBridge.UnityHelper.SetlocalScale(obj,0.7,0.7,1)
+        obj:GetComponent(CLS_SKELETONGRAPHIC):PlayAnimation("a_1",false,function()
+            local name = obj.name
+            CS.UnityEngine.GameObject.Destroy(obj)
+            cache:ClearGroup(name, true)
+            effectObj:SetSelfActive(false)
+        end)
+    end,spineName)
+end
+
+function OnLockTogClick(sender)
+    self:SendCommand("RuneLock",not lockCheckObj.activeSelf)
+end
+
+function OnClose() 
+    for i,attr in ipairs(oldAttrArr) do
+        attr.valTxt.gameObject:SetSelfActive(false)
+    end
+    for i,attr in ipairs(newAttrArr) do
+        attr.valTxt.gameObject:SetSelfActive(false)
+    end
+    oldNameTxt.text = ""
+    newNameTxt.text = ""
+
+    lockCostObj:SetSelfActive(false)
+    centerObj:SetSelfActive(false)  
+    bottomObj:SetSelfActive(false)
+    levelUpObj:SetSelfActive(false)
+    conversionObj:SetSelfActive(false)
+    unknownFlag:SetSelfActive(false)
+    lockObj:SetSelfActive(true)
+    self:SendCommand("RuneCancelConversion")
+    self:SendCommand("OnClose")
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function OnMaskClick(sender)
+    self:HideView(self.gameObject.name)
+end

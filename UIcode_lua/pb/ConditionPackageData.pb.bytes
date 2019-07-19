@@ -1,0 +1,61 @@
+
+—
+ConditionPackageData.protoConditionPackageDatastage.proto"O
+CheckConditionPackageReq3
+reqList (2".ConditionPackageData.ConditionReq"`
+CheckConditionPackageRespC
+packageConfig (2,.ConditionPackageData.ConditionPackageConfig"+
+ConditionReq
+type (
+param (	"³
+ConditionPackageConfig
+
+id (
+packageType (
+icon (	
+packageReward (	
+payId (
+condictionParm (	
+	limitTime (
+isOpen ("
+rewards	 (2.stage.RewardItem
+packagePrice
+ (
+continuedTime (
+time (
+packageName (	
+packageSlogen (	"P
+ConditionPackageInfo8
+packages (2&.ConditionPackageData.ConditionPackage".
+CheckAllConditionPackageReq
+useless ("X
+CheckAllConditionPackageResp8
+packages (2&.ConditionPackageData.ConditionPackage"­
+ConditionPackage
+
+id (
+packageType (
+icon (	
+packageReward (	
+payId (
+condictionParm (	
+	limitTime (
+isOpen ("
+rewards	 (2.stage.RewardItem
+packagePrice
+ (
+continuedTime (
+time (
+packageName (	
+packageSlogen (	"-
+RemoveConditionPackageRecordReq
+
+id ("2
+ RemoveConditionPackageRecordResp
+result ("N
+PlayerLevelUpPopDataReq3
+reqList (2".ConditionPackageData.ConditionReq"€
+PlayerLevelUpPopDataResp
+isAuth (C
+packageConfig (2,.ConditionPackageData.ConditionPackageConfig
+isAlert (

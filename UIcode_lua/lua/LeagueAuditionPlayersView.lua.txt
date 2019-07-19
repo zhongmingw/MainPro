@@ -1,0 +1,98 @@
+--[[
+	file: LeagueFinalListView.lua
+	author: hangang
+	description: League final match list view
+]]
+
+local playerGird, emptyTipsObj
+local ownItemTrans
+local cachedViewData
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 1     --shadow type
+
+	local path = "Center/ScrollRect/Viewport/Grid"
+	playerGrid = self:GetComponentAtPath(path, CLS_UI_ITEM_GRID)
+
+	path = "EmptyTips"
+	emptyTipsObj = self:GetGameObjectAtPath(path)
+
+	path = "Bottom/AuditionPlayerItemSlot"
+	ownItemTrans = self.transform:Find(path)
+end 
+
+--UIController events handlers-------------------------------------------------------
+function OnNotification_RefreshAuditionListView(objs)
+	cachedViewData = objs[0]
+	RefreshView(cachedViewData)
+end
+
+function RefreshView(data)
+	local playerList = data.playerList
+	emptyTipsObj:SetActive(#playerList == 0)
+	playerGrid:RefreshItemSlots(playerList, self.gameObject, "AuditionPlayerItemSlot")
+	if data.ownData then
+		BindItemValue(ownItemTrans, data.ownData)
+	end
+end
+
+function OnAuditionPlayerItemSlotBindValue(slot, data)
+	BindItemValue(slot.transform, data)
+end
+
+function BindItemValue(slotTrans, data)
+	local selfTrans = slotTrans
+
+	path = "NameTxt"
+	local nameText = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+	nameText.text = data.name
+
+	path = "zoneTxt"
+	local zoneTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+	zoneTxt.text = data.zone
+
+	path = "RankTxt"
+	local rankTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+	rankTxt.text = data.rankText
+
+	path = "PowerTxt"
+	local powerTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+	powerTxt.text = data.power
+
+	path = "RankSprite"
+	local ribbonImageObj = selfTrans:GetGameObjectAtPath(path)
+	ribbonImageObj:SetActive(data.showRibbon)
+	if data.showRibbon then
+		CsBridge.IconData.SetIconByName(ribbonImageObj, data.ribbonIcon)
+	end
+
+	path = "PlayerBase"
+	local playerRoot = selfTrans:Find(path)
+	BindPlayerBaseInfoValue(playerRoot,data.baseInfo)
+	playerRoot.gameObject:SetSelfAndChildrenGray(data.showMask)
+
+	path = "seedMark"
+	local seedMarkObj = selfTrans:GetGameObjectAtPath(path)
+	seedMarkObj:SetActive(data.isSeed)
+end
+
+--On closing--------------------------------------------------------------------------
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close() 
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	playerGird = nil
+	emptyTipsObj = nil
+	ownItemTrans = nil
+	cachedViewData = nil
+end

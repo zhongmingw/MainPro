@@ -1,0 +1,10 @@
+
+require "BitUtils"
+
+itemBaseIndex=1 
+itemDespIndex=2
+PropsIndex=4  
+itemSuitIndex=8
+itemActivateIndex=16
+itemBtnsIndex=32
+itemPetEquipIndex = 64

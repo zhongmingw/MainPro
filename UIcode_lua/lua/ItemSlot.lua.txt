@@ -1,0 +1,37 @@
+
+function OnItemSlotBindValue(slot, data)
+    BindItemBaseValue(slot.transform, data)
+    
+    slot.m_SelectSprite=slot.transform:Find("CheckSprite").gameObject
+    
+    if(data.IsSelected ~= nil) then
+        slot.m_SelectSprite:SetSelfActive(data.IsSelected)
+    else
+        slot.m_SelectSprite:SetSelfActive(false)
+    end
+
+    local redFlagObj = slot.transform:Find("RedFlag")
+    if redFlagObj ~= nil then
+        if data.redFlag then
+            redFlagObj.gameObject:SetSelfActive(true)
+        else
+            redFlagObj.gameObject:SetSelfActive(false)
+        end
+    end
+    local equipFlag = slot.transform:Find("EquipFlag")
+    if equipFlag then
+        equipFlag.gameObject:SetSelfActive(data.isEquip)
+    end
+    if data.runeLock and data.runeUnLock then --符文
+        --print("can unlock rune")
+    end
+end
+
+function BindItemValue(slot,type,itemId,count)
+    local data={}
+    data.id=itemId
+    data.count=1
+    data.typeId=type
+    slot = slot.transform:GetComponent("ItemSlot")
+    OnItemSlotBindValue(slot,data)
+end

@@ -1,0 +1,70 @@
+http=CS.Client.Library.HttpBehaviour.instance
+local loadUIMgr=CsBridge.loadUIMgr
+local msgCenter=CsBridge.msgCenter
+ 
+local sdkHelper = CsBridge.sDKHelper
+local isFirst=true
+
+function AssetNames(objs)
+	local arr={"MainView","MainTipView","StageView","StageItemSlot","StagePlayerBaseItemSlot","SimulateBattleView","StageBottomView", "MoneyBanner", "Marquee","CoinView", 
+		"UnionSceneView", "UnionApplyView","sp_ui_iconanima1_p","sp_ui_iconanima2_p","sp_ui_iconanima3_p","sp_ui_iconanima4_p","sp_ui_iconanima5_p",
+		"ActivityIconItemSlot","PlayerInfoView","FormationView"
+	}
+
+	return arr
+end
+
+function DoInit()
+	self.enableRender = false
+	MsgCenter:Subscribe(Notify_OnBattleEnd,ReloadFormBattle)
+	MsgCenter:Subscribe(Notify_OnMain,HideLoadUI)
+	self.bgm=false
+	loadUIMgr:CreateHintBox()
+end 
+
+function ReloadFormBattle(battleInfo)
+	if battleInfo.battleEndInfo.upLevelRewards~=nil then
+		PlayerLevelUp(self, battleInfo.battleEndInfo.upLevelRewards)
+	end
+end
+
+function HideLoadUI()
+	loadUIMgr:Hide()
+end 
+
+function OnCacheUpdate(progress)
+	loadUIMgr:UpdateProcess(progress)
+end 
+
+function OnEnter(objs,onFinished)
+	local guide = CsBridge.guideManager
+	guide:Clear()
+	guide:CheckGuide(function()
+		CS.Client.Library.MoneyBanner.SetBannerVisible(true)
+		CS.Client.Library.Marquee.instance:StartLooping()
+		if #WonderActivityFlags~=0 then
+			for i=#WonderActivityFlags,1,-1 do
+				WonderActivityFlags[i]=nil
+			end
+		end
+		local view = self:OpenView("MainTipView","MainModel")
+		local stageTogIdx = 1
+		view:SetParamDataList(stageTogIdx)
+		local iapWrapper = CS.Client.Library.IAPWrapper.Instance
+		iapWrapper:CheckFailedOrder()
+		if(onFinished ~= nil)then
+			onFinished()  
+		end
+	end)	
+end
+
+function OnDoUnhide()
+
+
+end
+
+function OnExit()
+	--print("__________________________________")
+	MsgCenter:Unsubscribe(Notify_OnBattleEnd,ReloadFormBattle)
+	MsgCenter:Unsubscribe(Notify_OnMain,HideLoadUI)
+end

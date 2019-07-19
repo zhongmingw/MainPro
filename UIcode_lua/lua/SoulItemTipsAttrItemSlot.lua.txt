@@ -1,0 +1,14 @@
+
+function OnSoulItemTipsAttrItemSlotBindValue(slot, data)
+    ---@type UnityEngine.Transform
+    local slotTrans = slot.transform
+    local propTxt = slotTrans:Find("PropTxt"):GetComponent(CLS_TEXT)
+    local nameTxtTrans = slotTrans:Find("NameTxt")
+    local nameTxt = nameTxtTrans:GetComponent(CLS_TEXT)
+    ---@type number 属性的宽度
+    local valOriginWidth = propTxt.preferredWidth
+    propTxt.text = data.propTxt
+    nameTxt.text = data.propNameTxt
+    local offsetX = propTxt.preferredWidth - valOriginWidth
+    CsBridge.UnityHelper.SetAnchoredPosition(nameTxt.gameObject, nameTxtTrans.localPosition.x + offsetX, nameTxtTrans.localPosition.y)
+end

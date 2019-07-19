@@ -1,0 +1,143 @@
+require "HonorCityRewardItemSlot"
+require "HonorCityPlayerRankItemSlot"
+require "HonorCityZoneRankItemSlot"
+require "ItemSlot"
+local titleGroup
+local leftTopTxt
+local rightTopTxt
+local flagBgImg
+local flagNameImg
+local bannerImg
+local bannerNameImg
+local timeTxt
+local itemGrid
+local scoreObj
+local scoreDecTxt
+local scoreNumTxt
+local rankingObj
+local rankingDecTxt
+local rankingNumTxt
+local RewardGrid
+
+local TICKER_NAME = "HonorCityRankRewardView"
+local REWARD_TYPE = 1
+local RANKING_TYPE = 2
+local viewData
+local curIndex = 0
+
+local isInit = false
+function DoInit()
+	self.Shadow = 1
+end 
+
+function InitUI()
+	local viewTrans = self.transform
+	titleGroup = self:GetComponentAtPath("TogGroup",CLS_TOGGLE_GROUP_ARCHLY)
+	leftTopTxt = self:GetComponentAtPath("TogGroup/tog01Tog/TitleTxt" ,CLS_TEXT)
+	rightTopTxt = self:GetComponentAtPath("TogGroup/tog02Tog/TitleTxt" ,CLS_TEXT)
+	flagBgImg = self:GetGameObjectAtPath("flag/iconImg")
+	flagNameImg = self:GetGameObjectAtPath("flag/nameImg")
+	bannerImg = self:GetGameObjectAtPath("banner/bgImg")
+	bannerNameImg = self:GetGameObjectAtPath("banner/nameImg")
+	timeTxt = self:GetComponentAtPath("banner/timeTxt" ,CLS_TEXT)
+	itemGrid = self:GetComponentAtPath("other/RecordSV/ScrollRect/Viewport/Grid",CLS_UI_ITEM_GRID)
+	scoreObj = self:GetGameObjectAtPath("other/rankScore")
+	scoreDecTxt = self:GetComponentAtPath("other/rankScore/TitleTxt" ,CLS_TEXT)
+	scoreNumTxt = self:GetComponentAtPath("other/rankScore/rankNumTxt" ,CLS_TEXT)
+	rankingObj = self:GetGameObjectAtPath("other/ranking")
+	rankingDecTxt = self:GetComponentAtPath("other/ranking/TitleTxt" ,CLS_TEXT)
+	rankingNumTxt = self:GetComponentAtPath("other/ranking/number02Txt" ,CLS_TEXT)
+	RewardGrid = self:GetComponentAtPath("other/RewardGrid",CLS_UI_ITEM_GRID)
+end
+
+local function SetInfo()
+	titleGroup:SetToggleOn(0)
+	CsBridge.IconData.SetIconByName(flagBgImg, viewData.flagBg)
+	CsBridge.IconData.SetIconByName(flagNameImg, viewData.flagNameImg)
+	leftTopTxt.text = viewData.leftTopTxt
+	rightTopTxt.text = viewData.rightTopTxt
+	rankingObj.gameObject:SetActive(not viewData.isRewards)
+	RewardGrid.gameObject:SetActive(viewData.isRewards)
+	local onLooping = function ()
+        timeTxt.text=CheckTimeRemain(viewData.endTime,false)
+    end
+    local now = CsBridge.timeManager.ServerTime
+	if now < viewData.endTime then
+	    Timer:AddTicker(TICKER_NAME, viewData.endTime, onLooping,function()
+	    	if viewData.type == RANKING_TYPE then
+	    		self:SendCommand("RefreshRankData",RANKING_TYPE,viewData.endTime)
+			end
+	    end)
+	else
+		timeTxt.text = ""
+	end
+end
+
+function SetData(data)
+	if not isInit then
+		InitUI()
+		isInit = true
+	end
+	viewData = data
+	SetInfo()
+end
+
+function OnNotification_RefreshRankViewData(objs)
+	viewData = objs[0]
+	SetInfo()
+	self:SendCommand("RefreshGroupData",viewData,curIndex)
+end
+
+function OnTogGroupClick(isOn,index)
+	if isOn then
+		itemGrid:ClearItems()
+		curIndex = index
+		self:SendCommand("RefreshGroupData",viewData,index)
+	end
+end
+
+function OnNotification_RefreshGroupData(objs)
+	local data = objs[0]
+	CsBridge.IconData.SetRawImageByName(bannerImg, data.banner)
+	CsBridge.IconData.SetIconByName(bannerNameImg, data.title)
+	scoreDecTxt.text = data.scoreDec
+	rankingDecTxt.text = data.rankingDec
+	scoreNumTxt.text = data.score
+	rankingNumTxt.text = data.rankingNum
+	itemGrid:RefreshItemSlots(data.itemsList, self.gameObject, data.slotName)
+	if data.rewards then
+		RewardGrid:RefreshItemSlots(data.rewards, self.gameObject, "ItemSlot")
+	end
+end
+
+function OnGridItemSlotClick(obj)
+    
+end
+
+function OnRewardGridItemSlotClick(obj)
+	local data = obj.m_data
+    self:SendCommand("OpenTipView", data)
+end
+
+function OnGridPlayerBaseClick(obj)
+	local playerData = obj.m_data.playerBaseInfo
+	self:SendCommand("PlayerBaseClicked", playerData, self.gameObject.name)
+end
+
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close()
+	Timer:StopTicker(TICKER_NAME)
+	titleGroup:SetAllTogglesOff()
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	Timer:StopTicker(TICKER_NAME)
+end

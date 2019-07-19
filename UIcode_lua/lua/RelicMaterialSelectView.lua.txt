@@ -1,0 +1,115 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-05-23 09:44:08
+
+local itemBase 
+local nameTxt
+local typeTxt
+local propArr
+local activateCondTxt
+local activatePropArr
+local valOriginWidth
+local nameOriginPos
+
+local selectRelic
+local selectRelicPos
+
+local isInit = false
+
+function DoInit()	
+    self.Shadow = 1
+    self.Anim = 8
+end
+
+function IsSetAnchor()
+    return true
+end
+
+function InitUI()
+    local centerObj = self:GetGameObjectAtPath("Center")
+    local centerTrans = centerObj.transform
+    itemBase = centerTrans:Find("Base/Item")
+    nameTxt = centerTrans:GetComponentAtPath("Base/NameTxt",CLS_TEXT)
+    typeTxt = centerTrans:GetComponentAtPath("Base/TypeTxt",CLS_TEXT)
+    propArr = {}
+    for i=1,4 do
+        local propTxt = centerTrans:GetComponentAtPath("Prop"..i.."Txt",CLS_TEXT)
+        local nameTxt = propTxt.transform:GetComponentAtPath("NameTxt",CLS_TEXT)
+        table.insert(propArr,{propTxt = propTxt,nameTxt=nameTxt})
+    end
+    valOriginWidth = propArr[1].propTxt:GetPreferredValues().x
+    nameOriginPos = propArr[1].nameTxt.transform.localPosition
+    activateCondTxt = centerTrans:GetComponentAtPath("ActivateTxt/ActivateCondTxt",CLS_TEXT)
+    activatePropArr = {}
+    for i=1,1 do
+        local propTxt = centerTrans:GetComponentAtPath("ActivateProp",CLS_TEXT)
+        local nameTxt = propTxt.transform:GetComponentAtPath("NameTxt",CLS_TEXT)
+        table.insert(activatePropArr,{propTxt=propTxt,nameTxt=nameTxt})
+    end
+end
+
+function SetParamDataList(objs)
+    selectRelic = objs[0]
+    selectRelicPos = objs[1]
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    RefreshRelicMaterialSelectView()
+end
+
+function RefreshRelicMaterialSelectView()
+    BindItemBaseValue(itemBase,selectRelic)
+    nameTxt:SetText(ResTblContainer:GetPropToStr(selectRelic.id,Relic.name,Relic.tblName))
+    for i,prop in ipairs(propArr) do
+        prop.propTxt.gameObject:SetSelfActive(false)
+    end
+    for i,prop in ipairs(selectRelic.propInfos) do
+        propArr[i].propTxt:SetTextWithSizeChange(prop.val)
+        propArr[i].nameTxt:SetText(prop.name)
+        propArr[i].propTxt.gameObject:SetSelfActive(true)
+    end
+
+    for i,prop in ipairs(activatePropArr) do
+        prop.propTxt.gameObject:SetSelfActive(false)
+    end 
+    if selectRelic.typeId == 4 and selectRelic.activateAttrs ~= nil then
+        local activateAttrs = selectRelic.activateAttrs
+        activateCondTxt:SetText(GetRelicActivateCondStr(activateAttrs.cond))
+        activateCondTxt.transform.parent.gameObject:SetSelfActive(true)
+        for i,prop in ipairs(activateAttrs.attrs) do
+            activatePropArr[i].propTxt:SetTextWithSizeChange(prop.val)
+            activatePropArr[i].nameTxt:SetText(prop.name)
+            activatePropArr[i].propTxt.gameObject:SetSelfActive(true)
+        end
+    else
+        activateCondTxt.transform.parent.gameObject:SetSelfActive(false)
+    end
+end
+
+function OnPutOneBtnClick(sender)
+    self:SendCommand("SelectRelicMaterial",selectRelic,selectRelicPos,1)
+    self:HideView(self.gameObject.name)
+end
+
+function OnPutTenBtnClick(sender)
+    self:SendCommand("SelectRelicMaterial",selectRelic,selectRelicPos,10)
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+    itemBase = nil
+    nameTxt = nil
+    typeTxt = nil
+    propArr = nil
+    activateCondTxt = nil
+    activatePropArr = nil
+    valOriginWidth = nil
+    nameOriginPos = nil
+
+    selectRelic = nil
+    selectRelicPos = nil
+
+    isInit  = nil
+end

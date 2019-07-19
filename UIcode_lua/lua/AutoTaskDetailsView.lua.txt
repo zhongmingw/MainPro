@@ -1,0 +1,204 @@
+local loadedConditionItemSlot=require "ConditionItemSlot"
+
+local titleTxt
+local time_Lab
+
+local rewardsGrid
+local taskHeroesSelectedGrid
+local conditionsGrid
+local taskHeroesGrid
+local heroEffect
+local enable = true
+
+local raceTogArr 
+local raceFlag
+
+local noneObj
+
+local curRace = 0
+
+function DoInit()
+	self.Shadow=1
+	titleTxt = self:GetComponentAtPath("Center/TitleTxt",CLS_TEXT)
+
+    time_Lab=self:GetComponentAtPath("Center/TimeTxt",CLS_TEXT)
+	taskHeroesSelectedGrid=self:GetComponentAtPath("Center/TaskHeroesSelectedGrid",CLS_UI_ITEM_GRID)
+	conditionsGrid=self:GetComponentAtPath("Center/ConditionsGrid",CLS_UI_ITEM_GRID)
+	taskHeroesGrid=self:GetComponentAtPath("Center/ScrollRect/Viewport/TaskHeroesGrid",CLS_UI_ITEM_GRID)
+	
+	heroEffect = self:GetComponentAtPath("Center/HeroBase",CLS_RECTTRANSFORM)
+
+	local raceTogGroup = self:GetComponentAtPath("Center/RaceTogGroup",CLS_RECTTRANSFORM)
+	raceTogArr = {}
+	for i=1,raceTogGroup.childCount-1 do
+		local tog = raceTogGroup:GetChild(i):GetComponent("ToggleArchly")
+		tog.ClickAnim = true
+		if i >= 2 then
+			tog.SubImg = tog.transform:GetComponentAtPath("icon01Img",CLS_IMAGE)
+		end
+		table.insert(raceTogArr, tog)
+	end 
+	raceFlag = raceTogGroup:Find("RaceFlag")
+	noneObj = self:GetGameObjectAtPath("Center/None")
+	curRace = 0
+end
+
+
+function OnAnimationFinished()
+	curRace = 0
+	raceTogArr[1].isOn = true
+end 
+
+function OnRaceTogGroupClick(isOn,index)
+	if not isOn then
+		return 
+	end
+	ScreenHeroView(index-1)
+end
+
+function ScreenHeroView(race)
+	--move animation
+	local offset = 10
+	if curRace > race then
+		offset = -offset
+	end
+	curRace = race
+	local targetX = raceTogArr[curRace+1].transform.localPosition.x
+	local t1 = CsBridge.TweenUtils.MoveTo(raceFlag,targetX+offset,raceFlag.localPosition.y,0.15,function()
+		local t2 = CsBridge.TweenUtils.MoveTo(raceFlag,targetX,raceFlag.localPosition.y,0.05)
+		t2:DoPlay()
+	end)
+	t1:DoPlay()
+	self:SendCommand("ScreenHero",curRace)
+end
+
+function OnNotification_UpdateDownHero(objs)
+	local downHeroArr = objs[0]
+	taskHeroesGrid:RefreshItemSlots(downHeroArr,self.gameObject,"HeroItemSlot")
+	noneObj:SetSelfActive(downHeroArr==nil or #downHeroArr==0)
+end
+
+function OnNotification_InitAutoTaskDetailsView(objs)
+	local data = objs[0]
+	local conditionsData = objs[1]
+	local upHeroArr = objs[2]
+	local downHeroArr = objs[3]
+	titleTxt.text = data.taskName
+	time_Lab.text=CsBridge.timeManager:checkTimeShow(data.taskTime*1000)
+	conditionsGrid:RefreshItemSlots(conditionsData,self.gameObject,"ConditionItemSlot")
+	taskHeroesGrid:RefreshItemSlots(downHeroArr,self.gameObject,"HeroItemSlot")
+	taskHeroesSelectedGrid:RefreshItemSlots(upHeroArr,self.gameObject,"HeroItemSlot")
+	noneObj:SetSelfActive(downHeroArr==nil or #downHeroArr==0)
+end
+
+function OnNotification_UpHeroChanged(objs)
+	local upHeroData = objs[0]
+	local pos = objs[1]
+	taskHeroesSelectedGrid:RefreshSlot(upHeroData,pos-1)
+end
+
+function OnNotification_DownHeroChanged(objs)
+	local changedHeroArr = objs[0]
+	for i,heroData in ipairs(changedHeroArr) do
+        taskHeroesGrid:SingleRefreshSlot(heroData)
+	end
+end
+
+function OnNotification_ScreenHero(objs)
+	local downHeroArr = objs[0]
+end
+
+function OnNotification_ConditionChanged(objs)
+	local conditionsData = objs[0]
+	conditionsGrid:RefreshItemSlots(conditionsData,self.gameObject,"ConditionItemSlot")
+end
+--点击上面格子
+function OnTaskHeroesSelectedGridHeroItemSlotClick(obj)
+	local data=obj.m_data
+	if(data.heroId~=0)then
+		self:SendCommand("DownHero",data.uid)
+	end
+end
+
+function OnTaskHeroesGridHeroItemSlotClick(obj)
+	local data=obj.m_data
+	if ShowSoulImprintedTip(data) then
+		return
+	end
+	if(data.IsSelected==true)then
+		self:SendCommand("DownHero",data.uid)
+	else
+		local result = CheckHeroInLockStateName(data, HeroDuty.AUTO_TASK)
+		if result ~= nil then
+			CsBridge.hintUILayer:ShowHintBox(Language:getStr(result))
+			return
+		end
+		self:SendCommand("SelectHeroEffect",data.uid,obj)
+	end
+end
+
+function OnNotification_SelectHeroEffect(objs)
+	local uid = objs[0]
+	local pos = objs[1]
+	local slot = objs[2]
+	if enable then
+		ShowHeroEffect(slot.m_data,slot.transform.position,taskHeroesSelectedGrid.transform:GetChild(pos-1).position,
+			function()
+				self:SendCommand("UpHero",uid,pos)
+			end)
+	end
+end 
+
+function ShowHeroEffect(hero,startPos,endPos,onFinish)
+	enable=false
+	heroEffect.gameObject:SetSelfActive(true)
+	heroEffect.position = startPos
+	BindHeroBaseValue(heroEffect,hero)
+	local t = CsBridge.TweenUtils.MoveToByWorld(heroEffect,endPos.x,endPos.y,0.2,
+		function()
+			enable=true
+			heroEffect.gameObject:SetSelfActive(false)
+			onFinish()
+		end)
+	t:DoPlay()
+end 
+
+function OnAtuoBtnClick(sender)
+	self:SendCommand("AutoSelectHeroes")
+end
+
+function OnStartBtnClick(sender)
+	self:SendCommand("StartTask",taskId,curCombat)
+end
+
+function OnCloseBtnClick(sender)
+	self:HideView(self.gameObject.name)
+end
+
+function OnMaskClick()
+	self:HideView(self.gameObject.name)
+end
+
+function OnNotification_CatchException(objs)
+	CsBridge.hintUILayer:ShowHintBox(Language:getStr(objs[0]))
+end 
+
+function OnClose()
+	taskHeroesGrid:ClearItems()
+end
+
+function DoExit()
+	self.Module=nil
+	titleTxt = nil
+	time_Lab = nil
+	rewardsGrid = nil
+	taskHeroesSelectedGrid = nil
+	conditionsGrid = nil
+	taskHeroesGrid = nil
+	heroEffect = nil
+	enable = nil
+	raceTogArr  = nil
+	raceFlag = nil
+	curRace = nil
+	noneObj = nil
+end

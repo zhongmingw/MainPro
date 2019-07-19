@@ -1,0 +1,14 @@
+function OnMonopolyIconItemSlotBindValue(slot,data)
+	-- body
+	local iconImg = slot:GetGameObjectAtPath("IconImg")
+    local numTxt = slot:GetComponentAtPath("NumTxt",CLS_TEXT)
+    local redFlag = slot:GetGameObjectAtPath("RedFlag")
+    local timeTxt = slot:GetComponentAtPath("bgImg/TimeTxt",CLS_TEXT)
+	if data then
+		local tbl = ResTblContainer:GetTable("ZillionaireFortuitous")
+		local icon = tbl:Get(data.id,"iconID")
+		numTxt.text = data.count
+		CsBridge.IconData.SetIconByName(iconImg, icon)
+		timeTxt.text = CheckTimeRemain(data.endTime)
+	end
+end

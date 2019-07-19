@@ -1,0 +1,283 @@
+local luaChat = require "ChatWorldData"
+local loadedChatDetailsItemSlot = require "ChatWorldDetailsItemSlot"
+require "ChatHelper"
+local chatGrid
+local ZoneTog
+local LegionTog
+local RecruitTog
+local playerInfo
+local MessageInput
+local zone_newFlag
+local legion_newFlag
+local recruit_newFlag
+local index
+
+local friendDetailWindow
+local detailView
+local inAnimation = false
+local curTalker
+local maskBtnTxt
+local unLegionBtn_GO
+
+
+local legionId = 0 --公会ID
+
+function DoInit()
+    CsBridge.MoneyBanner.SetBannerVisible(false)
+    self.MoveDistance=510
+    self.Shadow = 1
+    self.Anim = 5
+end
+
+function OnAnimationFinished()
+    initUI()
+    self:SendCommand("FirstChat")
+    ZoneTog.isOn = true
+end
+
+function initUI()
+    chatGrid = self:GetComponentAtPath("OTHER/talk01SV/ScrollRect/Viewport/Grid", "UIItemGrid")
+    MessageInput = self:GetComponentAtPath("OTHER/MessageInput", "UnityEngine.UI.InputField")
+    ZoneTog = self:GetComponentAtPath("BGS/TOG/zoneTog", "ToggleArchly")
+    LegionTog = self:GetComponentAtPath("BGS/TOG/legionTog", "ToggleArchly")
+    RecruitTog = self:GetComponentAtPath("BGS/TOG/recruitTog", "ToggleArchly")
+    zone_newFlag = ZoneTog.transform:GetGameObjectAtPath("newFlag")
+    legion_newFlag = LegionTog.transform:GetGameObjectAtPath("newFlag")
+    recruit_newFlag = RecruitTog.transform:GetGameObjectAtPath("newFlag")
+    unLegionBtn_GO = self:GetGameObjectAtPath("BGS/TOG/UnLegionBtn")
+
+    zone_newFlag:SetActive(false)
+    legion_newFlag:SetActive(false)
+    recruit_newFlag:SetActive(false)
+    playerInfo = appData:checkData("PlayerInfo")
+
+    friendDetailWindow=self:GetGameObjectAtPath("DetailView")
+    detailView=friendDetailWindow.transform:GetGameObjectAtPath("DetailView")
+    maskBtnTxt=detailView.transform:GetComponentAtPath("maskBtn/nameTxt", CLS_TEXT)
+
+
+end
+
+function OnGridPlayerClick(obj)
+    if not inAnimation then
+        curTalker=obj.m_data
+        local icon=obj.transform:Find("other/Player")
+        friendDetailWindow:SetSelfActive(true)
+        if IsSheild(curTalker.content.playerId) then
+            maskBtnTxt:SetText(Language:getStr("unmaskFriend"))
+        else
+            maskBtnTxt:SetText(Language:getStr("maskFriend"))
+        end
+        inAnimation=true
+        detailView:SetGlobalPositionY(icon.position.y)
+        detailView:PlayViewAnimation(function()
+            inAnimation=false
+        end, CsBridge.ViewAnimantion.Common)
+    end    
+end
+
+function OnDetailMaskClick(sender)
+    if not inAnimation then
+        inAnimation=true
+        detailView:PlayViewAnimation(function()
+            inAnimation=false
+            friendDetailWindow:SetSelfActive(false)
+        end,CsBridge.ViewAnimantion.Fade)
+    end
+end
+
+function OnNotification_SetBtnActive(objs)
+    local active = objs[0]
+    unLegionBtn_GO:SetSelfActive(active)
+end
+
+function OnUnLegionBtnClick(sender)
+    CsBridge.hintUILayer:ShowHintBox(Language:getStr("canNotLegion"))
+end
+
+function OnUnRecruitBtnClick(sender)
+    CsBridge.hintUILayer:ShowHintBox(Language:getStr("canNotLegion"))
+end
+
+function OnNotification_ChatConnected(objs)
+    local zoneChatTab = objs[0]
+    local legionChatTab = objs[1]
+    local recruitChatTab = objs[2]
+    index = 1
+    chatGrid:RefreshItemSlots(zoneChatTab, self.gameObject,"ChatWorldDetailsItemSlot")
+    zone_newFlag:SetActive(false)
+    if(#legionChatTab > 0) then
+        legion_newFlag:SetActive(true)
+    end
+    if(#recruitChatTab > 0) then
+        recruit_newFlag:SetActive(true)
+    end
+end
+
+function OnzoneTogClick()
+    if(index ~= 1) then
+         index = 1
+		 chatGrid:ClearItems()
+         self:SendCommand("GetZoneChatTab")
+    end
+end
+
+function OnNotification_ZoneChatTab(objs)
+    local zoneChatTab = objs[0]
+    chatGrid:RefreshItemSlots(zoneChatTab, self.gameObject,"ChatWorldDetailsItemSlot")
+    zone_newFlag:SetActive(false)
+end
+
+function OnlegionTogClick()
+    if(index ~= 2) then
+         index = 2
+		 chatGrid:ClearItems()
+        self:SendCommand("GetLegionChatTab")
+    end
+end
+
+function OnNotification_LegionChatTab(objs)
+    local legionChatTab = objs[0]
+    chatGrid:RefreshItemSlots(legionChatTab, self.gameObject,"ChatWorldDetailsItemSlot")
+    legion_newFlag:SetActive(false)
+end
+
+function OnrecruitTogClick()
+    if(index ~= 3) then
+        index = 3
+		chatGrid:ClearItems()
+        self:SendCommand("GetRecruitChatTab")
+    end
+end
+
+function OnNotification_RecruitChatTab(objs)
+    local recruitChatTab = objs[0]
+    chatGrid:RefreshItemSlots(recruitChatTab, self.gameObject,"ChatRecruitItemSlot")
+    recruit_newFlag:SetActive(false)
+end
+
+function OnsendBtnClick(sender)
+    local content = MessageInput.text
+    if content == ""  then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("SendMessage_CheckContent"),2)
+    else
+		local groupID = ChatGroup.ChatGroup_Zone
+        if ZoneTog.isOn then
+            groupID = ChatGroup.ChatGroup_Zone
+        elseif LegionTog.isOn then 
+            groupID = ChatGroup.ChatGroup_Legion
+        elseif RecruitTog.isOn then
+            groupID = ChatGroup.ChatGroup_Recruit
+        end
+
+		self:SendCommand("Chat", groupID, content)
+    end
+    MessageInput.text = ""
+end
+
+function OnsettingBtnClick(sender)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        CsBridge.OpenView("ChatSetView", "ChatWorldModel",false,true)
+    end, "ChatSetView")
+end
+
+function OncloseBtnClick(sender)
+    DoClose()
+end
+
+function OnMaskClick(sender)
+    DoClose()
+end
+
+function DoClose()
+    self:ReturnBack(function()
+	    CsBridge.MoneyBanner.SetBannerVisible(true)
+	end)
+end
+
+function OnNotification_ReceivedMsg(objs)
+    local chatGroup = objs[0]
+    if (chatGroup == ChatGroup.ChatGroup_Zone) then
+        if(index == 1) then
+            self:SendCommand("GetZoneChatTab")
+        else
+            zone_newFlag:SetActive(true)
+        end
+    elseif (chatGroup == ChatGroup.ChatGroup_Legion) then
+        if(index == 2) then
+            self:SendCommand("GetLegionChatTab")
+        else
+            legion_newFlag:SetActive(true)
+        end
+    elseif (chatGroup == ChatGroup.ChatGroup_Recruit) then
+        if(index == 3) then
+            self:SendCommand("GetRecruitChatTab")
+        else
+            recruit_newFlag:SetActive(true)
+        end
+    end
+end
+
+function OnGridcontentTxtClick(obj)
+    self:SendCommand("OpenShareContent",obj.m_data)
+end
+
+function OnmailBtnClick(sender)
+    if not CheckPlayerCanSendPrivateMail() then
+        return
+    end
+    friendDetailWindow:SetSelfActive(false)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+		self:Deactive("ChatWorldView")
+		local view=CsBridge.OpenView("SendMailView","SendMailModel",false,true)
+        local content = curTalker.content
+        local nick, userID, zone = content.playerBaseInfo.nick, content.playerId, content.zone
+		view:SetParamDataList(nick, userID, zone, function()
+		    self:Active("ChatWorldView")
+		end)
+	end, "SendMailView")
+end
+
+function OnmaskBtnClick(sender)
+    friendDetailWindow:SetSelfActive(false)
+	self:SendCommand("MaskFriend", curTalker.content.playerId, curTalker.content.playerBaseInfo.nick, curTalker.content.zone);
+end
+
+function OnaddFriendBtnClick(sender)
+    friendDetailWindow:SetSelfActive(false)
+    self:SendCommand("addFriendBtn",curTalker.content.playerId, curTalker.content.zone)
+end
+
+function OndetailBtnClick(sender)
+    friendDetailWindow:SetSelfActive(false)
+    CsBridge.CacheAssetsByModule( self.Module,
+	function()
+        local view = CsBridge.OpenView("PlayerInfoView", "PlayerInfoModel",true, true)
+        view:SetParamDataList(false, curTalker.content.playerId, curTalker.content.zone)
+	end, "PlayerInfoView","AchievementItemSlot")
+end
+
+function OnGridApplyBtnClick(slot)
+	local slotData = slot.m_data
+	self:SendCommand("ResponseRecruit", slotData)
+end
+
+function DoExit()
+    chatGrid = nil
+    ZoneTog = nil
+    LegionTog = nil
+    RecruitTog = nil
+    playerInfo = nil
+    MessageInput = nil
+    zone_newFlag = nil
+    legion_newFlag = nil
+    recruit_newFlag = nil
+    index = nil
+
+    friendDetailWindow = nil
+    detailView = nil
+    inAnimation = nil
+    curTalker = nil
+    maskBtnTxt = nil
+    unLegionBtn_GO = nil
+end

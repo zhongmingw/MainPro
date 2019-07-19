@@ -1,0 +1,19 @@
+local initScale
+
+function DoInit()
+    initScale = self.transform:CheckLocalScale()
+end
+
+function DoEnable()
+    MsgCenter:Subscribe(Notify_SetUpdateEffect,OnSetUpdateEffect)
+end
+
+function OnSetUpdateEffect()
+    self.transform:ResetLocalScale(initScale)
+    SetUpdateEffect(self.transform)
+end
+
+function DoDisable()
+    MsgCenter:Unsubscribe(Notify_SetUpdateEffect,OnSetUpdateEffect)
+end
+

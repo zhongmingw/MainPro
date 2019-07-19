@@ -1,0 +1,15 @@
+
+local function GetSoulSingFlag()
+	local totalNum = 0
+    local templeInfo = appData:checkData("PlayerTempleInfo")
+    if templeInfo then
+        local remains = templeInfo.remains or 0
+        local extraRemains = templeInfo.extraRemains or 0
+        totalNum = remains + extraRemains
+    end
+    return totalNum > 0
+end
+
+return {
+	GetSoulSingFlag = GetSoulSingFlag,
+}

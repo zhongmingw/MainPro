@@ -1,0 +1,12 @@
+local angle=0
+local speed=-25
+
+function DoEnable()
+    self:DoAnimation(0,function()
+        angle=angle + CsBridge.Time.deltaTime * speed
+        self.gameObject:SetRotation(0,0,angle)
+    end)
+end
+
+function DoDisable()
+end

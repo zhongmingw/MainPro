@@ -1,0 +1,467 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-04-09 16:09:44
+
+local raceTogArr
+local raceFlag
+
+local heroGrid 
+
+local oldHeroKnown 
+local oldHeroUnKnown
+local oldHeroFloorSpine
+local oldHeroModelRoot
+local oldHeroModel
+local oldHeroLevelTxt
+local oldHeroNameTxt
+local oldHeroRaceImg
+local oldHerooStarRoot
+local oldApearSpine
+local oldDisapearSpine
+local oldGroupName
+
+local newHeroKnown
+local newHeroUnKnown
+local newHeroFloorSpine
+local newHeroModelRoot
+local newHeroModel
+local newHeroLevelTxt
+local newHeroNameTxt
+local newHeroRaceImg
+local newHeroStarRoot
+local newApearSpine
+local newDisapearSpine
+local newGroupName
+
+local saveBtnObj
+local cancelBtnObj
+local conversionBtnObj
+local messageBtnObj
+
+local heroConversionDustNumTxt
+
+local tipTxtObj
+
+local raceBg
+local backRaceBg
+
+local effectObj
+local heroEffect
+
+local isInit = false
+local waitSelectEffect = false
+
+function DoInit()
+	self.Anim = 0
+end
+
+function IsSetAnchor()
+	local parentViewIndex = self.transform.parent.parent:Find("DragonCrystalView"):GetSiblingIndex()
+    self.transform.parent:SetSiblingIndex(parentViewIndex+1)
+    return true
+end
+
+function InitUI()	
+	local raceTogGroup = self:GetComponentAtPath("Bottom/RaceTogGroup",CLS_RECTTRANSFORM)
+	raceTogArr = {}
+    for i=1,raceTogGroup.childCount-1 do
+		local tog = raceTogGroup:GetChild(i):GetComponent("ToggleArchly")
+        tog.ClickAnim = true
+        if i >= 2 then
+            tog.SubImg = tog.transform:GetComponentAtPath("icon01Img",CLS_IMAGE)
+        end
+		table.insert(raceTogArr, tog)
+    end 
+    raceFlag = raceTogGroup:Find("Flag")
+
+	raceBg = self:GetGameObjectAtPath("BGS/RaceBg")
+	backRaceBg = self:GetGameObjectAtPath("BGS/BackRaceBg")
+
+	oldHeroKnown = self:GetGameObjectAtPath("Center/OldHero/Known")
+	oldHeroUnKnown = self:GetGameObjectAtPath("Center/OldHero/UnKnown")
+	oldHeroFloorSpine = self:GetComponentAtPath("Center/OldHero/FloorSpine",CLS_SKELETONGRAPHIC)
+	local oldHeroKnownTrans = oldHeroKnown.transform
+	oldHeroModelRoot = oldHeroKnownTrans:Find("OldHeroModel")
+	oldHeroLevelTxt = oldHeroKnownTrans:GetComponentAtPath("LevelTxt",CLS_TEXT)
+	oldHeroNameTxt = oldHeroKnownTrans:GetComponentAtPath("NameTxt",CLS_TEXT)
+	oldHeroRaceImg = oldHeroKnownTrans:GetGameObjectAtPath("RaceImg")
+	oldHerooStarRoot = oldHeroKnownTrans:GetComponentAtPath("StarRoot",CLS_RECTTRANSFORM)
+	oldApearSpine = self:GetComponentAtPath("Center/OldHero/ApearSpine",CLS_SKELETONGRAPHIC)
+	oldDisapearSpine = self:GetComponentAtPath("Center/OldHero/DisapearSpine",CLS_SKELETONGRAPHIC)
+
+	newHeroKnown = self:GetGameObjectAtPath("Center/NewHero/Known")
+	newHeroUnKnown = self:GetGameObjectAtPath("Center/NewHero/UnKnown")
+	newHeroFloorSpine = self:GetComponentAtPath("Center/NewHero/FloorSpine",CLS_SKELETONGRAPHIC)
+	local newHeroKnownTrans = newHeroKnown.transform
+	newHeroModelRoot = newHeroKnownTrans:GetComponentAtPath("NewHeroModel",CLS_RECTTRANSFORM)
+	newHeroLevelTxt = newHeroKnownTrans:GetComponentAtPath("LevelTxt",CLS_TEXT)
+	newHeroNameTxt = newHeroKnownTrans:GetComponentAtPath("NameTxt",CLS_TEXT)
+	newHeroRaceImg = newHeroKnownTrans:GetGameObjectAtPath("RaceImg")
+	newHeroStarRoot = newHeroKnownTrans:GetComponentAtPath("StarRoot",CLS_RECTTRANSFORM)
+	newApearSpine = self:GetComponentAtPath("Center/NewHero/ApearSpine",CLS_SKELETONGRAPHIC)
+	newDisapearSpine = self:GetComponentAtPath("Center/NewHero/DisapearSpine",CLS_SKELETONGRAPHIC)
+	
+	saveBtnObj = self:GetGameObjectAtPath("Center/SaveBtn")
+	cancelBtnObj = self:GetGameObjectAtPath("Center/CancelBtn")
+	conversionBtnObj = self:GetGameObjectAtPath("Center/ConversionBtn")
+	messageBtnObj = self:GetGameObjectAtPath("Center/MessageBtn")
+	heroConversionDustNumTxt = conversionBtnObj.transform:GetComponentAtPath("DustNumTxt",CLS_TEXT)
+	tipTxtObj = self:GetGameObjectAtPath("Top/TipTxt").gameObject
+	
+	heroGrid = self.transform:GetComponentAtPath("Bottom/HeroSV/ScrollRect/Viewport/HeroGrid",CLS_UI_ITEM_GRID)
+
+	effectObj = self:GetGameObjectAtPath("Effect")
+	heroEffect = effectObj.transform:Find("HeroBase")
+end
+
+function OnAnimationFinished()
+	if newHeroModel ~= nil then
+		return
+	end
+	if not isInit then
+		InitUI()
+		isInit = true
+	end
+	self:SendCommand("InitConversionData")
+end
+
+function Active()
+	self:SendCommand("RefreshHero")
+end
+
+function OnClose()
+	if newHeroModel ~= nil then
+		return
+	end
+
+	if oldHeroModel ~= nil then
+		DestroyModel(oldHeroModel,oldGroupName)
+		oldHeroModel = nil
+	end
+	if newHeroModel ~= nil then
+		DestroyModel(newHeroModel,newGroupName)
+		newHeroModel = nil
+	end 
+	oldHeroUnKnown:SetSelfActive(true)
+	oldHeroKnown:SetSelfActive(false)
+	newHeroUnKnown:SetSelfActive(true)
+	newHeroKnown:SetSelfActive(false)
+	saveBtnObj:SetSelfActive(false)
+	cancelBtnObj:SetSelfActive(false)
+	conversionBtnObj:SetSelfActive(false)
+	messageBtnObj:SetSelfActive(false)
+	--raceBg:SetSelfActive(false)
+	SetRaceBgByHeroId(raceBg,nil)
+	self:SendCommand("Close")
+end
+
+function OnNotification_RefreshConversionView(objs)
+	oldHeroFloorSpine:PlayAnimation("tongyong",true)
+	newHeroFloorSpine:PlayAnimation("tongyong",true)
+	local heroArr = objs[0]
+	heroGrid:RefreshItemSlots(heroArr,self.gameObject, "HeroItemSlot")
+end
+
+function OnNotification_InitScreen(objs)
+    raceTogArr[objs[0]+1].isOn = false
+    raceTogArr[1].isOn = true
+    CsBridge.UnityHelper.SetAnchoredPosition(raceFlag.gameObject,raceTogArr[1].transform.localPosition.x,raceFlag.localPosition.y)
+end
+
+function OnNotification_ScreenAnim(objs)
+    local curSort = objs[0]+1
+    local direct = objs[1]
+    local offset = 10
+    if direct then
+        offset = -offset
+    end
+    raceTogArr[curSort].isOn = true
+    local targetX = raceTogArr[curSort].transform.localPosition.x
+    local t1 = CsBridge.TweenUtils.MoveTo(raceFlag,targetX+offset,raceFlag.localPosition.y,0.15,function()
+        local t2 = CsBridge.TweenUtils.MoveTo(raceFlag,targetX,raceFlag.localPosition.y,0.05)
+        t2:DoPlay()
+    end)
+    t1:DoPlay()
+end
+
+function OnNotification_ScreenHero(objs)
+	local heroArr = objs[0]
+	heroGrid:RefreshItemSlots(heroArr, self.gameObject, "HeroItemSlot")
+end 
+
+function OnHeroGridHeroItemSlotClick(obj)
+	if waitSelectEffect then
+		return
+	end
+	local heroData = obj.m_data
+	if ShowSoulDesImprintView(heroData,self) then
+		return
+	end
+	if obj.IsSelected then
+		CrossRaceBg(nil,backRaceBg,raceBg)
+		self:SendCommand("CancelSelectHero", obj.m_data)
+	else
+		self:SendCommand("SelectHeroEffect", obj)
+	end 
+end
+
+function OnNotification_SelectHeroEffect(objs)
+	waitSelectEffect = true
+	local obj = objs[0]
+	ShowHeroEffect(obj.m_data,obj.transform.localPosition,function()
+		self:SendCommand("SelectHero", obj.m_index)
+	end)
+end 
+
+function OnNotification_RefreshSingleHero(objs)
+	heroGrid:RefreshSlot(objs[0],objs[1])
+end
+
+function ShowHeroEffect(hero,startPos,onFinish)
+	effectObj:SetSelfActive(true)
+	heroEffect.localPosition = startPos
+	BindHeroBaseValue(heroEffect,hero)
+	CrossRaceBg(hero.heroId,backRaceBg,raceBg)
+	CsBridge.TweenUtils.MoveTo(heroEffect,oldHeroUnKnown.transform.localPosition.x,oldHeroUnKnown.transform.localPosition.y,0.2,function()
+		effectObj:SetSelfActive(false)
+		onFinish()
+	end)
+end 
+
+function OnNotification_SelectHero(objs)
+	local index = objs[0]
+	local itemData = heroGrid:GetItemDataByIndex(index)
+	if	itemData~=nil then
+		itemData.IsSelected=true
+		itemData.data.IsSelected=true
+	end
+end
+
+function OnNotification_CancelSelectHero(objs)
+	local itemData = heroGrid:GetItemDataByData(objs[0])
+	if	itemData~=nil then
+		itemData.IsSelected=false
+		itemData.data.IsSelected=false
+	end
+end 
+
+function OnNotification_RefreshOldHero(objs)
+	local curHero = objs[0]
+	if curHero == nil then
+		conversionBtnObj:SetSelfActive(false)
+		tipTxtObj:SetSelfActive(true)
+		DestroyModel(oldHeroModel,oldGroupName)
+		oldHeroModel = nil
+		oldHeroKnown:SetSelfActive(false)
+		oldHeroUnKnown:SetSelfActive(true)
+		oldHeroFloorSpine:PlayAnimation("tongyong",true)
+		--raceBg:SetSelfActive(false)
+		--
+		oldDisapearSpine.gameObject:SetSelfActive(true)
+		oldDisapearSpine:PlayAnimation("born",false,function()
+			oldDisapearSpine.gameObject:SetSelfActive(false)
+		end)
+	else
+		tipTxtObj:SetSelfActive(false)
+		conversionBtnObj:SetSelfActive(true)
+		heroConversionDustNumTxt.text = curHero.crystalConsumption
+		SetFontColorWithEnough(heroConversionDustNumTxt,function()
+			return CheckPackItemEnough(1019,tonumber(curHero.crystalConsumption))
+		end,false)
+		oldHeroKnown:SetSelfActive(true)
+		oldHeroUnKnown:SetSelfActive(false)
+		raceBg:SetSelfActive(true)
+		oldApearSpine.gameObject:SetSelfActive(true)
+		oldApearSpine:PlayAnimation("born",false,function()
+			oldApearSpine.gameObject:SetSelfActive(false)
+		end)
+		ShowHero(curHero,oldHeroRaceImg,oldHeroNameTxt,nil,oldHeroLevelTxt,oldHeroModelRoot,true,oldHerooStarRoot,oldHeroFloorSpine)
+	end 
+end 
+
+function OnNotification_RefreshPreHero(objs)
+	local preHero = objs[0]
+	if preHero == nil then
+		newHeroUnKnown:SetSelfActive(true)
+		newHeroKnown:SetSelfActive(false)
+		newHeroFloorSpine:PlayAnimation("tongyong",true)
+	else
+		newHeroUnKnown:SetSelfActive(true)
+		newHeroKnown:SetSelfActive(true)
+		ShowHero(preHero,newHeroRaceImg,newHeroNameTxt,"????",newHeroLevelTxt,nil,false,newHeroStarRoot,newHeroFloorSpine)
+	end 
+end 
+
+function OnNotification_RefreshNewHero(objs)
+	local newHero = objs[0]
+	if newHero == nil then
+		DestroyModel(newHeroModel,newGroupName)
+		newHeroModel = nil
+		newHeroUnKnown:SetSelfActive(true)
+		newHeroKnown:SetSelfActive(false)
+		newHeroFloorSpine:PlayAnimation("tongyong",true)
+		newDisapearSpine.gameObject:SetSelfActive(true)
+		newDisapearSpine:PlayAnimation("born",false,function()
+			newDisapearSpine.gameObject:SetSelfActive(false)
+		end)
+	else
+		newHeroUnKnown:SetSelfActive(false)
+		newHeroKnown:SetSelfActive(true)
+		newApearSpine.gameObject:SetSelfActive(true)
+		newApearSpine:PlayAnimation("born",false,function()
+			newApearSpine.gameObject:SetSelfActive(false)
+		end)
+		ShowHero(newHero,newHeroRaceImg,newHeroNameTxt,nil,newHeroLevelTxt,newHeroModelRoot,false,newHeroStarRoot,newHeroFloorSpine)
+	end 
+end 
+
+function OnNotification_WaitConfirmConversion(objs)
+	conversionBtnObj:SetSelfActive(false)
+	saveBtnObj:SetSelfActive(true)
+	cancelBtnObj:SetSelfActive(true)
+	messageBtnObj:SetSelfActive(true)
+end 
+
+function OnNotification_CancelConversion(objs)
+	saveBtnObj:SetSelfActive(false)
+	cancelBtnObj:SetSelfActive(false)
+	messageBtnObj:SetSelfActive(false)
+	conversionBtnObj:SetSelfActive(true)
+end 
+
+function OnNotification_EndConfirmConversion(objs)
+	saveBtnObj:SetSelfActive(false)
+	cancelBtnObj:SetSelfActive(false)
+	messageBtnObj:SetSelfActive(false)
+end 
+
+function OnNotification_SaveConversion(objs)
+	heroGrid:RefreshBaseData(objs[0])
+end 
+
+function OnNotification_CloseSubView(objs)
+	self:HideView(self.gameObject.name)
+end 
+
+function ShowHero(hero,raceObj,nameTxt,name,levelTxt,modelRoot,isOld,starRoot,floorSpine)
+	if raceObj ~= nil then
+		SetRaceIconByHeroId(raceObj,hero.heroId)
+	end
+	if starRoot ~= nil then
+		ShowHeroQuality(hero.heroId,starRoot)
+	end
+	if name == nil then
+		nameTxt.text = ResTblContainer:GetPropToStr(hero.heroId,HeroBase.title,HeroBase.actorTbl)
+	else 
+		nameTxt.text = name
+	end 
+	if levelTxt ~= nil then
+		levelTxt.text = tostring(GetHeroAllLevel(hero.grade,hero.level,hero.distillationLevel))
+	end
+	if floorSpine ~= nil then
+		local raceId = ResTblContainer:GetPropToInt(hero.heroId,HeroBase.group,HeroBase.actorTbl)
+		floorSpine:PlayAnimation(GetPlatformAnim(raceId),true)
+	end
+	if modelRoot ~= nil then
+		CreateModel(ResTblContainer:GetPropToStr(hero.heroId,HeroBase.model,HeroBase.actorTbl),modelRoot,isOld,tostring(hero.uid))
+	end
+end 
+
+function CreateModel(name, root, isOld, groupName)
+	CsBridge.CacheAssetsByModule(self.Module ,function()
+		local obj = CsBridge.objectCache:CreateObject(name, true)
+		local model = obj.transform:GetChild(0)
+		obj.transform:SetParent(root.transform, false)
+		CsBridge.UnityHelper.SetAnchoredPosition(obj.gameObject,0,0)
+		CsBridge.UnityHelper.SetlocalScale(model.gameObject,-0.7,0.7,1)
+		model:GetComponent("Spine.Unity.SkeletonGraphic"):PlayAnimation("stand", true)
+		if isOld then
+			oldHeroModel = obj
+			oldGroupName = groupName
+		else
+			newHeroModel = obj
+			newGroupName = groupName
+		end 
+		waitSelectEffect = false
+	end, name)
+end 
+
+function OnRaceTogGroupClick(isOn,index)
+	if not isOn then
+		return
+	end 
+	self:SendCommand("ScreenHero",index-1)
+end 
+
+function OnConversionBtnClick(sender)
+    self:SendCommand("HeroConversion")
+end 
+
+function OnSaveBtnClick(sender)
+	self:SendCommand("SaveConversion")
+end 
+
+function OnMessageBtnClick(sender)
+	self:SendCommand("ShowNewHeroMessage")
+end 
+
+function OnCancelBtnClick(sender)
+	CsBridge.messageManager:PopMsgBox("",Language:getStr("Confirm_HeroConversion_Result"),Language:getStr("local_cancel"),nil,Language:getStr("local_confirm"),OnConfirmCallBack);
+end 
+
+function OnConfirmCallBack()
+	self:SendCommand("CancelConversion")
+end
+
+function DoExit()
+
+	raceTogArr = nil
+	raceFlag = nil
+
+	heroGrid  = nil
+
+	oldHeroKnown  = nil
+	oldHeroUnKnown = nil
+	oldHeroFloorSpine = nil
+	oldHeroModelRoot = nil
+	oldHeroModel = nil
+	oldHeroLevelTxt = nil
+	oldHeroNameTxt = nil
+	oldHeroRaceImg = nil
+	oldHerooStarRoot = nil
+	oldApearSpine = nil
+	oldDisapearSpine = nil
+	oldGroupName = nil
+
+	newHeroKnown = nil
+	newHeroUnKnown = nil
+	newHeroFloorSpine = nil
+	newHeroModelRoot = nil
+	newHeroModel = nil
+	newHeroLevelTxt = nil
+	newHeroNameTxt = nil
+	newHeroRaceImg = nil
+	newHeroStarRoot = nil
+	newApearSpine = nil
+	newDisapearSpine = nil
+	newGroupName = nil
+
+	saveBtnObj = nil
+	cancelBtnObj = nil
+	conversionBtnObj = nil
+	messageBtnObj = nil
+
+	heroConversionDustNumTxt = nil
+
+	tipTxtObj = nil
+
+	raceBg = nil
+	backRaceBg = nil
+
+	effectObj = nil
+	heroEffect = nil
+
+	isInit = nil
+	waitSelectEffect = nil
+end

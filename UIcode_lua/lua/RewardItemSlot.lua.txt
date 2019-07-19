@@ -1,0 +1,15 @@
+
+function OnRewardItemSlotBindValue(slot,itemData)
+
+    local itemBase_TF=slot.transform:Find("ItemBase")
+	BindItemBaseValue(itemBase_TF,itemData)
+
+end
+
+function BindItemValue(slot,type,itemId,count)
+    local data={}
+    data.id=itemId
+    data.count=count
+    data.typeId=type
+    OnRewardItemSlotBindValue(slot,data)
+end

@@ -1,0 +1,74 @@
+--[[
+	file: UnionBattleStatView.lua
+	author: hangang
+	description: Union battle statistics panels' container
+]]
+
+local ChildViewIdx =
+{
+	ChallengeStat = 1,
+	BeChallengedStat = 2,
+	MemberStat = 3,
+}
+
+local currentTabIndex = 0
+local childToggles
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 1     --shadow type
+	InitUI()            --cache UI items
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	childToggles = {}
+	local path = "Top/TogGroup"
+	local togglesRoot = selfTrans:Find(path)
+	for i = 0, togglesRoot.childCount - 1 do
+		local toggle = togglesRoot:GetChild(i):GetComponent(CLS_TOGGLE_ARCHLY)
+		childToggles[toggle.Index] = toggle
+	end
+end
+
+--On animation finished event--------------------------------------------------------
+function OnAnimationFinished()
+	currentTabIndex = 0
+	childToggles[0].isOn = false
+	childToggles[0].isOn = true
+end
+
+--UI event handlers-------------------------------------------------------------------
+function OnTogGroupClick(isOn, index)
+	if currentTabIndex == index + 1 then
+		return
+	end
+	currentTabIndex = index + 1
+	if currentTabIndex == ChildViewIdx.ChallengeStat then
+		self:SendCommand("OpenChallengeStatView")
+	elseif currentTabIndex == ChildViewIdx.BeChallengedStat then
+		self:SendCommand("OpenBeChallengedStatView")
+	else
+		self:SendCommand("OpenMemberStatView")
+	end
+end
+
+--On closing--------------------------------------------------------------------------
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close() 
+    self:SendCommand("CloseUnionBattleStatView")
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	ChildViewIdx = nil
+	currentTabIndex = nil
+	childToggles = nil
+end

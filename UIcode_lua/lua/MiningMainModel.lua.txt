@@ -1,0 +1,413 @@
+local miningUtils = require "MiningUtils"
+local miningTechnologyUtils = require "MiningTechnologyUtils"
+
+---当前地图页码
+local curMapIndex = 1
+--- 最大地图页码
+local maxMapIndex = 1
+--- 页码变化的目标页码
+local nextMapIndex = 1
+--- 地图本地表数据
+local mapArr = nil
+--- 自己的矿产数组
+local myMinerArr = nil
+---@type function 发生跳转需要执行的提示
+local goTargetPageTipFunc = nil
+
+--- 所有矿点类型
+local allMiningCaveTypeArr = nil
+--- 用于地图的定时器
+local TICKER_MAP = "ticker_map_MiningMainModel"
+--- 用于自己的矿产的定时器
+local TICKER_MY_CAVE = "ticker_myCave_MiningMainModel"
+---@type number 自己能占领的最大矿点数
+local MY_CAVE_HOLD_MAX = 0
+
+---初始化
+function DoInit()
+    allMiningCaveTypeArr = miningUtils.GetMiningCaveTypeList()
+    MY_CAVE_HOLD_MAX = GetConstValue("MineralNumber")
+end
+
+---设置上一页和下一页的按钮状态
+local function GetMapRightAndLeftBtnState()
+    local result = {}
+    local leftPageBtnGray = false
+    local firstPageBtnGray = false
+    local rightPageBtnGray = false
+    if curMapIndex == maxMapIndex == 1 then
+        leftPageBtnGray = true
+        firstPageBtnGray = true
+        rightPageBtnGray = true
+    elseif curMapIndex == 1 then
+        leftPageBtnGray = true
+        firstPageBtnGray = true
+        rightPageBtnGray = false
+    elseif curMapIndex == maxMapIndex then
+        leftPageBtnGray = false
+        firstPageBtnGray = false
+        rightPageBtnGray = true
+    else
+        leftPageBtnGray = false
+        firstPageBtnGray = false
+        rightPageBtnGray = false
+    end
+    result.leftPageBtnGray = leftPageBtnGray
+    result.firstPageBtnGray = firstPageBtnGray
+    result.rightPageBtnGray = rightPageBtnGray
+    return result
+end
+
+---发生跳转发生的提示
+local function GoTargetMapPageTipFunc()
+    CsBridge.ShowHintBoxTwo(string.format(Language:getStr("GoTargetPageSuccess"), tostring(nextMapIndex)))
+end
+
+---开始我的矿产界面的定时器
+local function StartMyCaveTicker(itemArr)
+    if itemArr == nil or #itemArr <= 0 then
+        return
+    end
+    Timer:AddTicker(TICKER_MY_CAVE, CsBridge.timeManager.ServerTime * 2, function()
+        local result = {}
+        result.itemArr = itemArr or {}
+        result.receiveBtnGray = true
+        local haveOutPut = false
+        for i = 1, #itemArr do
+            local item = itemArr[i]
+            if item.protectionEndTime > CsBridge.timeManager.ServerTime then
+                item.protectionEndTimeStr = CheckTimeRemain(item.protectionEndTime, false)
+            else
+                item.protectionEndTimeStr = ""
+            end
+            if item.lastTakeMineTime > 0 and item.time * 1000 < CsBridge.timeManager.ServerTime - item.lastTakeMineTime then
+                item.showTakeTip = true
+                result.receiveBtnGray = false
+                haveOutPut = true
+            else
+                item.showTakeTip = false
+            end
+        end
+        self:SendNotification("RefreshMyCaveRed", haveOutPut)
+        self:SendNotification("GetMyCaveItem", result)
+    end, nil, 1)
+end
+
+---更新自己的矿产
+local function RefreshMyCaveItem()
+    local result = {}
+    result.itemArr = myMinerArr or {}
+    result.receiveBtnGray = true
+    for i = 1, #result.itemArr do
+        if result.itemArr[i].showTakeTip then
+            result.receiveBtnGray = false
+        end
+    end
+    StartMyCaveTicker(myMinerArr)
+    self:SendNotification("GetMyCaveItem", result)
+end
+
+---我自己的矿是否有产出
+local function MyCaveHaveOutPut(minerId)
+    local result = false
+    if myMinerArr == nil or #myMinerArr <= 0 then
+        return result
+    end
+    for i = 1, #myMinerArr do
+        local minerItem = myMinerArr[i]
+        if minerId ~= nil then
+            if minerItem.idStr == minerId
+                    and minerItem.lastTakeMineTime > 0
+                    and minerItem.time * 1000 < CsBridge.timeManager.ServerTime - minerItem.lastTakeMineTime then
+                result = true
+            end
+        else
+            if minerItem.lastTakeMineTime > 0
+                    and minerItem.time * 1000 < CsBridge.timeManager.ServerTime - minerItem.lastTakeMineTime then
+                result = true
+            end
+        end
+    end
+    return result
+end
+
+---刷新地图信息
+local function RefreshMapInfo(mapArrInfo)
+    mapArr = mapArrInfo
+    maxMapIndex = #mapArr or 1
+    StartMapItemTimer()
+    if goTargetPageTipFunc ~= nil then
+        goTargetPageTipFunc()
+    end
+    goTargetPageTipFunc = nil
+    nextMapIndex = nextMapIndex <= 0 and 1 or nextMapIndex
+    nextMapIndex = nextMapIndex >= maxMapIndex + 1 and maxMapIndex or nextMapIndex
+    curMapIndex = nextMapIndex
+    local haveOutPut = MyCaveHaveOutPut()
+    StartMyCaveTicker(myMinerArr)
+    local myCount = miningUtils.GetMyCaveCount()
+    local viewData = {}
+    viewData.mapArr = mapArr
+    viewData.curMapIndex = curMapIndex
+    viewData.btnState = GetMapRightAndLeftBtnState()
+    viewData.haveCanOpenTechnology = miningTechnologyUtils.HaveCanOpenTechnology()
+    viewData.haveOutPut = haveOutPut
+    viewData.freeCaveStr = string.format(Language:getStr("MyFreeCaveNumber"), MY_CAVE_HOLD_MAX - myCount)
+    self:SendNotification("InitMainMapVIew", viewData)
+end
+
+---刷新我的矿点的红点
+local function RefreshMyCaveRed()
+    local haveOutPut = false
+    for i = 1, #myMinerArr do
+        haveOutPut = MyCaveHaveOutPut(myMinerArr[i].idStr)
+    end
+    self:SendNotification("RefreshMyCaveRed", haveOutPut)
+end
+
+---从服务器获取地图信息
+local function GetMapInfoFromServer()
+    Timer:StopTicker(TICKER_MAP)
+    miningUtils.GetMyselfCaveItem(allMiningCaveTypeArr, function(minerArr)
+        myMinerArr = minerArr
+    end, RefreshMapInfo, self)
+end
+
+---开始地图上的倒计时
+function StartMapItemTimer()
+    Timer:AddTicker(TICKER_MAP, CsBridge.timeManager.ServerTime * 2, function(targetTime)
+        local needReq = false
+        for i = 1, #mapArr do
+            local mapPage = mapArr[i]
+            for j = 1, #mapPage do
+                local mapItem = mapPage[j]
+                if mapItem.protectionEndTime and mapItem.protectionEndTime > 0 then
+                    local remainTime = CheckTimeRemain(mapItem.protectionEndTime, false)
+                    mapItem.protectionEndTimeStr = remainTime
+                end
+                if mapItem.protectionEndTime > 0 and mapItem.protectionEndTime < CsBridge.timeManager.ServerTime then
+                    ---需要重新请求服务器数据
+                    needReq = true
+                end
+            end
+        end
+        if needReq then
+            Timer:StopTicker(TICKER_MAP)
+            nextMapIndex = curMapIndex
+            GetMapInfoFromServer()
+        end
+        self:SendNotification("RefreshMap", mapArr)
+    end, nil, 1)
+end
+
+---打开持有者信息界面
+local function OpenHolderInfoView(caveItemInfo)
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("MiningHolderInfoView", "MiningHolderInfoModel", true, true)
+        view:SetParamDataList(caveItemInfo)
+    end, "MiningHolderInfoView", "ItemSlot", "MiningRobHeroItemSlot")
+end
+
+---设置默认打开的地图页
+function OnCommand_SetTargetPageIndex(objs)
+    curMapIndex = objs[0]
+    nextMapIndex = curMapIndex
+end
+
+---打开矿产地图
+function OnCommand_OpenMiningCaveMap(objs)
+    nextMapIndex = curMapIndex
+    Timer:StopTicker(TICKER_MY_CAVE)
+    GetMapInfoFromServer()
+end
+
+---显示帮助界面
+function OnCommand_ShowHelpView(objs)
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("HelpView", "MiningMainModel")
+        view:SetData(INSTRUCTION_MINING_MAP)
+    end, "HelpView")
+end
+
+---到达指定页码
+function OnCommand_GoTargetMapPage(objs)
+    if objs[0] ~= nil and objs[0] ~= "" then
+        local value = tonumber(objs[0])
+        if value ~= nil then
+            if value <= 0 or value > maxMapIndex then
+                CsBridge.ShowHintBoxTwo(Language:getStr("CanNotGoThisPageIndex"))
+                return
+            else
+                nextMapIndex = value
+                goTargetPageTipFunc = GoTargetMapPageTipFunc
+                GetMapInfoFromServer()
+            end
+        else
+            local splitArr = string.split(objs[0], "/")
+            if splitArr.Length == 2 then
+                nextMapIndex = tonumber(splitArr[0])
+                GetMapInfoFromServer()
+            else
+                CsBridge.ShowHintBoxTwo(Language:getStr("InvalidInputValue"))
+            end
+        end
+    else
+        CsBridge.ShowHintBoxTwo(Language:getStr("InvalidInputValue"))
+    end
+end
+
+---翻页
+function OnCommand_SendCommandForPageMoved(objs)
+    local isNextPage = objs[0]
+    if isNextPage then
+        nextMapIndex = curMapIndex + 1
+    else
+        nextMapIndex = curMapIndex - 1
+    end
+    if nextMapIndex <= 0 or nextMapIndex > maxMapIndex then
+        CsBridge.ShowHintBoxTwo(Language:getStr("CanNotGoThisPageIndex"))
+        return
+    end
+    self:SendNotification("GoTargetMapPage", mapArr, nextMapIndex, GetMapRightAndLeftBtnState())
+    GetMapInfoFromServer()
+end
+
+---地图上的矿点被点击
+function OnCommand_ShowMiningMapItemInfo(objs)
+    local data = objs[0]
+    if data.state == CaveItemStateEnum.Free then
+        CsBridge.CacheAssetsByModule(self.Module, function()
+            local view = CsBridge.OpenView("MiningNobodyHoldView", "MiningHolderInfoModel", false, true)
+            view:SetParamDataList(data)
+        end, "MiningNobodyHoldView", "ItemSlot")
+    else
+        OpenHolderInfoView(data)
+    end
+end
+
+---打开科技界面
+function OnCommand_OpenTechnologyView(objs)
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("MiningTechnologyView", "MiningTechnologyModel", true, true)
+    end, "MiningTechnologyView", "MiningTechnologyItemSlot")
+end
+
+---打开快速查找地图界面
+function OnCommand_OpenQuickFindMiningMapView(objs)
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("MiningQuickFindCaveView", "MiningMainModel", false, true)
+        view:SetParamDataList(allMiningCaveTypeArr)
+    end, "MiningQuickFindCaveView", "MiningQuickFindCaveItemSlot")
+end
+
+---一键找矿
+function OnCommand_QuickFindCaveItemMap(objs)
+    local caveTypeItem = objs[0]
+    miningUtils.FindFreeCaveItem(caveTypeItem, function(target)
+        if target == -1 then
+            CsBridge.ShowHintBoxTwo(Language:getStr("NoCaveItemCanToHold"))
+            return
+        else
+            target = target == -1 and curMapIndex or target
+            nextMapIndex = target
+            goTargetPageTipFunc = GoTargetMapPageTipFunc
+            GetMapInfoFromServer()
+            self:HideView("MiningQuickFindCaveView")
+        end
+    end, RefreshMapInfo, self)
+end
+
+---打开我的矿产界面
+function OnCommand_OpenMyMiningCaveView(objs)
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("MiningMyCaveView", "MiningMainModel", false, true)
+    end, "MiningMyCaveView", "MiningMyCaveItemSlot")
+end
+
+---获取我的矿产数据
+function OnCommand_GetMyCaveItem()
+    Timer:StopTicker(TICKER_MY_CAVE)
+    miningUtils.GetMyselfCaveItem(allMiningCaveTypeArr, function(minerArr)
+        myMinerArr = minerArr
+        RefreshMyCaveItem()
+    end, RefreshMapInfo, self)
+end
+
+---收取产出
+function OnCommand_GetOutPut(objs)
+    local mineId = nil
+    if objs and objs.Length > 0 and objs[0] ~= nil then
+        mineId = objs[0].idStr
+    end
+    local haveOut = MyCaveHaveOutPut(mineId)
+    if not haveOut then
+        CsBridge.ShowHintBoxTwo(Language:getStr("NoMiningOutPut"))
+        return
+    end
+    ---收取资源的回调
+    local function ReceiveOutputCallback()
+        RefreshMyCaveItem()
+    end
+    miningUtils.GetMyCaveOutPut(mineId, function(resp)
+        local myArr = {}
+        if myMinerArr ~= nil and mineId ~= nil then
+            for i = 1, #myMinerArr do
+                if myMinerArr[i].idStr == mineId then
+                    table.insert(myArr, myMinerArr[i])
+                end
+            end
+        else
+            myArr = myMinerArr
+        end
+        miningUtils.UpdateMyCaveItemFofGetOutPut(myArr)
+        RefreshMyCaveRed()
+        ShowRewardReceivedTip(self, resp.resource, ReceiveOutputCallback, true)
+    end)
+end
+
+---跳转到自己的矿
+function OnCommand_GoMyCaveInfo(objs)
+    local targetCaveInfo = objs[0]
+    OpenHolderInfoView(targetCaveInfo)
+end
+
+---显示物品提示信息
+function OnCommand_ShowItemTip(objs)
+    local data = objs[0]
+    local itemType = data.typeId
+    if itemType == ItemTypeEnum.Hero then
+        ShowHeroTip(self, data.id, 1, 1)
+    else
+        ShowTip(self, itemType, data.id)
+    end
+end
+
+---显示用户信息界面
+function OnCommand_OpenPlayerInfoView(objs)
+    local caveData = objs[0]
+    local playerInfo = caveData.host
+    if playerInfo == nil or playerInfo.isSelf then
+        return
+    end
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("PlayerInfoView", "PlayerInfoModel", true, true)
+        local isLocal = false
+        view:SetParamDataList(isLocal, playerInfo.userId, playerInfo.zone)
+    end, "PlayerInfoView", "AchievementItemSlot")
+end
+
+---退出该module回调
+function DoOnExit()
+    Timer:StopTicker(TICKER_MAP)
+    Timer:StopTicker(TICKER_MY_CAVE)
+    curMapIndex = nil
+    maxMapIndex = nil
+    nextMapIndex = nil
+    mapArr = nil
+    myMinerArr = nil
+    allMiningCaveTypeArr = nil
+    TICKER_MAP = nil
+    TICKER_MY_CAVE = nil
+    goTargetPageTipFunc = nil
+    MY_CAVE_HOLD_MAX = nil
+end

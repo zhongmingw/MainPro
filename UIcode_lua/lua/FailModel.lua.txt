@@ -1,0 +1,11 @@
+
+function DoInit()
+
+end
+
+function InitProperties()
+end
+
+function OnCommand_CreateRole()
+	--print("CreateRole")
+end

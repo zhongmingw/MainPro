@@ -1,0 +1,37 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-02-11 15:54:16
+
+local curJewel
+local callback
+
+function DoInit()
+end
+
+function InitProperties()
+end
+
+function OnCommand_InitJewelData(objs)
+    local jewel = objs[0]
+    curJewel = {
+        id = jewel.id,
+        typeId = ItemTypeEnum.Jewel
+    }
+
+    if objs.Length == 2 then
+        callback = objs[1]
+    end
+    self:SendNotification("RefreshJewelGetView", curJewel)
+end
+
+function OnCommand_CloseView(objs)
+    if callback then
+        callback()
+    end
+end
+
+function DoOnExit()
+    curJewel = nil
+    callback = nil
+end

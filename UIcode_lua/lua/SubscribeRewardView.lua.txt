@@ -1,0 +1,154 @@
+require "SubscribeRewardItemSlot"
+
+---@type UnityEngine.GameObject 通行证图标
+local subscriberImgObj
+---@type UnityEngine.TextMesh 订阅倒计时
+local subscriptionTimeTxt
+---@type Client.Library.ButtonArchly 购买按钮
+local buySubscribeBtn
+---@type UnityEngine.GameObject 购买按钮
+local buySubscribeBtnObj
+---@type UnityEngine.TextMesh 购买按钮的消耗
+local buySubscribeBtnCostTxt
+---@type Client.Library.ButtonArchly 已购买按钮
+local alreadyBuyBtn
+---@type UnityEngine.GameObject 已购买按钮
+local alreadyBuyBtnObj
+---@type Client.Library.ButtonArchly 一键收取按钮
+local receiveBtn
+---@type Client.Library.UIItemGrid
+local itemGrid
+---@type UnityEngine.UI.ScrollRect
+local scrollRect
+---@type UnityEngine.Transform
+local contentTrans
+---@type UnityEngine.TextMesh
+local rewardRemainTimeTxt
+
+local MOVE_TIME = 0.3
+
+---@type Client.Library.ViewBase
+local selfViewBase
+
+function DoInit()
+    selfViewBase = self
+    selfViewBase.Anim = 0
+    subscriberImgObj = selfViewBase:GetGameObjectAtPath("TopInfo/iconImg")
+    subscriptionTimeTxt = selfViewBase:GetComponentAtPath("TopInfo/iconImg/SubscribeTimeTxt", CLS_TEXT)
+    buySubscribeBtn = selfViewBase:GetComponentAtPath("BuyBtn", CLS_BUTTON_ARCHLY)
+    buySubscribeBtnObj = buySubscribeBtn.gameObject
+    buySubscribeBtnCostTxt = selfViewBase:GetComponentAtPath("BuyBtn/numberTxt", CLS_TEXT)
+    alreadyBuyBtn = selfViewBase:GetComponentAtPath("AlreadyBuyBtn", CLS_BUTTON_ARCHLY)
+    alreadyBuyBtnObj = alreadyBuyBtn.gameObject
+    receiveBtn = selfViewBase:GetComponentAtPath("Bottom/ReceiveBtn", CLS_BUTTON_ARCHLY)
+    itemGrid = selfViewBase:GetComponentAtPath("reward/rewardSV/ScrollRect/Viewport/Grid", CLS_UI_ITEM_GRID)
+    scrollRect = selfViewBase:GetComponentAtPath("reward/rewardSV/ScrollRect", "UnityEngine.UI.ScrollRect")
+    contentTrans = selfViewBase.transform:Find("reward/rewardSV/ScrollRect/Viewport/Grid")
+    rewardRemainTimeTxt = selfViewBase:GetComponentAtPath("Bottom/RefreshTxt/TimeTxt", CLS_TEXT)
+end
+
+function OnAnimationFinished()
+    selfViewBase:SendCommand("InitRewardViewData")
+end
+
+---初始化界面
+local function InitView(viewData)
+    itemGrid:RefreshItemSlots(viewData.allItemArr, selfViewBase.gameObject, "SubscribeRewardItemSlot")
+    if viewData.showAllBtn then
+        buySubscribeBtnCostTxt.text = viewData.payData.showPrice
+        buySubscribeBtnObj:SetActive(viewData.showBuyBtn)
+        alreadyBuyBtnObj:SetActive(not viewData.showBuyBtn)
+        alreadyBuyBtn.Gray = viewData.alreadyBuyGray
+    else
+        buySubscribeBtnObj:SetActive(false)
+        alreadyBuyBtnObj:SetActive(false)
+    end
+    subscriptionTimeTxt.text = viewData.subscribeRemainTimeStr
+    CsBridge.IconData.SetIconByName(subscriberImgObj, viewData.iconName)
+    receiveBtn.Gray = viewData.receiveGray
+    if viewData.tween then
+        local t1 = CsBridge.TweenUtils.MoveTo(contentTrans, 0, viewData.autoMoveHeight, MOVE_TIME, nil)
+        t1:DoPlay()
+    else
+        contentTrans.localPosition = CsBridge.Vector3ForLua.CreateVector3ForLua(0, viewData.autoMoveHeight, 0):ToVector3()
+    end
+end
+
+---获取到界面数据
+function OnNotification_InitRewardViewData(objs)
+    local viewData = objs[0]
+    InitView(viewData)
+end
+
+---刷新倒计时
+function OnNotification_RefreshSubscribeStr(objs)
+    subscriptionTimeTxt.text = objs[0]
+end
+
+---刷新周期倒计时
+function OnNotification_ShowRewardRemainTime(objs)
+    rewardRemainTimeTxt.text = objs[0]
+end
+
+---显示介绍
+function OnInfBtnClick()
+    selfViewBase:SendCommand("ShowDailyTaskRule")
+end
+
+---奖励的物品点击
+function OnItemGridItemSlotClick(obj)
+    local data = obj.m_data
+    selfViewBase:SendCommand("ShowItemTip", data)
+end
+
+---左侧被点击一个
+function OnGridLeftClick(obj)
+    local data = obj.m_data
+    selfViewBase:SendCommand("GetDailyTaskReward", data)
+end
+
+---右侧被点击一个
+function OnGridRightClick(obj)
+    local data = obj.m_data
+    selfViewBase:SendCommand("GetSubscribeReward", data)
+end
+
+---一键领取
+function OnReceiveBtnClick()
+    selfViewBase:SendCommand("GetAllReward")
+end
+
+---购买按钮点击
+function OnBuyBtnClick()
+    selfViewBase:SendCommand("BuySubscribe")
+end
+
+---已购买点击
+function OnAlreadyBuyBtnClick()
+    selfViewBase:SendCommand("AlreadyBuyBtnClick")
+end
+
+---关闭界面之前关闭子界面
+function BeoforeReturnBack()
+    selfViewBase:HideView(selfViewBase.gameObject.name)
+end
+
+function OnClose()
+
+end
+
+function DoExit()
+    subscriberImgObj = nil
+    subscriptionTimeTxt = nil
+    buySubscribeBtn = nil
+    buySubscribeBtnObj = nil
+    buySubscribeBtnCostTxt = nil
+    alreadyBuyBtn = nil
+    alreadyBuyBtnObj = nil
+    receiveBtn = nil
+    itemGrid = nil
+    scrollRect = nil
+    contentTrans = nil
+    MOVE_TIME = nil
+    selfViewBase = nil
+end

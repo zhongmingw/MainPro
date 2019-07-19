@@ -1,0 +1,62 @@
+local loadedAPArenaRecordItemSlot=require "APArenaRecordItemSlot"
+local none_GO
+local aPArenaRecordGrid
+
+function DoInit()
+	self.Shadow=1
+	none_GO=self:GetGameObjectAtPath("Center/None")
+	aPArenaRecordGrid = self:GetComponentAtPath("Center/ScrollRect/Viewport/APArenaRecordGrid",CLS_UI_ITEM_GRID)
+end
+
+function OnOpen()
+	aPArenaRecordGrid:ClearItems()
+end
+
+function OnNotification_UpdateAPArenaRecordView(objs)
+	local pbAPArenaRecordData=objs[0]
+	none_GO:SetSelfActive(pbAPArenaRecordData==nil)
+	if pbAPArenaRecordData~=nil then
+		aPArenaRecordGrid:RefreshItemSlots(pbAPArenaRecordData.defRecords,self.gameObject,"APArenaRecordItemSlot")
+	end
+end
+
+function OnAPArenaRecordGridPlayerBaseClick(obj)
+	local data = obj.m_data
+	CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			local view = CsBridge.OpenView("PlayerInfoView", "PlayerInfoModel",true,true)
+			view.transform.parent:SetAsLastSibling()
+			local isLocal = false
+			local uid = data.playerBaseInfo.userId
+			local zone = data.playerBaseInfo.zone
+			view:SetParamDataList(isLocal, uid, zone)
+		end, "PlayerInfoView","AchievementItemSlot")
+end
+
+function OnAPArenaRecordGridRecordBtnClick(obj)
+	local data=obj.m_data
+	self:SendCommand("RecordVedio",data.id)
+end
+
+function OnCloseBtnClick(sender)
+	CloseView()
+end
+
+function OnMaskClick(sender)
+	CloseView()
+end
+
+
+function CloseView()
+	self:HideView(self.gameObject.name)
+end
+
+function OnClose()
+	-- body
+end
+
+function DoExit()
+	loadedAPArenaRecordItemSlot=nil
+	none_GO = nil
+	aPArenaRecordGrid = nil
+end

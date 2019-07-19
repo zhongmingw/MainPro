@@ -1,0 +1,2365 @@
+local yield_return = (require 'cs_coroutine').yield_return
+
+function GetHeroBreakMaxLevel(quality, containOther)
+	local contain = true
+	if containOther == nil then
+		contain = true
+	else
+		contain = containOther
+	end
+	local maxLevel = 0
+	if quality == nil or quality == 0 then
+		return maxLevel
+	end
+	local tbl = ResTblContainer:GetTable(HeroBreakLevel.tblName)
+	local ids = tbl:GetCol(HeroBreakLevel.id)
+	local max = 0
+	for k = DISTILL_QUALITY + 1, quality do
+		for i = 0, ids.Length-1 do
+			local infos = tbl:GetRow(ids[i],HeroBreakLevel.grade,HeroBreakLevel.level)
+			if tonumber(infos[0]) == k then
+				max = math.max(max, tonumber(infos[1]))
+			end
+		end
+		if contain then
+			maxLevel = maxLevel + max
+		end
+		if not contain and k == quality then
+			maxLevel = maxLevel + max
+		end
+	end
+	return maxLevel
+end
+
+function CheckUIOpen(id)
+	return ResTblContainer:GetPropToInt(id,UIOpenBase.isOpen,UIOpenBase.actorTbl) == 1
+end
+
+function CheckUILevelOpen(id)
+	local playerInfo=appData:checkData("PlayerInfo")
+	if playerInfo == nil then
+		return false
+	end
+	local tbl = ResTblContainer:GetTable(UIOpenBase.actorTbl)
+	local conditionType=tbl:GetInt(id,UIOpenBase.conditionType)
+	local level=tbl:GetInt(id,UIOpenBase.level)
+	local vipLevel=tbl:GetInt(id,UIOpenBase.vipLevel)
+	local name = tbl:Get(id,UIOpenBase.name)
+	local levelEnough = playerInfo.level >= level
+	local vipLevelEnough = playerInfo.vip >= vipLevel
+	if conditionType == 2 then
+		if not (levelEnough or vipLevelEnough) then
+			CsBridge.hintUILayer:ShowHintBox(string.format(Language:getStr("UILevelAndVipOpenDec"), level,vipLevel,name))
+		end
+		return levelEnough or vipLevelEnough
+	else
+		return levelEnough and vipLevelEnough
+	end
+end
+
+function UIOpen(id, showHint)
+	local playerInfo=appData:checkData("PlayerInfo")
+	if playerInfo == nil then
+		return false
+	end
+	local tbl = ResTblContainer:GetTable(UIOpenBase.actorTbl)
+	local key = tostring(id)
+	local conditionType=tbl:GetInt(key,UIOpenBase.conditionType)
+	local level=tbl:GetInt(key,UIOpenBase.level)
+	local vipLevel=tbl:GetInt(key,UIOpenBase.vipLevel)
+	local isOpen=tbl:GetInt(key,UIOpenBase.isOpen) == 1
+	local name = tbl:Get(key,UIOpenBase.name)
+	if showHint == nil then
+		showHint = true
+	end
+	if not isOpen then
+		if showHint then
+			CsBridge.hintUILayer:ShowHintBox(string.format(Language:getStr("Coming_Soon"), name),2)
+		end
+		return false
+	end
+
+	local ret = false
+	local levelEnough = playerInfo.level >= level
+	local vipLevelEnough = playerInfo.vip >= vipLevel
+	if conditionType == 2 then
+		ret = levelEnough or vipLevelEnough
+		if not ret and showHint then
+			CsBridge.hintUILayer:ShowHintBox(string.format(Language:getStr("LevelOrVipNotOpenUI"), level, vipLevel, name),2)
+		end
+	else
+		ret = levelEnough and vipLevelEnough
+		if not levelEnough and showHint then
+			CsBridge.hintUILayer:ShowHintBox(string.format(Language:getStr("LevelNotOpenUI"), level, name),2)
+		elseif not vipLevelEnough and showHint then
+			CsBridge.hintUILayer:ShowHintBox(string.format(Language:getStr("VipLevelNotOpenUI"), vipLevel, name),2)
+		end
+	end
+	return ret
+end
+
+function LinkSystem(systemId, view, objs)
+	if not UIOpen(systemId,true) then
+		return
+	end
+	local linkedSysStr = ResTblContainer:GetPropToStr(systemId, UIOpenBase.LinkedUI, UIOpenBase.actorTbl)
+	local strs = SplitString(linkedSysStr,";")
+	local moduleName = strs[0]
+	if strs.Length == 1 then
+		if string.find(moduleName, "Module") ~= nil then
+			view:ShowModule(moduleName, objs, true, nil, false)
+		end
+	elseif strs.Length >= 2 then
+		local viewsData={}
+		for i=1,strs.Length-1 do
+			local viewStrs = SplitString(strs[i],",")
+			local viewData={}
+			viewData.assetName={}
+			viewData.viewName=viewStrs[0]
+			viewData.modelName=viewStrs[1]
+			if viewStrs.Length>2 then
+				viewData.paramsName=viewStrs[2]
+			end
+			if viewStrs.Length>3 then
+				viewData.extraAsset = SplitString(viewStrs[3],"|")
+				for i=0,viewData.extraAsset.Length-1 do
+					table.insert(viewData.assetName,viewData.extraAsset[i])
+				end
+			end
+			table.insert(viewData.assetName,viewData.viewName)
+			table.insert(viewsData,viewData)
+		end
+		if CsBridge.moduleManager.CurrentModule.ModuleName == "MainModule"then
+			CsBridge.moduleManager:ReturnToMainUI(
+					function ()
+						for k,viewData in pairs(viewsData) do
+							CsBridge.UnityHelper.LuaCallCacheCacheAssets(false,moduleName,nil,
+									function()
+										local newView = CsBridge.moduleManager.CurrentModule:OpenView(viewData.viewName,viewData.modelName)
+										newView:OnLinked(viewData.paramsName)
+									end,viewData.assetName)
+						end
+					end)
+		elseif CsBridge.moduleManager.CurrentModule.ModuleName == moduleName then
+			for k,viewData in pairs(viewsData) do
+				CsBridge.UnityHelper.LuaCallCacheCacheAssets(false,moduleName,nil,
+						function()
+							local newView = CsBridge.moduleManager.CurrentModule:OpenView(viewData.viewName,viewData.modelName,true,false)
+							newView:OnLinked(viewData.paramsName)
+						end,viewData.assetName)
+			end
+		else
+			view:ShowModule(moduleName, objs, true,
+					function()
+						for k,viewData in pairs(viewsData) do
+							--print(viewData.assetName[1],"CampElementFusionView")
+							CsBridge.UnityHelper.LuaCallCacheCacheAssets(false,moduleName,nil,
+									function()
+										local newView = CsBridge.moduleManager.CurrentModule:OpenView(viewData.viewName,viewData.modelName)
+										newView:OnLinked(viewData.paramsName)
+									end,viewData.assetName)
+						end
+					end, false)
+		end
+	end
+end
+
+function ClearBattleModule()
+	CsBridge.rootManager:RemoveObjByRootName("BattleBGRoot")--清除战斗大背景-
+	CsBridge.objectCache:ClearGroup("BattleModule",true)	--强制释放战斗资源
+end
+
+--设置掉落图标
+function SetIconByDropId(obj,dropId,allType, module)
+	if(allType==1)then--资源
+		SetIconByResourceId(obj,dropId, module)
+	elseif(allType==2)then--物品大类
+		SetIconByItemId(obj,dropId, module)
+	elseif(allType==3)then--英雄
+		SetIconByHeroId(obj,dropId, module)
+	end
+end
+
+function SetIconByAuraId(obj,id, module)
+	if id==0 then
+		return
+	else
+		local str= ResTblContainer:GetPropToStr(id,AuraBase.icon,AuraBase.actorTbl)
+		SetSpriteByModule(obj.gameObject,str, module)
+	end
+end
+
+--设置物品数量，不显示1个以下的
+function SetItemDoNum(txt_num,num)
+	if(num>1)then
+		txt_num.text=tostring(num)
+	else
+		txt_num.text=""
+	end
+end
+
+--设置物品某些特殊显示，比如碎片和装备
+function SetItemSpecial(txt_order,go_debrisFlag,itemId)
+	local bagType = ResTblContainer:GetPropToInt(itemId,ItemBase.category,ItemBase.actorTbl)
+	if(bagType==1)then--装备
+		go_debrisFlag:SetSelfActive(false)
+		txt_order.gameObject:SetSelfActive(true)
+		--装备品阶
+		local order = ResTblContainer:GetPropToInt(itemId,Equipment.order,Equipment.actorTbl)
+		txt_order.text=tostring("+"..order)
+	elseif(bagType==3)then--英雄碎片
+		go_debrisFlag:SetSelfActive(true)
+		txt_order.gameObject:SetSelfActive(false)
+	else
+		go_debrisFlag:SetSelfActive(false)
+		txt_order.gameObject:SetSelfActive(false)
+	end
+end
+
+--显示英雄碎片信息
+function SetDebrisInfo(img_race,starListObj,starArr,star_6,star_7,itemId,MaxWith)
+	MaxWith=MaxWith or 130
+	local bagType = ResTblContainer:GetPropToInt(itemId,ItemBase.category,ItemBase.actorTbl)
+	if(bagType==3)then--英雄碎片
+		starListObj:SetSelfActive(true)
+		img_race.gameObject:SetSelfActive(true)
+
+		local propStr = ResTblContainer:GetPropToStr(itemId,PiecesComposition.fixedResult,PiecesComposition.actorTbl)
+		local result=SplitString(propStr,",")
+		if(result.Length>=2)then
+			local heroId=tonumber(result[1])
+			SetRaceIconByHeroId(img_race.gameObject,heroId)
+			ShowStar(heroId,starListObj,starArr,star_6,star_7,MaxWith)
+		else --新增
+			img_race.gameObject:SetSelfActive(false)
+			starListObj:SetSelfActive(false)
+		end
+	else
+		starListObj:SetSelfActive(false)
+		img_race.gameObject:SetSelfActive(false)
+	end
+end
+
+function SetEquipOrder(equipId, orderRoot, module)
+	local order = ResTblContainer:GetPropToInt(equipId,Equipment.order,Equipment.actorTbl)
+	SetStar(orderRoot,order, module)
+end
+
+--显示英雄碎片进度
+function SetDebrisSlider(tex_num,slider,itemId,curNum,sliderImg,sliderOverImg)
+	local bagType = ResTblContainer:GetPropToInt(itemId,ItemBase.category,ItemBase.actorTbl)
+	if(bagType==3)then--英雄碎片
+		slider.gameObject:SetSelfActive(true)
+		--碎片合成进度
+		local val=ResTblContainer:GetPropToInt(itemId,PiecesComposition.count,PiecesComposition.actorTbl)
+		local process = tonumber(curNum/val)
+		if curNum >= val then
+			process = 1
+			sliderImg:SetSelfActive(false)
+			sliderOverImg:SetSelfActive(true)
+		else
+			sliderImg:SetSelfActive(true)
+			sliderOverImg:SetSelfActive(false)
+		end
+		slider.value=process
+		tex_num.text=tostring(curNum.."/"..val)
+	else
+		slider.gameObject:SetSelfActive(false)
+	end
+end
+
+function SetSliderProgress(txt,slider,curNum,maxNum,fillImg,overImg)
+	local progress = curNum/maxNum
+	if curNum-maxNum >= 0 then
+		progress = 1
+		if fillImg and overImg then
+			fillImg:SetSelfActive(false)
+			overImg:SetSelfActive(true)
+		end
+	else
+		if fillImg and overImg then
+			fillImg:SetSelfActive(true)
+			overImg:SetSelfActive(false)
+		end
+	end
+	slider.value = progress
+	txt.text = tostring(curNum.."/"..maxNum)
+end
+
+--设置装备部位名或概述
+function SetItemSummary(txt_type,itemId)
+	local bagType = ResTblContainer:GetPropToInt(itemId,ItemBase.category,ItemBase.actorTbl)
+	if(bagType==1)then--装备
+		local pos = ResTblContainer:GetPropToInt(itemId,Equipment.type,Equipment.actorTbl)
+		ShowEquipPosName(txt_type,pos)
+	else
+		--物品概述
+		local summary = ResTblContainer:GetPropToStr(itemId,ItemBase.summary,ItemBase.actorTbl)
+		txt_type.text=tostring(summary)
+	end
+end
+
+--设置物品名字，带颜色
+function SetItemColorName(txt_name,itemId)
+	local name = ResTblContainer:GetPropToStr(itemId,ItemBase.title,ItemBase.actorTbl)
+	txt_name.text=tostring(name)
+
+	local quality= ResTblContainer:GetPropToInt(itemId,ItemBase.quality,ItemBase.actorTbl)
+	SetNameColorByQuality(txt_name,quality)
+end
+
+function SetNameColorByQuality(obj,quality)
+	if(quality==1)then
+		CsBridge.UnityHelper.SetTextColor(obj,255,255,255) --白色
+	elseif(quality==2)then
+		CsBridge.UnityHelper.SetTextColor(obj,70,185,80) --绿色
+	elseif(quality==3)then
+		CsBridge.UnityHelper.SetTextColor(obj,100,180,236)
+	elseif(quality==4)then
+		CsBridge.UnityHelper.SetTextColor(obj,212,100,236)
+	elseif(quality==5)then
+		CsBridge.UnityHelper.SetTextColor(obj,243,158,82)
+	elseif(quality==6)then
+		CsBridge.UnityHelper.SetTextColor(obj,246,90,68)
+	elseif(quality==7)then
+		CsBridge.UnityHelper.SetTextColor(obj,246,207,72)
+	else
+		CsBridge.UnityHelper.SetTextColor(obj,255,255,255)
+	end
+end
+
+--显示装备动态属性
+function SetEquipAttr(attrArr,itemId)
+	local propStr = ResTblContainer:GetPropToStr(itemId,Equipment.propStr,Equipment.actorTbl)
+	local result=SplitString(propStr,";")
+	local tbl=ResTblContainer:GetTable(Attribute.actorTbl)
+	for  i = 1,4 do--最多4条
+		if(i<=result.Length)then
+			attrArr[i].gameObject:SetSelfActive(true)
+
+			local str=SplitString(result[i-1],",")
+			local propId=str[0]
+			local showType=tonumber(str[1])
+			local propVal=tonumber(str[2])
+
+			local doVal=GetAttrDoValStr(showType,propVal)
+
+			local propName= tbl:Get(propId,Attribute.name)
+			attrArr[i].text=propName.."+"..doVal
+
+		else
+			attrArr[i].gameObject:SetSelfActive(false)
+		end
+	end
+end
+
+--设置掉落品质
+function SetQualityByDropId(obj,dropId,allType)
+	if(allType==1)then--物品,默认是紫色
+		SetQuality(obj,4)
+	elseif(allType==2)then
+		SetQualityByItemId(obj,dropId)
+	elseif(allType==3)then--英雄,默认是白色
+		SetQuality(obj,1)
+	end
+end
+
+function SetIconByResourceId(obj,ResourceId, module)
+	local str= ResTblContainer:GetPropToStr(ResourceId,Resource.icon,Resource.ResourceTbl)
+	SetSpriteByModule(obj.gameObject,str, module)
+end
+
+function SetIconByItemId(obj,itemId, module)
+	local str= ResTblContainer:GetPropToStr(itemId,ItemBase.icon,ItemBase.actorTbl)
+	SetSpriteByModule(obj.gameObject,str, module)
+end
+
+function SetIconByRelicId(obj,id, module)
+	local str = ResTblContainer:GetPropToStr(id,Relic.icon,Relic.tblName)
+	SetSpriteByModule(obj.gameObject,str, module)
+end
+
+function SetQualityByRelicId(obj,id)
+	local quality = ResTblContainer:GetPropToInt(id,Relic.quality,Relic.tblName)
+	SetQuality(obj,quality)
+end
+
+function SetRelicStar(orderRoot,level, module)
+	SetStar(orderRoot,level, module)
+end
+
+function SetIconByRuneLevel(obj,level, module)
+	local str = ResTblContainer:GetPropToStr(level,Rune.icon,Rune.tblName)
+	SetSpriteByModule(obj.gameObject,str, module)
+end
+
+function SetQualityByRuneLevel(obj,level)
+	local quality = ResTblContainer:GetPropToInt(level,Rune.quality,Rune.tblName)
+	SetQuality(obj,quality)
+end
+
+function SetRuneStar(orderRoot,level, module)
+	local order = ResTblContainer:GetPropToInt(level,Rune.star,Rune.tblName)
+	SetStar(orderRoot,order, module)
+end
+
+---获取星星的状态信息
+function GetStarIconData(star)
+	local DIS_LEVEL_STAR_PER = 4
+	local oneSub = star - BASE_STAR
+	local iconIndex = 2
+	local showStarCount = 1
+	if oneSub < BASE_STAR then
+		iconIndex = oneSub <= 0 and 1 or iconIndex
+		showStarCount = oneSub <= 0 and star or oneSub
+		return iconIndex, showStarCount
+	end
+	while(oneSub >= BASE_STAR) do
+		oneSub = oneSub - DIS_LEVEL_STAR_PER
+		iconIndex = iconIndex + 1
+	end
+	showStarCount = oneSub
+	return iconIndex, showStarCount
+end
+
+function SetStar(root,star, module)
+	for i=0,root.childCount-1 do
+		root:GetChild(i).gameObject:SetSelfActive(false)
+	end
+	local StarIcon = {
+		"ui_com_star",
+		"ui_com_star9",
+		"ui_com_star6",
+		"ui_com_star15"
+	}
+	local MAX_STAR = BREAK_QUALITY + GetHeroMinDistillationStar(BREAK_QUALITY)
+	local BASE_SCALE = 1
+	local BIG_SCALE = 1.3
+	local targetScale = star >= MAX_STAR and BIG_SCALE or BASE_SCALE --最大的星级，星星比较大
+	local iconIndex, showStarCount = GetStarIconData(star)
+	local iconName = StarIcon[iconIndex]
+	root.gameObject:SetSelfActive(true)
+	for i=0,4 do
+		local obj = root:GetChild(i).gameObject
+		CsBridge.UnityHelper.SetlocalScale(obj, targetScale, targetScale, targetScale)
+		obj:SetSelfActive(i + 1 <= showStarCount)
+		SetSpriteByModule(obj, iconName, module)
+	end
+end
+
+function SetResourceQuality(obj)
+	SetQuality(obj,9)
+end
+
+function SetIconByHeadId(obj,icon, module)
+	if icon>0 then
+		SetIconByHeroId(obj,icon, module)
+	elseif icon==0 then
+		local iconName = ResTblContainer:GetGameBaseInfo("defaultPlayerIcon")
+		SetSpriteByModule(obj.gameObject,iconName, module)
+	end
+end
+
+function SetQualityByItemId(obj,itemId)
+	local quality= ResTblContainer:GetPropToInt(itemId,ItemBase.quality,ItemBase.actorTbl)
+	local type = ResTblContainer:GetPropToInt(itemId,ItemBase.type,ItemBase.actorTbl)
+	if type == ItemType.HeroEquip or type == ItemType.PetEquip or type == ItemType.PetSkillBook then
+		SetQuality(obj,quality)
+	else
+		SetQuality(obj,quality+8)
+	end
+end
+
+function GetPassTime(_oldTime)
+
+	local nowTime=CsBridge.timeManager.ServerTime
+	local passTime=0
+	if(nowTime>_oldTime)then
+		passTime=GetFloat((nowTime - _oldTime)/1000)
+	end
+
+	local maxTime=GetConstValue("maxValidOnHookTime")
+	local doMaxTime=tonumber(maxTime)
+	if(passTime>doMaxTime)then--最多8天挂机收益
+		passTime=doMaxTime
+	end
+	return passTime
+end
+
+function SetQuality(obj,_quality, module)
+	local tbl=ResTblContainer:GetTable(GameBaseInfo.actorTbl)
+	local str=tbl:Get("itemQuality".._quality,"value")
+	SetSpriteByModule(obj.gameObject,str, module)
+end
+
+function SetDefaultQuality(obj, module)
+	local icon = ResTblContainer:GetGameBaseInfo("itemQuality9")
+	SetSpriteByModule(obj.gameObject,icon, module)
+	local qualityParentTrans = obj.transform.parent
+	if qualityParentTrans then
+		local frameSpine = qualityParentTrans:Find("HeroFrameSpine")
+		if frameSpine then
+			frameSpine.gameObject:SetSelfActive(false)
+		end
+	end
+end
+
+
+
+function IsPhyJob(id)
+	local job= ResTblContainer:GetPropToInt(id,HeroBase.job,HeroBase.actorTbl)
+	if(job==1 or job==2 or job==4)then
+		return true
+	else
+		return false
+	end
+end
+
+function GetPosEquipId(pos,heroInfo)
+	if(pos==1)then
+		return heroInfo.weaponId
+	elseif(pos==2)then
+		return heroInfo.hatId
+	elseif(pos==3)then
+		return heroInfo.clothId
+	elseif(pos==4)then
+		return heroInfo.shoesId
+	elseif(pos==5)then
+		return heroInfo.necklaceId
+	elseif(pos==6)then
+		return heroInfo.ringId
+	end
+end
+
+function ShowEquipPosName(obj,pos)
+	local name=""
+	if(pos==1)then
+		name=Language:getStr("weaponStr")
+	elseif(pos==2)then
+		name=Language:getStr("headStr")
+	elseif(pos==3)then
+		name=Language:getStr("clothStr")
+	elseif(pos==4)then
+		name=Language:getStr("shoeStr")
+	elseif(pos==5)then
+		name=Language:getStr("necklaceStr")
+	elseif(pos==6)then
+		name=Language:getStr("ringStr")
+	end
+	obj.text=tostring(name)
+end
+
+function AddTipCanvas(obj,order)
+	order=order or 3
+	local canvas=CsBridge.UnityHelper.AddCanvas(obj.gameObject)
+	canvas.overrideSorting = true;
+	canvas.sortingLayerName = "UILayer"
+	canvas.sortingOrder =order
+end
+
+function ShowOneConsume(iconImg, numTxt, consume)
+	if consume.typeId == ItemTypeEnum.Resource then
+		ShowOneCurrency(iconImg,consume.id,numTxt,consume.count)
+	elseif consume.typeId == ItemTypeEnum.Item then
+		ShowOneItem(iconImg,consume.id,numTxt,consume.count)
+	end
+end
+
+function ShowOneItem(iconImg,id,numTxt,num)
+	local iconName = ResTblContainer:GetPropToStr(id,ItemBase.icon,ItemBase.actorTbl)
+	SetSpriteByModule(iconImg.gameObject,iconName)
+	numTxt.text=ShowConsumeCount(num)
+end
+
+
+function ShowOneCurrency(obj1,id,obj2,num)
+	local iconName = ResTblContainer:GetPropToStr(id,Resource.icon,Resource.ResourceTbl)
+	SetSpriteByModule(obj1.gameObject,iconName)
+	obj2.text=ShowConsumeCount(num)
+end
+
+function ShowConsumeCount(count)
+	if count == -1 then
+		return "-"
+	end
+	return GetValueAbbreviation(count)
+end
+
+function ShowOneAttr(obj1,id,obj2,num)
+	local iconName = ResTblContainer:GetPropToStr(id,Attribute.icon,Attribute.actorTbl)
+	SetSpriteByModule(obj1.gameObject,iconName)
+	obj2.text=tostring(num)
+end
+
+function SetIconByRaceId(obj,raceId, module)
+	local iconStr = ResTblContainer:GetPropToStr(raceId,Camp.icon,Camp.tblName)
+	SetSpriteByModule(obj, iconStr, module)
+end
+
+function SetIconByJobId(obj,jobId, module)
+	local iconStr = ResTblContainer:GetPropToStr(jobId, Job.icon, Job.tblName)
+	SetSpriteByModule(obj, iconStr, module)
+end
+
+function SetIconByHeroId(obj,heroId, module)
+	local str= ResTblContainer:GetPropToStr(heroId,HeroBase.icon,HeroBase.actorTbl)
+	SetSpriteByModule(obj.gameObject,str, module)
+end
+
+function SetRaceIconByHeroId(obj,heroId, module)
+	local raceId = ResTblContainer:GetPropToInt(heroId, HeroBase.group, HeroBase.actorTbl);
+	SetIconByRaceId(obj,raceId, module)
+end
+
+function SetJobIconByHeroId(obj, heroId, module)
+	local jobId = ResTblContainer:GetPropToInt(heroId,HeroBase.job,HeroBase.actorTbl)
+	SetIconByJobId(obj,jobId, module)
+end
+
+function SetJobIconAndNameByHeroId(icon,name,heroId, module)
+	local jobId = global_heroBaseArr[heroId].job
+	SetIconByJobId(icon,jobId, module)
+	name:SetText(ResTblContainer:GetPropToStr(jobId,Job.name,Job.tblName))
+end
+
+function SetIconByMonsterId(obj,monsterId, module)
+	local heroId = ResTblContainer:GetPropToInt(monsterId,Monster.actorId,Monster.actorTbl)
+	SetIconByHeroId(obj,heroId, module)
+end
+
+function SeRacetIconByMonsterId(obj,monsterId)
+	local heroId = ResTblContainer:GetPropToInt(monsterId,Monster.actorId,Monster.actorTbl)
+	SetRaceIconByHeroId(obj,heroId)
+end
+
+function GetIds(clsName)
+	local tbl=ResTblContainer:GetTable(clsName)
+	local ids=tbl:GetCol("id")
+	return ids
+end
+
+function GetFloat(x)--小数取整
+	if x <= 0 then
+		return math.ceil(x);
+	end
+
+	if math.ceil(x) == x then
+		x = math.ceil(x);
+	else
+		x = math.ceil(x) - 1;
+	end
+	return x;
+end
+
+
+function ShowStar(heroId,starListObj,starArr,star_6,star_7,MaxWith)
+	MaxWith=MaxWith or 130
+	local num = ResTblContainer:GetPropToInt(heroId,HeroBase.quality,HeroBase.actorTbl)
+	local startX=0
+	local cellWith=0
+	if(num<=5)then
+		starListObj.gameObject:SetSelfActive(true)
+		star_6.gameObject:SetSelfActive(false)
+		star_7.gameObject:SetSelfActive(false)
+
+		cellWith = MaxWith / 5;
+		startX = (1 - num) * (cellWith / 2);
+		for  i = 1,5 do
+			if(i<=num)then
+				CsBridge.UnityHelper.SetAnchoredPosition(starArr[i].gameObject,startX + (i-1) * cellWith,0)
+				starArr[i].gameObject:SetSelfActive(true)
+			else
+				starArr[i].gameObject:SetSelfActive(false)
+			end
+		end
+	elseif(num==6)then
+		star_6.gameObject:SetSelfActive(true)
+		star_7.gameObject:SetSelfActive(false)
+		starListObj.gameObject:SetSelfActive(false)
+	elseif(num==7)then
+		star_7.gameObject:SetSelfActive(true)
+		star_6.gameObject:SetSelfActive(false)
+		starListObj.gameObject:SetSelfActive(false)
+	end
+end
+
+--属性最终显示的字符串，可能是百分比
+function GetAttrDoValStr(type,val)
+	local doVal=0
+	if(type==2)then
+		doVal=(val/1000)*100
+		return tostring(doVal.."%")
+	else
+		doVal=val
+		return tostring(doVal)
+	end
+	return tostring(val)
+end
+
+function GetHeroAllLevel(_grade,_level,_distillLevel,_breakLevel)--获取英雄全部叠加等级
+	local levelCount=0
+	local fullNum=_grade-1
+	for  i = 1,fullNum do
+		levelCount= levelCount+GetHeroMaxLevel(i)
+	end
+	local distillLevel = _distillLevel or 0
+	local breakLevel = _breakLevel or 0
+
+	return levelCount+_level+distillLevel+breakLevel
+end
+
+function GetHeroAllMaxLevel(grade,distillStar,quality)
+	local allMaxLevel = 0
+	for i = 1, grade do
+		allMaxLevel = allMaxLevel+GetHeroMaxLevel(i)
+	end
+	local distillMaxLevel = 0
+	local maxGrade = ResTblContainer:GetPropToInt(DISTILL_QUALITY,HeroQuality.maxGrade,HeroQuality.actorTbl)
+	if grade >= maxGrade and distillStar ~= nil and distillStar ~= 0 then
+		local star = quality + distillStar
+		while star > BASE_STAR do
+			if global_heroDistillationLevelDic[star] ~= nil then
+				distillMaxLevel = distillMaxLevel + table.count(global_heroDistillationLevelDic[star])
+			end
+			star = star-1
+		end
+	end
+	local breakMaxLevel = GetHeroBreakMaxLevel(quality)
+	return allMaxLevel+distillMaxLevel+breakMaxLevel
+end
+
+
+
+function GetHeroMaxLevel(_grade)--获取英雄当前阶最大等级
+	local gradeArr={}
+	for i, data in pairs(global_levelUpArr) do
+		if(data.grade==_grade) then
+			table.insert(gradeArr,data)
+		end
+	end
+	return gradeArr[#gradeArr].level
+end
+
+--获取觉醒情况下 该等级在星级下的不累加等级
+function GetDistillLevelInStar(star,level)
+	local index = DISTILL_QUALITY+1
+	while global_heroDistillationLevelDic[index] ~= nil do
+		local maxLevel = table.count(global_heroDistillationLevelDic[index])
+		if level > maxLevel then
+			level = level-maxLevel
+		elseif level == maxLevel then
+			if index+1 <= star then
+				maxLevel = table.count(global_heroDistillationLevelDic[index+1])
+				level = level-maxLevel
+			end
+		end
+		index = index+1
+	end
+	return level
+end
+
+--获取觉醒情况下，该觉醒等级对应的星际和不累加等级
+function GetDistillLevelAndStarByLevel(level)
+	local infos = ResTblContainer:GetRowFromTbl(HeroDistillationLevel.tblName,tostring(level),HeroDistillationLevel.grade,HeroDistillationLevel.level)
+	return tonumber(infos[0]), tonumber(infos[1])
+end
+
+
+--获取觉醒情况下 该星级能升到的最大的累加等级
+function GetDistillMaxLevel(star, containOther)
+	local contain = true
+	if containOther == nil then
+		contain = true
+	else
+		contain = containOther
+	end
+	local maxLevel = 0
+	while star > BASE_STAR  do
+		if global_heroDistillationLevelDic[star] == nil and not contain then
+			break
+		end
+		if global_heroDistillationLevelDic[star] ~= nil then
+			maxLevel = maxLevel + table.count(global_heroDistillationLevelDic[star])
+		end
+		star = star-1
+	end
+	return maxLevel
+end
+
+--获取在某个星级下的不累加的最大等级
+function GetDistillMaxLevelInStar(star)
+	return table.count(global_heroDistillationLevelDic[star])
+end
+
+function GetLevelUpId(_grade,_level)--获取升级数据ID
+	for i, data in pairs(global_levelUpArr) do
+		if(data.grade==_grade and data.level==_level)then
+			return data.id
+		end
+	end
+end
+
+--是否显示物品描述，或者装备信息，两者互斥
+function ShowEquipAttrObj(txt_des,attrArr,txt_suitName,suitArr,isShow)
+	--装备信息
+	for i, obj in pairs(attrArr) do
+		obj.gameObject:SetSelfActive(isShow)
+	end
+	ShowSuitObj(txt_suitName,suitArr,isShow)
+	-- --描述，互斥
+	-- local isHide=false
+	-- if(isShow==true)then
+	-- 	isHide=false
+	-- else
+	-- 	isHide=true
+	-- end
+	-- txt_des.gameObject:SetSelfActive(isHide)
+
+
+end
+
+--是否显示套装属性界面
+function ShowSuitObj(txt_suitName,suitArr,isShow)
+	for i,obj in pairs(suitArr) do
+		obj.gameObject:SetSelfActive(isShow)
+	end
+	txt_suitName.gameObject:SetSelfActive(isShow)
+end
+
+--显示套装属性
+function SetSuitAttr(txt_suitName,suitArr,heroInfo,itemId)
+	local suiId = ResTblContainer:GetPropToInt(itemId,Equipment.suitId,Equipment.actorTbl)
+	local suitNum=0
+	if(heroInfo~=nil)then
+		suitNum=GetSuitNum(suiId,heroInfo)
+	end
+	if(suiId~=0)then--存在套装
+		ShowSuitObj(txt_suitName,suitArr,true)
+
+		local needCount1,needCount2,needCount3,needAllCount=GetSuitNeedCount(suiId)
+
+		local suitName= ResTblContainer:GetPropToStr(suiId,EquipmentSuits.title,EquipmentSuits.actorTbl)
+		txt_suitName.text=tostring(suitName.." ("..suitNum.."/"..needAllCount..")")
+
+		local propIndex=1
+		if(needCount1~=0)then
+			local propStr = ResTblContainer:GetPropToStr(suiId,EquipmentSuits.fightingProps1,EquipmentSuits.actorTbl)
+			local result=SplitString(propStr,";")
+			if(result.Length>=1)then
+				for  i = 0,result.Length-1 do
+					ShowSuitProp(result[i],suitNum,needCount1,suitArr[propIndex])
+					propIndex=propIndex+1
+				end
+			end
+		end
+
+		if(needCount2~=0)then
+			local propStr = ResTblContainer:GetPropToStr(suiId,EquipmentSuits.fightingProps2,EquipmentSuits.actorTbl)
+			local result=SplitString(propStr,";")
+			if(result.Length>=1)then
+				for  i = 0,result.Length-1 do
+					ShowSuitProp(result[i],suitNum,needCount2,suitArr[propIndex])
+					propIndex=propIndex+1
+				end
+			end
+		end
+
+		if(needCount3~=0)then
+			local propStr = ResTblContainer:GetPropToStr(suiId,EquipmentSuits.fightingProps3,EquipmentSuits.actorTbl)
+			local result=SplitString(propStr,";")
+			if(result.Length>=1)then
+				for  i = 0,result.Length-1 do
+					ShowSuitProp(result[i],suitNum,needCount3,suitArr[propIndex])
+					propIndex=propIndex+1
+				end
+			end
+		end
+
+		--隐藏多余的属性条
+		for i,obj in pairs(suitArr) do
+			if(i<propIndex)then
+				obj.gameObject:SetSelfActive(true)
+			else
+				obj.gameObject:SetSelfActive(false)
+			end
+		end
+
+	else
+		ShowSuitObj(txt_suitName,suitArr,false)
+	end
+end
+
+--显示套装一条属性
+function ShowSuitProp(prop,suitNum,needNum,obj)
+	local str=SplitString(prop,",")
+	local propId=tonumber(str[0])
+	local showType=tonumber(str[1])
+	local propVal=tonumber(str[2])
+
+	local doVal=GetAttrDoValStr(showType,propVal)
+
+	local propName= ResTblContainer:GetPropToStr(propId,Attribute.name,Attribute.actorTbl)
+	obj.text=tostring(propName.."+"..doVal)
+
+	--是否激活
+	if(suitNum>=needNum)then
+		CsBridge.UnityHelper.SetTextColor(obj,119,236,100) --绿色
+	else
+		CsBridge.UnityHelper.SetTextColor(obj,193,193,193) --灰色
+	end
+end
+
+--获取套装需求数量
+function GetSuitNeedCount(suiId)
+	local tbl=ResTblContainer:GetTable(EquipmentSuits.actorTbl)
+	local needCount1= tbl:GetInt(suiId,EquipmentSuits.needCount1)
+	local needCount2= tbl:GetInt(suiId,EquipmentSuits.needCount2)
+	local needCount3= tbl:GetInt(suiId,EquipmentSuits.needCount3)
+	local needAllCount=math.max(needCount1,needCount2,needCount3)
+
+	return needCount1,needCount2,needCount3,needAllCount
+end
+
+--获取当前拥有该套装的实际数量
+function GetSuitNum(_suit,heroInfo)
+	local suitNum=0
+	local tbl=ResTblContainer:GetTable(Equipment.actorTbl)
+	local weaponId = tbl:GetInt(heroInfo.weaponId,Equipment.suitId)
+	if(weaponId==_suit)then
+		suitNum=suitNum+1
+	end
+
+	local hatId = tbl:GetInt(heroInfo.hatId,Equipment.suitId)
+	if(hatId==_suit)then
+		suitNum=suitNum+1
+	end
+
+	local clothId = tbl:GetInt(heroInfo.clothId,Equipment.suitId)
+	if(clothId==_suit)then
+		suitNum=suitNum+1
+	end
+
+	local shoesId = tbl:GetInt(heroInfo.shoesId,Equipment.suitId)
+	if(shoesId==_suit)then
+		suitNum=suitNum+1
+	end
+
+	local necklaceId = tbl:GetInt(heroInfo.necklaceId,Equipment.suitId)
+	if(necklaceId==_suit)then
+		suitNum=suitNum+1
+	end
+
+	local ringId = tbl:GetInt(heroInfo.ringId,Equipment.suitId)
+	if(ringId==_suit)then
+		suitNum=suitNum+1
+	end
+
+	return suitNum
+end
+
+function GetCommonReloadTime()
+	local tbl=ResTblContainer:GetTable(ConstantTbl.TblName)
+	if	tbl:HasKey("commonReloadTime") then
+		return tbl:GetInt("commonReloadTime",ConstantTbl.val)
+	end
+end
+
+function GetAPArenaRewardReloadTime()
+	local tbl=ResTblContainer:GetTable(ConstantTbl.TblName)
+	if	tbl:HasKey("arenaReloadTime") then
+		return tbl:GetInt("arenaReloadTime",ConstantTbl.val)
+	else
+		return 22
+	end
+end
+
+function GetRewardFromTbl(rewardStr)
+	local rewardItems = {}
+	local rewardItemsInfos = SplitString(rewardStr,";")
+	for i=0,rewardItemsInfos.Length-1 do
+		local infos=SplitString(rewardItemsInfos[i],",")
+		local rewardItem = {}
+		rewardItem.typeId=tonumber(infos[0])
+		rewardItem.id=tonumber(infos[1])
+		rewardItem.count=infos.Length>2 and tonumber(infos[2]) or 0
+		table.insert(rewardItems,rewardItem)
+	end
+	return rewardItems
+end
+
+function GetRewardName(rewardItem)
+	local typeId = rewardItem.typeId
+	local itemId = rewardItem.id
+
+	local itemName = ""
+	if typeId == ItemTypeEnum.Resource then
+		itemName = GetNameByResId(itemId)
+	elseif typeId == ItemTypeEnum.Item then
+		itemName = GetItemNameByItemId(itemId)
+	elseif typeId == ItemTypeEnum.Hero then
+		itemName = ResTblContainer:GetPropToInt(itemId,HeroBase.title,HeroBase.actorTbl)
+	elseif typeId == ItemTypeEnum.Relic then
+		itemName = ResTblContainer:GetPropToInt(itemId,Relic.name,Relic.tblName)
+	elseif typeId == ItemTypeEnum.IconFrame then
+		itemName = ResTblContainer:GetPropToInt(itemId,AvatarBox.name,AvatarBox.tblName)
+	end
+
+	return itemName
+end
+
+function ShowAutoTaskQuality(quality,starRoot)
+	if quality<0 then
+		return
+	end
+	for i=0,starRoot.childCount-1 do
+		starRoot:GetChild(i).gameObject:SetSelfActive(i<quality)
+	end
+end
+
+function UpdateDailyTaskProgress(compSlider, compTxt, finished, total)
+	if finished > total then
+		finished = total
+	end
+	compTxt.text = string.format( "%s/%s", finished, total)
+	compSlider.value = finished / total
+	return finished >= total
+end
+
+function ContainItem(tb, item, func)
+	if tb ~= nil and #tb ~= 0 then
+		for i,data in ipairs(tb) do
+			if func ~= nil and func(data) then
+				return true
+			else
+				if data == item then
+					return true
+				end
+			end
+		end
+	end
+	return false
+end
+
+function CheckItemCountInTb(tb,item,func)
+	local count = 0
+	if tb ~= nil and #tb ~= 0 then
+		for i,data in ipairs(tb) do
+			if func ~= nil and func(data) then
+				count = count + 1
+			else
+				if data == item then
+					count = count + 1
+				end
+			end
+		end
+	end
+	return count
+end
+
+function GetIndexInTable(tb,item)
+	if tb ~= nil and #tb ~= 0 then
+		for i,v in ipairs(tb) do
+			if v == item then
+				return i
+			end
+		end
+	end
+	return -1
+end
+
+function TextChangeColorAnim(text,onFinish)
+	local t = CsBridge.TweenUtils.TextChangeColor(text,0,1,0,0.15,function()
+		onFinish()
+	end)
+	t:DoPlay()
+end
+
+function CheckItemEnough(itemId,itemType,targetNum,showHint)
+	if itemType == ItemTypeEnum.Resource then
+		return CheckResEnough(itemId,targetNum,showHint)
+	elseif itemType == ItemTypeEnum.Item then
+		return CheckPackItemEnough(itemId,targetNum,showHint)
+	end
+end
+
+function CheckPackItemEnough(itemId,targetNum,showHint)
+	local item = appData:checkItem("PackItem",itemId)
+	local count = item ~= nil and item.count or 0
+	local ret = false
+	ret = count >= targetNum
+	if not ret and showHint then
+		CsBridge.hintUILayer:ShowHintBox(string.format(Language:getStr("PackItemNotEnough"), GetItemNameByItemId(itemId)),2)
+	end
+	return ret
+end
+
+function GetItemNameByItemId(id)
+	return ResTblContainer:GetPropToStr(id,ItemBase.title,ItemBase.actorTbl)
+end
+
+--return 不足的资源
+function CheckResEnough(resId, targetNum, showHint)
+	local playerInfo = appData:checkData("PlayerInfo")
+	local ret = false
+	if targetNum >= 0 then
+		local balance = GetBalance(resId)
+		ret = balance >= targetNum
+	end
+
+	if not ret and showHint then
+		CsBridge.hintUILayer:ShowHintBox(string.format(CsBridge.localizationHelper:getStr("ResNotEnough"), GetNameByResId(resId)),2)
+	end
+	return ret
+end
+
+function GetBalance(resID)
+	local playerInfo = appData:checkData("PlayerInfo")
+	local balance = 0
+	if resID == 1 then
+		balance = playerInfo.coin
+	elseif resID == 2 then
+		balance = playerInfo.payGem + playerInfo.rewardGem
+	elseif resID == 3 then
+		balance = playerInfo.soulCoin
+	elseif resID == 4 then
+		balance = playerInfo.stepStoneCoin
+	elseif resID == 5 then
+		balance = playerInfo.exchangeCoin
+	elseif resID == 7 then
+		balance = playerInfo.friendCoin
+	elseif resID == 8 then
+		balance = playerInfo.lotteryDust
+	elseif resID == 9 then
+		balance = playerInfo.unionCoin
+	elseif resID == 10 then
+		balance = playerInfo.runeDust
+	elseif resID == 11 then
+		balance = playerInfo.strength
+	elseif resID == 12 then
+		balance = playerInfo.heroSoul
+	elseif resID == 13 then
+		balance = playerInfo.feather
+	elseif resID == 14 then
+		balance = playerInfo.vipExp
+	elseif resID == 15 then
+		balance = playerInfo.ghostBadge
+	elseif resID == 16 then
+		balance = playerInfo.activityPoint
+	elseif resID == 17 then
+		balance = playerInfo.FTArenaCoin
+	elseif resID == 18 then
+		balance = playerInfo.FTArenaScore
+	elseif resID == 19 then
+		balance = playerInfo.petSoulEssence
+	elseif resID == 20 then
+		balance = playerInfo.petSoulStone
+	elseif resID == 21 then
+		balance = playerInfo.jewelDust
+	elseif resID == 23 then
+		balance = playerInfo.zillionaire
+	end
+	return balance
+end
+
+function CheckMulResEnough(costs, showHint)
+	local notEnoughArr = {}
+	for i,cost in ipairs(costs) do
+		if not CheckResEnough(cost.id,cost.count) then
+			table.insert(notEnoughArr, cost.id)
+		end
+	end
+	if #notEnoughArr ~= 0 and showHint then
+		CsBridge.hintUILayer:ShowHintBox(string.format(Language:getStr("ResNotEnough"), GetNameByResId(notEnoughArr[1])))
+	end
+	return notEnoughArr
+end
+
+function GetNameByResId(resId)
+	return ResTblContainer:GetPropToStr(resId,Resource.name,Resource.ResourceTbl)
+end
+
+function GetNextStageId(stageId)
+	local nextStageId = stageId+1
+	local tbl = ResTblContainer:GetTable(Campaign.actorTbl)
+	if tbl:HasKey(nextStageId) then
+		return nextStageId
+	else
+		nextStageId = stageId+100-(stageId%100)+1
+		if tbl:HasKey(nextStageId) then
+			return nextStageId
+		else
+			nextStageId = stageId-(stageId%10000)+10101
+			if tbl:HasKey(nextStageId) then
+				return nextStageId
+			end
+		end
+	end
+end
+
+--套装属性
+function GetEquipSuitNum(suitId,heroData)
+	local num = {}
+	local suitInfos = ResTblContainer:GetRowFromTbl(EquipmentSuits.actorTbl,suitId,EquipmentSuits.needCount1,EquipmentSuits.needCount2,EquipmentSuits.needCount3)
+	local needCount1,needCount2,needCount3 = suitInfos[0],suitInfos[1],suitInfos[2]
+	num.needCount = {}
+	if needCount3 ~= "" then
+		table.insert(num.needCount, {
+			id = 3,
+			count = tonumber(needCount3)
+		})
+	end
+	if needCount2 ~= "" then
+		table.insert(num.needCount, {
+			id = 2,
+			count = tonumber(needCount2)
+		})
+	end
+	if needCount1 ~= "" then
+		table.insert(num.needCount, {
+			id = 1,
+			count = tonumber(needCount1)
+		})
+	end
+
+	num.cur = heroData and GetHeroEquipSuitNumBySuitId(suitId, heroData.weaponId, heroData.hatId, heroData.clothId, heroData.shoesId)
+				or 1
+	num.triggerId = 0
+	for i,v in ipairs(num.needCount) do
+		if num.cur >= v.count then
+			num.triggerId = v.id
+			break
+		end
+	end
+	return num
+end
+
+function GetHeroEquipSuitNumBySuitId(suitId, ... )
+	local args = { ... }
+	local num = 0
+	local tbl=ResTblContainer:GetTable(Equipment.actorTbl)
+	for i,equipId in ipairs(args) do
+		if equipId ~= nil and equipId ~= 0 then
+			if tbl:GetInt(equipId,Equipment.suitId) == suitId then
+				num = num + 1
+			end
+		end
+	end
+	return num
+end
+
+function GetHeroRelic(relicPb)
+	local relic = {
+		id = relicPb.id,
+		level = relicPb.level,
+		exp = relicPb.exp,
+		uid = relicPb.uid,
+		owner = relicPb.owner,
+		typeId = 4
+	}
+	relic.attrs = GetRelicAttrs(relic.id, relic.level)
+end
+
+--检查神奇隐藏熟悉是否激活
+function CheckRelicActivate(cond, owner)
+	local heroId = appData:checkItem("HeroItem",owner).heroId
+	local result = false
+	for i=1,#cond do
+		if cond[i].idx==1 then
+			result = cond[i].val == global_heroBaseArr[heroId].group
+		elseif cond[i].idx==2 then
+			result = cond[i].val == global_heroBaseArr[heroId].job
+		end
+	end
+	return result
+end
+
+--检查其他玩家神器隐藏属性是否激活
+function CheckOtherActivate(cond, curHero)
+	local heroId = curHero.heroId
+	local result = false
+	for i=1,#cond do
+		if cond[i].idx==1 then
+			result = cond[i].val == global_heroBaseArr[heroId].group
+		elseif cond[i].idx==2 then
+			result = cond[i].val == global_heroBaseArr[heroId].job
+		end
+	end
+	return result
+end
+
+function MergeRelic(relicArr)
+    local length = #relicArr
+    if length == 1 then
+        return relicArr
+	end
+
+    local mergedData = {}
+    for i = 1, length do
+		local curItem = relicArr[i]
+        local id = curItem.id
+		local level = curItem.level
+		local owner = curItem.owner
+		local mergedCount = curItem.count or 0
+
+        if (owner == 0 or owner == nil) and not curItem.merged then
+            for j = i + 1, length do
+                local otherItem = relicArr[j]
+                if not otherItem.merged
+                    and otherItem.id == id
+					and otherItem.level == level
+					and (otherItem.owner == 0 or otherItem.owner == nil)
+                then
+                    mergedCount = mergedCount + 1
+					otherItem.merged = true
+                end
+            end
+            curItem.count = mergedCount
+            table.insert(mergedData, curItem)
+        end
+    end
+
+    for k, item in pairs(relicArr) do
+        item.merged = nil
+	end
+	
+	return mergedData
+end
+
+--获取神器最大等级
+function GetRelicMaxLevel(quality)
+	return ResTblContainer:GetPropToInt(quality, RelicQuality.star, RelicQuality.tblName)
+end
+
+--获取神器属性
+function GetRelicAttrs(id, level)
+	local attrs = {}
+	local infos = ResTblContainer:GetRowFromTbl(Relic.tblName,tostring(id),Relic.attribute,Relic.stepAttribute,Relic.activate,Relic.activateStr,Relic.stepActivateStr)
+	local attrStr = infos[0]
+	local stepAttrStr = infos[1]
+	local activeCondStr = infos[2]
+	local activeAttrStr = infos[3]
+	local activeStepAttrStr = infos[4]
+	attrs.baseAttrs = GetRelicBaseAttrs(id,level,attrStr,stepAttrStr)
+	if activeCondStr ~= "" and activeAttrStr ~= "" and activeStepAttrStr ~= "" then
+		attrs.activateAttrs = GetRelicActivateAttrs(level,activeCondStr,activeAttrStr,activeStepAttrStr)
+	end
+	return attrs
+end
+
+function GetRelicBaseAttrs(id, level, initStr, stepStr)
+	local initAttrs = {}
+	GetProp(initStr, initAttrs)
+	local stepAttrs = {}
+	GetProp(stepStr, stepAttrs)
+	local baseAttrs = {}
+	for i,initAttr in ipairs(initAttrs) do
+		local baseAttr = {}
+		baseAttr.id = initAttr.id
+		baseAttr.name = initAttr.name
+		baseAttr.type = initAttr.type
+		baseAttr.tbVal = initAttr.tbVal+stepAttrs[i].tbVal*(level-1)
+		baseAttr.val = GetPropValue(initAttr.type,baseAttr.tbVal)
+		table.insert(baseAttrs, baseAttr)
+	end
+	return baseAttrs
+end
+
+function GetRelicActivateAttrs(level, condStr, attrStr, stepStr)
+	local activateAttrs = {}
+	activateAttrs.cond = {}
+	local condInfos = SplitString(condStr,",")
+	for i=0,condInfos.Length-1,2 do
+		table.insert(activateAttrs.cond,{idx = tonumber(condInfos[i]), val = tonumber(condInfos[i+1])})
+	end
+	activateAttrs.attrs = GetRelicBaseAttrs(nil,level,attrStr,stepStr)
+	return activateAttrs
+end
+
+function GetRelicActivateCondStr(cond)
+	local str = ""
+	local count = #cond
+	for i=1,count do
+		if cond[i].idx == 1 then
+			str = str..ResTblContainer:GetPropToStr(cond[i].val,Camp.camp,Camp.tblName)
+		elseif cond[i].idx == 2 then
+			str = str..ResTblContainer:GetPropToStr(cond[i].val,Job.name,Job.tblName)
+		end
+		if i < count then
+			str = str..","
+		end
+	end
+	return str
+end
+
+function GetProp(propStr,tb)
+	local propInfos = SplitString(propStr,";")
+	for i=0,propInfos.Length-1 do
+		local infos = SplitString(propInfos[i],",")
+		local prop = {
+			id = tonumber(infos[0]),
+			type = tonumber(infos[1])
+		}
+		if prop.id ~= 6 and prop.id ~= 7 then
+			prop.name = GetPropName(prop.id)
+			prop.val = GetPropValue(prop.type,infos[2])
+			--prop.trueVal = GetPropTrueVal(prop.type,infos[2])
+			prop.tbVal = tonumber(infos[2])
+			table.insert(tb,prop)
+		end
+	end
+end
+
+function GetPropName(id)
+	for i,attr in ipairs(global_attributeArr) do
+		if attr.id == id then
+			return attr.name
+		end
+	end
+end
+
+function GetPropValue(type,val)
+	if(type==2)then
+		val = (tonumber(val)/1000)*100
+		return "+"..val.."%"
+	else
+		return "+"..val
+	end
+end
+
+function GetPropTrueVal(type,val)
+	if(type==2)then
+		return (tonumber(val)/1000)*100
+	else
+		return tonumber(val)
+	end
+end
+
+---获取一个heroId在distillation表中数据，返回的是一个数组，按star升序排序
+local function GetHeroDistillationTblData(heroId)
+	local result= {}
+	local ids = ResTblContainer:GetIds(HeroDistillation.tblName)
+	if ids == nil then
+		return nil
+	end
+	for i = 0, ids.Length do
+		local id = tonumber(ids[i])
+		local tblHeroId = ResTblContainer:GetPropToInt(id, HeroDistillation.hero, HeroDistillation.tblName)
+		local talStart = ResTblContainer:GetPropToInt(id, HeroDistillation.star, HeroDistillation.tblName)
+		if tblHeroId == heroId then
+			local tempItem = {
+				heroId = tblHeroId,
+				star = talStart
+			}
+			table.insert(result, tempItem)
+		end
+	end
+	table.sort(result,function (a, b)
+		return a.star < b.star
+	end)
+	return result
+end
+
+function GetHeroSkillArr(hero)
+	local skillArr = {}
+
+	--主动
+	local id = ResTblContainer:GetPropToInt(hero.heroId,HeroBase.skillId,HeroBase.actorTbl)
+	local skill = GetHeroSkill(id,false,hero)
+	table.insert(skillArr, skill)
+	local quality = hero.quality or ResTblContainer:GetPropToInt(hero.heroId,HeroBase.quality,HeroBase.actorTbl)
+	--被动
+	local replaceSkillArr = {}
+	if hero.distillationStar ~= nil and hero.distillationStar ~= 0 and quality < BREAK_QUALITY then
+		local star = quality + (hero.distillationStar or 0)
+		local disStartData = GetHeroDistillationTblData(hero.heroId)
+		if disStartData and global_heroDistillationDic[hero.heroId] and global_heroDistillationDic[hero.heroId][star] then
+			while star >= disStartData[1].star do
+				local oldSkillId = global_heroDistillationDic[hero.heroId][star].passiveSkill
+				local newSkillId = global_heroDistillationDic[hero.heroId][star].target
+				replaceSkillArr[oldSkillId] = newSkillId
+				star = star - 1
+			end
+		end
+	end
+	local passiveStr=ResTblContainer:GetPropToStr(hero.heroId,HeroBase.passiveStr,HeroBase.actorTbl)
+	local result=SplitString(passiveStr,",")
+	if result.Length>=1 then
+		for  i = 0,result.Length-1 do
+			local id = tonumber(result[i])
+			if replaceSkillArr[id] ~= nil then
+				skill = GetHeroSkill(replaceSkillArr[id],true,hero)
+			else
+				skill = GetHeroSkill(id,true,hero)
+			end
+			table.insert(skillArr,skill)
+		end
+	end
+	return skillArr
+end
+
+function GetHeroSkill(skillId, isPassive, hero)
+	local skill = {}
+	skill.id = skillId
+	if isPassive then
+		skill.isPassive = true
+		local infos = ResTblContainer:GetRowFromTbl(PassiveSkill.actorTbl,tostring(skillId),PassiveSkill.title,PassiveSkill.desp,PassiveSkill.icon,PassiveSkill.openGrade,PassiveSkill.addMark)
+		skill.name = infos[0]
+		skill.des = infos[1]
+		skill.icon = infos[2]
+		skill.grade = hero.grade
+		skill.openGrade = tonumber(infos[3])
+		skill.addMark = tonumber(infos[4]) or 0
+		if hero then
+			skill.isOpen = hero.grade >= skill.openGrade
+		else
+			skill.isOpen = true
+		end
+	else
+		skill.isPassive = false
+		local infos = ResTblContainer:GetRowFromTbl(SkillBase.actorTbl,tostring(skillId),PassiveSkill.title,PassiveSkill.desp,PassiveSkill.icon)
+		skill.name = infos[0]
+		skill.des = infos[1]
+		skill.icon = infos[2]
+	end
+	return skill
+end
+
+function GetHeroSkillDesp(hero,des)
+	return string.gsub(des,"{.-}",function(str)
+		local infos = string.sub(str, 2, string.len(str)-1)
+		local result = SplitString(infos,",")
+
+		return "()"
+	end)
+end
+
+function BindSkillBaseValue(skillBaseTF, skillData)
+	local img_icon=skillBaseTF:Find("iconImg"):GetComponent(CLS_IMAGE)
+	local go_mark=skillBaseTF:Find("mark").gameObject
+	local txt_lv=go_mark.transform:Find("skillMark"):GetComponent(CLS_TEXT)
+
+	go_mark:SetSelfActive(false)
+
+	local iconName=""
+	if not skillData.isPassive then
+		CsBridge.IconData.ChangeImageMaterial(img_icon.gameObject,"")
+	else--被动技能
+		if skillData.isOpen then
+			CsBridge.IconData.ChangeImageMaterial(img_icon.gameObject,"")
+		else
+			CsBridge.IconData.ChangeImageMaterial(img_icon.gameObject,"SpriteGray",skillData.noCache or false)
+		end
+
+		local addMark=skillData.addMark
+		local lvStr=""
+		if(addMark~=0)then
+
+			go_mark:SetSelfActive(true)
+			if(addMark==1)then
+				lvStr="I"
+			elseif(addMark==2)then
+				lvStr="II"
+			elseif(addMark==3)then
+				lvStr="III"
+			elseif(addMark==4)then
+				lvStr="IV"
+			elseif(addMark==5)then
+				lvStr="V"
+			end
+			txt_lv.text= tostring(lvStr)
+		end
+
+	end
+	local iconObj = img_icon.gameObject
+	iconObj:SetActive(true)
+	SetSpriteByModule(iconObj,skillData.icon)
+end
+
+function DestroyModel(modelObj,groupName)
+	if modelObj == nil then
+		return
+	end
+	local name = modelObj.name
+	CS.UnityEngine.GameObject.Destroy(modelObj)
+	CsBridge.objectCache:ClearGroup(groupName or name, true)
+end
+
+function GetPlatformAnim(raceId)
+	if raceId == 1 then
+		return "green"
+	elseif raceId == 2 then
+		return "blue"
+	elseif raceId == 3 then
+		return "yellow"
+	elseif raceId == 4 then
+		return "red"
+	elseif raceId == 5 then
+		return "white"
+	elseif raceId == 6 then
+		return "black"
+	end
+end
+
+function CheckHeroOpen(heroId)
+	local haveHero = ResTblContainer:TblHasId(heroId, Hero.actorTbl)
+			and ResTblContainer:GetPropToInt(heroId, Hero.open, Hero.actorTbl) == 1
+	local isHero = ResTblContainer:TblHasId(heroId, HeroBase.actorTbl)
+			and ResTblContainer:GetPropToInt(heroId, HeroBase.item, Hero.actorTbl) == 0
+			and ResTblContainer:GetPropToInt(heroId, HeroBase.isBoss, Hero.actorTbl) == 0
+	local hadRelationTenHero = HadRelationTenHero(heroId)
+	return haveHero and isHero and hadRelationTenHero
+end
+
+function CheckHeroNotOwn(heroId)
+	local playerInfo = appData:checkData("PlayerInfo")
+	local heroIds = playerInfo.avaliableIcons
+	if heroIds ~= nil then
+		for i,ownHeroId in ipairs(heroIds) do
+			if heroId == ownHeroId then
+				return false
+			end
+		end
+	end
+	return true
+end
+
+function GetVipTextColor(level)
+	local upColor, downColor = nil, nil
+	if level > 0 then
+		local configStr = ResTblContainer:GetPropToStr(level, VipTbl.color, VipTbl.tblName)
+		local colorStrArr = SplitString(configStr, ",")
+		local upColorIdx, downColorIdx = 0, 1
+		local upColorID, downColorID = tonumber(colorStrArr[upColorIdx]), tonumber(colorStrArr[downColorIdx])
+		upColor, downColor = colorTable[upColorID], colorTable[downColorID]
+	end
+
+	return upColor, downColor
+end
+
+function SetRaceBgByHeroId(obj,heroId)
+	local raceId = ""
+	if heroId ~= nil and heroId ~= 0 then
+		raceId = ResTblContainer:GetPropToInt(heroId, HeroBase.group, HeroBase.actorTbl)
+	end
+	SetRaceBgByRaceId(obj,raceId)
+end
+
+function SetRaceBgByRaceId(obj,raceId)
+	local str = "ui_bg_zy"..(raceId or "")
+	CsBridge.IconData.SetRawImageByName(obj,str)
+end
+
+function SetUpdateEffect(root,effectScale,go,destroyAfterAnim,isScaleAnim)
+	destroyAfterAnim = destroyAfterAnim or true
+	isScaleAnim = isScaleAnim or true
+	effectScale = effectScale or 0.7
+	CsBridge.CacheAssetsByGroup("IconUpdateSpine",function()
+		local obj = CsBridge.objectCache:CreateObject("IconUpdateSpine", true)
+		obj.transform:SetParent(root,false)
+		CsBridge.UnityHelper.SetlocalScale(obj,effectScale,effectScale,1)
+		obj:GetComponent("SkeletonGraphic"):PlayAnimation("a_1",false,function()
+			if destroyAfterAnim then
+				DestroyModel(obj)
+				if go then
+					go = nil
+				end
+			end
+		end)
+		if go then
+			go = obj
+		end
+		if isScaleAnim then
+			CsBridge.TweenUtils.ScaleInAndOut(root)
+		end
+	end,"IconUpdateSpine")
+end
+
+function CrossRaceBg(heroId,backRaceBg,raceBg)
+	backRaceBg:SetSelfActive(true)
+	SetRaceBgByHeroId(backRaceBg,heroId)
+	CsBridge.TweenUtils.DoRawImageAlphaValue(raceBg,0,0.2, function()
+		backRaceBg:SetSelfActive(false)
+		SetRaceBgByHeroId(raceBg,heroId)
+		raceBg:SetRawImageAlpha(1)
+	end)
+end
+
+function CheckHeroBagEnough(addNum,showHint)
+	local capacity = CheckHeroBagNum()
+
+	local heroItem = appData:checkAllItems("HeroItem")
+	local heroCount = heroItem ~= nil and heroItem.Length or 0
+
+	local ret = (capacity - heroCount - addNum) >= 0
+	if not ret and showHint then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("HeroBag_NoCapacity"),2)
+	end
+	return ret
+end
+
+function CheckHeroBagNum()
+	local extendHeroBagAddNum = GetConstValue("heroBagExtendNum") or 0
+	local capacity = GetConstValue("maxHeroCount") or 0
+	local heroBagInfo = appData:checkData("HeroBagInfo")
+	if heroBagInfo~= nil then
+		capacity = capacity+heroBagInfo.extendTimes*extendHeroBagAddNum
+	end
+	local vip = appData:checkData("PlayerInfo").vip
+	capacity = capacity+ResTblContainer:GetPropToInt(vip,VipTbl.heroBagAdd,VipTbl.tblName)
+	return capacity
+end
+
+function GetPieceType(id)
+	if id >= 5001 and id <= 6000 then
+		return PieceType.Hero
+	elseif id >= 6001 and id <= 7000 then
+		return PieceType.Relic
+	end
+	return nil
+end
+
+function GetHeroDistillation(hero)
+	local quality = hero.qulity or ResTblContainer:GetPropToInt(hero.heroId, HeroBase.quality, HeroBase.actorTbl)
+	if quality < DISTILL_QUALITY or global_heroDistillationDic[hero.heroId] == nil then
+		return nil
+	end
+	local Break_Skill_Star_Icon = {
+		"ui_com_star9",
+		"ui_com_star6"
+	}
+	local DIS_LEVEL_STEP = 4 --觉醒几次需要合成一次
+	local distillation = {
+		star = (hero.distillationStar or 0),
+		level = (hero.distillationLevel or 0),
+		sillStarIcon = Break_Skill_Star_Icon[1]
+	}
+	local subDisQuality = quality - DISTILL_QUALITY ---合成了几次
+	distillation.skillStar = distillation.star + 1
+	distillation.sillStarIcon = Break_Skill_Star_Icon[subDisQuality + 1]
+	if distillation.skillStar >= DIS_LEVEL_STEP then
+		if subDisQuality > 0 and quality < BREAK_QUALITY then
+			distillation.skillStar = distillation.skillStar - DIS_LEVEL_STEP * subDisQuality + 1
+		end
+	end
+	local nextStar = distillation.star+ quality +1
+	local heroDistillData = global_heroDistillationDic[hero.heroId][nextStar]
+	distillation.hasMax = heroDistillData == nil
+	if not distillation.hasMax then
+		distillation.attrUp = heroDistillData.attribute
+		distillation.levelUp = table.count(global_heroDistillationLevelDic[nextStar])
+		distillation.oldSkill = GetHeroSkill(heroDistillData.passiveSkill,true,hero)
+		distillation.newSkill = GetHeroSkill(heroDistillData.target,true,hero)
+		distillation.consume = {
+			typeId = ItemTypeEnum.Resource,
+			id = ResourceEnum.GreenSoul,
+			count = heroDistillData.count
+		}
+		distillation.heroMatArr = {}
+		if heroDistillData.mainId ~= 0 then
+			local heroMat = GetHeroMatData(heroDistillData.mainId,heroDistillData.mainCount)
+			table.insert(distillation.heroMatArr,heroMat)
+		end
+		if heroDistillData.subId1 ~= 0 then
+			local heroMat = GetHeroMatData(heroDistillData.subId1,heroDistillData.subCount1)
+			table.insert(distillation.heroMatArr,heroMat)
+		end
+		if heroDistillData.subId2 ~= 0 then
+			local heroMat = GetHeroMatData(heroDistillData.subId2,heroDistillData.subCount2)
+			table.insert(distillation.heroMatArr,heroMat)
+		end
+	else
+		local maxData = global_heroDistillationDic[hero.heroId][nextStar-1]
+		distillation.maxSkill = GetHeroSkill(maxData.target,true,hero)
+		distillation.levelUp = "Max"
+		distillation.attrUp = "Max"
+		distillation.consume = {
+			typeId = ItemTypeEnum.Resource,
+			id = ResourceEnum.GreenSoul,
+			count = -1
+		}
+	end
+	return distillation
+end
+
+function GetHeroMatData(matId,matCount,distillationStar)
+	local heroMat = {
+		heroId = matId,
+		count = matCount,
+		typeId = ItemTypeEnum.Hero,
+		distillationStar = distillationStar or 0,
+		quality = ResTblContainer:GetPropToInt(matId,HeroBase.quality,HeroBase.actorTbl),
+		raceId = ResTblContainer:GetPropToInt(matId,HeroBase.group,HeroBase.actorTbl),
+		putMatList = {}
+	}
+	if ResTblContainer:GetPropToInt(matId,HeroBase.refrence,HeroBase.actorTbl) == 1 then
+		heroMat.type = HeroMatType.FixedQualityAndRace
+	else
+		heroMat.type = HeroMatType.FixedAll
+	end
+	return heroMat
+end
+
+function GetDistillConsume(_star, _level)
+	local grade,level = GetDistillLevelAndStarByLevel(_level+1)
+	if grade == nil or level == nil then
+		return -1, -1
+	end
+	local consume = global_heroDistillationLevelDic[grade][level]
+	if consume then
+		return tonumber(consume.coin),tonumber(consume.soulCoin)
+	else
+		return -1, -1
+	end
+end
+
+function CheckMatHasHighLevel(level, ... )
+	local args = { ... }
+	for i,v in ipairs(args) do
+		if v ~= nil then
+			for i,mat in ipairs(v) do
+				local hero = appData:checkItem("HeroItem",mat.uid)
+				if hero and GetHeroAllLevel(hero.grade, hero.level, hero.distillationLevel, hero.breakLevel) > level then
+					return true
+				end
+			end
+		end
+	end
+	return false
+end
+
+function CheckHeroRelationId(heroId)
+	return global_relationDic[heroId] or heroId
+end
+
+function SplitString(content, delimiter)
+	return string.split(content, delimiter)
+end
+
+function CheckTimeRemain(time, showDays)
+	local now = CsBridge.timeManager.ServerTime
+	if now > time then
+		return ""
+	end
+
+	local DELEMITER = ":";
+	local ZERO_STRING = "0";
+	local SPACE_STRING = " ";
+	local KEY_DAY = "days";
+	local timeSpan = CsBridge.TimeSpan.FromMilliseconds(time - now + 1000);
+
+	local days = timeSpan.Days
+	local hours = showDays and timeSpan.Hours or (timeSpan.Days * 24 + timeSpan.Hours)
+	local minutes = timeSpan.Minutes
+	local seconds = timeSpan.Seconds
+
+	local strTable = {}
+	if showDays then
+		table.insert(strTable, days)
+		table.insert(strTable, Language:getStr(KEY_DAY))
+		table.insert(strTable, SPACE_STRING)
+	end
+	if hours < 10 then
+		table.insert(strTable, ZERO_STRING)
+	end
+	table.insert(strTable, hours)
+	table.insert(strTable, DELEMITER)
+	if minutes < 10 then
+		table.insert(strTable, ZERO_STRING)
+	end
+	table.insert(strTable, minutes)
+	table.insert(strTable, DELEMITER)
+	if seconds < 10 then
+		table.insert(strTable, ZERO_STRING)
+	end
+	table.insert(strTable, seconds)
+
+	local formatedStr = table.concat(strTable, nil)
+	strTable = nil
+	return formatedStr
+end
+
+function GetValueAbbreviation(input)
+	if not input then
+		return ""
+	end
+
+	local value = math.floor(input)
+	local str = ""
+	if (value < 0) then
+		str = ""
+	elseif (value < 10000) then
+		str= tostring(value)
+	elseif (value < 10000000) then
+		str = math.floor(value / 1000) .. "k"
+	elseif (value < 1000000000) then
+		str = math.floor(value / 1000000) .. "m"
+	elseif (value < 1000000000000) then
+		str = math.floor(value / 1000000000) .. "b"
+	else
+		str = "∞"
+	end
+
+	return str
+end
+
+function IsNilOrEmpty(str)
+	if str == nil or str =="" then
+		return true
+	else
+		return false
+	end
+end
+
+local worldPlayerNameFormatTbl = {
+	[1] = "S",
+	[2] = "",
+	[3] = "_",
+	[4] = "",
+}
+function FormatWorldPlayerName(nickName, zone)
+	if IsNilOrEmpty(zone) then
+		return nickName
+	else
+		local zoneIdx, nickIdx = 2, 4
+		worldPlayerNameFormatTbl[zoneIdx] = zone
+		worldPlayerNameFormatTbl[nickIdx] = nickName
+		return table.concat(worldPlayerNameFormatTbl, nil)
+	end
+end
+
+local TmpSpriteTagFormatTbl = {
+	[1] = "<sprite name=",
+	[2] = "",
+	[3] = ">"
+}
+function FormatTmpSpriteTag(spriteName)
+	local nameIdx = 2
+	TmpSpriteTagFormatTbl[nameIdx] = spriteName or ""
+	return table.concat(TmpSpriteTagFormatTbl, nil)
+end
+
+function FormatTmpSpriteTagByFontKey(fontKey)
+	return FormatTmpSpriteTag(Language:getStr(fontKey))
+end
+
+local vipFontKeys = {
+	[0] = "FontKey_VIP0",
+	[1] = "FontKey_VIP1",
+	[2] = "FontKey_VIP2",
+	[3] = "FontKey_VIP3",
+	[4] = "FontKey_VIP4",
+	[5] = "FontKey_VIP5",
+	[6] = "FontKey_VIP6",
+	[7] = "FontKey_VIP7",
+	[8] = "FontKey_VIP8",
+	[9] = "FontKey_VIP9",
+	[10] = "FontKey_VIP10",
+	[11] = "FontKey_VIP11",
+	[12] = "FontKey_VIP12",
+	[13] = "FontKey_VIP13",
+}
+function SetVipText(label, vipLevel)
+	if not label then
+		return
+	end
+
+	local text = ""
+	local textkey = vipFontKeys[vipLevel]
+	if textkey then
+		text = FormatTmpSpriteTag(Language:getStr(textkey))
+	end
+	label.text = text
+end
+
+function SetServerActivityArtFontByImage(imgLocal, bgName)
+	imgLocal.key = bgName
+	SetSpriteByModule(imgLocal.gameObject, Language:getStr(bgName))
+end
+
+function GetCountByItemType(id,type)
+	if type == ItemTypeEnum.Item then
+		local item = appData:checkItem("PackItem",tostring(id))
+		return item == nil and 0 or item.count
+	elseif type == ItemTypeEnum.Resource then
+		return GetBalance(id)
+	end
+end
+
+function GetMonsterFormationFromTbl(monsterStr)
+	if monsterStr == "" then
+		return nil
+	end
+	local monsterArr = {}
+	local monsterInfos = SplitString(monsterStr,";")
+	local tbl=ResTblContainer:GetTable(Monster.actorTbl)
+	for i=0,monsterInfos.Length-1 do
+		local infos=SplitString(monsterInfos[i],",")
+		local monsterData = {}
+		monsterData.pos=tonumber(infos[0])
+		local infos = tbl:GetRow(tonumber(infos[1]),Monster.actorId,Monster.level)
+		monsterData.heroId=tonumber(infos[0])
+		monsterData.grade=1
+		monsterData.level=tonumber(infos[1])
+		table.insert(monsterArr,monsterData)
+	end
+	return monsterArr
+end
+
+function GetConditionReqData(type,param)
+	return {
+		type = type,
+		param = param == nil and "" or tostring(param)
+	}
+end
+
+function CheckMulCostEnough(costs, showHint)
+	local notEnoughArr = {}
+	for i,cost in ipairs(costs) do
+		if not CheckCostEnough(cost.id,cost.typeId,cost.count,false) then
+			table.insert(notEnoughArr,cost)
+		end
+	end
+	if #notEnoughArr ~= 0 and showHint then
+		local notEnoughCost = notEnoughArr[1]
+		if notEnoughCost.typeId == ItemTypeEnum.Resource then
+			CsBridge.hintUILayer:ShowHintBox(string.format(Language:getStr("ResNotEnough"), GetNameByResId(notEnoughCost.id),2))
+		elseif notEnoughCost.typeId == ItemTypeEnum.Item then
+			CsBridge.hintUILayer:ShowHintBox(string.format(Language:getStr("PackItemNotEnough"), GetItemNameByItemId(notEnoughCost.id)),2)
+		end
+	end
+	return notEnoughArr
+end
+
+function CheckCostEnough(id,typeId,count,showHint)
+	return CheckItemEnough(id,typeId,count,showHint)
+end
+
+function GetMillisecondFromHours(hour)
+	return hour*3600*1000
+end
+
+function EncodePwd(str)
+	local byteArr = {string.byte(str,1,string.len(str))}
+	local codeStr = ""
+	for i,v in ipairs(byteArr) do
+		v = v + 1
+		codeStr = codeStr..string.char(v)
+	end
+	return codeStr
+end
+
+function DecodePwd(str)
+	local byteArr = {string.byte(str,1,string.len(str))}
+	local codeStr = ""
+	for i,v in ipairs(byteArr) do
+		v = v - 1
+		codeStr = codeStr..string.char(v)
+	end
+	return codeStr
+end
+
+function GetTaskHasteResume(time)
+	if time<=0 then
+		return 0
+	end
+	local tbl = ResTblContainer:GetTable(AutoTaskHaste.tblName)
+	local infos = tbl:GetCol(AutoTaskHaste.minTime)
+	for i=1,infos.Length-1 do
+		if time<tonumber(infos[i])*1000 then
+			return tbl:GetInt(i,AutoTaskHaste.gemCost)
+		end
+	end
+	return tbl:GetInt(infos.Length,AutoTaskHaste.gemCost)
+end
+
+function GetMorning(time)
+	local playerInfo = appData:checkData("PlayerInfo")
+	local dayLong = 86400000
+	local hourLong = 3600000
+	local timeZone = playerInfo.timeZone or 8 --服务器时区 默认8为北京时区
+	local morningTime = time - math.fmod(time, dayLong) - hourLong*timeZone
+	if time - morningTime >= dayLong then
+		morningTime = morningTime + dayLong
+	end
+	return morningTime
+end
+
+function GLuaFormatTime(time,formatStr)
+	local localTime = math.floor(time/1000)
+	local HOUR_SECONDS = 3600
+	local playerInfo = appData:checkData("PlayerInfo")
+	local timeZone = playerInfo.timeZone or 8
+	local tempTimeData = os.date("!*t",localTime+HOUR_SECONDS*timeZone)
+	
+	local year = tempTimeData.year
+	local month = tempTimeData.month
+	local day = tempTimeData.day
+	local hour = string.format("%02d",tempTimeData.hour)
+	local min = string.format("%02d",tempTimeData.min)
+	local sec = string.format("%02d",tempTimeData.sec)
+	local str = formatStr
+	if string.find(str,"yyyy") then
+		str = string.gsub(str,"yyyy",tostring(year))
+	end
+	if string.find(str,"MM") then
+		str = string.gsub(str,"MM",tostring(month))
+	end
+	if string.find(str,"dd") then
+		str = string.gsub(str,"dd",tostring(day))
+	end
+	if string.find(str,"HH") then
+		str = string.gsub(str,"HH",tostring(hour))
+	end
+	if string.find(str,"mm") then
+		str = string.gsub(str,"mm",tostring(min))
+	end
+	if string.find(str,"ss") then
+		str = string.gsub(str,"ss",tostring(sec))
+	end
+	return str
+end
+
+function GetReloadTimestamp(reloadTime)
+	local now = CsBridge.timeManager.ServerTime
+	local todayMorning = GetMorning(now)
+	if (now - todayMorning) > reloadTime then
+		local dayLong = 86400000
+		return todayMorning + dayLong + reloadTime
+	else
+		return todayMorning + reloadTime
+	end
+end
+
+function GetTimeString(nowtime)
+    -- body
+    local hour=math.floor(nowtime/3600);
+
+    local minute=math.floor((nowtime%3600)/60);
+
+    local second=(nowtime%3600)%60;
+
+    return string.format("%02d:%02d:%02d",hour,minute,second)
+end
+
+function FormatUserID(userId, zone)
+	return zone .. "_" .. userId
+end
+
+function FormatMailReciver(nick, zone)
+	return nick .. "@" .. zone
+end
+
+--[[
+    @desc:
+    author:dyl
+    time:2018-12-26 11:22:28
+    --@consumeRoot:
+    return {[obj, icon, num]}
+]]
+function GetConsumeArr(consumeRoot)
+	local consumeArr = {}
+	for i=0,consumeRoot.childCount-1 do
+		local consume = consumeRoot:GetChild(i)
+		table.insert(consumeArr, {
+			obj = consume.gameObject,
+			icon = consume:GetGameObjectAtPath("IconImg"),
+			num = consume:GetComponentAtPath("NumTxt",CLS_TEXT)
+		})
+	end
+	return consumeArr
+end
+
+function PrintLuaMemory()
+	local memory = require 'memory'
+	print("total memory:", memory.total())
+	print(memory.snapshot())
+end
+
+function CheckPlayerCanSendPrivateMail()
+	local level = appData:checkData("PlayerInfo").level
+	local limitLevel = GetConstValue("PrivateMailLevel")
+	if level < limitLevel then
+		local desp = string.format(Language:getStr("PrivateMailLevelLimit"),limitLevel)
+		CsBridge.hintUILayer:ShowHintBox(desp,2)
+		return false
+	end
+	return true
+end
+
+local function GetModuleName(gameObject)
+	local typeName = "Client.Library.ModuleBase"
+	local module = nil
+	if gameObject.activeInHierarchy then
+		local type = CS.System.Type.GetType(typeName)
+		module = gameObject:GetComponentInParent(type)
+	end
+	if not module then
+		local parent = gameObject.transform.parent
+		while parent ~= nil and module == nil do
+			module = parent:GetComponent(typeName)
+			parent = parent.parent
+		end
+	end
+
+	return module and module.ModuleName or CsBridge.moduleManager.CurrentModule.ModuleName
+end
+
+function SetSprite(gameObject, iconName, groupName)
+	if not gameObject then
+		return
+	end
+
+	if IsNilOrEmpty(iconName) then
+		return
+	end
+
+	local onFinished = function()
+		if gameObject then
+			local img = gameObject:GetComponent(CLS_IMAGE)
+			if img then
+				img.sprite = CsBridge.objectCache:SharedSprite(iconName);
+			end
+		end
+	end
+	CsBridge.CacheAssetsByGroup(groupName, onFinished, iconName)
+end
+
+function SetSpriteByModule(gameObject, iconName, module)
+	if not module then
+		module = CsBridge.moduleManager.CurrentModule
+	end
+	SetSprite(gameObject, iconName, module.ModuleName)
+end
+
+function SetRawImage(gameObject, imageName, groupName)
+	if not gameObject then
+		return
+	end
+
+	if IsNilOrEmpty(imageName) then
+		return
+	end
+
+	local onFinished = function()
+		local img = gameObject:GetComponent(CLS_RAWIMAGE)
+		if img then
+			img.texture = CsBridge.objectCache:SharedTexture2D(imageName);
+		end
+	end
+	CsBridge.CacheAssetsByGroup(groupName, onFinished, imageName)
+end
+
+function SetRawImageByModule(gameObject, imageName, module)
+	if not module then
+		module = CsBridge.moduleManager.CurrentModule
+	end
+	SetRawImage(gameObject, imageName, module.ModuleName)
+end
+
+function SetRawImageMat(gameObject, materialName, groupName)
+	if not gameObject then
+		return
+	end
+
+	if IsNilOrEmpty(materialName) then
+		return
+	end
+
+	local onFinished = function()
+		local img = gameObject:GetComponent(CLS_RAWIMAGE)
+		if img then
+			img.material = CsBridge.objectCache:SharedMaterial(materialName);
+		end
+	end
+	CsBridge.CacheAssetsByGroup(groupName, onFinished, materialName)
+end
+
+function SetRawImageMatByModule(gameObject, materialName, module)
+	if not module then
+		module = CsBridge.moduleManager.CurrentModule
+	end
+	SetRawImageMat(gameObject, materialName, module.ModuleName)
+end
+
+function SetImageMat(gameObject, materialName, groupName)
+	if not gameObject then
+		return
+	end
+
+	if IsNilOrEmpty(materialName) then
+		return
+	end
+
+	local onFinished = function()
+		local img = gameObject:GetComponent(CLS_IMAGE)
+		if img then
+			img.material = CsBridge.objectCache:SharedMaterial(materialName);
+		end
+	end
+	CsBridge.CacheAssetsByGroup(groupName, onFinished, materialName)
+end
+
+function SetImageMatByModule(gameObject, materialName, module)
+	if not module then
+		module = CsBridge.moduleManager.CurrentModule
+	end
+	SetImageMat(gameObject, materialName, module.ModuleName)
+end
+
+function SetSpineMat(gameObject, materialName, groupName)
+	if not gameObject then
+		return
+	end
+
+	if IsNilOrEmpty(materialName) then
+		return
+	end
+
+	local onFinished = function()
+		local img = gameObject:GetComponent(CLS_SKELETONGRAPHIC)
+		if img then
+			img.material = CsBridge.objectCache:SharedMaterial(materialName);
+		end
+	end
+	CsBridge.CacheAssetsByGroup(groupName, onFinished, materialName)
+end
+
+function SetSpineMatByModule(gameObject, materialName, module)
+	if not module then
+		module = CsBridge.moduleManager.CurrentModule
+	end
+	SetSpineMat(gameObject, materialName, module.ModuleName)
+end
+
+function CheckJewelBagEnough(addNum,showHint)
+	local capacity = CheckJewelBagNum()
+
+	local jewelItem = appData:checkAllItems("JewelItem")
+	local jewelCount = jewelItem ~= nil and jewelItem.Length or 0
+
+	local ret = (capacity - jewelCount - addNum) >= 0
+	if not ret and showHint then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("JewelBag_NoCapacity"),2)
+	end
+	return ret
+end
+
+function CheckJewelBagNum()
+	local extendJewelBagAddNum = GetConstValue("JewelBagExtend") or 0
+	local capacity = GetConstValue("JewelBag") or 0
+	local jewelBagInfo = appData:checkData("JewelBagInfo")
+	if jewelBagInfo~= nil then
+		capacity = capacity+jewelBagInfo.extendCount*extendJewelBagAddNum
+	end
+	return capacity
+end
+
+function ShowBattleRecordView(battleInfos,modelOrView)
+	if modelOrView and battleInfos then
+		CsBridge.CacheAssetsByModule(modelOrView.Module,
+			function()
+				local view=CsBridge.OpenView("BattleRecordView","BattleRecordModel",true,true)
+				view:SetData(battleInfos)
+			end,"BattleRecordView","BattleRecordItemSlot")
+	end
+end

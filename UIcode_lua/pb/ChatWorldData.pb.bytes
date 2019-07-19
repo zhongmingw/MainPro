@@ -1,0 +1,78 @@
+
+…
+ChatWorldData.protoChatWorldDataplayerData.proto"n
+ChatPlayerBaseInfo
+nick (	
+icon (
+level (
+vip ( 
+box (2.playerData.BoxItem"‘
+ChatRecruitReq9
+playerBaseInfo (2!.ChatWorldData.ChatPlayerBaseInfo
+contentType (/
+recruitInfo (2.ChatWorldData.RecruitInfo")
+RecruitInfo
+type (
+data (	"!
+ChatRecruitResp
+reslut ("œ
+ChatContent
+playerId (	9
+playerBaseInfo (2!.ChatWorldData.ChatPlayerBaseInfo
+contentType (
+content (	
+time (
+zone (	"5
+CheckChatContentReq
+time (
+legionId (	"^
+
+ChatRecord
+	chatGroup (+
+content (2.ChatWorldData.ChatContent
+chatTime ("Q
+CheckChatContentResp
+time (+
+contents (2.ChatWorldData.ChatRecord"?
+LoginChatReq
+channel (	
+zone (	
+playerId (	"
+LoginChatResp
+uid (	".
+CheckChatReq
+time (
+legionId (	"1
+CheckChatResp
+time (
+
+hasNewChat ("n
+ChatZoneReq9
+playerBaseInfo (2!.ChatWorldData.ChatPlayerBaseInfo
+contentType (
+content (	"m
+
+ChatVipReq9
+playerBaseInfo (2!.ChatWorldData.ChatPlayerBaseInfo
+contentType (
+content (	"µ
+ChatPrivateReq9
+playerBaseInfo (2!.ChatWorldData.ChatPlayerBaseInfo
+
+friendZone (	
+friendPlayerId (	
+contentType (
+content (	
+friendNickName (	"‚
+ChatLegionReq9
+playerBaseInfo (2!.ChatWorldData.ChatPlayerBaseInfo
+contentType (
+legionId (	
+content (	"m
+
+ChatAllReq9
+playerBaseInfo (2!.ChatWorldData.ChatPlayerBaseInfo
+contentType (
+content (	"%
+FriendShieldInfo
+	blackList (	

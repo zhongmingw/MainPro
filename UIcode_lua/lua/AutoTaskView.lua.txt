@@ -1,0 +1,282 @@
+local yield_return = (require 'cs_coroutine').yield_return
+
+require "AutoTaskItemSlot"
+local ScreenUtils = require "ScreenUtils"
+
+local remain_Lab
+local timer_Lab
+local count_Lab
+local free_Lab
+local normalCount_Lab
+local seniorCount_Lab
+
+local refreshResume_Sprite
+
+local autoTaskGrid
+
+local resumeGO
+local none_GO
+local AUTO_TASK_ADD_NORMAL_ID
+local AUTO_TASK_ADD_SENIOR_ID
+
+local refreshFree = false
+local refreshType = 1
+
+local autoTaskInfo
+local curTaskId
+local curIndex=0
+
+local togGroup
+local togArr
+local flag
+local TICKER_NAME = "ticker_AutoTaskView"
+
+local refreshBtnObj
+
+function DoInit()
+	self.Shadow=1 
+    remain_Lab=self:GetComponentAtPath("Center/RemainsTxt",CLS_TEXT)
+	timer_Lab=self:GetComponentAtPath("Center/TimerTxt",CLS_TEXT)
+	refreshBtnObj = self:GetGameObjectAtPath("Center/RefreshBtn")
+    count_Lab=self:GetComponentAtPath("Center/RefreshBtn/ResumeGO/CountTxt",CLS_TEXT)
+    free_Lab=self:GetComponentAtPath("Center/RefreshBtn/FreeTxt",CLS_TEXT)
+	normalCount_Lab=self:GetComponentAtPath("Center/money01/NormalCountTxt",CLS_TEXT)
+	seniorCount_Lab=self:GetComponentAtPath("Center/money02/SeniorCountTxt",CLS_TEXT)
+
+	refreshResume_Sprite=self:GetComponentAtPath("Center/RefreshBtn/ResumeGO/RefreshResumeSprite",CLS_IMAGE)
+
+	autoTaskGrid=self:GetComponentAtPath("Center/ScrollRect/Viewport/AutoTaskGrid",CLS_UI_ITEM_GRID)
+
+	resumeGO=self:GetGameObjectAtPath("Center/RefreshBtn/ResumeGO")
+	none_GO = self:GetGameObjectAtPath("Center/None")
+	AUTO_TASK_ADD_NORMAL_ID=GetConstValue("autoTaskAddNormalItem")
+	AUTO_TASK_ADD_SENIOR_ID=GetConstValue("autoTaskAddSeniorItem")
+
+	togGroup = self:GetComponentAtPath("Center/TogGroup",CLS_TOGGLE_GROUP_ARCHLY)
+    local togGroupTrans = togGroup.transform
+    togArr = {}
+    for i=1,togGroupTrans.childCount-1 do
+		local tog = togGroupTrans:GetChild(i):GetComponent("ToggleArchly")
+        tog.ClickAnim = true
+        if i >= 2 then
+            tog.SubImg = tog.transform:GetComponentAtPath("icon01Img",CLS_IMAGE)
+        end
+		table.insert(togArr, tog)
+    end 
+    flag = togGroupTrans:Find("Flag")
+
+	CsBridge.MsgCenter.Subscribe(Notify_UpRewardVedioGetReward, OnUpRewardVedioGetReward)
+end
+
+function OnAnimationFinished()
+	ScreenUtils.InitScreenUI(togGroup,togArr,flag)
+	self:SendCommand("InitAutoTaskData")
+end
+
+function OnClose()
+	ScreenUtils.Clear()
+end
+
+function OnNotification_RefreshAutoTaskView(objs)
+	local autoTaskInfo = objs[0]
+	remain_Lab.text="("..autoTaskInfo.curCount.."/"..autoTaskInfo.maxCount..")"
+	normalCount_Lab.text=autoTaskInfo.normalAddItemCount
+	seniorCount_Lab.text=autoTaskInfo.seniorAddItemCount
+
+	none_GO:SetSelfActive(autoTaskInfo.curCount == 0)
+	autoTaskGrid:RefreshItemSlots(autoTaskInfo.autoTasks,self.gameObject,"AutoTaskItemSlot")
+	refreshBtnObj:SetSelfActive(autoTaskInfo.showRefresh)
+	UpdateRefreshBtnState(autoTaskInfo)
+	UpdateUpRewardVedioState(autoTaskInfo) 
+end
+
+local function UpdateSlotCountDown(data, slot)
+	if slot.m_data and data[slot.m_data.id] then
+		local d = data[slot.m_data.id]
+		local timeTxt = slot:GetComponentAtPath("TimerGO/TimerTxt",CLS_TEXT)
+		local resumeCount_Lab=slot:GetComponentAtPath("HasteBtn/ResumeCountTxt",CLS_TEXT)
+		local taskProgress_Slider = slot:GetComponentAtPath("TaskProgressSlider",CLS_SLIDER)
+
+		resumeCount_Lab.text = d.resumeCount
+		taskProgress_Slider:SetSliderValue(d.progress)
+		timeTxt.text = d.remainTime
+	end
+end
+
+function OnNotification_UpdateCountDown(objs)
+	local data = objs[0]
+	local slots = autoTaskGrid:GetAllItems()
+	if slots then
+		for i=0, slots.Length-1 do
+			local slot = slots[i]
+			UpdateSlotCountDown(data, slot)
+		end
+	end
+end
+
+function OnNotification_UpdateRemain(objs)
+	local autoTaskInfo = objs[0]
+	remain_Lab.text="("..autoTaskInfo.curCount.."/"..autoTaskInfo.maxCount..")"
+end
+
+function OnNotification_UpdateAllAutoTask(objs)
+	local autoTaskInfo = objs[0]
+	none_GO:SetSelfActive(autoTaskInfo.curCount == 0)
+	autoTaskGrid:RefreshItemSlots(autoTaskInfo.autoTasks,self.gameObject,"AutoTaskItemSlot")
+end
+
+function OnNotification_UpdateSingleAutoTask(objs)
+	autoTaskGrid:SingleRefreshSlot(objs[0])
+end
+
+function OnNotification_UpdateRefreshBtnState(objs)
+	local autoTaskInfo = objs[0]
+	UpdateRefreshBtnState(autoTaskInfo)
+end
+
+function OnNotification_UpdateUpRewardVedioState(objs)
+	local autoTaskInfo = objs[0]
+	UpdateUpRewardVedioState(autoTaskInfo)
+end
+
+function UpdateUpRewardVedioState(autoTaskInfo)
+	if not autoTaskInfo.upRewardVedioOpen then
+		return
+	end
+	Timer:StopTicker(TICKER_NAME)
+	if autoTaskInfo.lastHasteAutoTaskTime <= 0 then
+		self:SendCommand("UpdateUpRewardVedio")
+	else
+		Timer:AddTicker(TICKER_NAME,autoTaskInfo.lastHasteAutoTaskTime+autoTaskInfo.upRewardVedioCD,nil, function()
+			self:SendCommand("UpdateUpRewardVedio")
+		end,nil)
+	end
+end
+
+function UpdateRefreshBtnState(autoTaskInfo)
+	local refreshData = autoTaskInfo.refreshData
+	if refreshData.type == 0 then
+		resumeGO:SetSelfActive(false)
+		free_Lab.gameObject:SetSelfActive(true)
+		timer_Lab.text = DEFAULT_TIME
+	else
+		resumeGO:SetSelfActive(true)
+		free_Lab.gameObject:SetSelfActive(false)
+		if refreshData.typeId == ItemTypeEnum.Item then
+			SetIconByItemId(refreshResume_Sprite.gameObject,refreshData.id)
+			count_Lab.text = refreshData.count
+		elseif refreshData.typeId == ItemTypeEnum.Resource then
+			SetIconByResourceId(refreshResume_Sprite.gameObject,refreshData.id)
+			count_Lab.text = refreshData.count
+		end
+	end
+end
+
+function OnFreeRefreshUpdate(targetTime)
+      local timeStr = CheckTimeRemain(targetTime,false)
+      timer_Lab.text=timeStr;
+end
+
+function OnFreeRefreshFinished()
+	self:SendCommand("UpdateRefreshRemain")
+end
+
+function OnRefreshBtnClick(sender)
+	self:SendCommand("RefreshTask")
+end
+
+function OnAutoTaskGridLockBtnClick(obj) 
+	local data = obj.m_data
+	self:SendCommand("LockTask",data)
+end
+
+function OnAutoTaskGridStartBtnClick(obj)
+	local data = obj.m_data
+	self:SendCommand("OpenAutoTaskDetails",data)
+end
+
+function OnAutoTaskGridHasteBtnClick(obj)
+	local data = obj.m_data
+	self:SendCommand("HasteTask",data)
+end
+
+function OnUpRewardVedioGetReward()
+	self:SendCommand("HasteTask",curTaskId)
+end
+
+function OnAutoTaskGridCancelBtnClick(obj)
+	local data = obj.m_data
+	self:SendCommand("CancelTask",data)
+end
+
+function OnAutoTaskGridCompleteBtnClick(obj)
+	local data = obj.m_data
+	self:SendCommand("CompleteTask",data)
+end
+
+function OnItemSlotGirdItemSlotClick(obj)
+	local data = obj.m_data
+	ShowRewardTip(self,data)
+end
+
+function OnQuickLockBtnClick(sender)
+	self:SendCommand("LockAllTask",true)
+end
+
+function OnQuickUnLockBtnClick(sender)
+	self:SendCommand("LockAllTask",false)
+end
+
+function OnNormalUseBtnClick(sender)
+	self:SendCommand("UseAddItem",AUTO_TASK_ADD_NORMAL_ID)
+end
+
+function OnSeniorUseBtnClick(sender)
+	self:SendCommand("UseAddItem",AUTO_TASK_ADD_SENIOR_ID)
+end
+
+function OnTogGroupClick(isOn,index)
+	ScreenUtils.TogGroupClick(isOn,index)
+end
+
+function OnRuleBtnClick(obj)
+	ShowHelpTip(self,INSTRUCTION_AUTOTASK)
+end
+
+function OnCloseBtnClick(sender)
+	self:ReturnBack()
+end
+
+function OnClose()
+	ScreenUtils.Clear()
+end
+
+function DoExit()
+	CsBridge.MsgCenter.Unsubscribe(Notify_UpRewardVedioGetReward, OnUpRewardVedioGetReward)
+	self.Module=nil
+	Timer:StopTicker(TICKER_NAME)
+	yield_return = nil
+	ScreenUtils = nil
+	remain_Lab = nil
+	timer_Lab = nil
+	count_Lab = nil
+	free_Lab = nil
+	normalCount_Lab = nil
+	seniorCount_Lab = nil
+	refreshResume_Sprite = nil
+	autoTaskGrid = nil
+	resumeGO = nil
+	none_GO = nil
+	AUTO_TASK_ADD_NORMAL_ID = nil
+	AUTO_TASK_ADD_SENIOR_ID = nil
+	refreshFree = nil
+	refreshType = nil
+	autoTaskInfo = nil
+	curTaskId = nil
+	curIndex = nil
+	togGroup = nil
+	togArr = nil
+	flag = nil
+	TICKER_NAME = nil
+	refreshBtnObj = nil
+end

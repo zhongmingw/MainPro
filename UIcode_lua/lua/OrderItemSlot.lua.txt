@@ -1,0 +1,42 @@
+
+
+function OnOrderItemSlotBindValue(slot,data)
+    local slotTrans = slot.transform
+    local timer_Slider = slot:GetComponentAtPath("TimerSlider" ,CLS_SLIDER)
+    local complete_Sprite = slot:GetComponentAtPath("CompleteSprite" ,CLS_IMAGE)
+    local timer_Lab = slot:GetComponentAtPath("TimerTxt" ,CLS_TEXT)
+    local startBtn_GO = slot:GetGameObjectAtPath("StartBtn")
+    local completeBtn_GO = slot:GetGameObjectAtPath("CompleteBtn")
+    local goingBtn_GO = slot:GetGameObjectAtPath("GoingBtn")
+    local itemGrid = slot:GetComponentAtPath("ItemGrid" ,CLS_UI_ITEM_GRID)
+    local starRoot = slotTrans:Find("StarRoot")
+
+    local quality = ResTblContainer:GetPropToInt(data.tradeId,GuildTrade.quality,GuildTrade.tblName)
+    local time = ResTblContainer:GetPropToInt(data.tradeId,GuildTrade.time,GuildTrade.tblName)
+    local rewardStr = ResTblContainer:GetPropToStr(data.tradeId,GuildTrade.reward,GuildTrade.tblName)
+    local rewardItems = GetRewardFromTbl(rewardStr)
+
+    for k,reward in pairs(rewardItems) do
+        reward.count = math.floor(reward.count*(1+data.rate/10000)) 
+    end
+    itemGrid:RefreshItemSlots(rewardItems,slot.m_grid.viewBase.gameObject,"ItemSlot")
+    ShowAutoTaskQuality(quality,starRoot)
+    
+    startBtn_GO:SetSelfActive(false)
+    completeBtn_GO:SetSelfActive(false)
+    goingBtn_GO:SetSelfActive(false)
+    complete_Sprite.gameObject:SetSelfActive(false)
+    if data.startTime ~= 0 and data.status ~= 1 then
+        goingBtn_GO:SetSelfActive(true)
+    elseif data.status == 0 then
+        timer_Slider:SetSliderValue(0)
+    	timer_Lab:SetText(CsBridge.timeManager:checkTimeShow(time*1000))
+        complete_Sprite.gameObject:SetSelfActive(false)
+        startBtn_GO:SetSelfActive(true)
+    elseif data.status == 1 then
+        timer_Slider:SetSliderValue(1)
+        timer_Lab:SetText("00:00:00")
+        complete_Sprite.gameObject:SetSelfActive(true)
+        completeBtn_GO:SetSelfActive(true)
+    end
+end

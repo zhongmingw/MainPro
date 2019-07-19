@@ -1,0 +1,66 @@
+
+³
+Monopoly.protoMonopolystage.proto"Ö
+ZillionaireInfo
+
+id (
+location ('
+
+eventPoint (2.Monopoly.Event_Pos'
+event_1 (2.Monopoly.Event_Type_1'
+event_2 (2.Monopoly.Event_Type_1'
+event_3 (2.Monopoly.Event_Type_2'
+event_4 (2.Monopoly.Event_Type_1'
+event_5 (2.Monopoly.Event_Type_1
+payDiceCount	 (
+strengthResetTime
+ ("9
+	Event_Pos
+location (
+
+id (
+active ("W
+Event_Type_1
+createdTime (
+
+id (&
+rewardItems (2.stage.RewardItem"B
+Event_Type_2
+createdTime (
+goods (2.Monopoly.Good"k
+Good!
+reward (2.stage.RewardItem
+cost (2.stage.RewardItem
+count (
+curCount ("&
+ZillionaireCheckReq
+useless ("&
+ZillionaireCheckResp
+status (""
+ZillionaireDiceReq
+step ("d
+ZillionaireDiceResp%
+
+stepReward (2.stage.RewardItem&
+finalReward (2.stage.RewardItem"(
+ZillionaireBoxReq
+createdTime ("<
+ZillionaireBoxResp&
+rewardItems (2.stage.RewardItem"=
+ZillionaireQuestionReq
+createdTime (
+answer ("A
+ZillionaireQuestionResp&
+rewardItems (2.stage.RewardItem"<
+ZillionaireGoodReq
+createdTime (
+	goodIndex ("<
+ZillionaireGoodResp%
+
+rewardItem (2.stage.RewardItem"V
+ZillionaireBattleReq
+createdTime ()
+formationPos (2.stage.FormationPos"T
+ZillionaireBossReq
+createdTime ()
+formationPos (2.stage.FormationPos

@@ -1,0 +1,36 @@
+local distance=0
+local speed=10
+local sign=1
+local angle
+local degree
+local sin
+local cos
+
+function DoInit()
+    angle = self.transform.localEulerAngles.z
+    degree = math.rad(angle)
+    sin = math.sin(degree)
+    cos = math.cos(degree)
+end
+
+function DoEnable()
+    local pos = self.transform.localPosition
+    local delta_X
+    local delta_Y
+    local trans=self.transform
+    distance = 0
+    self:DoAnimation(0,function()
+        if distance < -5 and sign==-1 then
+            sign=1
+        elseif distance > 5 and sign==1 then
+            sign=-1
+        end
+        distance=distance+sign * CsBridge.Time.deltaTime * speed
+        delta_X=distance*cos
+        delta_Y=distance*sin
+        self.gameObject:SetPosition(pos.x+delta_X, pos.y+delta_Y)
+    end)
+end
+
+function DoDisable()
+end

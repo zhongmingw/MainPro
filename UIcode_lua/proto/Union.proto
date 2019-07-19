@@ -1,0 +1,892 @@
+import "stage.proto";
+import "playerData.proto";
+package Union;
+
+message RecommendUnionsReq
+{
+	required int32 useless = 1;
+}
+
+message RecommendUnionsResp
+{
+	repeated Union unions = 1;
+}
+
+message AddUnionReq
+{
+	required string name = 1; //��������
+	required int32 icon = 2; //�����־
+	required string notice = 3; //���ṫ��
+}
+
+message AddUnionResp
+{
+	required int32 status = 1;//0:succed
+}
+
+message SearchUnionReq
+{
+	required string name = 1; //��������
+}
+
+message SearchUnionResp
+{
+	required Union union = 1;
+}
+
+message ApplyUnionReq
+{
+	required int32 id = 1; //����id
+}
+
+message ApplyUnionResp
+{
+	required int32 status = 1; //0:succeeded
+}
+
+message MyUnionReq
+{
+	required int32 useless = 1;
+}
+
+message MyUnionResp
+{
+	required Union union = 1;
+	required int32 myAuthority = 2;//�ҵĹ���Ȩ��
+	required bool canSignIn = 3;//�����ܷ�ǩ��
+	required int32 rank = 4;
+	required int64 combat = 5;//total power
+}
+
+message UnionMemberListReq
+{
+	required int32 useless = 1;
+}
+
+message UnionMemberListResp
+{
+	repeated UnionMemberWithCombatResp memberList = 1;
+}
+
+message MemberToViceReq
+{
+	required string userId = 1; //���id
+}
+
+message MemberToViceResp
+{
+	required int32 status = 1; //0:succed
+}
+
+message ViceToMemberReq
+{
+	required string userId = 1; //���id
+}
+
+message ViceToMemberResp
+{
+	required int32 status = 1; //0:succed
+}
+
+message PresidentTransferReq
+{
+	required string userId = 1; //���id
+}
+
+message PresidentTransferResp
+{
+	required int32 status = 1; //0:succed
+}
+
+message FireMemberReq
+{
+	required string userId = 1; //���id
+}
+
+message FireMemberResp
+{
+	required int32 status = 1; //0:succed
+}
+
+message ApplyUnionListReq
+{
+	required int32 useless = 1;
+}
+
+message ApplyUnionListResp
+{
+	repeated UnionMemberWithCombatResp applyList = 1;
+}
+
+message ApprovalUnionReq
+{
+	required int32 decision = 1;//1ͬ�⣬2�ܾ�
+	repeated string userIds = 2;
+}
+
+message ApprovalUnionResp
+{
+	required int32 status = 1; //0:succed
+}
+
+message UnionRankReq
+{
+	required int32 useless = 1;
+}
+
+message UnionRankResp
+{
+	repeated Union rankList = 1;
+	required Union union = 2;//My union
+	required int32 rank = 3;
+}
+
+message QuitUnionReq
+{
+	required int32 useless = 1;
+}
+
+message QuitUnionResp
+{
+	required int32 status = 1; //0:succed
+}
+
+message DismissUnionReq
+{
+	required int32 useless = 1;
+}
+
+message DismissUnionResp
+{
+	required int32 status = 1; //0:succed
+}
+
+message CancelDismissUnionReq
+{
+	required int32 useless = 1;
+}
+
+message CancelDismissUnionResp
+{
+	required int32 status = 1; //0:succed
+}
+
+message UpdateUnionNoticeReq
+{
+	required string notice = 1;
+}
+
+message UpdateUnionNoticeResp
+{
+	required int32 status = 1; //0:succed
+}
+
+message UpdateUnionApplyLevelReq
+{
+	required int32 level = 1;
+}
+
+message UpdateUnionApplyLevelResp
+{
+	required int32 status = 1; //0:succed
+}
+
+message UpdateUnionAutoApprovalReq
+{
+	required int32 open = 1;//�Ƿ��� 0-�ر� 1-����
+}
+
+message UpdateUnionAutoApprovalResp
+{
+	required int32 status = 1; //0:succed
+}
+
+message UpdateUnionNameReq
+{
+	required string name = 1;
+}
+
+message UpdateUnionNameResp
+{
+	required int32 status = 1; //0:succed
+}
+
+message UpdateUnionIconReq
+{
+	required int32 icon = 1;
+}
+
+message UpdateUnionIconResp
+{
+	required int32 status = 1; //0:succed
+}
+
+message UnionTechUpgradeReq
+{
+	required int32 job = 1;
+	required int32 id = 2;
+}
+
+message UnionTechUpgradeResp
+{
+	required int32 status = 1; //0:succed
+}
+
+message CheckMyUnionReq
+{
+	required int32 useless = 1;
+}
+
+message CheckMyUnionResp
+{
+	required UnionUserRecord unionUserRecord = 1; //0:succed
+}
+
+message UnionDungeonReq
+{
+	required int32 useless = 1;
+}
+
+message UnionDungeonResp
+{
+	required int32 currentId = 1; //��ǰ�����ؿ�
+	required int32 isPassAll = 2; //�Ƿ�ͨ�أ�0-no��1-yes
+	required int64 seasonEndTime = 3;
+}
+
+message UnionTradeReq
+{
+	required int32 useless = 1;
+}
+
+message UnionTradeResp
+{
+	required int64 lastTradeTime = 1; //�ϴλ�ȡ����ʱ��,Ϊ0ʱ�����ٴλ�ȡ
+	repeated Trade trades = 2; 
+}
+
+message UnionTradeGetReq
+{
+	required int32 useless = 1;
+}
+
+message UnionTradeGetResp
+{
+	required int32 status = 1;
+}
+
+message UnionTradeStartReq
+{
+	required int32 id = 1;
+}
+
+message UnionTradeStartResp
+{
+	required int32 status = 1;
+}
+
+message UnionTradePayReq
+{
+	required int32 id = 1;
+}
+
+message UnionTradePayResp
+{
+	repeated stage.RewardItem rewards = 1;
+}
+
+message UnionMillReq
+{
+	required int32 useless = 1;
+}
+
+message UnionMillResp
+{
+	required int32 level = 1;//等级
+	required int64 exp = 2;//经验
+	required int32 maxLevel = 3;//最高等级
+}
+
+message UnionMillDonateReq
+{
+	required int32 id = 1;
+	required int32 count = 2;
+}
+
+message UnionMillDonateResp
+{
+	required int32 status = 1;
+}
+
+message UnionMillRankReq
+{
+	required int32 useless = 1;
+}
+
+message UnionMillRankResp
+{
+	repeated UnionMemberWithDonateResp donateList = 1;
+}
+
+message UnionTradeUpgradeReq
+{
+	required int32 id = 1;
+}
+
+message UnionTradeUpgradeResp
+{
+	required int32 status = 1;
+}
+
+message UnionLogsReq
+{
+	required int32 useless = 1;
+}
+
+message UnionLogsResp
+{
+	repeated Log logs = 1;
+}
+
+message DungeonChallengeInfoReq
+{
+	required int32 id = 1;//level id
+}
+
+message DungeonChallengeInfoResp
+{
+	required int32 curHpPercentage = 1;//x%,x=0:�ѻ�ɱ
+	required int64 combat = 2;//boss power
+	repeated stage.RewardItem trialRewards = 3;//�ؿ����Խ���
+	repeated stage.RewardItem rewards = 4;//�ؿ���ɱ����
+	repeated UnionMemberWithHurtResp hurtList = 5;//�˺�����
+}
+
+message DungeonChallengeReq
+{
+	repeated stage.FormationPos formationPos = 1;//formation
+	required int32 id = 2;//level id
+}
+
+message GmUnionDungeonChallengeResetReq
+{
+	required int32 useless = 1;
+}
+
+message GmUnionDungeonChallengeResetResp
+{
+	required int32 status = 1;
+}
+
+message CheckUnionReq
+{
+	required int32 id = 1;
+}
+
+message CheckUnionResp
+{
+	required Union union = 1;
+	repeated UnionMemberWithCombatResp memberList = 2;
+	required int64 unionCombat = 3;
+	required int32 rank = 4;
+}
+
+message UnionAttendanceReq
+{
+	required int32 useless = 1;
+}
+
+message UnionAttendanceResp
+{
+	repeated stage.RewardItem rewards = 1;
+}
+
+message CancelPresidentTransferReq
+{
+	required int32 useless = 1;
+}
+
+message CancelPresidentTransferResp
+{
+	required int32 status = 1;
+}
+
+message Union
+{
+	required int64 version = 1;
+	required int32 id = 2; //����id
+	required string name = 3; //��������
+	required int32 icon = 4; //�����־
+	required int32 memberCount = 5; //��ǰ����
+	required int32 memberMax = 6; //��������
+	required int32 level = 7; //����ȼ�   
+	required string notice = 8; //���ṫ��
+	required int64 exp = 9;//���ᾭ��
+	required int32 status = 10; //����״̬��1.������2.�ѽ�ɢ
+	required int64 dismissStartTime = 11; //��ʼ��ɢʱ��
+	required int64 prisidentTransferStartTime = 12; //��ʼת�ƻ᳤ʱ��
+	required string transferRecord = 13; //new leaderID
+	required int64 dungeonOpenTime = 14; //��������ʱ��
+	required int64 activeTime = 15; //��Ծʱ��
+	required int32 applyLevel = 16;//level requirement
+	required int32 autoApproval = 17;//�Զ����� 0-�ر� 1-����
+	required int32 combat = 18;
+}
+
+message UnionMemberBasicResp
+{
+	required string userId = 1; //���id
+	required string name = 2; //����
+	required int32 icon = 3; //ͷ��
+	required int32 level = 4; //�ȼ�
+	required int32 vip = 5;
+	required int32 authority = 6; //����Ȩ�ޣ�1.�����ˣ�2.��ͨ��Ա��3.���᳤��4.�᳤
+	required int64 lastOnline = 7; //�ϴ�����ʱ��
+	required bool isOnline = 8; //�Ƿ�����
+	required bool isSignIn = 9;
+	required playerData.BoxItem box = 10; //炫彩头像
+	required string zone = 11;
+}
+
+message UnionMemberWithCombatResp
+{
+	required UnionMemberBasicResp basicInfo = 1;
+	required int64 combat = 2;
+}
+
+message UnionMemberWithHurtResp
+{
+	required UnionMemberBasicResp basicInfo = 1;
+	required int64 hurt = 2;
+	required int64 combat = 3;
+}
+
+message UnionMemberWithDonateResp
+{
+	required UnionMemberBasicResp basicInfo = 1;
+	required int64 donate = 2;
+	required int32 rank = 3;
+}
+
+message UnionUserRecord
+{
+	required int32 id = 1; 
+	required int32 authority = 2; 
+}
+
+message PlayerUnionRecord
+{
+	required int32 challengeCount = 1; 
+	required int32 millDonateCount = 2; 
+	required int32 reinforcementDonateCount = 3; 
+	required int64 lastAttendanceTime = 4; 
+	required int64 lastQuitUnionTime = 5; 
+	required int64 lastChallengeTime = 6; 
+	required int64 lastTradeTime = 7; 
+	required int64 lastMillDonateTime = 8; 
+	required int64 lastRequestReinforcementTime = 9; 
+	required int64 lastReinforcementDonateTime = 10; 
+	repeated JobTech unionTechs = 11;
+	repeated Trade trades = 12;
+	required int32 lastRequestReinforcementQuality = 13;
+	required int64 lastKickoutTime = 14;
+	required int64 lastMailUnionTime = 15;
+	required bool firstFreeResetUnionTechUsed = 16;
+	required int32 battleChallengeCount = 17;
+	required int32 battlePayCount = 18;
+	required int64 lastBattleMatchTime = 19;
+	required int32 battlePayCountTotal = 20;
+	required int32 mailCount = 21;
+}
+
+message JobTech
+{
+	required int32 job = 1; //ְҵ
+	repeated Tech techs = 2;
+}
+
+message Tech
+{
+	required int32 id = 1; 
+	required int32 level = 2;
+}
+
+message Trade
+{
+	required int32 id = 1; 
+	required int32 tradeId = 2;//����id
+	required int32 level = 3; 
+	required int64 startTime = 4;
+	required int32 status = 5;//����״̬��0-δ��ɣ�1-�����
+}
+
+message Log
+{
+	required string content = 1;
+	required int64 time = 2;
+	required int32 id = 3;
+}
+
+//union reinforcement
+message Reinforcement
+{
+	required string userId = 1;
+	required int32 itemId = 2;
+	required int32 requestCount = 3;
+	required int32 receivedCount = 4;
+	required int64 startTime = 5;
+	required string nick = 6;
+	required int32 authority = 7;
+	required string zone = 8;
+}
+
+message UnionReinforcementReq
+{
+	required int32 useless = 1;
+}
+
+message UnionReinforcementResp
+{
+	repeated ReinforcementResp requestList = 1;
+	required int32 status = 2;
+}
+
+message ReinforcementResp
+{
+	required Reinforcement info = 1;
+	required bool canDonate = 2;
+}
+
+message RequestReinforcementReq
+{
+    required int32 itemId = 1;
+}
+
+message RequestReinforcementResp
+{
+    required int32 status = 1;
+}
+
+message DonateReinforcementReq
+{
+    required string userId = 1;
+	required int32 itemId = 2;
+	required int64 time = 3;
+}
+
+message DonateReinforcementResp
+{
+    required int32 status = 1;
+}
+
+message UnionTechResetReq
+{
+	required int32 useless = 1;
+}
+
+message UnionTechResetResp
+{
+    required int32 status = 1;
+}
+
+message GmUnionResetReinforcementCdReq
+{
+    required int32 useless = 1;
+}
+
+message GmUnionResetReinforcementCdResp
+{
+    required int32 status = 1;
+}
+
+message GmUnionResetReinforcementDonationReq
+{
+    required int32 useless = 1;
+}
+
+message GmUnionResetReinforcementDonationResp
+{
+    required int32 status = 1;
+}
+
+message GmUnionTechUpgradeReq
+{
+	required string id = 1;
+	required int32 level = 2;
+}
+
+message GmUnionTechUpgradeResp
+{
+    required int32 status = 1;
+}
+
+message GmUnionTechCleanReq
+{
+    required int32 useless = 1;
+}
+
+message GmUnionTechCleanResp
+{
+    required int32 status = 1;
+}
+
+message GmUnionDungeonAccomplishReq
+{
+	required string id = 1;
+}
+
+message GmUnionDungeonAccomplishResp
+{
+    required int32 status = 1;
+}
+
+message GmUnionDungeonRewardReq
+{
+	required int32 id = 1;
+}
+
+message GmUnionDungeonRewardResp
+{
+    repeated stage.RewardItem rewards = 1;
+}
+
+message GmUnionTradeAccomplishReq
+{
+	required int32 id = 1;
+}
+
+message GmUnionTradeAccomplishResp
+{
+    required int32 status = 1;
+}
+
+message GmUnionTradeResetCdReq
+{
+	required int32 useless = 1;
+}
+
+message GmUnionTradeResetCdResp
+{
+    required int32 status = 1;
+}
+
+message GmUnionTradeUpgradeReq
+{
+	required int32 level = 1;
+}
+
+message GmUnionTradeUpgradeResp
+{
+    required int32 status = 1;
+}
+
+message GmUnionTradeResetDonationReq
+{
+	required int32 useless = 1;
+}
+
+message GmUnionTradeResetDonationResp
+{
+    required int32 status = 1;
+}
+
+message GmUnionUpgradeReq
+{
+	required int32 level = 1;
+}
+
+message GmUnionUpgradeResp
+{
+    required int32 status = 1;
+}
+
+message GmUnionCleanExpReq
+{
+	required int32 useless = 1;
+}
+
+message GmUnionCleanExpResp
+{
+    required int32 status = 1;
+}
+
+message GmUnionAddExpReq
+{
+	required int64 exp = 1;
+}
+
+message GmUnionAddExpResp
+{
+    required int32 status = 1;
+}
+
+message GmUnionDismissReq
+{
+	required int32 useless = 1;
+}
+
+message GmUnionDismissResp
+{
+    required int32 status = 1;
+}
+
+message GmUnionPresidentTransferReq
+{
+	required int32 useless = 1;
+}
+
+message GmUnionPresidentTransferResp
+{
+    required int32 status = 1;
+}
+
+message GmUnionResetSignInReq
+{
+	required int32 useless = 1;
+}
+
+message GmUnionResetSignInResp
+{
+    required int32 status = 1;
+}
+
+message DungeonDailyRankReq
+{
+	required int32 useless = 1;
+}
+
+message DungeonDailyRankResp
+{
+	repeated UnionMemberDailyDungeonRankResp rankResps = 1;
+}
+
+message UnionMemberDailyDungeonRankResp
+{
+	required UnionMemberBasicResp basicInfo = 1;
+	required int64 hurt = 2;
+	required int32 count = 3;
+	required int64 combat = 4;
+}
+
+message MillDailyRankReq
+{
+	required int32 useless = 1;
+}
+
+message MillDailyRankResp
+{
+	repeated UnionMemberWithDonateResp rankResps = 1;
+}
+
+message UnionMemberDailyMillRankResp
+{
+	required UnionMemberBasicResp basicInfo = 1;
+	required int64 donate = 2;
+}
+
+message MailUnionReq
+{
+	required string content = 1;
+}
+
+message MailUnionResp
+{
+	required int32 status = 1;
+}
+
+message BattleTarget
+{
+	required playerData.PlayerBaseInfo info = 1;
+	required int32 robot = 2;
+	required int32 combat = 3;
+	required Union unionInfo = 4;
+	required string leaderName = 5;
+}
+
+message GetBattleTargetsReq
+{
+	required int32 id = 1;
+}
+
+message GetBattleTargetsResp
+{
+	repeated BattleTarget targets = 1;
+}
+
+message ChallengeInGuildWarReq
+{
+	required string zone = 1;
+	required string userId = 2;
+	repeated stage.FormationPos formationPos = 3;//formation
+}
+
+message CheckGuildWarResp
+{
+	required int64 seasonEndTime = 1;
+	required bool canFight = 2;//使用允许新的成员参与匹配
+	required GuildWarTarget opponent = 3;
+	required bool seasonFinished = 4;
+}
+
+message GuildWarTarget
+{
+	required int32 id = 2;
+	required Union baseInfo = 3;
+	required string zone = 4;
+	repeated GuildWarMember members = 5;
+	required int64 winScore = 6;
+	required int64 maxPower = 7;
+	required int64 score = 8;
+	required int32 defeatedMemberCount = 9;
+}
+
+message GuildWarMember
+{
+	required playerData.PlayerBaseInfo baseInfo = 1;
+	required int32 authority = 2;
+	required int64 power = 3;
+	required bool defeated = 4;
+	required int32 challengCount = 5;//被挑战次数
+	required int32 defeatedScore = 6;//强制击败分数
+}
+
+message UnionRankItem
+{
+	required Union unionBaseInfo = 1;
+	required int64 score = 2;
+	required int32 rank = 3;
+	required string zone = 4;
+	required int32 count = 5;
+	required bool defeated = 6;
+}
+
+message GetUnionRankReq
+{
+	required int32 count = 1;
+}
+
+message GetUnionScoreRankResp
+{
+	repeated UnionRankItem rankItems = 1;
+	required UnionRankItem myRankItem = 2;
+}
+
+message GetUnionDailyRankResp
+{
+	repeated UnionRankItem rankItems = 1;
+}
+
+message MemberWarRankInfo
+{
+	required playerData.PlayerBaseInfo baseInfo = 1;
+	required int64 score = 2;
+	required int32 count = 3;
+	required int32 rank = 4;
+	required int64 combat = 5;
+}
+
+message GetUnionMemberRankResp
+{
+	repeated MemberWarRankInfo rankItems = 1;
+	required MemberWarRankInfo myRankItem = 2;
+}

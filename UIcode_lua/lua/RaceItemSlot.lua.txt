@@ -1,0 +1,19 @@
+
+function OnRaceItemSlotBindValue(slot,data)
+local txt_name
+	txt_name=slot.transform:Find("name"):GetComponent(CLS_TEXT)
+	iconImg = slot.transform:Find("Icon"):GetComponent("UnityEngine.UI.Image")
+	
+	local str
+	if(data.race==0)
+		then
+		str=Language:getStr("allItemStr")
+	else
+		local tbl=ResTblContainer:GetTable(GameBaseInfo.actorTbl)
+		str=tbl:Get("race"..data.race,"value")
+		iconImg.gameObject:SetActive(true)
+		CsBridge.IconData.SetIconByName(iconImg.gameObject, "new_com_zy"..data.race)
+	end
+	
+	txt_name.text=str
+end

@@ -1,0 +1,122 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-10-29 16:32:33
+
+require "HalloweenItemSlot"
+
+local isInit = false
+
+local titleImgObj, countdownTxt, titleArtImg
+local consumeImg, consumeTxt
+local halloweenGrid
+
+local viewData
+
+function DoInit()
+    self.Shadow = CS.Client.Library.ShadowType.None	
+    self.Anim = 0
+    MsgCenter:Subscribe(Notify_OnBattleEnd,OnBattleEnd)
+end
+
+function InitUI()
+    titleImgObj = self:GetGameObjectAtPath("Center/bgImg")
+    countdownTxt = self:GetComponentAtPath("Center/TimeTxt",CLS_TEXT)
+    titleArtImg = self:GetComponentAtPath("Center/TitleArtImg",CLS_LOCALIZE)
+    consumeImg = self:GetGameObjectAtPath("Center/Consume/IconImg")
+    consumeTxt = self:GetComponentAtPath("Center/Consume/NumTxt",CLS_TEXT)
+    halloweenGrid = self:GetComponentAtPath("Center/awardSV/ScrollRect/Viewport/HalloweenGrid",CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+end
+
+function DoExit()
+    MsgCenter:Unsubscribe(Notify_OnBattleEnd,OnBattleEnd)
+    self.Module=nil
+    isInit = nil 
+
+    titleImgObj = nil 
+    countdownTxt = nil
+    titleArtImg = nil
+    consumeImg = nil 
+    consumeTxt = nil
+    halloweenGrid = nil
+    viewData = nil
+end
+
+function OnNotification_RefreshHalloweenActivityView(objs)
+    RefreshConsume(objs[1])
+    halloweenGrid:RefreshItemSlots(objs[0],self.gameObject,"HalloweenItemSlot")
+end
+
+function OnNotification_RefreshActivityView(objs)
+	if self.gameObject.activeInHierarchy then
+		viewData = objs[0]
+        RefreshView(viewData)
+        self:SendCommand("InitHalloweenActivityData")
+	end
+end
+
+function OnNotification_RefreshHallowmasItem(objs)
+    RefreshConsume(objs[0])
+end
+
+function RefreshConsume(consume)
+    ShowOneConsume(consumeImg,consumeTxt,consume)
+end
+
+function RefreshView(data)
+	SetServerActivityArtFontByImage(titleArtImg,data.image)
+    countdownTxt.text = data.restTime
+	CsBridge.IconData.SetRawImageByName(titleImgObj, data.image) 
+end
+
+function OnNotification_RefreshCountdown(objs)
+	local data = objs[0]
+	RefreshCountdown(data)
+end
+
+function RefreshCountdown(countdownData)
+	if not viewData then--not ready
+		return
+	end
+
+	local currentActivityID = viewData.id
+	for activityID, restTime in pairs(countdownData) do
+		if activityID == currentActivityID then
+			countdownTxt.text = restTime
+			return
+		end
+	end
+end
+
+function OnBattleEnd()
+    self:SendCommand("UpdateHalloweenData")
+end
+
+function OnInfoBtnClick(sender)
+    ShowHelpTip(self,INSTRUCTION_HALLOWEEN)
+end
+
+function OnAddBtnClick(sender)
+    self:SendCommand("BuyHalloweenCount")
+end
+
+function OnHalloweenGridStartBtnClick(obj)
+    local data = obj.m_data
+    self:SendCommand("SelectHalloweenLevel",data.level)
+end
+
+function OnRewardGridItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("OpenTipView",data)
+end
+
+function OnNotification_CloseActivityView(obj)
+	self:HideView(self.gameObject.name)
+end

@@ -1,0 +1,140 @@
+local activityGrid
+local banner
+local background
+local inited = false
+
+local defaultActivityType = -1
+
+local TICKER_NAME = "ticker_GiftActivityView"
+
+function DoInit()
+   self.Shadow = 1
+end
+
+function IsSetAnchor()
+    return true
+end
+
+function SetParamDataList(objs)
+    defaultActivityType = objs[0]
+end
+
+function OnMaskClick(sender)
+    DoClose()
+end
+
+function OncloseBtnClick(sender)
+    DoClose()
+end
+
+function DoClose()
+    self:ReturnBack()
+end
+
+function OnAnimationFinished()
+    if not inited then
+        inited = true
+        activityGrid = self:GetComponentAtPath("OTHER/activity/ScrollRect/Viewport/Grid",CLS_UI_ITEM_GRID)
+        banner = self:GetGameObjectAtPath("BGS/downbgImg")
+        background=self:GetComponentAtPath("BGS/iconImg",CLS_RAWIMAGE)
+    end
+    self:SendCommand("InitActivities", defaultActivityType)
+end
+
+function OnNotification_InitActivities(objs)
+    local activities = objs[0]
+    activityGrid.SelectIndex=0
+    activityGrid:RefreshItemSlots(activities, self.gameObject, "activityItemSlot")
+end
+
+function OnactivityItemSlotBindValue(slot,data)
+    local icon = slot:GetComponentAtPath("icon01Img",CLS_IMAGE)
+    local selectSprite = slot:GetComponentAtPath("icon02Img",CLS_IMAGE)
+    slot.m_SelectSprite = selectSprite.gameObject
+    local title = slot:GetComponentAtPath("name01Txt",CLS_TEXT)
+    local title2 = slot:GetComponentAtPath("name02Txt",CLS_TEXT)
+    local number = slot:GetComponentAtPath("numberTxt",CLS_TEXT)
+    local newFlag = slot:GetGameObjectAtPath("NewFlag")
+    CsBridge.IconData.SetIconByName(icon.gameObject,data.icon)
+    if(data.hasTime == 1) then
+        title.gameObject:SetSelfActive(false)
+        title2.gameObject:SetSelfActive(true)
+        number.gameObject:SetSelfActive(true)
+        title2.text=data.title
+        Timer:AddTicker(TICKER_NAME,data.endTime, function(target)
+            if self == nil or self.Module == nil then
+                return
+            end
+            number:SetText(CheckTimeRemain(target,false))
+        end, function()
+            --todo:到期后处理
+        end)
+    else
+        title.gameObject:SetSelfActive(true)
+        title2.gameObject:SetSelfActive(false)
+        number.gameObject:SetSelfActive(false)
+        title.text=data.title
+    end
+    newFlag:SetSelfActive(data.flag==true)
+    slot.m_SelectSprite:SetActive(slot.IsSelected)
+end
+
+function OnGridactivityItemSlotClick(obj)
+	self:SendCommand("SelectActivity",obj.m_index)
+end
+
+function OnNotification_SelectActivity(objs)
+    local itemData = activityGrid:GetItemDataByIndex(objs[0])
+	if itemData ~= nil then
+		itemData.IsSelected = true
+		DoSelectActivity(nil,itemData.data)
+	end
+end
+
+function OnNotification_RefreshItemFlag(objs)
+    local data = objs[0]
+    activityGrid:SingleRefreshSlot(data)
+end
+
+function OnNotification_ReSelectActivity(objs)
+	local oldItemData = activityGrid:GetItemDataByIndex(objs[0])
+	if oldItemData ~= nil then
+		oldItemData.IsSelected = false
+	end
+	local itemData = activityGrid:GetItemDataByIndex(objs[1])
+	if itemData ~= nil then
+		itemData.IsSelected = true
+	end
+	DoSelectActivity(oldItemData.data,itemData.data)
+end
+
+function DoSelectActivity(old,data)
+    if(old ~= nil) then
+        self:HideView(old.view,false)
+    end
+    if(data ~= nil) then
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            banner:SetSelfActive(data.showbanner==1)
+            if data.background ~= nil and data.background ~= "" then
+                background.gameObject:SetSelfActive(true)
+                local bg = Language:getStr(data.background)
+                CsBridge.IconData.SetRawImageByName(background.gameObject,bg)
+            else
+                background.gameObject:SetSelfActive(false)
+            end
+            local view=CsBridge.OpenView(data.view,data.model,false,false)
+            view:SetParamDataList(data)
+	    end, data.view)
+    end
+end
+
+function DoExit()
+    self.Module=nil
+    Timer:StopTicker(TICKER_NAME)
+    activityGrid = nil
+    banner = nil
+    background = nil
+    inited = nil
+    defaultActivityType = nil
+    TICKER_NAME = nil
+end

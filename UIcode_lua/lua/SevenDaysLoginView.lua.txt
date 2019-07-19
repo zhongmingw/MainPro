@@ -1,0 +1,116 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-05-21 15:32:01
+
+local isInit = false
+
+local upDaysGrid
+local downDaysGrid
+local rewardGrid
+local heroImgObj
+local dayTxt
+local receiveBtn
+
+function DoInit()	
+    self.Shadow = 1
+end
+
+local function InitUI()
+    upDaysGrid = self:GetComponentAtPath("Center/UpDaysGrid",CLS_UI_ITEM_GRID)
+    downDaysGrid = self:GetComponentAtPath("Center/DownDaysGrid",CLS_UI_ITEM_GRID)
+    rewardGrid = self:GetComponentAtPath("Center/ScrollRect/Viewport/RewardGrid",CLS_UI_ITEM_GRID)
+    heroImgObj = self:GetGameObjectAtPath("BGS/HeroImg")
+    dayTxt = self:GetComponentAtPath("Center/DayTxt",CLS_TEXT)
+    receiveBtn = self:GetComponentAtPath("Center/ReceiveBtn",CLS_BUTTON_ARCHLY)
+end
+
+function OnOpen()
+    CsBridge.MoneyBanner.SetBannerVisible(false)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitSevenDaysLoginData")
+end
+
+function DoExit()
+    isInit = nil
+    upDaysGrid = nil
+    downDaysGrid = nil
+    rewardGrid = nil
+    heroImgObj = nil
+    dayTxt = nil
+    receiveBtn = nil
+    CsBridge.MoneyBanner.SetBannerVisible(true)
+end
+
+local function ReturnBack()
+    self:ReturnBack()
+end
+
+local function RefreshOneSevenDay(viewData)
+    SetSpriteByModule(heroImgObj,viewData.background,self.Module)
+    dayTxt.text = viewData.showDay
+    rewardGrid:RefreshItemSlots(viewData.rewardItems,self.gameObject,"ItemSlot")
+    receiveBtn.Gray = not viewData.canGet
+end
+
+local function SingleRefreshSevenDay(data)
+    if data.isUp then
+        upDaysGrid:SingleRefreshSlot(data)
+    else
+        downDaysGrid:SingleRefreshSlot(data)
+    end
+end
+
+function OnNotification_RefreshSevenDaysLoginView(objs)
+    local viewData = objs[0]
+    upDaysGrid:RefreshItemSlots(viewData.upSevenDays,self.gameObject,"SevenDaysLoginItemSlot")
+    downDaysGrid:RefreshItemSlots(viewData.downSevenDays,self.gameObject,"SevenDaysLoginItemSlot")
+    RefreshOneSevenDay(viewData)
+end
+
+function OnNotification_SingleRefreshSevenDaysLoginView(objs)
+    local viewData = objs[0]
+    SingleRefreshSevenDay(viewData.old)
+    SingleRefreshSevenDay(viewData.new)
+    RefreshOneSevenDay(viewData.new)
+end
+
+function OnSevenDaysLoginItemSlotBindValue(slot, data)
+    local iconImgObj = slot:GetGameObjectAtPath("IconImg")
+    local getFlag = slot:GetGameObjectAtPath("GetFlag")
+    local selectFlag = slot:GetGameObjectAtPath("SelectFlag")
+    local dayTxt = slot:GetComponentAtPath("DayTxt",CLS_TEXT)
+    SetSpriteByModule(iconImgObj,data.icon,self.Module)
+    getFlag:SetSelfActive(data.hasGet)
+    selectFlag:SetSelfActive(data.selected)
+    dayTxt.text = data.showDay
+end
+
+function OnUpDaysGridSevenDaysLoginItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("SelectDay",data)
+end
+
+function OnDownDaysGridSevenDaysLoginItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("SelectDay",data)
+end
+
+function OnRewardGridItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("ShowItemTip",data)
+end
+
+function OnReceiveBtnClick(sender)
+    self:SendCommand("ReceiveReward")
+end
+
+function OnMaskClick(sender)
+    ReturnBack()
+end

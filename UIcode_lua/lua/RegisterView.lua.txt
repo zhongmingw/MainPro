@@ -1,0 +1,101 @@
+local userNameInput
+local passwordInput
+local reapetPasswordInput
+local userName
+local pwd
+
+local BindUserCallback
+
+function DoInit()
+	self.Shadow = 1
+	userNameInput = CsBridge.GetInputFromView(self, "Center/AccountInput") 
+	passwordInput = CsBridge.GetInputFromView(self, "Center/PasswordInput") 
+	reapetPasswordInput = CsBridge.GetInputFromView(self, "Center/ConfirmPasswordInput") 
+end
+
+function OnOpen()
+	userNameInput.text = ""
+	passwordInput.text = ""
+	reapetPasswordInput.text = ""
+end
+
+function SetParamDataList(obj)
+	BindUserCallback = obj[0]
+end
+
+function OnBindBtnClick(sender)
+
+	userName=userNameInput.text;
+	local password=passwordInput.text;
+	local reap_password=reapetPasswordInput.text;
+	pwd=CsBridge.MD5.GetMd5String(passwordInput.text) 
+
+
+	if(string.len(userName)==0)then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("local_1"))
+	elseif(string.len(password)==0)then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("local_2"))
+	elseif(string.len(reap_password)==0)then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("local_3"))
+	elseif(reap_password~=password)then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("local_4"))
+	else
+		OnConfirmCallBack()
+	end
+
+end
+
+function OnConfirmCallBack()
+	if(BindUserCallback == nil) then
+		self:SendCommand("RegisterUser", userName, pwd)
+	else 
+		self:SendCommand("BindUser", userName, pwd)
+	end
+end
+
+function OnNotification_RegisterUserResp(objs)
+	CsBridge.UnityHelper.SetString("local_userName", userName)
+	CsBridge.UnityHelper.SetString("local_pwd", pwd)
+	local resp = objs[0]
+	CsBridge.httpBehaviour.serverURL = resp.url	
+	EnterMainView(resp)
+end
+
+function OnNotification_BindUserResp(objs)
+	CsBridge.UnityHelper.SetString("local_userName", userName)
+	CsBridge.UnityHelper.SetString("local_pwd", pwd)
+	self:HideView(self.gameObject.name)
+	BindUserCallback()
+end
+
+function EnterMainView(resp)
+	appData:clear()
+	CsBridge.httpBehaviour.serverURL=resp.url
+	CsBridge.httpBehaviour:CheckData("enterGame",{},
+	function()
+	   CsBridge.moduleManager:ResetMainModule("MainModule", onLoad)
+	end)
+end
+
+function OnCancelBtnClick(sender)
+	self:HideView(self.gameObject.name)
+end
+
+function OnCloseBtnClick(sender)
+	self:HideView(self.gameObject.name)
+end
+
+function onLoad()
+	MsgCenter:Broadcast(Notify_OnMain)
+end
+
+
+function DoExit()
+	userNameInput = nil
+	passwordInput = nil
+	reapetPasswordInput = nil
+	userName = nil
+	pwd = nil
+
+	BindUserCallback = nil
+end

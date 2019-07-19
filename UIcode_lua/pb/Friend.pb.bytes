@@ -1,0 +1,117 @@
+
+Á
+Friend.protoFriendstage.protoplayerData.proto"¥
+FriendBasicInfoResp
+userId (	
+nick (	
+level (
+icon (
+lastOnlineTime (
+vip ( 
+box (2.playerData.BoxItem
+zone (	"î
+
+FriendResp8
+friendBasicInfoResp (2.Friend.FriendBasicInfoResp
+haveMonster (
+	canDonate (
+
+canReceive (
+	monsterId (
+monsterLevel (
+curHpPercentage (
+lastFightingTime (
+sheild	 ("
+MyFriendsReq
+useless ("N
+MyFriendsResp#
+friends (2.Friend.FriendResp
+fightingCdRemain ("
+MyApplysReq
+useless (";
+MyApplysResp+
+applys (2.Friend.FriendBasicInfoResp"&
+RecommendFriendsReq
+useless ("G
+RecommendFriendsResp/
+
+recommends (2.Friend.FriendBasicInfoResp" 
+SearchFriendsReq
+nick (	"A
+SearchFriendsResp,
+results (2.Friend.FriendBasicInfoResp""
+ApplyFriendsReq
+userIds (	""
+ApplyFriendsResp
+status ("7
+ApprovalFriendsReq
+userIds (	
+decision ("%
+ApprovalFriendsResp
+status ("%
+RemoveFriendReq
+
+userIdList (	""
+RemoveFriendResp
+status ("&
+DonateFriendCoinReq
+userIds (	"+
+DonateFriendCoinResp
+donateCount ("'
+ReceiveFriendCoinReq
+userIds (	"-
+ReceiveFriendCoinResp
+receiveCount ("O
+ChallengeFriendReq
+userId (	)
+formationPos (2.stage.FormationPos"#
+SearchMonsterReq
+useless ("»
+SearchMonsterResp&
+rewardItems (2.stage.RewardItem8
+playerMonsterSearch (2.Friend.PlayerMonsterSearchD
+playerMonsterSearchRecord (2!.Friend.PlayerMonsterSearchRecord"%
+RefreshStrengthReq
+useless ("%
+RefreshStrengthResp
+status ("?
+ChallengeMyBossReq)
+formationPos (2.stage.FormationPos"S
+ChallengeFriendBossReq)
+formationPos (2.stage.FormationPos
+userId (	"&
+GetFriendsHelpRankReq
+count ("f
+FriendsHelpRankItem2
+playerBaseInfo (2.playerData.PlayerBaseInfo
+score (
+rank ("”
+GetFriendsHelpRankResp.
+	rankItems (2.Friend.FriendsHelpRankItem3
+playerRankItem (2.Friend.FriendsHelpRankItem
+seasonEndTime ("…
+PlayerMonsterSearch
+monsterFaceId (
+monsterPropId (
+monsterLevel (
+monsterMaxHp (
+monsterCurHp ("ƒ
+PlayerMonsterSearchRecord
+searchCount (
+lastSearchTime (!
+strengthRecoveryStartTime (
+isStrengthFull ("(
+RefreshMonsterInfoReq
+useless ("˜
+RefreshMonsterInfoResp8
+playerMonsterSearch (2.Friend.PlayerMonsterSearchD
+playerMonsterSearchRecord (2!.Friend.PlayerMonsterSearchRecord"/
+FriendSheildReq
+type (
+userId (	""
+FriendSheildResp
+result (""
+GmGetMonsterReq
+useless (""
+GmGetMonsterResp
+status (

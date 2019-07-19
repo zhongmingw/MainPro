@@ -1,0 +1,45 @@
+--[[
+	file: CycleChargeActivityUtils.lua
+	author: zhangyue
+	description: CycleChargeActivity utilities
+]]
+
+local function BuyGiftBox(objs, currentActivityID, onFinished, model)
+	local data = objs[0]
+	local showRewardTip = true
+	if objs.Length > 1 then
+		showRewardTip = data[1]
+	end
+	DoPayActivity(data.activityId,data,
+		function()
+			if showRewardTip then
+				PopRewardView(model,data.rewards,function()
+					onFinished(currentActivityID)
+				end)
+			else
+				onFinished(currentActivityID)
+			end
+		end)
+end
+
+local function GetBaseViewData(viewData, activityData)
+	local activity = {}
+	activity.expText = "+"..activityData.activity.vip
+	activity.remain = activityData.activity.remain
+	activity.priceText = CheckPayData(activityData.activity.payId).showPrice
+	activity.price = activityData.activity.price
+	activity.rewards = activityData.activity.rewards
+	activity.activityId = activityData.activity.activityId
+	activity.id = activityData.activity.payId
+	activity.pid = activityData.activity.pid
+	activity.title = activityData.activity.title
+	activity.desp = activityData.activity.desp
+	activity.currency = activityData.activity.currency
+	viewData.activity = activity
+	viewData.canBuy = activityData.canBuy
+end
+
+return{
+	BuyGiftBox = BuyGiftBox,
+	GetBaseViewData = GetBaseViewData,
+}

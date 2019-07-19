@@ -1,0 +1,76 @@
+local inited = false
+
+local portGroup
+
+function DoInit()
+    self.Shadow = 1
+end 
+
+function IsSetAnchor()
+	return true
+end
+
+function InitUI()
+    portGroup = self:GetComponentAtPath("Center/PortGroup" ,CLS_TOGGLE_GROUP_ARCHLY)
+    portGroup:SetAllTogglesOff()
+
+end
+
+function OnOpen()
+    -- body
+end
+
+function OnAnimationFinished()
+	if not inited then
+		InitUI()
+		inited = true
+	end 
+	self:SendCommand("InitPortData")
+end 
+
+function OnNotification_InitPortView(objs)
+    portGroup:SetToggleOn(1)
+end
+
+function OnPortGroupClick(isOn,index)
+    if not isOn then
+        return 
+    end
+    self:HideView("UnionOrderView")
+    self:HideView("PortLevelupView")
+    self:HideView("UnionDonateRankView")
+    if index==1 then
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            CsBridge.OpenView("UnionOrderView","UnionPortModel",false,true)
+            
+        end, "UnionOrderView","OrderItemSlot")
+    elseif index==2 then
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            CsBridge.OpenView("PortLevelupView","UnionPortModel",false,true)
+        end, "PortLevelupView")
+    else
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            CsBridge.OpenView("UnionDonateRankView","UnionPortModel",false,true)
+        end, "UnionDonateRankView","DonateRankItemSlot")
+    end
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView("UnionOrderView")
+    self:HideView("PortLevelupView")
+    self:HideView("UnionDonateRankView")
+    self:ReturnBack()
+end
+
+function OnMaskClick(sender)
+    self:HideView("UnionOrderView")
+    self:HideView("PortLevelupView")
+    self:HideView("UnionDonateRankView")
+    self:ReturnBack()
+end
+
+function DoExit()
+    inited = nil
+
+    portGroup = nil
+end

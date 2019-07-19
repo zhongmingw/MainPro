@@ -1,0 +1,73 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-07-25 10:25:17
+
+local isInit = false
+
+local redFlagArr
+
+function DoInit()
+    self.Shadow = 1
+end
+
+function InitUI()
+    redFlagArr = {}
+    local grid = self.transform:Find("other/summonSV/ScrollRect/Viewport/RaceGrid")
+    for i=0,grid.childCount-1 do
+        table.insert(redFlagArr,grid:GetChild(i):GetGameObjectAtPath("NewFlag"))--Find("NewFlag").gameObject)
+    end
+    MsgCenter:Subscribe(Notify_ElementFusionCampRedFlagChanged,OnElementFusionCampRedFlagChanged)
+end
+
+function DoExit()
+    MsgCenter:Unsubscribe(Notify_ElementFusionCampRedFlagChanged,OnElementFusionCampRedFlagChanged)
+    self.Module=nil
+    isInit = nil
+    redFlagArr = nil
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+    end
+    self:SendCommand("InitElementFusionData")
+end
+
+function IsSetAnchor()
+	return true
+end
+
+function OnRace1Click(sender)
+    self:SendCommand("SelectCamp",1)
+end
+
+function OnRace2Click(sender)
+    self:SendCommand("SelectCamp",2)
+end
+
+function OnRace3Click(sender)
+    self:SendCommand("SelectCamp",3)
+end
+
+function OnRace4Click(sender)
+    self:SendCommand("SelectCamp",4)
+end
+
+function OnRace5Click(sender)
+    self:SendCommand("SelectCamp",5)
+end
+
+function OnRace6Click(sender)
+    self:SendCommand("SelectCamp",6)
+end
+
+function OnElementFusionCampRedFlagChanged(arr)
+    for i,flag in ipairs(redFlagArr) do
+        flag:SetSelfActive(arr[i] == nil and false or arr[i])
+    end
+end
+
+function OnCloseBtnClick(sender)
+    self:ReturnBack()
+end

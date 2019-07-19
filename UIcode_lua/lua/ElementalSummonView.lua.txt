@@ -1,0 +1,88 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-04-08 15:15:24
+
+local loadedEquipItemSlot = require "SummonItemSlot"
+
+local summonGrid
+
+local effectObj
+
+local isInit = false
+
+function DoInit()
+    self.Anim = 0
+end
+
+function IsSetAnchor()
+    local parentViewIndex = self.transform.parent.parent:Find("DragonCrystalView"):GetSiblingIndex()
+    self.transform.parent:SetSiblingIndex(parentViewIndex+1)
+    return true
+end
+
+function InitUI()	
+    summonGrid = self:GetComponentAtPath("Center/SummonSV/ScrollRect/Viewport/SummonGrid",CLS_UI_ITEM_GRID)
+    effectObj = self:GetGameObjectAtPath("Effect")
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitSummonData")
+end
+
+function OnNotification_RefreshSummonView(objs)
+    local summonArr = objs[0]
+    summonGrid:RefreshItemSlots(summonArr, self.gameObject, "SummonItemSlot")
+end
+
+function OnNotification_ShowSummonEffect(objs)
+    effectObj:SetSelfActive(true)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local obj = CsBridge.objectCache:CreateObject("ElementSummonSpine", true)
+			obj.transform:SetParent(effectObj.transform,false)
+			--UnityHelper.SetlocalScale(obj,0.7,0.7,1)
+			obj:GetComponent("SkeletonGraphic"):PlayAnimation("born",false,function()
+				DestroyModel(obj)
+                effectObj:SetSelfActive(false)
+                objs[0]()
+			end)
+    end,"ElementSummonSpine")
+end
+
+function OnSummonGridSummonOnceBtnClick(obj)
+    self:SendCommand("Summon",obj.m_data,1)
+end
+
+function OnSummonGridSummonTenthBtnClick(obj)
+    self:SendCommand("Summon",obj.m_data,10)
+end
+
+function OnNotification_CloseSubView(objs)
+	self:HideView(self.gameObject.name)
+end 
+
+function OnInfoBtnClick(sender)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("HelpView","DragonCrystalModel",false,true)
+        view:SetData(INSTRUCTION_DRAGON_PROP)
+        view:SetParamDataList(Language:getStr("Probability_Desc"))
+	end, "HelpView")
+end 
+
+function OnHelpBtnClick(sender)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("HelpView","DragonCrystalModel",false,true)
+        view:SetData(INSTRUCTION_DRAGON)
+	end, "HelpView")
+end
+
+function DoExit()
+    loadedEquipItemSlot = nil
+    summonGrid = nil
+    effectObj = nil
+    isInit = nil
+end

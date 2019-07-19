@@ -1,0 +1,20 @@
+function DoInit()
+
+end
+
+function ResourceIds(objs)
+  local arr={2,5}
+  return arr
+end
+
+function AssetNames(objs)
+  local arr={"LotteryView"}
+  return arr
+end
+
+function OnEnter(objs,onFinished)
+	   self:OpenView("LotteryView","LotteryModel")
+       if(onFinished ~= nil)then
+	     onFinished()  
+       end
+end

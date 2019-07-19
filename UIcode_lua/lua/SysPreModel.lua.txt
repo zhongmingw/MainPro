@@ -1,0 +1,39 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-05-30 17:29:53
+local SysPreUtils = require "SysPreUtils"
+local sysPreTblData
+
+local function GetSysPreData()
+    local data = {}
+    local playerLevel = appData:checkData("PlayerInfo").level
+    for _,sysPre in ipairs(sysPreTblData) do
+        if sysPre.level > playerLevel then
+            local sys = {
+                id = sysPre.id,
+                level = sysPre.level,
+                name = sysPre.name,
+                icon = sysPre.icon,
+                desp = sysPre.desp,
+                openLvDesp = string.format(Language:getStr("SysPreview_OpenLv"),sysPre.level)
+            }
+            table.insert(data, sys)
+        end
+    end
+    return data
+end
+
+function DoInit()
+    sysPreTblData = SysPreUtils.GetSysPreTblData()
+end
+
+function DoOnExit()
+    SysPreUtils = nil
+    sysPreTblData = nil
+end
+
+function OnCommand_InitSysPreData(objs)
+    local data = GetSysPreData()
+    self:SendNotification("RefreshSysPreView",data)
+end

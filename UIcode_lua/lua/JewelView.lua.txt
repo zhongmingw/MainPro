@@ -1,0 +1,82 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-01-22 09:53:28
+
+local isInit = false
+
+local togGroup
+local composeTog
+
+local upStarTogRedFlag
+local composeTogRedFlag
+
+function DoInit()	
+    self.Shadow = 1
+end
+
+function InitUI()
+    togGroup = self:GetComponentAtPath("Top/JewelTogGroup", CLS_TOGGLE_GROUP_ARCHLY)
+    upStarTogRedFlag = self:GetGameObjectAtPath("Top/JewelTogGroup/tog02Tog/RedFlag")
+    composeTog = self:GetGameObjectAtPath("Top/JewelTogGroup/tog05Tog")
+    composeTogRedFlag = self:GetGameObjectAtPath("Top/JewelTogGroup/tog05Tog/RedFlag")
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitJewelData")
+end
+
+function OnLinked(data)
+    self:SendCommand("InitJewelPageType", data)
+end
+
+function OnClose()
+    togGroup:SetAllTogglesOff()
+end
+
+function OnNotification_RefreshJewelView(objs)
+    local curPageType = objs[0]
+    togGroup:SetToggleOn(curPageType - 1)
+end
+
+function OnNotification_IsOpenJewelCompose(objs)
+    local flag = objs[0]
+    composeTog:SetSelfActive(flag)
+end
+
+function OnNotification_RefreshJewelViewRedFlag(objs)
+    local redFlag = objs[0]
+    upStarTogRedFlag:SetSelfActive(redFlag)
+end
+
+function OnNotification_RefreshComposeRedFlag(objs)
+    local redFlag = objs[0]
+    composeTogRedFlag:SetSelfActive(redFlag)
+end
+
+function OnJewelTogGroupClick(isOn, index)
+    if not isOn then
+        return
+    end
+    self:SendCommand("OpenJewelPage", index+1)
+end
+
+function OnCloseBtnClick(sender)
+    self:ReturnBack()
+end
+
+function OnMaskClick(sender)
+    self:ReturnBack()
+end
+
+function DoExit()
+    isInit = nil
+    togGroup = nil
+    composeTog = nil
+    upStarTogRedFlag = nil
+    composeTogRedFlag = nil
+end

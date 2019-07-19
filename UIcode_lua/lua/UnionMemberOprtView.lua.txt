@@ -1,0 +1,110 @@
+--[[
+	file: UnionMemberOprtView.lua
+	author: hangang
+	description: View for union member operation
+]]
+
+local popupParentViewName = "UnionMemberOprtView"
+
+local nameTxt
+local promoteBtn, demoteBtn, promoteLeaderBtn, kickOutBtn, cancelDemisingBtnObj
+local viewData
+
+function DoInit()
+	self.Shadow = 1
+	InitUI()
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	local path = "Top/nameTxt"
+	nameTxt = selfTrans:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Buttons/PromoteBtn"
+	promoteBtn = selfTrans:GetComponentAtPath(path ,CLS_BUTTON_ARCHLY)
+
+	path = "Buttons/DemoteBtn"
+	demoteBtn = selfTrans:GetComponentAtPath(path ,CLS_BUTTON_ARCHLY)
+
+	path = "Buttons/PromoteLeaderBtn"
+	promoteLeaderBtn = selfTrans:GetComponentAtPath(path ,CLS_BUTTON_ARCHLY)
+
+	path = "Buttons/CancelDemiseBtn"
+	cancelDemisingBtnObj = selfTrans:GetGameObjectAtPath(path)
+
+	path = "Buttons/KickOutBtn"
+	kickOutBtn = selfTrans:GetComponentAtPath(path ,CLS_BUTTON_ARCHLY)
+end
+
+function OnNotification_RefreshMemberOprtView(objs)
+	viewData = objs[0]
+	RefreshView(viewData)
+end
+
+function RefreshView(data)
+	nameTxt.text = data.memberName
+	promoteBtn.gameObject:SetActive(data.promoteBtnVisible)
+	demoteBtn.gameObject:SetActive(data.demoteBtnVisible)
+	promoteBtn.interactable = data.promoteBtnEnabled
+	demoteBtn.interactable = data.demoteBtnEnabled
+
+	promoteLeaderBtn.interactable = data.promoteLeaderBtnEnabled
+	promoteLeaderBtn.gameObject:SetActive(not data.cancelDemiseBtnEnabled)
+	cancelDemisingBtnObj:SetActive(data.cancelDemiseBtnEnabled)
+
+	kickOutBtn.interactable = data.kickoutBtnEnabled
+
+	self.gameObject:SetGlobalPositionY(data.positionY)
+end
+
+function OnDetailBtnClick(sender)
+	self:SendCommand("OpenMemberDetailView", viewData.memberID, viewData.zone, popupParentViewName)
+end
+
+function OnMailBtnClick(sender)
+	self:SendCommand("Mail", viewData.memberID, viewData.zone, popupParentViewName)
+end
+
+function OnPromoteBtnClick(sender)
+	self:SendCommand("PromoteElder", viewData.memberID, viewData.zone)
+end
+
+function OnDemoteBtnClick(sender)
+	self:SendCommand("Demote", viewData.memberID, viewData.zone)
+end
+
+function OnPromoteLeaderBtnClick(sender)
+	self:SendCommand("PromoteToLeader", viewData.memberID, viewData.zone)
+end
+
+function OnCancelDemiseBtnClick(sender)
+	self:SendCommand("CancelDemising", viewData.memberID, viewData.zone)
+end
+
+function OnKickOutBtnClick(sender)
+	self:SendCommand("KnickOut", viewData.memberID, viewData.zone)
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function OnNotification_CloseUnionView(obj)
+	Close()
+end
+
+function Close()
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	popupParentViewName = nil
+
+	nameTxt = nil
+	promoteBtn = nil
+	demoteBtn = nil
+	promoteLeaderBtn = nil
+	kickOutBtn = nil
+	cancelDemisingBtnObj = nil
+	viewData = nil
+end

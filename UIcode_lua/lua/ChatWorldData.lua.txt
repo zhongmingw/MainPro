@@ -1,0 +1,397 @@
+local yield_return = (require 'cs_coroutine').yield_return
+local pb = require "pb"
+require "ChatHelper"
+
+local MSG_FirstChatResp = 1001
+MSG_receivedMsg = 1002
+local MSG_ChatStatusChanged = 1003
+
+ChatGroup = {}
+ChatGroup.ChatGroup_Zone = 1
+ChatGroup.ChatGroup_AllZone = 2
+ChatGroup.ChatGroup_Vip = 3
+ChatGroup.ChatGroup_Legion = 4
+ChatGroup.ChatGroup_Private = 5
+ChatGroup.ChatGroup_Recruit = 6
+ChatGroup.ChatGroup_Private = 7
+
+ChatType = {}
+ChatType.chatType_msg = 1
+ChatType.chatType_hero = 2
+ChatType.chatType_Equip = 3
+ChatType.union_recruit = 4
+
+ChatRcruitType = {}
+ChatRcruitType.union = 1
+
+local maxChatCount = 100
+
+local chatTime = {}
+local timeMap = {}
+local headers = {}
+local uid
+
+local legionId = ""
+local legionName
+local legionLevel
+local chatChannel
+local host
+local port
+
+local playerInfo
+local player
+local recruit
+
+local ChatWorldData = {}
+
+function onRetry(times, action)
+end
+
+
+local codoStartChat
+
+function privateKey()
+    return "chatPrivate."..chatChannel.."."..playerInfo.zone.."."..playerInfo.userId
+end
+
+function zoneKey()
+    return "chatZone."..chatChannel.."."..playerInfo.zone
+end 
+function legionKey()
+    return "chatLegion."..chatChannel.."."..playerInfo.zone .."."..legionId
+end
+function vipKey()
+    return "chatVip."..chatChannel
+end 
+function allKey()
+    return "chatAll."..chatChannel
+end 
+function recruitKey()
+    return "chatRecruit."..chatChannel.."."..playerInfo.zone
+end
+
+function clear()
+    chatItems = {}
+    timeMap = {}
+    hasNewChat = false
+    _onReceiveMessage = nil
+end
+
+
+function Sort()
+    chatTime.sort(function (x,y)
+        if x>y then
+            return 1
+        elseif x<y then
+            return -1
+        else
+            return 0
+        end
+    end)
+end
+function formPlayerInfo()
+    player = {}
+
+    playerInfo = appData:checkData("PlayerInfo")
+    player.nick = playerInfo.nick
+    player.icon = playerInfo.icon
+    player.level = playerInfo.level
+    if CsBridge.UnityHelper.GetString("local_vip") == "false" then
+        player.vip = 0
+    else
+        player.vip = playerInfo.vip
+    end
+    player.box = playerInfo.box
+    return player
+end
+
+function enterGame(unionID)
+    formPlayerInfo()
+    chatChannel = CsBridge.configUtil:loadStrValue("chatChannel","chatMgr")
+    host = CsBridge.configUtil:loadStrValue("chatHost","116.62.108.132")  -- 测试服IP 120.27.251.194  --服务器IP192.168.5.103
+    port = CsBridge.configUtil:loadIntValue("chatPort",8090)
+	legionId = tostring(unionID or "")
+    startChat()
+end
+
+function startChat()
+    codoStartChat = coroutine.create(function ()
+        CsBridge.chatManager:Connect(host,port,4096,20000,100,5,10000,onRetry)
+        while not CsBridge.chatManager:isConnected() do
+            yield_return(0)
+        end
+        local loginedChat = false
+        while not loginedChat do
+            local loginFinished = false
+            loginChat(function (error)
+                loginFinished = true
+                if error == nil then
+                    loginedChat = true
+                end
+            end)
+            while not loginFinished do
+                yield_return(0)
+            end
+        end
+
+        CsBridge.chatManager:StartHeart()
+        headers = checkHeader()
+        local req1 = {}
+        req1.time = 0
+        req1.legionId = legionId
+        local val = serialize(req1,"CheckChatContentReq")
+        CsBridge.chatManager:Request("firstChat",headers,val,function (error,msg)
+            if error == nil then
+                local result = deserialize("CheckChatContentResp",msg)
+                local time = result.chatTime
+                if(result.contents ~= nil) then
+                    for i = 1,#(result.contents) do
+					    if not IsSheild(result.contents[i].content.playerId) then
+                            CsBridge.chatManager:addChatItem(result.contents[i].chatGroup, result.contents[i],result.contents[i].chatTime)
+						end
+                    end
+                end
+            end
+            --   通知   --
+            CS.Client.Library.MsgCenter.Broadcast(MSG_FirstChatResp,nil)
+        end)
+        if(not LockZoneChat()) then
+            CsBridge.chatManager:Register(zoneKey(),function (message)
+                onReceivedMessage(ChatGroup.ChatGroup_Zone,message)
+            end)
+            CsBridge.chatManager:Register(privateKey(),function (message)
+                onReceivedMessage(ChatGroup.ChatGroup_Private,message)
+            end)
+        end
+		if(not LockLegionChat()) then
+			CsBridge.chatManager:Register(legionKey(),function (message)
+				onReceivedMessage(ChatGroup.ChatGroup_Legion,message)
+			end)
+		end
+        if(not LockRecruitChat()) then
+            CsBridge.chatManager:Register(recruitKey(),function (message)
+                onReceivedMessage(ChatGroup.ChatGroup_Recruit,message)
+            end)
+        end
+        CS.Client.Library.MsgCenter.Subscribe(MSG_ChatStatusChanged, ChatStatusChanged)
+    end);
+    assert(coroutine.resume(codoStartChat))
+end
+
+function ChatStatusChanged(obj)
+    local val = obj
+    if(val == -1)then
+       formPlayerInfo()
+    elseif(val == ChatGroup.ChatGroup_Zone) then
+        if(not LockZoneChat()) then
+            CsBridge.chatManager:Register(zoneKey(),function (message)
+                onReceivedMessage(ChatGroup.ChatGroup_Zone,message)
+            end)
+            CsBridge.chatManager:Register(privateKey(),function (message)
+                onReceivedMessage(ChatGroup.ChatGroup_Private,message)
+            end)
+        else
+            CsBridge.chatManager:Unregister(zoneKey())
+            CsBridge.chatManager:Unregister(privateKey())
+        end
+    elseif(val == ChatGroup.ChatGroup_Legion) then
+        if(not LockLegionChat()) then
+            CsBridge.chatManager:Register(legionKey(),function (message)
+                onReceivedMessage(ChatGroup.ChatGroup_Legion,message)
+            end)
+        else
+            CsBridge.chatManager:Unregister(legionKey())
+        end
+    elseif(val == ChatGroup.ChatGroup_Recruit) then
+        if(not LockRecruitChat()) then
+            CsBridge.chatManager:Register(recruitKey(),function (message)
+                onReceivedMessage(ChatGroup.ChatGroup_Recruit,message)
+            end)
+        else
+            CsBridge.chatManager:Unregister(recruitKey())
+        end
+    end
+end
+
+function LockZoneChat()
+    return CsBridge.UnityHelper.GetString("local_world") == "false"
+end
+
+function LockLegionChat()
+    return CsBridge.UnityHelper.GetString("local_guild") == "false"
+end
+
+function LockRecruitChat()
+    return CsBridge.UnityHelper.GetString("local_recruit") == "false"
+end
+
+
+
+function deserialize(msgType,msg)
+    local respMsg = checkProtoMessage(msgType)
+    local result = pb.decode(respMsg,CsBridge.chatManager:decodeFrombase64(msg))
+    return result
+end
+
+function serialize(msg, msgType)
+    local reqMsg = checkProtoMessage(msgType)--序列化
+    return CsBridge.chatManager:encodeTobase64(assert(pb.encode(reqMsg,msg)))
+end
+
+function onReceivedMessage(group,message)
+    local result = deserialize("ChatContent",message)
+	if not IsSheild(result.playerId) then
+	    local rec = {}
+	    if(group == ChatGroup.ChatGroup_Private) then
+	        print(1)
+	        rec.chatGroup = ChatGroup.ChatGroup_Zone
+	    else
+            rec.chatGroup = group
+        end
+        rec.content = result
+        CsBridge.chatManager:addChatItem(result.chatGroup, rec, result.chatTime)
+        --发送消息
+        CS.Client.Library.MsgCenter.Broadcast(MSG_receivedMsg,rec)
+	end
+end
+
+function checkHeader()
+    local dict = {}
+    dict["lan"] = "zh-hans"
+    if uid ~= nil then
+        dict["uid"] = uid
+    end
+    return dict
+end
+
+
+function loginChat(onFinished)
+    local req = {}
+    req.channel = chatChannel
+    req.playerId = playerInfo.userId
+    req.zone = playerInfo.zone
+    local val = serialize(req,"LoginChatReq")
+    CsBridge.chatManager:Request("registerChat", checkHeader(), val,
+    function(error,msg)
+        if error ~= nil then
+            onFinished()
+        else
+            local result = deserialize("LoginChatResp",msg)
+            uid = result.uid
+            onFinished()
+        end
+    end)
+end
+
+function hasNewChatInfo(groupId,time)
+    for k,v in pairs(timeMap) do
+        if k == groupId then
+            return timeMap[groupId] > time
+        else
+            return false
+        end
+    end
+end
+
+function checkAllItems(time)
+    local list = {}
+    for i = 1,#(chatItems) do
+        local chatItem = chatItems[i]
+        if chatItem.content.time > time then
+            table.insert(list,chatItem)
+        end
+    end
+    return list
+end
+
+function chatZone(chatType,content)
+    local req2 = {}
+    req2.playerBaseInfo = player
+    req2.contentType = chatType
+    req2.content = content
+    local req = serialize(req2,"ChatZoneReq")
+    CsBridge.chatManager:Send("chatZone",checkHeader(),req)
+end
+
+function chatLegion(chatType,content)
+    local req2 = {}
+    req2.playerBaseInfo = player
+    req2.nickName = playerInfo.nick
+    req2.contentType = chatType
+    req2.content = content
+    req2.legionId = legionId
+    CsBridge.chatManager:Send("chatLegion",headers,serialize(req2,"ChatLegionReq"))
+end
+
+function resetLegion(legionId)
+    CsBridge.chatManager:Unregister(legionKey)
+    regiterLegion()
+end
+
+
+function chatVip(chatType,content)
+    local req3 = {}
+    req3.playerBaseInfo = player
+    req3.nickName = playerInfo.nick
+    req3.contentType = chatType
+    req3.content = content
+    CsBridge.chatManager:Send("chatVip",headers,serialize(req3,"ChatVipReq"))
+end
+
+function chatAll(chatType,content)
+    local req3 = {}
+    req3.playerBaseInfo = player
+    req3.nickName = playerInfo.nick
+    req3.contentType = chatType
+    req3.content = content
+    CsBridge.chatManager:Send("chatAll",headers,serialize(req3,"ChatAllReq"))
+end
+
+function chatRecruit(chatType, content)
+    local req4 = {}
+    req4.playerBaseInfo = player
+    req4.contentType = chatType	
+    req4.recruitInfo = {
+		type = ChatRcruitType.union,
+		data = content
+	};--print("chatRecruit:" .. content)
+    local req = serialize(req4,"ChatRecruitReq")
+    CsBridge.chatManager:Send("chatRecruit", checkHeader(), req)
+end
+
+function chatFriend(chatType,friendZone,friendId,friendNickName,content)
+    local req6 = {}
+    req6.nickName = playerInfo.nick
+    req6.contentType = chatType
+    req6.content = content
+    req6.friendZone = friendZone
+    req6.friendPlayerId = friendId
+    req6.friendNickName = friendNickName
+    CsBridge.chatManager:Request("chatPrivate",headers,serialize(req6,"ChatPrivateReq"),function (error,message)
+        if error == nil then
+            onReceivedMessage(ChatGroup.ChatGroup_Legion,message)
+        end
+    end)
+end
+
+function UnserializeRcruitStr(content)
+	local recruitInfo = {}
+	content = string.gsub(content, "*", "")
+	content = string.gsub(content, "{", "")
+	content = string.gsub(content, "}", "")
+	content = string.gsub(content, "\"", "")
+	local field_sep, keyValue_sep = ",", ":"
+	local fieldArray = SplitString(content, field_sep)
+	local dataIdx, typeIdx = 0, 1
+	
+	local valueIdx = 1
+	local fieldData = fieldArray[dataIdx]
+	local kvPair = SplitString(fieldData, keyValue_sep)
+	recruitInfo.data = kvPair[valueIdx]
+
+	fieldData = fieldArray[typeIdx]
+	kvPair = SplitString(fieldData, keyValue_sep)
+	recruitInfo.type = tonumber(kvPair[valueIdx])
+	
+	return recruitInfo
+end

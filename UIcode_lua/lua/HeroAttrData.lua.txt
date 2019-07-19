@@ -1,0 +1,588 @@
+--global hero attr
+
+local AttrUtils = require "AttrUtils"
+local soulImprintItemBagUtils = require "SoulImprintItemBagUtils"
+require "JewelUtils"
+
+local HeroAttrData = {}
+
+local heroAttrDic
+local attrChangeEventDic
+
+local function GetPassiveSkillFightByJewel(heroInfo)
+	local fight = 0
+    if heroInfo.jewelIds == nil then
+        return 0
+    end
+    local effects = nil
+    for i,v in ipairs(heroInfo.jewelIds) do
+        local jewel = nil
+        if heroInfo.jewelItems then
+            for _,j in pairs(heroInfo.jewelItems) do
+                if j.uid == tonumber(v) then
+                    jewel = j
+                    break
+                end
+            end
+        else
+            jewel = appData:checkItem("JewelItem",v)
+        end
+        if jewel then
+            effects = JewelUtils.GetJewelEffectsById(jewel.id)
+            break
+        end
+    end
+    if effects then
+        for k,effect in ipairs(effects) do
+            if effect.type == JewelEffectType.PassiveSkill then
+                fight = fight + ResTblContainer:GetPropToInt(effect.effect,PassiveSkill.combat,PassiveSkill.actorTbl)
+            end
+        end
+    end
+	return fight
+end
+
+local function CheckHasEvent(listener)
+    for i,v in ipairs(attrChangeEventDic) do
+        if v == listener then
+            return true
+        end
+    end
+    return false
+end
+
+local function GetEventIndex(listener)
+    for i,v in ipairs(attrChangeEventDic) do
+        if v == listener then
+            return i 
+        end
+    end
+    return -1
+end
+
+local function GetInitAttrs(hero, attrs)
+    local tbl = ResTblContainer:GetTable(Hero.actorTbl)
+    local initAttrs = {}
+    initAttrs[HeroAttrEnum.HP] = AttrUtils.GetAttrData(HeroAttrEnum.HP, attrs[HeroAttrEnum.HP].type, tbl:GetInt(hero.heroId, Hero.initHp), attrs[HeroAttrEnum.HP].name)
+    initAttrs[HeroAttrEnum.SPEED] = AttrUtils.GetAttrData(HeroAttrEnum.SPEED, attrs[HeroAttrEnum.SPEED].type, tbl:GetInt(hero.heroId, Hero.initSpeed), attrs[HeroAttrEnum.SPEED].name)
+    initAttrs[HeroAttrEnum.ATK] = AttrUtils.GetAttrData(HeroAttrEnum.ATK, attrs[HeroAttrEnum.ATK].type, tbl:GetInt(hero.heroId, Hero.initPhyAtk), attrs[HeroAttrEnum.ATK].name)
+    initAttrs[HeroAttrEnum.DEF] = AttrUtils.GetAttrData(HeroAttrEnum.DEF, attrs[HeroAttrEnum.DEF].type, tbl:GetInt(hero.heroId, Hero.initPhyDef), attrs[HeroAttrEnum.DEF].name)
+    initAttrs[HeroAttrEnum.CRIT_RATE] = AttrUtils.GetAttrData(HeroAttrEnum.CRIT_RATE, attrs[HeroAttrEnum.CRIT_RATE].type, tbl:GetInt(hero.heroId, Hero.initCritRate), attrs[HeroAttrEnum.CRIT_RATE].name)
+    initAttrs[HeroAttrEnum.ANTI_CRIT_RATE] = AttrUtils.GetAttrData(HeroAttrEnum.ANTI_CRIT_RATE, attrs[HeroAttrEnum.ANTI_CRIT_RATE].type, tbl:GetInt(hero.heroId, Hero.initAntiCritRate), attrs[HeroAttrEnum.ANTI_CRIT_RATE].name)
+    initAttrs[HeroAttrEnum.CRIT_HURT] = AttrUtils.GetAttrData(HeroAttrEnum.CRIT_HURT, attrs[HeroAttrEnum.CRIT_HURT].type, tbl:GetInt(hero.heroId, Hero.initCritHurt), attrs[HeroAttrEnum.CRIT_HURT].name)
+    initAttrs[HeroAttrEnum.ANTI_CRIT_HURT] = AttrUtils.GetAttrData(HeroAttrEnum.ANTI_CRIT_HURT, attrs[HeroAttrEnum.ANTI_CRIT_HURT].type, tbl:GetInt(hero.heroId, Hero.initAntiCritHurt), attrs[HeroAttrEnum.ANTI_CRIT_HURT].name)
+    return initAttrs
+end
+
+local function CalcAttrIncrease(level,grade,val,ratio,distillLevel,breakLevel)
+    local levelIncr = 0
+    local gradeIncr = 0
+    local incNum = 0
+    
+    local fullNum=grade-1
+    local tbl = ResTblContainer:GetTable(HeroAttributeRatio.tblName)
+    for  i = 1,fullNum do
+        gradeIncr =gradeIncr+i
+        local levelCount = GetHeroMaxLevel(i)
+        local heroRatio = tbl:GetInt(i,HeroAttributeRatio.ratio)/Mill_PERCENT_RATE
+        levelIncr = levelIncr+((levelCount-1) * heroRatio)
+    end
+    gradeIncr = gradeIncr*ratio
+    local heroRatio = tbl:GetInt(grade,HeroAttributeRatio.ratio)/Mill_PERCENT_RATE
+    levelIncr =levelIncr+(heroRatio * (level-1))
+    
+    incNum = val *(gradeIncr + levelIncr)
+    return incNum+(distillLevel or 0)*grade*val+(breakLevel or 0)*grade*val
+end
+
+local function GetGrowthAttr(hero, maxValColName)
+    local increasePropId=ResTblContainer:GetPropToInt(hero.heroId,Hero.increasePropId,Hero.actorTbl)
+	local ratio=GetConstValue("gradeUpRatio") or 5
+    local maxLifeVal=ResTblContainer:GetPropToInt(increasePropId,maxValColName,HeroAttributeGrowth.actorTbl)
+    local maxLifeInc=CalcAttrIncrease(hero.level,hero.grade,maxLifeVal,ratio,hero.distillationLevel,hero.breakLevel)
+    return maxLifeInc
+end
+
+local function GetBaseAttrs(hero, attrs)
+    local baseAttrs = {}
+    baseAttrs[HeroAttrEnum.HP] = AttrUtils.GetAttrData(HeroAttrEnum.HP, attrs[HeroAttrEnum.HP].type, GetGrowthAttr(hero,HeroAttributeGrowth.maxLife), attrs[HeroAttrEnum.HP].name)
+    baseAttrs[HeroAttrEnum.SPEED] = AttrUtils.GetAttrData(HeroAttrEnum.SPEED, attrs[HeroAttrEnum.SPEED].type, 0, attrs[HeroAttrEnum.SPEED].name)
+    baseAttrs[HeroAttrEnum.ATK] = AttrUtils.GetAttrData(HeroAttrEnum.ATK, attrs[HeroAttrEnum.ATK].type, GetGrowthAttr(hero,HeroAttributeGrowth.phyAttack), attrs[HeroAttrEnum.ATK].name)
+    baseAttrs[HeroAttrEnum.DEF] = AttrUtils.GetAttrData(HeroAttrEnum.DEF, attrs[HeroAttrEnum.DEF].type, GetGrowthAttr(hero,HeroAttributeGrowth.phyDef), attrs[HeroAttrEnum.DEF].name)
+    baseAttrs[HeroAttrEnum.CRIT_RATE] = AttrUtils.GetAttrData(HeroAttrEnum.CRIT_RATE, attrs[HeroAttrEnum.CRIT_RATE].type, 0, attrs[HeroAttrEnum.CRIT_RATE].name)
+    baseAttrs[HeroAttrEnum.ANTI_CRIT_RATE] = AttrUtils.GetAttrData(HeroAttrEnum.ANTI_CRIT_RATE, attrs[HeroAttrEnum.ANTI_CRIT_RATE].type, 0, attrs[HeroAttrEnum.ANTI_CRIT_RATE].name)
+    baseAttrs[HeroAttrEnum.CRIT_HURT] = AttrUtils.GetAttrData(HeroAttrEnum.CRIT_HURT, attrs[HeroAttrEnum.CRIT_HURT].type, 0, attrs[HeroAttrEnum.CRIT_HURT].name)
+    baseAttrs[HeroAttrEnum.ANTI_CRIT_HURT] = AttrUtils.GetAttrData(HeroAttrEnum.ANTI_CRIT_HURT, attrs[HeroAttrEnum.ANTI_CRIT_HURT].type, 0, attrs[HeroAttrEnum.ANTI_CRIT_HURT].name)
+    return baseAttrs
+end
+
+local function GetDistillAttrsAddtion(hero, attrs, baseAttrs)
+    local distillAttrs = {}
+    local quality = hero.quality or ResTblContainer:GetPropToInt(hero.heroId,HeroBase.quality,HeroBase.actorTbl)
+    local heroStar = quality + hero.distillationStar
+    local minStar = quality + GetHeroMinDistillationStar(quality)
+    if heroStar == minStar then
+        return distillAttrs
+    end
+    if hero.distillationStar and hero.distillationStar ~= 0 and quality < BREAK_QUALITY then
+        local up = 0
+        local star = quality + hero.distillationStar
+        while star > BASE_STAR do
+            local disData = global_heroDistillationDic[hero.heroId]
+            if disData and disData[star] then
+                up = up + disData[star].attribute
+            end
+            star = star - 1
+        end
+        distillAttrs[HeroAttrEnum.HP] = AttrUtils.GetAttrData(HeroAttrEnum.HP, baseAttrs[HeroAttrEnum.HP].type, baseAttrs[HeroAttrEnum.HP].val*up/Mill_PERCENT_RATE, baseAttrs[HeroAttrEnum.HP].name)
+        distillAttrs[HeroAttrEnum.ATK] = AttrUtils.GetAttrData(HeroAttrEnum.ATK, baseAttrs[HeroAttrEnum.ATK].type, baseAttrs[HeroAttrEnum.ATK].val*up/Mill_PERCENT_RATE, baseAttrs[HeroAttrEnum.ATK].name)
+        distillAttrs[HeroAttrEnum.DEF] = AttrUtils.GetAttrData(HeroAttrEnum.DEF, baseAttrs[HeroAttrEnum.DEF].type, baseAttrs[HeroAttrEnum.DEF].val*up/Mill_PERCENT_RATE, baseAttrs[HeroAttrEnum.DEF].name)
+    end
+    return distillAttrs
+end
+
+local function GetBreakAttrsAddtion(hero, attrs, baseAttrs)
+    local breakAttrs = {}
+	local quality = hero.quality or ResTblContainer:GetPropToInt(hero.heroId, HeroBase.quality, HeroBase.actorTbl)
+    if quality <= DISTILL_QUALITY then
+        return breakAttrs
+    end
+    local breakTimes = quality - DISTILL_QUALITY
+    local attrUp = GetConstValue("HeroBreakAtrUp")
+    local attrUp2 = GetConstValue("HeroBreakAtrUp2")
+    local upArr = {}
+    table.insert(upArr, attrUp)
+    table.insert(upArr, attrUp2)
+    local up = upArr[breakTimes]
+    breakAttrs[HeroAttrEnum.HP] = AttrUtils.GetAttrData(HeroAttrEnum.HP, baseAttrs[HeroAttrEnum.HP].type, baseAttrs[HeroAttrEnum.HP].val*up/DEFAULT_PERCENT_RATE, baseAttrs[HeroAttrEnum.HP].name)
+    breakAttrs[HeroAttrEnum.ATK] = AttrUtils.GetAttrData(HeroAttrEnum.ATK, baseAttrs[HeroAttrEnum.ATK].type, baseAttrs[HeroAttrEnum.ATK].val*up/DEFAULT_PERCENT_RATE, baseAttrs[HeroAttrEnum.ATK].name)
+    breakAttrs[HeroAttrEnum.DEF] = AttrUtils.GetAttrData(HeroAttrEnum.DEF, baseAttrs[HeroAttrEnum.DEF].type, baseAttrs[HeroAttrEnum.DEF].val*up/DEFAULT_PERCENT_RATE, baseAttrs[HeroAttrEnum.DEF].name)
+	return breakAttrs
+end
+
+local function GetElementFusionAttrsAddtion(hero, attrs, baseAttrs)
+    local incNum = 0
+    local eleAttrs = {}
+    if not UIOpen(UI_OPEN_TYPE_ELEMENT_FUSION, false) and not hero.elementCampInfo then
+        return eleAttrs
+    end
+    --camp
+    local raceId = hero.raceId or ResTblContainer:GetPropToInt(hero.heroId,HeroBase.group,HeroBase.actorTbl)
+    local campInfoPb = nil
+    if hero.elementCampInfo then
+        if hero.elementCampInfo.id == tonumber(raceId) then
+            campInfoPb = hero.elementCampInfo
+        end
+    else
+        campInfoPb = appData:checkItem("ElementCampInfo",raceId)
+    end
+    if campInfoPb then
+        local campAttrs = global_campaignArr[campInfoPb.level].attrs
+        for i,v in ipairs(campAttrs) do
+            local attr = AttrUtils.GetAttrData(v.id, v.type,v.tbVal,v.name)
+            local baseAttr = baseAttrs[v.id]
+            eleAttrs[v.id] = eleAttrs[v.id] or AttrUtils.GetAttrData(baseAttr.id, baseAttr.type, 0, baseAttr.name)
+            AttrUtils.CalcAttr(eleAttrs[v.id],baseAttr,attr)
+        end
+    end
+
+    local elementLevel = 0
+    local heroId = CheckHeroRelationId(hero.heroId)
+    local heroCrystalInfoPb = nil
+    if hero.heroCrystalInfo then
+        if hero.heroCrystalInfo.heroId == tonumber(heroId) then
+            heroCrystalInfoPb = hero.heroCrystalInfo
+        end
+    else
+        heroCrystalInfoPb = appData:checkItem("HeroCrystalInfo",heroId)
+    end
+    local elementLevel = heroCrystalInfoPb and heroCrystalInfoPb.level or 0
+    if elementLevel == 0 then
+        return eleAttrs
+    end
+    local elementAttrs = global_elementFusionDic[elementLevel].attrs
+    for i,v in ipairs(elementAttrs) do
+        local attr = AttrUtils.GetAttrData(v.id, v.type,v.tbVal,v.name)
+        local baseAttr = baseAttrs[v.id]
+        eleAttrs[v.id] = eleAttrs[v.id] or AttrUtils.GetAttrData(baseAttr.id, baseAttr.type, 0, baseAttr.name)
+        AttrUtils.CalcAttr(eleAttrs[v.id],baseAttr,attr)
+    end
+	return eleAttrs
+end
+
+local function CalcOneEquipAttrsAddition(equipId, attrs, baseAttrs)
+    local propStr = ResTblContainer:GetPropToStr(equipId,Equipment.propStr,Equipment.actorTbl)
+    local equipAttrs = AttrUtils.GetAttrsDataFromTblStr(propStr)
+    for i,v in ipairs(equipAttrs) do
+        local baseAttr = baseAttrs[v.id]
+        attrs[v.id] = attrs[v.id] or AttrUtils.GetAttrData(baseAttr.id,baseAttr.type,0,baseAttr.name)
+        AttrUtils.CalcAttr(attrs[v.id], baseAttr, v)
+    end
+end
+
+local function CalcEquipSuitAttrsAddition(hero,equipAttrs,baseAttrs)
+    local suitArr={}
+    local tbl = ResTblContainer:GetTable(Equipment.actorTbl)
+    local weaponSuitId = tbl:GetInt(hero.weaponId,Equipment.suitId)
+    local hatSuitId = tbl:GetInt(hero.hatId,Equipment.suitId)
+    local clothSuitId = tbl:GetInt(hero.clothId,Equipment.suitId)
+    local shoeSuitId = tbl:GetInt(hero.shoesId,Equipment.suitId)
+    table.insertnorepeat(suitArr,weaponSuitId)
+    table.insertnorepeat(suitArr,hatSuitId)
+    table.insertnorepeat(suitArr,clothSuitId)
+    table.insertnorepeat(suitArr,shoeSuitId)
+
+    local function _CalcSuitAttrs(suiId,propStrName)
+        local propStr = tbl:Get(suiId,propStrName)
+        local suitAttrs = AttrUtils.GetAttrsDataFromTblStr(propStr)
+        for i,v in ipairs(suitAttrs) do
+            local baseAttr = baseAttrs[v.id]
+            equipAttrs[v.id] = equipAttrs[v.id] or AttrUtils.GetAttrData(baseAttr.id,baseAttr.type,0,baseAttr.name)
+            AttrUtils.CalcAttr(equipAttrs[v.id], baseAttr, v)
+        end
+    end
+
+    tbl=ResTblContainer:GetTable(EquipmentSuits.actorTbl)
+    for i,suiId in ipairs(suitArr) do
+        local suitNum=GetSuitNum(suiId,hero)
+        local needCount1= tbl:GetInt(suiId,EquipmentSuits.needCount1)
+        local needCount2= tbl:GetInt(suiId,EquipmentSuits.needCount2)
+        local needCount3= tbl:GetInt(suiId,EquipmentSuits.needCount3)
+        if needCount1~=0 and suitNum>=needCount1 then
+            _CalcSuitAttrs(suiId,EquipmentSuits.fightingProps1)
+        end
+        if needCount2~=0 and suitNum>=needCount2 then
+            _CalcSuitAttrs(suiId,EquipmentSuits.fightingProps2)
+        end
+        if(needCount3~=0 and suitNum>=needCount3)then
+            _CalcSuitAttrs(suiId,EquipmentSuits.fightingProps3)
+        end    
+    end
+end
+
+local function CalcRuneAttrsAddition(hero, attrs, baseAttrs)
+    local runeData = hero.runeData or hero.rune
+    if runeData == nil then
+        return
+    end
+    local infos = ResTblContainer:GetRowFromTbl(Rune.tblName,tostring(runeData[1]),Rune.attribute1,Rune.attribute2,Rune.attribute3,Rune.attribute4,Rune.attribute5,Rune.attribute6,Rune.attribute7,Rune.attribute8,Rune.attribute9,Rune.attribute10)
+    for i=2,#runeData do
+        local runeAttrs = AttrUtils.GetAttrsDataFromTblStr(infos[runeData[i]-1])
+        for i,v in ipairs(runeAttrs) do
+            local baseAttr = baseAttrs[v.id]
+            attrs[v.id] = attrs[v.id] or AttrUtils.GetAttrData(baseAttr.id,baseAttr.type,0,baseAttr.name)
+            AttrUtils.CalcAttr(attrs[v.id], baseAttr, v)
+        end
+    end 
+end
+
+local function CalcRelicAttrsAddition(hero, attrs, baseAttrs)
+    if hero.relicId == nil or hero.relicId == 0 then
+        return
+    end
+    local relic = nil
+    if hero.relicItem then
+        if hero.relicItem.uid == hero.relicId then
+            relic = hero.relicItem
+        end
+    else
+        relic = appData:checkItem("RelicItem",hero.relicId)
+    end
+    local relicAttrs = GetRelicAttrs(relic.id,relic.level)
+    for i,v in ipairs(relicAttrs.baseAttrs) do
+        local attr = AttrUtils.GetAttrData(v.id,v.type,v.tbVal,v.name)
+        local baseAttr = baseAttrs[v.id]
+        attrs[v.id] = attrs[v.id] or AttrUtils.GetAttrData(baseAttr.id,baseAttr.type,0,baseAttr.name)
+        AttrUtils.CalcAttr(attrs[v.id], baseAttr, attr)
+    end
+    if relicAttrs.activateAttrs then
+        local cond = relicAttrs.activateAttrs.cond
+        if (hero.other and CheckOtherActivate(cond,hero)) or (not hero.other and CheckRelicActivate(cond, hero.uid)) then
+            for i,activeAttr in ipairs(relicAttrs.activateAttrs.attrs) do
+                local attr = AttrUtils.GetAttrData(activeAttr.id,activeAttr.type,activeAttr.tbVal,activeAttr.name)
+                local baseAttr = baseAttrs[activeAttr.id]
+                attrs[activeAttr.id] = attrs[activeAttr.id] or AttrUtils.GetAttrData(baseAttr.id,baseAttr.type,0,baseAttr.name)
+                AttrUtils.CalcAttr(attrs[activeAttr.id], baseAttr, attr)
+            end
+        end 
+    end 
+end
+
+local function GetEquipAttrsAddition(hero, attrs, baseAttrs)
+    local equipAttrs = {}
+    CalcOneEquipAttrsAddition(hero.weaponId,equipAttrs,baseAttrs)
+    CalcOneEquipAttrsAddition(hero.hatId,equipAttrs,baseAttrs)
+    CalcOneEquipAttrsAddition(hero.clothId,equipAttrs,baseAttrs)
+    CalcOneEquipAttrsAddition(hero.shoesId,equipAttrs,baseAttrs)
+    CalcEquipSuitAttrsAddition(hero,equipAttrs,baseAttrs)
+    CalcRuneAttrsAddition(hero,equipAttrs,baseAttrs)
+    CalcRelicAttrsAddition(hero,equipAttrs,baseAttrs)
+    return equipAttrs 
+end
+
+local function GetUnionTechAttrsAddition(hero, attrs, baseAttrs)
+    local unionAttrs = {}
+    local jobTechs = nil
+    if hero.unionTechs then
+        jobTechs = hero.unionTechs
+    else
+        local playerInfo = appData:checkData("PlayerInfo")
+        local PlayerUnionRecord = appData:checkData("PlayerUnionRecord")
+        if playerInfo.union == nil or playerInfo.union == "0" or 
+        PlayerUnionRecord == nil or PlayerUnionRecord.unionTechs == nil then
+            return unionAttrs
+        end
+        jobTechs = appData:checkData("PlayerUnionRecord").unionTechs
+    end
+    
+    local job = ResTblContainer:GetPropToInt(hero.heroId,HeroBase.job,HeroBase.actorTbl)
+    local tbl = ResTblContainer:GetTable(GuildTech.tblName)
+    local techs = nil
+    for i,jobTech in ipairs(jobTechs) do
+        if jobTech.job == job then
+            techs = jobTech.techs
+            break
+        end
+    end
+    if techs == nil then
+        return unionAttrs
+    end
+    for i,tech in ipairs(techs) do
+        local techAttrs = AttrUtils.GetAttrsDataFromTblStr(tbl:Get(tech.id, GuildTech.attribute))
+        for i,v in ipairs(techAttrs) do
+            v.val = v.val*tech.level
+            local baseAttr = baseAttrs[v.id]
+            unionAttrs[v.id] = unionAttrs[v.id] or AttrUtils.GetAttrData(baseAttr.id,baseAttr.type,0,baseAttr.name)
+            AttrUtils.CalcAttr(unionAttrs[v.id],baseAttr,v)
+        end
+    end
+    return unionAttrs
+end
+
+---获取佩戴的灵魂纹章的属性
+local function GetSoulImprintItemAttrsAddition(hero, attrs, baseAttrs)
+    local soulImprintItem = soulImprintItemBagUtils.GetSoulImprintItemByHero(hero)
+    local initAttrs = {}
+    for k,v in pairs(global_attributeArr) do
+        local value = soulImprintItemBagUtils.GetSoulImprintItemAttrValueById(v.id, soulImprintItem)
+        initAttrs[v.id] = AttrUtils.GetAttrData(v.id, v.type, value, v.name)
+    end
+    return initAttrs
+end
+
+local function GetJewelAttrsAddition(hero,jewel,jewelAttrs,baseAttrs)
+    local effects = JewelUtils.GetJewelEffectsById(jewel.id)
+    local function _CalcJewelAttrsAddtion(effect, jewelAttrs, baseAttrs)
+        if effect.type == JewelEffectType.BattleAttr then
+            for j, attr in ipairs(effect.effect) do
+                local baseAttr = baseAttrs[attr.id]
+                jewelAttrs[attr.id] = jewelAttrs[attr.id] or AttrUtils.GetAttrData(baseAttr.id,baseAttr.type,0,baseAttr.name)
+                AttrUtils.CalcAttr(jewelAttrs[attr.id],baseAttr,attr)
+            end
+        end
+    end
+    for k,effect in ipairs(effects) do
+        if effect.active and JewelUtils.CheckJewelEffectCondsActive(hero, effect.conds) then
+            _CalcJewelAttrsAddtion(effect,jewelAttrs,baseAttrs)
+        end
+    end
+end
+
+local function GetJewelsAttrsAddition(hero, attrs, baseAttrs)
+    local jewelAttrs = {}
+    if hero.jewelIds == nil then
+        return jewelAttrs
+    end
+    for i,v in ipairs(hero.jewelIds) do
+        if hero.jewelItems then
+            for _,j in pairs(hero.jewelItems) do
+                if j.uid == tonumber(v) then
+                    jewel = j
+                    break
+                end
+            end
+        else
+            jewel = appData:checkItem("JewelItem",v)
+        end
+        if jewel then
+            GetJewelAttrsAddition(hero,jewel,jewelAttrs,baseAttrs)
+        end
+    end
+	return jewelAttrs
+end
+
+local function CalcAttrs(attrs, incAttrs)
+    for k,v in pairs(incAttrs) do
+        AttrUtils.CalcAttr(attrs[k],attrs[k],v)
+    end
+end
+
+local function CalcHeroAttrs(hero)
+    local attrs = {}
+    for k,v in pairs(global_attributeArr) do
+        attrs[v.id] = AttrUtils.GetAttrData(v.id, v.type, 0, v.name)
+        attrs[v.id].fightVal = v.value
+    end
+    CalcAttrs(attrs, GetInitAttrs(hero, attrs))
+    CalcAttrs(attrs, GetBaseAttrs(hero, attrs))
+    if hero.showBaseAttr then
+        return attrs
+    end
+    --其他基于基础属性的加成
+    local baseAttrs = table.copy(attrs)
+    CalcAttrs(attrs, GetDistillAttrsAddtion(hero, attrs, baseAttrs))
+    CalcAttrs(attrs, GetBreakAttrsAddtion(hero, attrs, baseAttrs))
+    CalcAttrs(attrs, GetElementFusionAttrsAddtion(hero, attrs, baseAttrs))
+    CalcAttrs(attrs, GetEquipAttrsAddition(hero, attrs, baseAttrs))
+    CalcAttrs(attrs, GetUnionTechAttrsAddition(hero, attrs, baseAttrs))
+    CalcAttrs(attrs, GetSoulImprintItemAttrsAddition(hero, attrs, baseAttrs))
+    CalcAttrs(attrs, GetJewelsAttrsAddition(hero, attrs, baseAttrs))
+    return attrs
+end
+
+local function GetHeroAttrs(hero, cache)
+    local isCache = cache == nil and false or true
+    if heroAttrDic == nil or not cache then
+        return CalcHeroAttrs(hero)
+    end
+    if heroAttrDic[hero.uid] == nil then
+        heroAttrDic[hero.uid] = CalcHeroAttrs(hero)
+    end
+    return heroAttrDic[hero.uid]
+end
+
+local function UpdateHeroAttrData(uid)
+    local hero = appData:checkItem("HeroItem",uid)
+    local attrs = heroAttrDic[uid]
+    local newAttrs = CalcHeroAttrs(hero)
+    local changeAttrs = {}
+    for k,v in pairs(attrs) do
+        local oldVal = v.val
+        local newVal = newAttrs[v.id].val
+        if oldVal ~= newVal then
+            local changeVal = newVal-oldVal
+            local changeAttr = AttrUtils.GetAttrData(v.id, v.type, changeVal, v.name)
+            changeAttr.oldVal = oldVal
+            changeAttr.newVal = newVal
+            changeAttr.isUp = newVal - oldVal > 0
+            changeAttr.changeValStr = changeAttr.showVal
+            table.insert(changeAttrs,changeAttr)
+        end
+    end
+    heroAttrDic[uid] = newAttrs
+    if #changeAttrs ~= 0 then
+        for i,listener in ipairs(attrChangeEventDic) do
+            listener(changeAttrs)
+        end
+    end
+end
+
+local function OnItemDataChanged(objs)
+    local clsName = objs[0]
+    if clsName == "HeroItem" then
+        local uid = tonumber(objs[1])
+        local pbHero = GetPbHero({uid = uid})
+        local emblemOwnerUid = pbHero and pbHero.emblemOwnerUid or 0
+        if emblemOwnerUid and emblemOwnerUid > 0 and heroAttrDic[emblemOwnerUid] then
+            UpdateHeroAttrData(emblemOwnerUid)
+        end
+        if heroAttrDic[uid] then
+            UpdateHeroAttrData(uid)
+        end
+    end
+    if clsName == "RelicItem" then
+        local relicUid = tonumber(objs[1])
+        local heroUid = appData:checkItem("RelicItem",relicUid).owner
+        if heroAttrDic[heroUid] then
+            UpdateHeroAttrData(heroUid)
+        end
+    end
+end
+
+HeroAttrData.GetHeroAttrsByHero = function(hero, cache)
+    return GetHeroAttrs(hero, cache)
+end
+
+HeroAttrData.GetHeroAttrsByUid = function(uid, cache)
+    local hero = appData:checkItem("HeroItem",uid)
+    return HeroAttrData.GetHeroAttrsByHero(hero, cache)
+end
+
+HeroAttrData.GetHeroFightByHero = function(hero, cache)
+    local allFight=0
+    --技能
+    local skills = GetHeroSkillArr(hero)
+    for _,skill in ipairs(skills) do
+        local combat = 0
+        if not skill.isPassive then
+            combat = ResTblContainer:GetPropToInt(skill.id,SkillBase.combat,SkillBase.actorTbl)
+        elseif skill.isOpen then
+            combat = ResTblContainer:GetPropToInt(skill.id,PassiveSkill.combat,PassiveSkill.actorTbl)
+        end
+        allFight=allFight+combat
+    end
+	--晶石的被动技能
+	allFight = allFight + GetPassiveSkillFightByJewel(hero)
+    --叠加所有属性战斗力
+    local attrs = GetHeroAttrs(hero, cache)
+    for i, data in pairs(attrs) do  
+        if data.fightVal ~= 0 then
+            local num = data.val
+            if data.id == HeroAttrEnum.SPEED then
+                local speedPreprocess = GetConstValue("SpeedPreprocess")
+                num = math.max(num-speedPreprocess,0)
+            end
+            allFight = allFight+(num*data.fightVal)
+        end
+    end
+	--最后取整
+	allFight=GetFloat(allFight)
+	return allFight
+end
+
+HeroAttrData.GetHeroFightByUid = function(uid, cache)
+    local hero = appData:checkItem("HeroItem",uid)
+    return HeroAttrData.GetHeroFightByHero(hero, cache)
+end
+
+HeroAttrData.GetFormationFight = function(formationType)
+    local allFight=0
+	local formationHeros=appData:checkItem("Formation",formationType)
+	if formationHeros==nil or formationHeros.heroIds==nil or next(formationHeros.heroIds)==nil then
+		return 0
+	end
+	for i, data in pairs(formationHeros.heroIds) do  
+		if data then
+			local hero=appData:checkItem("HeroItem",data.uid)
+			allFight=allFight+HeroAttrData.GetHeroFightByHero(hero)
+		end
+	end
+	return allFight
+end
+
+HeroAttrData.Init = function()
+    heroAttrDic = {}
+    attrChangeEventDic = {}
+    MsgCenter:Subscribe(CsBridge.SysMsgDef.Notify_ItemDataChanged, OnItemDataChanged)
+end
+
+HeroAttrData.Clear = function()
+    heroAttrDic = nil
+    attrChangeEventDic = nil
+    MsgCenter:Unsubscribe(CsBridge.SysMsgDef.Notify_ItemDataChanged, OnItemDataChanged)
+end
+
+HeroAttrData.AddAttrChangeEvent = function(listener)
+    if not CheckHasEvent(listener) then
+        table.insert(attrChangeEventDic, listener)
+    end
+end
+
+HeroAttrData.RemoveChangeEvent = function(listener)
+    local pos = GetEventIndex(listener)
+    if pos ~= -1 then
+        table.remove(attrChangeEventDic, pos)
+    end
+end
+
+return HeroAttrData

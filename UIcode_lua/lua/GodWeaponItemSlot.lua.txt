@@ -1,0 +1,38 @@
+local loadedClientData=require "ClientData"
+local luaIconData=require "IconData"
+require "ItemSlot"
+require "ForgeItemSlot"
+
+function OnGodWeaponItemSlotBindValue(slot, data)
+	path = "NeedItemGird"
+    local needItemGird = slot:GetComponentAtPath(path ,CLS_UI_ITEM_GRID) --slot.transform:Find(path):GetComponent(CLS_UI_ITEM_GRID)
+    
+    path = "RewardItemGird"
+    local rewardItemGird = slot:GetComponentAtPath(path ,CLS_UI_ITEM_GRID) --slot.transform:Find(path):GetComponent(CLS_UI_ITEM_GRID)
+
+    local resume1_Lab = slot:GetComponentAtPath("Resume1Txt" ,CLS_TEXT) --slot.transform:Find("Resume1Txt"):GetComponent(CLS_TEXT)
+    local resume2_Lab = slot:GetComponentAtPath("Resume2Txt" ,CLS_TEXT) --slot.transform:Find("Resume2Txt"):GetComponent(CLS_TEXT)
+    local resume1_Sprite = slot:GetComponentAtPath("Resume1Sprite" ,CLS_IMAGE) --slot.transform:Find("Resume1Sprite"):GetComponent(CLS_IMAGE)
+    local resume2_Sprite = slot:GetComponentAtPath("Resume2Sprite" ,CLS_IMAGE) --slot.transform:Find("Resume2Sprite"):GetComponent(CLS_IMAGE)
+    local limitCount_Lab = slot:GetComponentAtPath("LimitCountTxt" ,CLS_TEXT) --slot.transform:Find("LimitCountTxt"):GetComponent(CLS_TEXT)
+    local forgeBtn = slot:GetComponentAtPath("ForgeBtn" ,CLS_BUTTON_ARCHLY) --slot.transform:Find("ForgeBtn"):GetComponent(CLS_BUTTON_ARCHLY)
+
+    needItemGird:RefreshItemSlots(data.materials,slot.m_grid.viewBase.gameObject, "ForgeItemSlot")
+    rewardItemGird:RefreshItemSlots(data.rewards,slot.m_grid.viewBase.gameObject, "ItemSlot")
+    limitCount_Lab.text = tostring(data.remain)
+    BindPrice(data.prices[1],resume1_Lab,resume1_Sprite)
+    BindPrice(data.prices[2],resume2_Lab,resume2_Sprite)
+    forgeBtn.Gray = data.remain == 0 
+end
+
+function BindPrice(reward,lab,sprite)
+    if reward==nil then
+        return 
+    end
+    lab.text = GetValueAbbreviation(reward.count)
+	if reward.typeId==1 then
+		SetIconByResourceId(sprite.gameObject,reward.id)
+	elseif reward.typeId==2 then
+		SetIconByItemId(sprite.gameObject,reward.id)
+    end
+end

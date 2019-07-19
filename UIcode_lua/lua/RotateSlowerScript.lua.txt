@@ -1,0 +1,14 @@
+local time = CS.UnityEngine.Time
+
+local angle = 0
+local speed = -15
+
+function DoEnable()
+    self:DoAnimation(0, function()
+        angle = angle + time.deltaTime * speed
+        self.gameObject:SetRotation(0, 0, angle)
+    end)
+end
+
+function DoDisable()
+end

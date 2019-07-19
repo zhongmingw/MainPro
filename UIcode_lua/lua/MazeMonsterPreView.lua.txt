@@ -1,0 +1,67 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-05-05 10:12:04
+
+local isInit = false
+
+local fMonsterGrid
+local bMonsterGrid
+
+local function HideView(enableAnim)
+    self:HideView(self.gameObject.name,enableAnim)
+end
+
+function DoInit()	
+    self.Anim = 8
+    self.Shadow = 1
+end
+
+local function InitUI()
+    fMonsterGrid = self:GetComponentAtPath("Center/FMonsterGrid",CLS_UI_ITEM_GRID)
+    bMonsterGrid = self:GetComponentAtPath("Center/BMonsterGrid",CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitMazeMonsterPreData")
+end
+
+function SetParamDataList(objs)
+    local monsters,formationCallback = objs[0],objs[1]
+    self:SendCommand("InitData",monsters,formationCallback)
+end
+
+function OnClose()
+    fMonsterGrid:ClearItems()
+    bMonsterGrid:ClearItems()
+end
+
+function DoExit()
+    isInit = nil
+
+    fMonsterGrid = nil
+    bMonsterGrid = nil
+end
+
+function OnNotification_RefreshMazeMonsterPreView(objs)
+    local fMonsters,bMonsters = objs[0],objs[1]
+    fMonsterGrid:RefreshItemSlots(fMonsters,self.gameObject,"HeroItemSlot")
+    bMonsterGrid:RefreshItemSlots(bMonsters,self.gameObject,"HeroItemSlot")
+end
+
+function OnNotification_CloseView(objs)
+    local enableAnim = objs[0]
+    HideView(enableAnim)
+end
+
+function OnMaskClick(sender)
+    HideView(true)
+end
+
+function OnStartBtnClick(sender)
+    self:SendCommand("BattleMonster")
+end

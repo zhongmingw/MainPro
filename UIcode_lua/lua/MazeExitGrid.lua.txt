@@ -1,0 +1,43 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-04-17 14:58:39
+]]
+
+local MazeGrid = require "MazeGrid"
+local MazeUtils = require "MazeUtils"
+
+local MazeExitGrid = class("MazeExitGrid",MazeGrid)
+
+function MazeExitGrid:Ctor(row, col, state, type, data)
+    super(self,row,col,state,type)
+    self.passed = data.isNormal
+    self.upPos = false
+    if not self.passed then
+        self.formation = MazeUtils.ParseSvrDataFormation(data.formation)
+    end
+end
+
+function MazeExitGrid:SetData(svrData)
+    self.passed = svrData.isNormal
+    if not self.passed then
+        self.formation = MazeUtils.ParseSvrDataFormation(svrData.formation)
+    end
+end
+
+function MazeExitGrid:BindOnStateValue(trans)
+    self.super.BindOnStateValue(self,trans)
+    local monsterRootObj = trans:GetGameObjectAtPath("MonsterRoot")
+    monsterRootObj:SetSelfActive(not self.passed)
+end
+
+function MazeExitGrid:Click(data)
+    if self.passed then
+        MsgCenter:Broadcast(Notify_MazeGridTriggerEnterNext)
+    else
+        MsgCenter:Broadcast(Notify_MazeGridTriggerMonster,self)
+    end
+end
+
+return MazeExitGrid

@@ -1,0 +1,38 @@
+function OnAchievementItemSlotBindValue(slot, data)
+	local selfTrans = slot.transform
+	local rewardSlots = {}
+	for i = 0, selfTrans.childCount - 1 do
+		local childTrans = selfTrans:GetChild(i)
+		local itemSlot = childTrans:GetComponent(CLS_ITEM_SLOT)
+		if itemSlot then
+			rewardSlots[itemSlot.m_index] = itemSlot
+			itemSlot.transform.gameObject:SetActive(false)
+		end
+	end
+
+	local path = "titleTxt"
+	local titleTxt = slot:GetComponentAtPath(path, CLS_TEXT)
+	path = "descTxt"
+	local descTxt = slot:GetComponentAtPath(path, CLS_TEXT)
+	path = "Slider"
+	local sliderObj = slot:GetGameObjectAtPath(path)
+	local slider = sliderObj:GetComponent(CLS_SLIDER)
+	path = "Slider/progressTxt"
+	local progressTxt = slot:GetComponentAtPath(path, CLS_TEXT)
+	path = "ClaimBtn"
+	local claimBtnObj = slot:GetGameObjectAtPath(path)
+
+	titleTxt.text = data.title
+	descTxt.text = data.desc
+	progressTxt.text = data.progressDesc
+	slider.value = data.progress
+	claimBtnObj:SetActive(data.rewardFlag)
+	sliderObj:SetActive(not data.rewardFlag)
+	
+	local rewards = data.rewards
+	for k, reward in pairs(rewards) do
+		local itemSlot = rewardSlots[k]
+		itemSlot.transform.gameObject:SetActive(true)
+		BindItemBaseValue(itemSlot.transform, reward)
+	end
+end

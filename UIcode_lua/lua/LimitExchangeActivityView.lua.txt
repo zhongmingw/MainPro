@@ -1,0 +1,88 @@
+require "LimitExchangeItemSlot"
+
+local titleImgObj, countdownTxt, descTxt,titleTxt
+local itemsGrid
+local titleArtTxt
+local viewData
+
+function DoInit()
+	self.Shadow = CS.Client.Library.ShadowType.None
+	self.Anim = 0
+    InitUI()
+end
+
+function InitUI()
+	local path = "Center/Title/titleImg"
+	titleImgObj = self:GetGameObjectAtPath(path) 
+
+	path = "Center/Title/countdownTxt"
+	countdownTxt = self:GetComponentAtPath(path ,CLS_TEXT) 
+	path = "Center/ScrollRect/Viewport/LimitExchangeGrid"
+	itemsGrid = self:GetComponentAtPath(path ,CLS_UI_ITEM_GRID) 
+	titleArtTxt = self:GetComponentAtPath("Center/Title/TitleArtImg",CLS_LOCALIZE)
+	titleTxt = self:GetComponentAtPath("Center/Title/TitleTxt",CLS_TEXT)
+end
+
+function OnNotification_RefreshActivityView(objs)
+	if self.gameObject.activeInHierarchy then
+		viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function RefreshView(data)
+	if data.title and data.title~="" then
+		titleTxt.text = data.title
+	else
+		SetServerActivityArtFontByImage(titleArtTxt,data.image)
+	end
+	countdownTxt.text = data.restTime
+    --descTxt.text = data.desc
+    CsBridge.IconData.SetRawImageByName(titleImgObj, data.image)
+	itemsGrid:RefreshItemSlots(data.itemList, self.gameObject, "LimitExchangeItemSlot")
+end
+
+function OnNotification_RefreshCountdown(objs)
+	local data = objs[0]
+	RefreshCountdown(data)
+end
+
+function RefreshCountdown(countdownData)
+	if not viewData then--not ready
+		return
+	end
+
+	local currentActivityID = viewData.id
+	for activityID, restTime in pairs(countdownData) do
+		if activityID == currentActivityID then
+			countdownTxt.text = restTime
+			return
+		end
+	end
+end
+
+function OnLimitExchangeGridBuyBtnClick(obj)
+    local data = obj.m_data
+    if data.remain==0 then
+        return 
+    end
+    self:SendCommand("Exchange",data)
+end
+
+function OnItemGridItemSlotClick(obj)
+	self:SendCommand("OpenTipView",obj.m_data)
+end 
+
+function OnNotification_CloseActivityView(obj)
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	titleImgObj = nil
+	countdownTxt = nil 
+	descTxt = nil 
+	titleTxt = nil
+	itemsGrid = nil
+	titleArtTxt = nil
+	viewData = nil
+end

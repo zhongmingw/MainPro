@@ -1,0 +1,28 @@
+import "stage.proto";
+package GetGoldProto;
+
+message GetGoldInfo 
+{
+	repeated int32 takenIds = 1;//当日已领取过的id
+	required int64 lastRefreshTime = 2; //上次重置时间
+}
+
+message GetGoldReq 
+{
+    required int32 id = 1;//Get gold type id
+}
+
+message GetGoldResp 
+{
+    repeated stage.RewardItem rewardItems = 1;//奖励
+}
+
+message GMResetGetGoldReq 
+{
+    required int32 id = 1;//需要重置的id, 为0则全部重置
+}
+
+message GMResetGetGoldResp 
+{
+    required int32 result = 1;
+}

@@ -1,0 +1,57 @@
+local rewardItemsGrid
+
+local isInit = false
+
+function DoInit()
+    --print(1111)
+    self.Shadow = 1
+    if not isInit then
+		InitUI()
+		isInit = true
+	end 
+end 
+
+function InitUI()
+	rewardItemsGrid= self:GetComponentAtPath("other/RewardItemsGrid" ,"UIItemGrid")
+end
+
+function SetData(obj)
+    --print(1111111111)
+    local rewardItems = obj
+    --print(rewardItems)
+	rewardItemsGrid:RefreshItemSlots(rewardItems,self.gameObject,"ItemSlot")
+end
+
+function OnClose()
+	rewardItemsGrid:ClearItems()
+end 
+
+function OnRewardItemsGridItemSlotClick(obj)
+	CsBridge.CacheAssetsByModule(self.Module,
+	function()
+		local data = obj.m_data
+		local item = {
+			id = data.id,
+			typeId = data.typeId,
+			count = 1
+		}
+		local view = CsBridge.OpenView("ItemTipView", "ItemTipModel",false,true)
+		view:SetParamDataList(item,itemBaseIndex+itemDespIndex)
+		view:SendCommand("InitItemData")
+	end, "ItemTipView")
+end
+
+function OnSureBtnClick(sender)
+	self:HideView(self.gameObject.name)
+end 
+
+function OnMaskClick(sender)
+	self:HideView(self.gameObject.name)
+end 
+
+function DoExit()
+
+	rewardItemsGrid = nil
+
+	isInit = nil
+end

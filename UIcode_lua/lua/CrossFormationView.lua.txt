@@ -1,0 +1,174 @@
+require("CrossFormationItemSlot")
+
+local title_Lab
+local fightBtn_GO
+local saveBtn_GO
+local crossFormationItemGrid
+
+local confirmCallback, updateCallback
+local formationTypeList
+
+local heroBase_TF
+local draggingItem
+local dropItem
+
+local battled = false
+local initialized = false
+
+function DoInit()
+    self.Shadow = 1
+    MsgCenter:Subscribe(Notify_OnBattle, DoEnterBattle);
+    if not initialized then
+        initialized = true
+        InitUI()
+    end
+end
+
+function InitUI()
+    title_Lab = self:GetComponentAtPath("BGS/TitleTxt",CLS_TEXT)
+    fightBtn_GO = self:GetGameObjectAtPath("Center/FightBtn")
+    saveBtn_GO = self:GetGameObjectAtPath("Center/SaveBtn")
+    heroBase_TF = self:GetComponentAtPath("Center/HeroBase",CLS_RECTTRANSFORM)
+    crossFormationItemGrid = self:GetComponentAtPath("Center/CrossFormationGrid",CLS_UI_ITEM_GRID)
+end
+
+
+function SetParamDataList(objs)
+    local formView=objs[0]
+    confirmCallback = objs[1]
+    updateCallback = objs[2]
+    formationTypeList = objs[3]
+
+    fightBtn_GO:SetSelfActive(formView==0)
+    saveBtn_GO:SetSelfActive(formView~=0)
+	if(formView==0)then
+		title_Lab.text=tostring(Language:getStr("uiStr_1"))
+	else
+		title_Lab.text=tostring(Language:getStr("uiStr_3"))
+    end
+end
+
+function OnAnimationFinished()
+	self:SendCommand("InitCrossFormationData", confirmCallback, updateCallback, formationTypeList)
+end
+
+function OnNotification_RefreshCrossFormationView(objs)
+    local formationsData = objs[0]
+    crossFormationItemGrid:RefreshItemSlots(formationsData,self.gameObject,"CrossFormationItemSlot")
+end
+
+function OnNotification_RefreshTeam(objs)
+    local data = objs[0]
+    crossFormationItemGrid:SingleRefreshSlot(data)
+end
+
+function OnFightBtnClick(sender)
+    self:SendCommand("CrossFight")
+end
+
+function OnSaveBtnClick(sender)
+    self:SendCommand("SaveFormation")
+end
+
+function OnNotification_CloseFormtionView(objs)
+    self:HideView(self.gameObject.name)
+end
+
+function OnCrossFormationGridFightOrderBtnClick(obj)
+    local data=obj.m_data
+    local index = obj.m_index
+    if data.fightOrder==0 then
+        self:SendCommand("AddOrder",index+1)
+    else
+        self:SendCommand("RemoveOrder",index+1)
+    end
+end
+
+function OnCrossFormationGridFormationBtnClick(obj)
+    local data = obj.m_data
+    local index = obj.m_index
+    self:SendCommand("OpenFormationView",data,index)
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function OnMaskClick()
+    self:HideView(self.gameObject.name)
+end
+
+function OnHeroItemSlotBeginDrag(obj)
+	local btn = obj:GetComponent(CLS_BUTTON_ARCHLY)
+	btn:StopRunningClickAnim()
+	btn.ClickAnim = false
+
+	local data = obj:GetComponent("ItemSlot"):GetItemData().data
+	if data.heroId == 0 then
+		return
+	end
+	BindHeroBaseValue(heroBase_TF.gameObject,data)
+	CsBridge.UnityHelper.SetUILocalPosition(heroBase_TF,obj.transform.localPosition.x,obj.transform.localPosition.y)
+	heroBase_TF.gameObject:SetActive(true)
+	BindHeroBaseValue(obj.transform:Find("HeroBase").gameObject,nil)
+	draggingItem = obj
+end 
+
+function OnHeroItemSlotEndDrag(obj)
+	local btn = obj:GetComponent(CLS_BUTTON_ARCHLY)
+	btn.ClickAnim = true
+    local dragItem = obj:GetComponent("ItemSlot")
+    local dragData = dragItem.m_data
+	if dragData.heroId == 0 then
+		return
+	end
+	if draggingItem ~= nil then
+		draggingItem = nil
+	end 
+	if dropItem ~= nil then
+		local dropData = dropItem.m_data
+        self:SendCommand("ExchangeHero",dragData,dropData,
+            function()
+                BindHeroBaseValue(obj.transform:Find("HeroBase").gameObject, dragData)
+            end)
+	else
+		BindHeroBaseValue(obj.transform:Find("HeroBase").gameObject, dragData)
+    end 
+    dropItem = nil
+end 
+
+function OnHeroItemSlotDrop(obj)
+	if obj.name == "HeroItemSlot" then
+		if obj ~= draggingItem then
+			dropItem = obj:GetComponent("ItemSlot")
+		end
+	end 
+end
+
+function OnskipClick(sender)
+    if(canSkip) then
+        skipChecked = not skipChecked
+        skipCheckObj:SetActive(skipChecked)
+    end
+end
+
+function OnClose()
+
+end
+
+function DoExit()
+    MsgCenter:Unsubscribe(Notify_OnBattle, DoEnterBattle);
+    self.Module=nil
+    title_Lab = nil
+    fightBtn_GO = nil
+    saveBtn_GO = nil
+    crossFormationItemGrid = nil
+    confirmCallback = nil
+    updateCallback = nil
+    formationTypeList = nil
+    heroBase_TF = nil
+    draggingItem = nil
+    dropItem = nil
+    battled = nil
+    initialized = nil
+end

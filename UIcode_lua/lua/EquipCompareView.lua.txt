@@ -1,0 +1,390 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-05-16 21:49:04
+
+local oldEquipObj
+local oldEquipRT
+local oldNameTxt
+local oldTypeTxt 
+local oldItemBaseTF
+local oldPropArr
+local oldSuitNameTxt
+local oldSuitNumTxt
+local oldSuitPropArr
+local oldActivateCondTxt
+local oldActivatePropArr
+
+local newEquipObj
+local newEquipRt
+local newNameTxt
+local newTypeTxt 
+local newItemBaseTF
+local newPropArr
+local newSuitNameTxt
+local newSuitNumTxt
+local newSuitPropArr
+local newActivateCondTxt
+local newActivatePropArr
+
+local oldValOriginWidth
+local oldNameOriginPos
+
+local co
+
+local yield_return = (require 'cs_coroutine').yield_return
+
+local isInit = false
+
+function DoInit()	
+    self.Shadow = 1
+    self.Anim = 8
+end
+
+function IsSetAnchor()
+    return true
+end
+
+function InitUI() 
+    oldEquipObj = self:GetGameObjectAtPath("OldEquip")
+    oldEquipRT = oldEquipObj:GetComponent("RectTransform")
+    local oldEquipTrans = oldEquipObj.transform
+    oldNameTxt = oldEquipTrans:GetComponentAtPath("Base/NameTxt",CLS_TEXT)
+    oldTypeTxt = oldEquipTrans:GetComponentAtPath("Base/TypeTxt",CLS_TEXT)
+    oldItemBaseTF = oldEquipTrans:Find("Base/Item")
+    oldPropArr = {}
+    for i=1,4 do
+        local propTxt = oldEquipTrans:GetComponentAtPath("Prop"..i.."Txt",CLS_TEXT)
+        local nameTxt = propTxt.transform:GetComponentAtPath("NameTxt",CLS_TEXT)
+        local propTrans = propTxt:GetComponent("RectTransform")
+        table.insert(oldPropArr, {propTxt = propTxt,nameTxt = nameTxt,propTrans = propTrans})
+    end
+    
+    oldSuitNameTxt = oldEquipTrans:GetComponentAtPath("SuitTxt",CLS_TEXT)
+    oldSuitNumTxt = oldEquipTrans:GetComponentAtPath("SuitTxt/NumTxt",CLS_TEXT)
+
+    oldSuitPropArr = {}
+    for i=1,4 do
+        local propTxt = oldEquipTrans:GetComponentAtPath("SuitProp"..i.."Txt",CLS_TEXT)
+        local nameTxt = propTxt.transform:GetComponentAtPath("NameTxt",CLS_TEXT)
+        local propTrans = propTxt:GetComponent("RectTransform")
+        table.insert(oldSuitPropArr, {propTxt = propTxt,nameTxt = nameTxt,propTrans = propTrans})
+    end
+
+    oldActivateCondTxt = oldEquipTrans:GetComponentAtPath("ActivateTxt/ActivateCondTxt",CLS_TEXT)
+    oldActivatePropArr = {}
+    for i=1,1 do
+        local propTxt = oldEquipTrans:GetComponentAtPath("ActivateProp",CLS_TEXT)
+        local nameTxt = propTxt.transform:GetComponentAtPath("NameTxt",CLS_TEXT)
+        local propTrans = propTxt:GetComponent("RectTransform")
+        table.insert(oldActivatePropArr, {propTxt = propTxt, nameTxt = nameTxt,propTrans = propTrans})
+    end 
+
+    
+    newEquipObj = self:GetGameObjectAtPath("NewEquip")
+    newEquipRt = newEquipObj:GetComponent("RectTransform")
+    local newEquipTrans = newEquipObj.transform
+    newNameTxt = newEquipTrans:GetComponentAtPath("Base/NameTxt",CLS_TEXT)
+    newTypeTxt = newEquipTrans:GetComponentAtPath("Base/TypeTxt",CLS_TEXT)
+    newItemBaseTF = newEquipTrans:Find("Base/Item")
+    newPropArr = {}
+    for i=1,4 do
+        local propTxt = newEquipTrans:GetComponentAtPath("Prop"..i.."Txt",CLS_TEXT)
+        local nameTxt = propTxt.transform:GetComponentAtPath("NameTxt",CLS_TEXT)
+        local propTrans = propTxt:GetComponent("RectTransform")
+        table.insert(newPropArr, {propTxt = propTxt,nameTxt = nameTxt,propTrans = propTrans})
+    end
+    newSuitNameTxt = newEquipTrans:GetComponentAtPath("SuitTxt",CLS_TEXT)
+    newSuitNumTxt = newEquipTrans:GetComponentAtPath("SuitTxt/NumTxt",CLS_TEXT)
+
+    newSuitPropArr = {}
+    for i=1,4 do
+        local propTxt = newEquipTrans:GetComponentAtPath("SuitProp"..i.."Txt",CLS_TEXT)
+        local nameTxt = propTxt.transform:GetComponentAtPath("NameTxt",CLS_TEXT)
+        local propTrans = propTxt:GetComponent("RectTransform")
+        table.insert(newSuitPropArr, {propTxt = propTxt,nameTxt = nameTxt,propTrans = propTrans})
+    end
+
+    newActivateCondTxt = newEquipTrans:GetComponentAtPath("ActivateTxt/ActivateCondTxt",CLS_TEXT)
+    newActivatePropArr = {}
+    for i=1,1 do
+        local propTxt = newEquipTrans:GetComponentAtPath("ActivateProp",CLS_TEXT)
+        local nameTxt = propTxt.transform:GetComponentAtPath("NameTxt",CLS_TEXT)
+        local propTrans = propTxt:GetComponent("RectTransform")
+        table.insert(newActivatePropArr, {propTxt = propTxt, nameTxt = nameTxt,propTrans = propTrans})
+    end 
+
+    oldEquipObj:SetSelfActive(false)
+    newEquipObj:SetSelfActive(false)
+end
+
+function OnOpen()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitEquipCompareData")
+end
+
+function OnNotification_RefreshEquipCompareView(objs)
+    local oldEquip = objs[0]
+    local newEquip = objs[1]
+
+    BindItemBaseValue(oldItemBaseTF,oldEquip)
+    oldNameTxt.text = oldEquip.name
+    oldTypeTxt.text = oldEquip.summary
+ 
+    for i,prop in ipairs(oldPropArr) do
+        prop.propTxt.gameObject:SetSelfActive(false)
+    end
+
+    for i,prop in ipairs(oldEquip.propInfos) do
+        oldPropArr[i].propTxt.gameObject:SetSelfActive(true)
+		oldPropArr[i].propTxt.text = prop.val
+        oldPropArr[i].nameTxt.text= prop.name
+        CsBridge.UnityHelper.SetUISizeDelta(oldPropArr[i].propTrans,oldPropArr[i].propTxt:GetPreferredValues().x,oldPropArr[i].propTrans.sizeDelta.y)
+    end
+    
+    for i,prop in ipairs(oldSuitPropArr) do
+        prop.propTxt.gameObject:SetSelfActive(false)
+    end
+
+    if oldEquip.suit ~= nil then
+        oldSuitNameTxt.text = oldEquip.suit.suitName
+        local cur = math.min(oldEquip.suit.suitNum.cur,oldEquip.suit.suitNum.needCount[1].count)
+        oldSuitNumTxt:SetText("("..cur.."/"..oldEquip.suit.suitNum.needCount[1].count..")")
+        oldSuitNameTxt.gameObject:SetSelfActive(true)
+        for i,prop in ipairs(oldEquip.suit.suitProps) do
+            oldSuitPropArr[i].propTxt.gameObject:SetSelfActive(true)
+            oldSuitPropArr[i].propTxt.text = prop.val
+            oldSuitPropArr[i].nameTxt.text = prop.name
+            CsBridge.UnityHelper.SetUISizeDelta(oldSuitPropArr[i].propTrans,oldSuitPropArr[i].propTxt:GetPreferredValues().x,oldSuitPropArr[i].propTrans.sizeDelta.y)
+        end
+    else
+        oldSuitNameTxt.gameObject:SetSelfActive(false)
+    end
+
+    for i,prop in ipairs(oldActivatePropArr) do
+        prop.propTxt.gameObject:SetSelfActive(false)
+    end 
+    if oldEquip.typeId == 4 and oldEquip.activateAttrs ~= nil then
+        local activateAttrs = oldEquip.activateAttrs
+        oldActivateCondTxt:SetText(GetRelicActivateCondStr(activateAttrs.cond))
+        oldActivateCondTxt.transform.parent.gameObject:SetSelfActive(true)
+        for i,prop in ipairs(activateAttrs.attrs) do
+            oldActivatePropArr[i].propTxt.gameObject:SetSelfActive(true)
+            oldActivatePropArr[i].propTxt.text = prop.val
+            oldActivatePropArr[i].nameTxt.text = prop.name
+            CsBridge.UnityHelper.SetUISizeDelta(oldActivatePropArr[i].propTrans,oldActivatePropArr[i].propTxt:GetPreferredValues().x,oldActivatePropArr[i].propTrans.sizeDelta.y)
+        end
+    else
+        oldActivateCondTxt.transform.parent.gameObject:SetSelfActive(false)
+    end
+
+    BindItemBaseValue(newItemBaseTF,newEquip)
+    newNameTxt.text = newEquip.name
+    newTypeTxt.text = newEquip.summary
+ 
+    for i,prop in ipairs(newPropArr) do
+        prop.propTxt.gameObject:SetSelfActive(false)
+        --UnityHelper.SetAnchoredPosition(prop.nameTxt.gameObject,oldNameOriginPos.x,prop.nameTxt.transform.localPosition.y)
+    end
+
+    for i,prop in ipairs(newEquip.propInfos) do
+        newPropArr[i].propTxt.gameObject:SetSelfActive(true)
+		newPropArr[i].propTxt.text = prop.val
+        newPropArr[i].nameTxt.text= prop.name
+        CsBridge.UnityHelper.SetUISizeDelta(newPropArr[i].propTrans,newPropArr[i].propTxt:GetPreferredValues().x,newPropArr[i].propTrans.sizeDelta.y)
+    end
+    
+    for i,prop in ipairs(newSuitPropArr) do
+        prop.propTxt.gameObject:SetSelfActive(false)
+    end
+
+    if newEquip.suit ~= nil then
+        newSuitNameTxt.text = newEquip.suit.suitName
+        local cur = math.min(newEquip.suit.suitNum.cur,newEquip.suit.suitNum.needCount[1].count)
+        newSuitNumTxt:SetText("("..cur.."/"..newEquip.suit.suitNum.needCount[1].count..")")
+
+        newSuitNameTxt.gameObject:SetSelfActive(true)
+        for i,prop in ipairs(newEquip.suit.suitProps) do
+            newSuitPropArr[i].propTxt.gameObject:SetSelfActive(true)
+            newSuitPropArr[i].propTxt.text = prop.val
+            newSuitPropArr[i].nameTxt.text = prop.name
+            CsBridge.UnityHelper.SetUISizeDelta(newSuitPropArr[i].propTrans,newSuitPropArr[i].propTxt:GetPreferredValues().x,newSuitPropArr[i].propTrans.sizeDelta.y)
+        end
+    else
+        newSuitNameTxt.gameObject:SetSelfActive(false)
+    end
+
+    for i,prop in ipairs(newActivatePropArr) do
+        prop.propTxt.gameObject:SetSelfActive(false)
+    end
+    if newEquip.typeId == 4 and newEquip.activateAttrs ~= nil then
+        local activateAttrs = newEquip.activateAttrs
+        newActivateCondTxt:SetText(GetRelicActivateCondStr(activateAttrs.cond))
+        newActivateCondTxt.transform.parent.gameObject:SetSelfActive(true)
+        for i,prop in ipairs(activateAttrs.attrs) do
+            newActivatePropArr[i].propTxt.gameObject:SetSelfActive(true)
+            newActivatePropArr[i].propTxt.text = prop.val
+            newActivatePropArr[i].nameTxt.text = prop.name
+            CsBridge.UnityHelper.SetUISizeDelta(newActivatePropArr[i].propTrans,newActivatePropArr[i].propTxt:GetPreferredValues().x,newActivatePropArr[i].propTrans.sizeDelta.y)
+        end
+    else
+        newActivateCondTxt.transform.parent.gameObject:SetSelfActive(false)
+    end
+
+    oldEquipObj:SetSelfActive(true)
+    newEquipObj:SetSelfActive(true)
+    co = coroutine.create(function()
+        yield_return(1)
+
+        local oldHeight = oldEquipRT.sizeDelta.y
+        local newHeight = newEquipRt.sizeDelta.y
+        local center = (newHeight-oldHeight)/2
+        CsBridge.UnityHelper.SetAnchoredPosition(oldEquipObj,0,oldHeight/2+5+center)
+        CsBridge.UnityHelper.SetAnchoredPosition(newEquipObj,0,-(newHeight/2+5)+center)     
+    end)
+    assert(coroutine.resume(co))
+end
+
+function OnNotification_RefreshPetEquipCompareView(objs)
+    oldActivateCondTxt.transform.parent.gameObject:SetSelfActive(false)
+    newActivateCondTxt.transform.parent.gameObject:SetSelfActive(false)
+    local oldEquip = objs[0]
+    local newEquip = objs[1]
+
+    BindItemBaseValue(oldItemBaseTF,oldEquip)
+    oldNameTxt.text = oldEquip.name
+    oldTypeTxt.text = oldEquip.summary
+ 
+    for i,prop in ipairs(oldPropArr) do
+        prop.propTxt.gameObject:SetSelfActive(false)
+    end
+
+    for i,prop in ipairs(oldEquip.attrs) do
+        oldPropArr[i].propTxt.gameObject:SetSelfActive(true)
+		oldPropArr[i].propTxt.text = "+"..prop.showVal
+        oldPropArr[i].nameTxt.text= prop.name
+        CsBridge.UnityHelper.SetUISizeDelta(oldPropArr[i].propTrans,oldPropArr[i].propTxt:GetPreferredValues().x,oldPropArr[i].propTrans.sizeDelta.y)
+    end
+    
+    for i,prop in ipairs(oldSuitPropArr) do
+        prop.propTxt.gameObject:SetSelfActive(false)
+    end
+
+    if oldEquip.suit ~= nil then
+        oldSuitNameTxt.text = oldEquip.suit.name
+        oldSuitNumTxt:SetText("("..oldEquip.suit.curNum.."/"..oldEquip.suit.maxNum..")")
+        oldSuitNameTxt.gameObject:SetSelfActive(true)
+        for i,attrInfo in ipairs(oldEquip.suit.attrInfos) do
+            oldSuitPropArr[i].propTxt.gameObject:SetSelfActive(true)
+            oldSuitPropArr[i].propTxt.text = "+"..attrInfo.attrs[1].showVal
+            oldSuitPropArr[i].nameTxt.text = attrInfo.attrs[1].name
+            CsBridge.UnityHelper.SetUISizeDelta(oldSuitPropArr[i].propTrans,oldSuitPropArr[i].propTxt:GetPreferredValues().x,oldSuitPropArr[i].propTrans.sizeDelta.y)
+        end
+    else
+        oldSuitNameTxt.gameObject:SetSelfActive(false)
+    end
+
+    for i,prop in ipairs(oldActivatePropArr) do
+        prop.propTxt.gameObject:SetSelfActive(false)
+    end 
+
+    BindItemBaseValue(newItemBaseTF,newEquip)
+    newNameTxt.text = newEquip.name
+    newTypeTxt.text = newEquip.summary
+ 
+    for i,prop in ipairs(newPropArr) do
+        prop.propTxt.gameObject:SetSelfActive(false)
+        --UnityHelper.SetAnchoredPosition(prop.nameTxt.gameObject,oldNameOriginPos.x,prop.nameTxt.transform.localPosition.y)
+    end
+
+    for i,prop in ipairs(newEquip.attrs) do
+        newPropArr[i].propTxt.gameObject:SetSelfActive(true)
+		newPropArr[i].propTxt.text = "+"..prop.showVal
+        newPropArr[i].nameTxt.text= prop.name
+        CsBridge.UnityHelper.SetUISizeDelta(newPropArr[i].propTrans,newPropArr[i].propTxt:GetPreferredValues().x,newPropArr[i].propTrans.sizeDelta.y)
+    end
+    
+    for i,prop in ipairs(newSuitPropArr) do
+        prop.propTxt.gameObject:SetSelfActive(false)
+    end
+
+    if newEquip.suit ~= nil then
+        newSuitNameTxt.text = newEquip.suit.name
+        newSuitNumTxt:SetText("("..newEquip.suit.curNum.."/"..newEquip.suit.maxNum..")")
+
+        newSuitNameTxt.gameObject:SetSelfActive(true)
+        for i,attrInfo in ipairs(newEquip.suit.attrInfos) do
+            newSuitPropArr[i].propTxt.gameObject:SetSelfActive(true)
+            newSuitPropArr[i].propTxt.text = "+"..attrInfo.attrs[1].showVal
+            newSuitPropArr[i].nameTxt.text = attrInfo.attrs[1].name
+            CsBridge.UnityHelper.SetUISizeDelta(newSuitPropArr[i].propTrans,newSuitPropArr[i].propTxt:GetPreferredValues().x,newSuitPropArr[i].propTrans.sizeDelta.y)
+        end
+    else
+        newSuitNameTxt.gameObject:SetSelfActive(false)
+    end
+
+    for i,prop in ipairs(newActivatePropArr) do
+        prop.propTxt.gameObject:SetSelfActive(false)
+        --UnityHelper.SetAnchoredPosition(prop.nameTxt.gameObject,oldNameOriginPos.x,prop.nameTxt.transform.localPosition.y)
+    end
+
+    oldEquipObj:SetSelfActive(true)
+    newEquipObj:SetSelfActive(true)
+    co = coroutine.create(function()
+        yield_return(1)
+
+        local oldHeight = oldEquipRT.sizeDelta.y
+        local newHeight = newEquipRt.sizeDelta.y
+        local center = (newHeight-oldHeight)/2
+        CsBridge.UnityHelper.SetAnchoredPosition(oldEquipObj,0,oldHeight/2+5+center)
+        CsBridge.UnityHelper.SetAnchoredPosition(newEquipObj,0,-(newHeight/2+5)+center)     
+    end)
+    assert(coroutine.resume(co))
+end
+
+function OnWearBtnClick(sender)
+    self:SendCommand("WearEquip")
+    Close()
+end
+
+function OnMaskClick(sender)
+    self:SendCommand("ActiveEquipSelect")
+    Close()
+end
+
+function Close()
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+    oldEquipObj = nil
+    oldEquipRT = nil
+    oldNameTxt = nil
+    oldTypeTxt  = nil
+    oldItemBaseTF = nil
+    oldPropArr = nil
+    oldSuitNameTxt = nil
+    oldSuitNumTxt = nil
+    oldSuitPropArr = nil
+    oldActivateCondTxt = nil
+    oldActivatePropArr = nil
+    newEquipObj = nil
+    newEquipRt = nil
+    newNameTxt = nil
+    newTypeTxt  = nil
+    newItemBaseTF = nil
+    newPropArr = nil
+    newSuitNameTxt = nil
+    newSuitNumTxt = nil
+    newSuitPropArr = nil
+    newActivateCondTxt = nil
+    newActivatePropArr = nil
+    oldValOriginWidth = nil
+    oldNameOriginPos = nil
+    co = nil
+    yield_return = nil
+    isInit = nil
+end

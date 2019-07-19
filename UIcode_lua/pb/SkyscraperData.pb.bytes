@@ -1,0 +1,59 @@
+
+‡
+SkyscraperData.protoSkyscraperDataplayerData.protostage.proto"p
+SkyTowerItem
+
+id (
+remains (
+itemKeyRemains (
+lastRenewTime (
+extraRewards ("&
+GetPassSkyTowerPlayerReq
+
+id ("R
+GetPassSkyTowerPlayerResp5
+infos (2&.SkyscraperData.PassSkyTowerPlayerResp"Z
+PassSkyTowerPlayerResp
+time (2
+playerBaseInfo (2.playerData.PlayerBaseInfo"4
+GetPassSkyTowerVideoReq
+
+id (
+index (";
+TrySkyTowerReq)
+formationPos (2.stage.FormationPos"5
+GetSkyTowerRankInfoReq
+type (
+count ("Ž
+GetSkyTowerRankInfoResp7
+	rankInfos (2$.SkyscraperData.SkyTowerRankInfoItem:
+selfRankInfo (2$.SkyscraperData.SkyTowerRankInfoItem"w
+SkyTowerRankInfoItem2
+playerBaseInfo (2.playerData.PlayerBaseInfo
+score (
+rank (
+combat ("w
+CampaignRankInfoItem2
+playerBaseInfo (2.playerData.PlayerBaseInfo
+score (
+rank (
+combat ("#
+GetCampaignRankReq
+count ("Š
+GetCampaignRankResp7
+	rankInfos (2$.SkyscraperData.CampaignRankInfoItem:
+selfRankInfo (2$.SkyscraperData.CampaignRankInfoItem"u
+CombatRankInfoItem2
+playerBaseInfo (2.playerData.PlayerBaseInfo
+score (
+rank (
+combat ("$
+GetPvpCombatRankReq
+count ("‹
+GetPvpCombatRankResp7
+	rankInfos (2$.SkyscraperData.CampaignRankInfoItem:
+selfRankInfo (2$.SkyscraperData.CampaignRankInfoItem")
+SkyTowerExtraRewardReq
+stageId ("A
+SkyTowerExtraRewardResp&
+rewardItems (2.stage.RewardItem

@@ -1,0 +1,854 @@
+--[[
+	file: ServerActivityUtils.lua
+	author: zhangyue
+	description: ServerActivity utilities
+]]
+
+local ActivityUrls = {
+	[ActivityType.SevenDays] = "getLoginRewardActivity,GetLoginRewardActivityReq,GetLoginRewardActivityResp",
+	[ActivityType.Tavern] = "getAutoTaskActivity,GetAutoTaskActivityReq,GetAutoTaskActivityResp",
+	[ActivityType.Militants] = "getAPArenaActivity,GetAPArenaActivityReq,GetAPArenaActivityResp",
+	[ActivityType.Destruction] = "getDestructionActivity,GetDestructionActivityReq,GetDestructionActivityResp",
+	[ActivityType.Gift] = "getSuperPackage,GetSuperPackageReq,GetSuperPackageResp",
+	[ActivityType.SummonGift] = "getHeroSummonActivity,GetHeroSummonActivityReq,GetHeroSummonActivityResp",
+	[ActivityType.SummonCreditGift] = "getCallHeroActivity,GetCallHeroActivityReq,GetCallHeroActivityResp",
+	[ActivityType.Dragon] = "getDragonCallHeroActivity,GetDragonCallHeroActivityReq,GetDragonCallHeroActivityResp",
+	[ActivityType.TurnTableLottery] = "getLotteryActivity,GetLotteryActivityReq,GetLotteryActivityResp",
+	[ActivityType.DailyLogin] = "getDailyRewardActivity,GetDailyRewardActivityReq,GetDailyRewardActivityResp",
+	[ActivityType.HeroMiracles] = "getMiracleActivity,GetMiracleActivityReq,GetMiracleActivityResp",
+	[ActivityType.HonorOfCompose] = "getHonorOfComposeActivity,GetHonorOfComposeActivityReq,GetHonorOfComposeActivityResp",
+	[ActivityType.PVEBonus] = "getPveDropActivity,GetPveDropActivityReq,GetPveDropActivityResp",
+	[ActivityType.WheelBonus] = "getLotteryDropActivity,GetLotteryDropActivityReq,GetLotteryDropActivityResp",
+	[ActivityType.LimitExchange] = "getExchangeHeroActivity,GetExchangeActivityReq,GetExchangeActivityResp",
+	[ActivityType.LimitActivity] = "getExchangeItemActivity,GetExchangeActivityReq,GetExchangeActivityResp",
+	[ActivityType.LimitBox] = "getExchangeBoxActivity,GetExchangeActivityReq,GetExchangeActivityResp",
+	[ActivityType.HeroGang] = "getHeroGangActivity,GetExchangeActivityReq,GetExchangeActivityResp",
+	[ActivityType.GodWeapon] = "getGodWeaponActivity,GetExchangeActivityReq,GetExchangeActivityResp",
+	[ActivityType.DailyPackage] = "getDailyPackage,GetDailyPackageReq,GetDailyPackageResp",
+	[ActivityType.CycleCharge] = "getCycleChargeActivity,GetCycleChargeActivityReq,GetCycleChargeActivityResp",
+	[ActivityType.LimitCallHero] = "getLimitCallHeroActivity,GetLimitCallHeroActivityReq,GetLimitCallHeroActivityResp",
+	[ActivityType.LimitCrystal] = "getLimitCrystalActivity,GetLimitCallHeroActivityReq,GetLimitCallHeroActivityResp",
+	[ActivityType.DailyCharge] = "getDailyChargeActivity,GetDailyChargeActivityReq,GetDailyChargeActivityResp",
+	[ActivityType.AccumulativeCharge] = "getChargeActivity,GetCallHeroActivityReq,GetCallHeroActivityResp",
+	[ActivityType.AccumulativeConsumpution] = "getGemActivity,GetCallHeroActivityReq,GetCallHeroActivityResp",
+	[ActivityType.HalloweenChallenge] = "getHalloweenActivity,GetHalloweenActivityReq,GetHalloweenActivityResp",
+	[ActivityType.GroupPurchase] = "getGroupBuyGoods,GetGroupBuyReq,GetGroupBuyResp",
+	[ActivityType.GroupBuy] = "getGroupBuyGoods,GetGroupBuyReq,GetGroupBuyResp",
+	[ActivityType.DiscountShop] = "initDiscountBuy,InitDiscountBuyReq,InitDiscountBuyResp",
+	[ActivityType.DailyDiscount] = "getNewDailyPackage,GetNewDailyPackageReq,GetNewDailyPackageResp",
+	[ActivityType.GoodsMonthlyCard] = "getMonthChargeActivity,GetCycleChargeActivityReq,GetCycleChargeActivityResp",
+	[ActivityType.PowerLeaderboard] = "getCombatActivityRank,GetActivityRankReq,GetCombatActivityRankResp",
+	[ActivityType.ArenaLeaderboard] = "getArenaActivityRank,GetActivityRankReq,GetArenaActivityRankResp",
+	[ActivityType.HeroUpgrading] = "getHeroGrowthActivity,GetHeroGrowthActivityReq,GetHeroGrowthActivityResp",
+	[ActivityType.JewelLottery] = "getJewelActivity,GetActivityByIdReq,GetJewelActivityResp",
+	[ActivityType.GlobalPowerLeaderboard] = "getCombatGroupActivityRank,GetActivityRankReq,GetCombatActivityRankResp",
+	[ActivityType.GloryRoadActivity] = "getGloryRoadActivity,GetActivityByIdReq,GetGloryRoadActivityResp",
+	[ActivityType.SoulBitsShopActivity] = "limitLotteryShop,LimitLotteryShopReq,LimitLotteryShopResp",
+	[ActivityType.TripShopActivity] = "barteringShop,ExchangeShopReq,ExchangeShopResp",
+	[ActivityType.ArenaStandActivity] = "arenaCompleteActivity,GetArenaStandActReq,GetArenaStandActResp",
+	[ActivityType.HeroBoutActivity] = "mulTeamArenaCompleteActivity,GetHeroBoutActReq,GetHeroBoutActResp",
+	[ActivityType.BattlePassActivity] = "campaignCompleteActivity,GetBattlePassActReq,GetBattlePassActResp",
+	[ActivityType.TrialTowerActivity] = "skyTowerCompleteActivity,GetTrialTowerActReq,GetTrialTowerActResp",
+	[ActivityType.FlashSaleActivity] = "rush2BuyShop,Rush2BuyShopReq,Rush2BuyShopResp",
+	[ActivityType.CombatRankAct] = "getMulTeamArenaScoreRankActivity,GetActivityRankReq,GetCombatActivityRankResp",
+	[ActivityType.GemLeaders] = "getGemSpendRankActivity,GetActivityRankReq,GetCombatActivityRankResp",
+	[ActivityType.LimitedTaskActivity] = "dailyTaskActivity,LimitedTaskActivityReq,LimitedTaskActivityResp",
+	[ActivityType.SelectionAchieveActivity] = "getSummonUpCountActivity,GetSummonUpCountActivityReq,GetSummonUpCountActivityResp",
+	[ActivityType.HeroLevelUpActivity] = "getHeroLevelActivity,GetHeroLevelActivityReq,GetHeroLevelActivityResp",
+	[ActivityType.HeroStarUpActivity] = "getHeroStarActivity,GetHeroStarActivityReq,GetHeroStarActivityResp",
+	[ActivityType.JewelQualityActivity] = "getJewelQualityActivity,GetJewelQualityActivityReq,GetJewelQualityActivityResp",
+}
+
+local ActivityAssets = {
+	[ActivityType.SevenDays] = {"SevenDaysActivityView","SevenDaysActivityItemSlot","ItemSlot"},
+	[ActivityType.Tavern] = {"GeneralActivityView", "GeneralActivityItemSlot"},
+	[ActivityType.Militants] = {"GeneralActivityView", "GeneralActivityItemSlot"},
+	[ActivityType.Destruction] = {"DestructionActivityView"},
+	[ActivityType.Gift] = {"SuperGiftActivityView", "SuperGiftItemSlot"},
+	[ActivityType.SummonGift] = {"SummonGiftActivityView","SummonGiftActivityItemSlot"},
+	[ActivityType.SummonCreditGift] = {"DragonActivityView", "GeneralActivityItemSlot"},
+	[ActivityType.Dragon] = {"DragonActivityView", "GeneralActivityItemSlot"},
+	[ActivityType.TurnTableLottery] = {"DragonActivityView","GeneralActivityItemSlot"},
+	[ActivityType.DailyLogin] = {"DailyLoginActivityView","ItemSlot"},
+	[ActivityType.HeroMiracles] = {"GeneralActivityView", "GeneralActivityItemSlot"},
+	[ActivityType.HonorOfCompose] = {"HonorOfComposeActivityView","HonorOfComposeItemSlot"},
+	[ActivityType.PVEBonus] = {"ExtraBonusActivityView"},
+	[ActivityType.WheelBonus] = {"ExtraBonusActivityView"},
+	[ActivityType.LimitExchange] = {"LimitExchangeActivityView","LimitExchangeItemSlot"},
+	[ActivityType.LimitActivity] = {"LimitFestivalView","LimitFestivalItemSlot"},
+	[ActivityType.LimitBox] = {"LimitBoxActivityView","LimitBoxItemSlot"},
+	[ActivityType.HeroGang] = {"HeroGangActivityView","HeroGangItemSlot"},
+	[ActivityType.GodWeapon] = {"GodWeaponActivityView","GodWeaponItemSlot","ForgeItemSlot"},
+	[ActivityType.DailyPackage] = {"DailyPackageActivityView","DailyPackageItemSlot"},
+	[ActivityType.CycleCharge] = {"CycleChargeActivityView","ItemSlot"},
+	[ActivityType.LimitCallHero] = {"DailyLoginActivityView","ItemSlot"},
+	[ActivityType.LimitCrystal] = {"DailyLoginActivityView","ItemSlot"},
+	[ActivityType.DailyCharge] = {"DailyChargeActivityView","DailyChargeItemSlot","ItemSlot"},
+	[ActivityType.AccumulativeCharge] = {"GeneralActivityView", "GeneralActivityItemSlot"},
+	[ActivityType.AccumulativeConsumpution] = {"GeneralActivityView", "GeneralActivityItemSlot"},
+	[ActivityType.HalloweenChallenge] = {"HalloweenActivityView","HalloweenItemSlot","ItemSlot"},
+	[ActivityType.GroupPurchase] = {"GroupPurchaseActivityView","GPGoodsItemSlot"},
+	[ActivityType.GroupBuy] = {"GroupBuyActivityView","GBGoodsItemSlot","DownArrow"},
+	[ActivityType.DiscountShop] = {"DiscountShopActivityView","DSGoodsItemSlot"},
+	[ActivityType.DailyDiscount] = {"DailyDiscountActivityView","DailyDiscountItemSlot", "ItemSlot"},
+	[ActivityType.GoodsMonthlyCard] = {"GoodsMonthlyCardView","ItemSlot"},
+	[ActivityType.PowerLeaderboard] = {"LeaderboardActivityView","LeaderboardActivityItemSlot"},
+	[ActivityType.ArenaLeaderboard] = {"LeaderboardActivityView","LeaderboardActivityItemSlot"},
+	[ActivityType.HeroUpgrading] = {"HeroUpgradingActivityView","ItemSlot", "GeneralActivityItemSlot"},
+	[ActivityType.JewelLottery] = {"DragonActivityView", "GeneralActivityItemSlot"},
+	[ActivityType.GlobalPowerLeaderboard] = {"LeaderboardActivityView","LeaderboardActivityItemSlot"},
+	[ActivityType.GloryRoadActivity] = {"GloryRoadActivityView","GloryRoadActivityItemSlot","ItemSlot"},
+	[ActivityType.SoulBitsShopActivity] = {"SoulBitsShopActivityView","ShopItemSlot"},
+	[ActivityType.TripShopActivity] = {"TripShopActivityView","ShopItemSlot"},
+	[ActivityType.ArenaStandActivity] = {"DragonActivityView","GeneralActivityItemSlot"},
+	[ActivityType.HeroBoutActivity] = {"DragonActivityView","GeneralActivityItemSlot"},
+	[ActivityType.BattlePassActivity] = {"DragonActivityView","GeneralActivityItemSlot"},
+	[ActivityType.TrialTowerActivity] = {"DragonActivityView","GeneralActivityItemSlot"},
+	[ActivityType.FlashSaleActivity] = {"FlashSaleActivityView","ItemSlot","DSGoodsItemSlot"},
+	[ActivityType.CombatRankAct] = {"LeaderboardActivityView","LeaderboardActivityItemSlot"},
+	[ActivityType.GemLeaders] = {"LeaderboardActivityView","LeaderboardActivityItemSlot"},
+	[ActivityType.LimitedTaskActivity] = {"LimitedTaskActivityView","LimitedTaskActivityItemSlot","ItemSlot"},
+	[ActivityType.SelectionAchieveActivity] = {"DragonActivityView","GeneralActivityItemSlot"},
+	[ActivityType.HeroLevelUpActivity] = {"HeroUpActivityView","HeroUpActivityItemSlot","ItemSlot"},
+	[ActivityType.HeroStarUpActivity] = {"HeroUpActivityView","HeroUpActivityItemSlot","ItemSlot"},
+	[ActivityType.JewelQualityActivity] = {"JewelGainActivityView","JewelGainActivityItemSlot","ItemSlot"},
+}
+
+local FormatActivityItems
+local GetDespByItemType
+
+local function GetUrl(activityType)
+	local configStr = ActivityUrls[activityType]
+	local configArr = SplitString(configStr, ",")
+	local urlIdx, requsetMsgIdx, responseMsgIdx = 0, 1, 2
+	return configArr[urlIdx], configArr[requsetMsgIdx], configArr[responseMsgIdx]
+end
+
+local function GetAssetsName(activityType)
+	local assets = ActivityAssets[activityType]
+	local length = #assets
+	if length == 1 then 
+		return assets[1]
+	elseif length == 2 then
+		return assets[1], assets[2]
+	elseif length == 3 then
+		return assets[1], assets[2], assets[3]
+	elseif length == 4 then
+		return assets[1], assets[2], assets[3], assets[4]
+	elseif length == 5 then
+		return assets[1], assets[2], assets[3], assets[4], assets[5]
+	end
+end
+
+local FormatDestrctionData = function(data, activityData)
+	local utils = require "destructionActivityUtils"
+	utils.InitData(data, activityData)
+end
+
+local FormatGroupBuyData = function(data, activityData)
+	local utils = require "GroupBuyActivityUtils"
+	utils.InitGBDiscountData(data, activityData)
+end
+
+local FormatGroupPurchaseData = function(data, activityData)
+	local utils = require "GroupPurchaseActivityUtils"
+	utils.InitGPGoodsData(data, activityData)
+end
+
+local FormatTripShopData = function(data, activityData)
+	local utils = require "TripShopUtils"
+	return utils.InitData(data, activityData)
+end
+
+local FormatSoulBitsShopData = function(data, activityData)
+	local utils = require "SoulBitsShopUtils"
+	return utils.InitData(data, activityData)
+end
+
+local FormatDiscountShopData = function(data, activityData)
+	activityData.refrshItemId = data.DoubleElevenDiscountRefresh
+	activityData.dsRefreshPrice = data.DoubleElevenDiscountPrice
+end
+
+local FormatHalloweenChallengeData = function(data, activityData)
+	activityData.hallowmasPrice = data.HallowmasPrice
+	activityData.hallowmasLimit = data.HallowmasLimit
+end
+
+local FormatLeaderboardData = function(data, activityData)
+	local utils = require "LeaderboardActivityUtils"
+	return utils.InitData(data, activityData)
+end
+
+local FormatDailyPackageData = function(data, activityData)
+	activityData.isTodayBuy = data.isTodayBuy
+	activityData.totalCount = table.count(activityData.items)
+end
+
+local FormatPVEBonusData = function(data, activityData)
+	local rewards = {}
+	for k, itemData in pairs(data.activities) do
+		for j, reward in pairs(itemData.rewards) do
+			table.insert(rewards, reward)
+		end
+	end
+	activityData.rewards = rewards
+end
+
+local FormatLimitCallHeroData = function(data, activityData)
+	activityData.rewards = {}
+	for i,v in ipairs(data.activities) do
+		local reward = {
+			typeId = ItemTypeEnum.Hero,
+			id = v.heroId,
+			count = 1
+		}
+		table.insert(activityData.rewards,reward)
+	end
+end
+
+local FormatDailyLoginData = function(data, activityData)
+	activityData.rewards = data.activity.rewards
+end
+
+local FormatJewelLotteryData = function(data, activityData)
+	activityData.score = data.score
+	activityData.totalScore = string.format(
+		Language:getStr("TotalCount"),data.totalScore)
+	activityData.round = string.format(
+		Language:getStr("DragonActivityCount"),data.round,data.maxRound)
+end
+
+local FormatDragonData = function(data, activityData)
+	activityData.score = data.score
+		activityData.totalScore = string.format(
+			Language:getStr("TotalScore"),data.totalScore)
+		activityData.round = string.format(
+			Language:getStr("DragonActivityCount"),data.round,data.maxRound)
+end
+
+local FormatAccumulativeChargeData = function(data, activityData)
+	activityData.score = data.score
+end
+
+local FormatCycleChargeData = function(data, activityData)
+	activityData.activity = data.activity
+	activityData.canBuy = data.canBuy
+end
+
+local FormatFlashSaleShopData = function(data, activityData)
+	activityData.thisTimeData = {}
+	activityData.nexTimeData = {}
+	if data ~= nil then
+		activityData.thisTimeData = data.nowShop
+		activityData.nexTimeData = data.nextShop
+	end
+end
+
+local FormatLimitedTaskData = function(data, activityData)
+	activityData.zeroPos = nil
+	activityData.taskList = {}
+	if data ~= nil then
+		activityData.zeroPos = data.zeroPos
+		activityData.taskList = data.items
+	end
+end
+
+local FormatStandardsActData = function(data, activityData)
+	activityData.activityConfigs = {}
+	if data then
+		activityData.activityConfigs = data.activityConfigs
+	end
+end
+
+local ReadActivityDataCbks = {
+	[ActivityType.AccumulativeCharge] = FormatAccumulativeChargeData,
+	[ActivityType.AccumulativeConsumpution] = FormatAccumulativeChargeData,
+	[ActivityType.Dragon] = FormatDragonData,
+	[ActivityType.SummonCreditGift] = FormatDragonData,
+	[ActivityType.TurnTableLottery] = FormatDragonData,
+	[ActivityType.JewelLottery] = FormatJewelLotteryData,
+	[ActivityType.DailyLogin] = FormatDailyLoginData,
+	[ActivityType.LimitCallHero] = FormatLimitCallHeroData,
+	[ActivityType.LimitCrystal] = FormatLimitCallHeroData,
+	[ActivityType.PVEBonus] = FormatPVEBonusData,
+	[ActivityType.WheelBonus] = FormatPVEBonusData,
+	[ActivityType.DailyPackage] = FormatDailyPackageData,
+	[ActivityType.PowerLeaderboard] = FormatLeaderboardData,
+	[ActivityType.ArenaLeaderboard] = FormatLeaderboardData,
+	[ActivityType.GlobalPowerLeaderboard] = FormatLeaderboardData,
+	[ActivityType.HalloweenChallenge] = FormatHalloweenChallengeData,
+	[ActivityType.DiscountShop] = FormatDiscountShopData,
+	[ActivityType.SoulBitsShopActivity] = FormatSoulBitsShopData,
+	[ActivityType.TripShopActivity] = FormatTripShopData,
+	[ActivityType.GroupPurchase] = FormatGroupPurchaseData,
+	[ActivityType.Destruction] = FormatDestrctionData,
+	[ActivityType.CycleCharge] = FormatCycleChargeData,
+	[ActivityType.GoodsMonthlyCard] = FormatCycleChargeData,
+	[ActivityType.ArenaStandActivity] = FormatAccumulativeChargeData,
+	[ActivityType.HeroBoutActivity] = FormatAccumulativeChargeData,
+	[ActivityType.BattlePassActivity] = FormatAccumulativeChargeData,
+	[ActivityType.TrialTowerActivity] = FormatAccumulativeChargeData,
+	[ActivityType.FlashSaleActivity] = FormatFlashSaleShopData,
+	[ActivityType.CombatRankAct] = FormatLeaderboardData,
+	[ActivityType.GemLeaders] = FormatLeaderboardData,
+	[ActivityType.LimitedTaskActivity] = FormatLimitedTaskData,
+	[ActivityType.SelectionAchieveActivity] = FormatAccumulativeChargeData,
+	[ActivityType.HeroLevelUpActivity] = FormatStandardsActData,
+	[ActivityType.HeroStarUpActivity] = FormatStandardsActData,
+	[ActivityType.JewelQualityActivity] = FormatStandardsActData,
+}
+
+local function ReadActivityData(data, activity)
+	local activityData = {}
+	local activityType = activity.type
+	activityData.id = activity.id
+	activityData.type = activityType
+	activityData.endTime = activity.endTime
+	activityData.items = FormatActivityItems(data, activityType)
+
+	local cbk = ReadActivityDataCbks[activityType]
+	if cbk then
+		cbk(data, activityData)
+	end
+
+	return activityData
+end
+
+--请不要再使用这个函数了
+FormatActivityItems = function(data, activityType)
+	local items = {}
+	if activityType == ActivityType.Militants or
+		activityType == ActivityType.Tavern then
+		for k, itemData in pairs(data.activityItems) do
+			items[itemData.subId] = itemData
+		end
+	elseif activityType == ActivityType.SummonGift then
+		for k, itemData in pairs(data.activities) do
+			items[itemData.subId] = itemData
+		end
+	elseif activityType == ActivityType.SummonCreditGift then
+		for k, itemData in pairs(data.activities) do
+			items[itemData.subId] = itemData
+		end
+	elseif activityType == ActivityType.Gift then
+		for k, itemData in pairs(data.activities) do
+			items[k] = itemData
+		end
+	elseif activityType == ActivityType.SevenDays then
+		for k, itemData in pairs(data.activityItems) do
+			items[itemData.config.day] = itemData
+		end
+	elseif activityType == ActivityType.Dragon or
+	activityType == ActivityType.JewelLottery or 
+	activityType == ActivityType.ArenaStandActivity or 
+	activityType == ActivityType.HeroBoutActivity or 
+	activityType == ActivityType.BattlePassActivity or 
+	activityType == ActivityType.TrialTowerActivity or
+	activityType == ActivityType.SelectionAchieveActivity then
+		for k, itemData in pairs(data.activities) do
+			items[itemData.subId] = itemData
+		end
+	elseif activityType == ActivityType.HeroMiracles then
+		for k, itemData in pairs(data.activities) do
+			items[k] = itemData
+		end
+	elseif activityType == ActivityType.HonorOfCompose then
+		for k, itemData in pairs(data.activities) do
+			items[k] = itemData
+		end
+	elseif activityType == ActivityType.TurnTableLottery then
+		for k, itemData in pairs(data.activities) do
+			items[itemData.subId] = itemData
+		end
+	elseif activityType == ActivityType.LimitExchange then
+		for k, itemData in pairs(data.activities) do
+			items[itemData.activity.subId] = itemData
+		end
+	elseif activityType == ActivityType.LimitBox then
+		for k, itemData in pairs(data.activities) do
+			items[itemData.activity.subId] = itemData
+		end
+	elseif activityType == ActivityType.LimitActivity then
+		for k, itemData in pairs(data.activities) do
+			items[itemData.activity.subId] = itemData
+		end
+	elseif activityType == ActivityType.GodWeapon then
+		for k, itemData in pairs(data.activities) do
+			items[itemData.activity.subId] = itemData
+		end
+	elseif activityType == ActivityType.HeroGang then
+		for k, itemData in pairs(data.activities) do
+			items[itemData.activity.subId] = itemData
+		end
+	elseif activityType == ActivityType.DailyPackage then
+		for k, itemData in pairs(data.activities) do
+			items[itemData.day] = itemData
+		end
+	elseif activityType == ActivityType.DailyCharge then
+		for k, itemData in pairs(data.activities) do
+			items[itemData.config.day] = itemData
+		end
+	elseif activityType == ActivityType.AccumulativeCharge then
+		for k, itemData in pairs(data.activities) do
+			items[itemData.subId] = itemData
+		end
+	elseif activityType == ActivityType.AccumulativeConsumpution then
+		for k, itemData in pairs(data.activities) do
+			items[itemData.subId] = itemData
+		end
+	elseif activityType == ActivityType.DailyDiscount then
+		for k, itemData in pairs(data.items) do
+			table.insert(items, itemData)
+		end
+	elseif activityType == ActivityType.GloryRoadActivity
+		or activityType == ActivityType.HeroUpgrading
+	then
+		for k, itemData in ipairs(data.activities) do
+			table.insert(items, itemData)
+		end
+	end
+
+	return items
+end
+
+local function GetTavernItemViewData(activityData)
+	local allItemData = {}
+	for subID, item in pairs(activityData.items) do
+		local itemViewData = {}
+		itemViewData.progress = item.finishedCount / (item.count + 0.0)
+		local count = item.finishedCount <= item.count and item.finishedCount or item.count
+		itemViewData.progressText = count .. "/" .. item.count
+		itemViewData.desc = item.title
+		itemViewData.rewards = item.rewards
+		itemViewData.id = subID
+
+		table.insert(allItemData, itemViewData)
+	end
+	return allItemData
+end
+
+local function GetMilitantsItemViewData(activityData)
+	local allItemData = {}
+	local finishedCount
+	for subID, item in pairs(activityData.items) do
+		finishedCount = item.score
+		local itemViewData = {}
+		itemViewData.progress = finishedCount / (item.count + 0.0)
+		local count = finishedCount <= item.count and finishedCount or item.count
+		itemViewData.progressText = count .. "/" .. item.count
+		itemViewData.desc = item.title
+		itemViewData.rewards = item.rewards
+		itemViewData.finished = finishedCount >= item.count
+		itemViewData.id = subID
+
+		table.insert(allItemData, itemViewData)
+	end
+	return allItemData
+end
+
+local function GetDragonItemViewData(activityData)
+	local allItemData = {}
+	local finishedCount = activityData.score
+	local activityType = activityData.type
+	local isProgressHide = false
+	if activityType == ActivityType.BattlePassActivity or
+		activityType == ActivityType.TrialTowerActivity then--主线任务达标和试练塔达标不显示进度条
+		isProgressHide = true
+	end
+	for subID, item in pairs(activityData.items) do
+		local itemViewData = {}
+		itemViewData.progress = finishedCount / (item.count + 0.0)
+		local count = finishedCount <= item.count and finishedCount or item.count
+		itemViewData.progressText = count .. "/" .. item.count
+		itemViewData.desc = item.title
+		itemViewData.rewards = item.rewards
+		itemViewData.finished = finishedCount >= item.count
+		itemViewData.id = subID
+		itemViewData.isProgressHide = isProgressHide
+
+		table.insert(allItemData, itemViewData)
+	end
+	return allItemData
+end
+
+local function GetAccumulativeChargeItemViewData(activityData)
+	local allItemData = {}
+	local finishedCount = activityData.score/100
+	for subID, item in pairs(activityData.items) do
+		local itemViewData = {}
+		local itemCount = item.count/100
+		itemViewData.progress = finishedCount / (itemCount + 0.0)
+		local count = finishedCount <= itemCount and finishedCount or itemCount
+		itemViewData.progressText = count .. "/" .. itemCount
+		itemViewData.desc = item.title
+		itemViewData.rewards = item.rewards
+		itemViewData.id = subID
+
+		table.insert(allItemData, itemViewData)
+	end
+	return allItemData
+end
+
+local function GetDestructionItemViewData(activityData)
+	local allItemData = {}
+	for id, item in pairs(activityData.items) do
+		local itemViewData = {}
+		itemViewData.id = item.type
+		itemViewData.title = item.name
+		itemViewData.image = item.pic
+
+		table.insert(allItemData, itemViewData)
+	end
+	return allItemData
+end
+
+local function GetGiftItemViewData(activityData)
+	local allItemData = {}
+	for subID, item in pairs(activityData.items) do
+		local itemViewData = {}
+		itemViewData.expText = "+"..item.vip
+		itemViewData.remain = item.remain
+		itemViewData.priceText = CheckPayData(item.id).showPrice
+		itemViewData.price = item.price
+		itemViewData.rewards = item.rewards
+		itemViewData.activityId = item.activityId
+		itemViewData.id = item.id
+		itemViewData.pid = item.pid
+		itemViewData.title = item.title
+		itemViewData.desp = item.desp
+		itemViewData.currency = item.currency
+		table.insert(allItemData, itemViewData)
+	end
+	return allItemData
+end
+
+local function GetSummonGiftItemViewData(activityData)
+	local allItemData = {}
+	for subID, item in pairs(activityData.items) do
+		local itemViewData = {}
+		itemViewData.heroId = item.hero
+		itemViewData.rewards = item.rewards
+		itemViewData.id = subID
+
+		table.insert(allItemData, itemViewData)
+	end
+	return allItemData
+end
+
+local function GetSevenDaysItemViewData(activityData)
+	local utils = require "SevenDaysActivityUtils"
+	return utils.GetItemViewData(activityData)
+end
+
+local function GetHeroMiraclesItemViewData(activityData)
+	local allItemData = {}
+	for k, item in pairs(activityData.items) do
+		local itemViewData = {}
+		local finishedCount = item.score
+		itemViewData.progress = finishedCount / (item.config.count + 0.0)
+		local count = finishedCount <= item.config.count 
+			and finishedCount or item.config.count
+		itemViewData.progressText = count .. "/" .. item.config.count
+		itemViewData.desc = item.config.title
+		itemViewData.rewards = item.config.rewards
+		itemViewData.id = k
+		table.insert(allItemData, itemViewData)
+	end
+
+	table.sort(allItemData,
+		function(a, b)
+			if (a.progress < 1.0 and b.progress < 1.0) or
+				(a.progress >= 1.0 and b.progress >= 1.0)
+			then
+				return a.id < b.id
+			else
+				return a.progress < 1.0
+			end
+		end
+	)
+
+	return allItemData
+end
+
+local function GetHonorOfComposeItemViewData(activityData)
+	local allItemData = {}
+	for k, item in pairs(activityData.items) do
+		local itemViewData = {}
+		itemViewData.rewardLimit = item.config.rewardLimit
+		itemViewData.finishedCount = item.count <= item.config.rewardLimit 
+			and item.count or item.config.rewardLimit
+		itemViewData.rewards = item.config.rewards
+		itemViewData.id = item.config.star
+		table.insert(allItemData, itemViewData)
+	end
+	return allItemData
+end
+
+local function GetLimitExchangeItemViewData(activityData)
+	local allItemData = {}
+	for subID, item in pairs(activityData.items) do
+		local itemViewData = {}
+		itemViewData.rewards = item.activity.rewards
+		itemViewData.consumes = item.activity.prices
+		itemViewData.prices = item.activity.prices
+		itemViewData.buyLimit = item.activity.buyLimit
+		itemViewData.remain = item.remain
+		itemViewData.isShowBuyLimit = false
+		itemViewData.id = subID
+		table.insert(allItemData, itemViewData)
+	end
+	return allItemData
+end
+
+local function GetLimitBoxItemViewData(activityData)
+	local allItemData = {}
+	for subID, item in pairs(activityData.items) do
+		local itemViewData = {}
+		itemViewData.rewards = item.activity.rewards
+		itemViewData.consumes = item.activity.prices
+		itemViewData.prices = item.activity.prices
+		itemViewData.buyLimit = item.activity.buyLimit
+		itemViewData.remain = item.remain
+		itemViewData.isShowBuyLimit = true
+		itemViewData.id = subID
+		table.insert(allItemData, itemViewData)
+	end
+	return allItemData
+end
+
+local function GetLimitActivityItemViewData(activityData)
+	local allItemData = {}
+	for subID, item in pairs(activityData.items) do
+		local itemViewData = {}
+		itemViewData.rewards = item.activity.rewards
+		itemViewData.consumes = item.activity.prices
+		itemViewData.prices = item.activity.prices
+		itemViewData.buyLimit = item.activity.buyLimit
+		itemViewData.remain = item.remain
+		itemViewData.isShowBuyLimit = true
+		itemViewData.id = subID
+		itemViewData.remainCount = item.remain
+		itemViewData.priceTypeId = item.activity.prices[1].id
+		itemViewData.resId = item.activity.prices[1].id
+		itemViewData.basePrice = item.activity.prices[1].count
+		itemViewData.limited = true
+		itemViewData.priceType = item.activity.prices[1].typeId
+		itemViewData.reward = item.activity.rewards[1]
+		table.insert(allItemData, itemViewData)
+	end
+	return allItemData
+end
+
+local function GetDailyPackageItemViewData(activityData)
+	local allItemData = {}
+	for day, item in pairs(activityData.items) do
+		local itemViewData = {}
+		itemViewData.expText = "+"..item.vip
+		itemViewData.remain = item.remain
+		itemViewData.priceText = CheckPayData(item.payId).showPrice
+		itemViewData.price = item.price
+		itemViewData.rewards = item.rewards
+		itemViewData.activityId = item.activityId
+		itemViewData.id = item.payId
+		itemViewData.pid = item.pid
+		itemViewData.title = item.title
+		itemViewData.desp = item.desp
+		itemViewData.currency = item.currency
+		if activityData.isTodayBuy and
+		item.status == 3 and
+		activityData.items[day-1] and
+		activityData.items[day-1].status == 1 then
+			itemViewData.status = 3
+		else
+			itemViewData.status = item.status == 3 and 4 or item.status
+		end
+		itemViewData.isEnd = activityData.totalCount == day
+		table.insert(allItemData, itemViewData)
+	end
+	return allItemData
+end
+
+local function GetGodWeaponItemViewData(activityData)
+	local allItemData = {}
+	for subID, item in pairs(activityData.items) do
+		local itemViewData = {}
+		itemViewData.rewards = item.activity.rewards
+		itemViewData.consumes = item.activity.prices
+		itemViewData.materials = {}
+		itemViewData.prices = {}
+		for i,v in ipairs(item.activity.prices) do
+			if v.typeId == ItemTypeEnum.Resource then
+				table.insert(itemViewData.prices,v)
+			else
+				table.insert(itemViewData.materials,v)
+			end
+		end
+		itemViewData.buyLimit = item.activity.buyLimit
+		itemViewData.remain = item.remain
+		itemViewData.isShowBuyLimit = true
+		itemViewData.id = subID
+		table.insert(allItemData, itemViewData)
+	end
+	return allItemData
+end
+
+local function GetHeroGangItemViewData(activityData)
+	local allItemData = {}
+	for subID, item in pairs(activityData.items) do
+		local itemViewData = {}
+		itemViewData.rewards = item.activity.rewards
+		itemViewData.remain = item.remain
+		itemViewData.heroId = item.activity.extraInfo
+		itemViewData.id = subID
+		table.insert(allItemData, itemViewData)
+	end
+	return allItemData
+end
+
+local function GetDailyChargeItemViewData(activityData)
+	local allItemData = {}
+	local count = table.count(activityData.items)
+	for day, item in pairs(activityData.items) do
+		local itemViewData = {}
+		itemViewData.score = item.score/100
+		itemViewData.isCurrent = item.active
+		itemViewData.price = item.config.price/100
+		itemViewData.isOver = itemViewData.score>=itemViewData.price
+		itemViewData.rewards = item.config.rewards
+		itemViewData.isEnd = count == day
+		table.insert(allItemData, itemViewData)
+	end
+	return allItemData
+end
+
+local function GetGroupPurchaseItemViewData(activityData)
+	local utils = require "GroupPurchaseActivityUtils"
+	return utils.GetItemViewData(activityData)
+end
+
+local function GetGroupBuyItemViewData(activityData)
+	local utils = require "GroupBuyActivityUtils"
+	return utils.GetItemViewData(activityData)
+end
+
+local function GetDailyDiscountItemViewData(activityData)
+	local utils = require "DailyDiscountActivityUtils"
+	return utils.GetItemViewData(activityData)
+end
+
+local function GetGloryRoadActivityItemViewData(activityData)
+	local utils = require "GloryRoadActivityUtils"
+	return utils.GetItemViewData(activityData)
+end
+
+local function GetHeroUpgradingItemViewData(activityData)
+	local allItemData = {}
+	for i, item in ipairs(activityData.items) do
+		local itemViewData = {}
+		itemViewData.progress = item.progress / (item.count + 0.0)
+		local count = item.progress <= item.count and finishedCount or item.count
+		itemViewData.progressText = item.progress .. "/" .. item.count
+		itemViewData.desc = item.description
+		itemViewData.rewards = item.rewards
+		itemViewData.finished = item.progress >= item.count
+		itemViewData.id = item.subId
+
+		table.insert(allItemData, itemViewData)
+	end
+	return allItemData
+end
+
+local function GetSoulBitsShopActivityItemViewData(activityData)
+	local utils = require "SoulBitsShopUtils"
+	return utils.GetItemViewData(activityData)
+end
+
+local function GetTripShopActivityItemViewData(activityData)
+	local utils = require "TripShopUtils"
+	return utils.GetItemViewData(activityData)
+end
+
+local GetItemsViewDataCbks = {
+	[ActivityType.Tavern] = GetTavernItemViewData,
+	[ActivityType.Militants] = GetMilitantsItemViewData,
+	[ActivityType.SummonCreditGift] = GetDragonItemViewData,
+	[ActivityType.Dragon] = GetDragonItemViewData,
+	[ActivityType.TurnTableLottery] = GetDragonItemViewData,
+	[ActivityType.AccumulativeConsumpution] = GetDragonItemViewData,
+	[ActivityType.JewelLottery] = GetDragonItemViewData,
+	[ActivityType.AccumulativeCharge] = GetAccumulativeChargeItemViewData,
+	[ActivityType.Destruction] = GetDestructionItemViewData,
+	[ActivityType.Gift] = GetGiftItemViewData,
+	[ActivityType.SummonGift] = GetSummonGiftItemViewData,
+	[ActivityType.SevenDays] = GetSevenDaysItemViewData,
+	[ActivityType.HeroMiracles] = GetHeroMiraclesItemViewData,
+	[ActivityType.HonorOfCompose] = GetHonorOfComposeItemViewData,
+	[ActivityType.LimitExchange] = GetLimitExchangeItemViewData,
+	[ActivityType.LimitBox] = GetLimitBoxItemViewData,
+	[ActivityType.LimitActivity] = GetLimitActivityItemViewData,
+	[ActivityType.DailyPackage] = GetDailyPackageItemViewData,
+	[ActivityType.GodWeapon] = GetGodWeaponItemViewData,
+	[ActivityType.HeroGang] = GetHeroGangItemViewData,
+	[ActivityType.DailyCharge] = GetDailyChargeItemViewData,
+	[ActivityType.GroupPurchase] = GetGroupPurchaseItemViewData,
+	[ActivityType.GroupBuy] = GetGroupBuyItemViewData,
+	[ActivityType.DailyDiscount] = GetDailyDiscountItemViewData,
+	[ActivityType.GloryRoadActivity] = GetGloryRoadActivityItemViewData,
+	[ActivityType.HeroUpgrading] = GetHeroUpgradingItemViewData,
+	[ActivityType.SoulBitsShopActivity] = GetSoulBitsShopActivityItemViewData,
+	[ActivityType.TripShopActivity] = GetTripShopActivityItemViewData,
+	[ActivityType.ArenaStandActivity] = GetDragonItemViewData,
+	[ActivityType.HeroBoutActivity] = GetDragonItemViewData,
+	[ActivityType.BattlePassActivity] = GetDragonItemViewData,
+	[ActivityType.TrialTowerActivity] = GetDragonItemViewData,
+	[ActivityType.SelectionAchieveActivity] = GetDragonItemViewData,
+}
+
+--请不要再使用这个函数了，写在各自的Utils文件中吧
+local function GetActivityItemsViewData(activityData)
+	local allItemData = {}
+	local cbk = GetItemsViewDataCbks[activityData.type]
+	if cbk then
+		allItemData = cbk(activityData)
+	end
+
+	if activityType == ActivityType.Tavern or
+		activityType == ActivityType.Militants or
+		activityType == ActivityType.SummonCreditGift or
+		activityType == ActivityType.HeroUpgrading or
+		activityType == ActivityType.Dragon or
+		activityType == ActivityType.TurnTableLottery or
+		activityType == ActivityType.AccumulativeCharge or
+		activityType == ActivityType.AccumulativeConsumpution or
+		activityType == ActivityType.JewelLottery or
+		activityType == ActivityType.ArenaStandActivity or
+		activityType == ActivityType.HeroBoutActivity or
+		activityType == ActivityType.BattlePassActivity or
+		activityType == ActivityType.TrialTowerActivity 
+	then
+		table.sort(allItemData,
+			function(a, b)
+				if (a.progress < 1.0 and b.progress < 1.0) or
+					(a.progress >= 1.0 and b.progress >= 1.0)
+				then
+					return a.id < b.id
+				else
+					return a.progress < 1.0
+				end
+			end
+		)
+	end
+
+	return allItemData
+end
+
+return {
+	GetUrl = GetUrl,
+	GetAssetsName = GetAssetsName,
+	ReadActivitiesData = ReadActivitiesData,
+	GetBaseViewData = GetBaseViewData,
+	ReadActivityData = ReadActivityData,
+	GetActivityItemsViewData = GetActivityItemsViewData,
+}
+

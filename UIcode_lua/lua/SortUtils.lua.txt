@@ -1,0 +1,145 @@
+
+
+function SortById(a,b)
+    return a.id < b.id
+end
+
+--选择等级优先的情况下，品质优先排在前面。
+function SortHeroByLevel(a,b)
+    if a.grade ~= b.grade then
+        return a.grade > b. grade
+    end
+    if a.level ~= b.level then
+        return a.level > b.level
+    end
+    local distillLevelA = a.distillationLevel or 0
+    local distillLevelB = b.distillationLevel or 0
+    if distillLevelA ~= distillLevelB then
+        return distillLevelA > distillLevelB 
+    end
+    local breakLevelA = a.breakLevel or 0
+    local breakLevelB = b.breakLevel or 0
+    if breakLevelA ~= breakLevelB then
+        return breakLevelA > breakLevelB
+    end
+
+    local qualityA = a.quality or ResTblContainer:GetPropToInt(a.heroId, HeroBase.quality, HeroBase.actorTbl)
+    local qualityB = b.quality or ResTblContainer:GetPropToInt(b.heroId, HeroBase.quality, HeroBase.actorTbl)
+    if a.distillationStar ~= nil then
+		qualityA = qualityA + a.distillationStar
+    end
+    if b.distillationStar ~= nil then
+        qualityB = qualityB + b.distillationStar
+    end
+    if qualityA ~= qualityB then
+        return qualityA > qualityB
+    end
+    return a.heroId < b.heroId
+end
+
+--选择品质排序的时候，应该由高到低排
+function SortHeroByQuality(a,b)
+    local qualityA = a.quality or ResTblContainer:GetPropToInt(a.heroId, HeroBase.quality, HeroBase.actorTbl)
+    local qualityB = b.quality or ResTblContainer:GetPropToInt(b.heroId, HeroBase.quality, HeroBase.actorTbl)
+    if a.distillationStar ~= nil then
+		qualityA = qualityA + a.distillationStar
+    end
+    if b.distillationStar ~= nil then
+        qualityB = qualityB + b.distillationStar
+    end
+    if qualityA ~= qualityB then
+        return qualityA > qualityB
+    end
+    if a.grade ~= b.grade then
+        return a.grade > b. grade
+    end
+    if a.level ~= b.level then
+        return a.level > b.level
+    end
+    local distillLevelA = a.distillationLevel or 0
+    local distillLevelB = b.distillationLevel or 0
+    if distillLevelA ~= distillLevelB then
+        return distillLevelA > distillLevelB 
+    end
+    return a.heroId < b.heroId
+end
+
+function SortHeroByDescQuality(a, b)
+    local qualityA = a.quality or ResTblContainer:GetPropToInt(a.heroId, HeroBase.quality, HeroBase.actorTbl)
+    local qualityB = b.quality or ResTblContainer:GetPropToInt(b.heroId, HeroBase.quality, HeroBase.actorTbl)
+    if qualityA ~= qualityB then
+        return qualityA < qualityB
+    end
+    if a.grade ~= b.grade then
+        return a.grade < b. grade
+    end
+    if a.level ~= b.level then
+        return a.level < b.level
+    end
+    return a.heroId < b.heroId
+end
+
+function SortHeroByRace(a,b)
+    local raceIdA = a.raceId or a.race or a.group or ResTblContainer:GetPropToInt(a.heroId, HeroBase.group, HeroBase.actorTbl)
+    local raceIdB = b.raceId or b.race or b.group or ResTblContainer:GetPropToInt(b.heroId, HeroBase.group, HeroBase.actorTbl)
+    if raceIdA ~= raceIdB then
+        return raceIdA < raceIdB
+    end
+    local qualityA = a.quality or ResTblContainer:GetPropToInt(a.heroId, HeroBase.quality, HeroBase.actorTbl)
+    local qualityB = b.quality or ResTblContainer:GetPropToInt(b.heroId, HeroBase.quality, HeroBase.actorTbl)
+    if qualityA ~= qualityB then
+        return qualityA < qualityB
+    end
+    return a.heroId < b.heroId
+end
+
+--神器排序 先按质量 再按等级
+function SortRelicByQuality(a,b)
+    if a.quality ~= b.quality then
+        return a.quality > b.quality
+    end
+    if a.level ~= b.level then
+        return a.level > b.level
+    end
+    return a.id < b.id
+end
+
+function SortRelicByDescQuality(a,b)
+    if a.quality ~= b.quality then
+        return a.quality < b.quality
+    end
+    if a.level ~= b.level then
+        return a.level < b.level
+    end
+    return a.id < b.id
+end
+
+function SortPiecesByProcess(a,b)
+    local valA = ResTblContainer:GetPropToInt(a.id,PiecesComposition.count,PiecesComposition.actorTbl)
+    local compA = a.count >= valA and 1 or 0
+    local valB = ResTblContainer:GetPropToInt(b.id,PiecesComposition.count,PiecesComposition.actorTbl)
+    local compB = b.count >= valB and 1 or 0
+    if compA ~= compB then
+        return compA > compB
+    end
+    local qualityA = ResTblContainer:GetPropToInt(a.id,ItemBase.pieceStar,ItemBase.actorTbl)
+    local qualityB = ResTblContainer:GetPropToInt(b.id,ItemBase.pieceStar,ItemBase.actorTbl)
+    if qualityA ~= qualityB then
+        return qualityA > qualityB
+    end
+    return a.id < b.id
+end
+
+function SortJewelByQualityAndStar(a, b)
+    local qualityA = a.quality or ResTblContainer:GetPropToInt(a.id,Jewel.quality,Jewel.tblName)
+    local qualityB = b.quality or ResTblContainer:GetPropToInt(b.id,Jewel.quality,Jewel.tblName)
+    if qualityA ~= qualityB then
+        return qualityA > qualityB
+    end
+    local starA = a.star or ResTblContainer:GetPropToInt(a.id,Jewel.star,Jewel.tblName)
+    local starB = b.star or ResTblContainer:GetPropToInt(b.id,Jewel.star,Jewel.tblName)
+    if starA ~= starB then
+        return starA > starB
+    end
+    return a.id < b.id
+end

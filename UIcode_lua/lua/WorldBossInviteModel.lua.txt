@@ -1,0 +1,102 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-06-18 18:42:28
+require "UnionUtils"
+
+local WorldBossUtils = require "WorldBossUtils"
+
+local outerData
+
+local function GetUnionDuty(authority)
+    local languageKey = "UnionMember"
+	if authority == UnionMemberType.Elder then
+		languageKey = "UnionElder"
+	elseif authority == UnionMemberType.Leader then
+		languageKey = "UnionLeader"
+	end
+	return Language:getStr(languageKey)
+end
+
+local function GetInviteArrViewData(list)
+    local inviteArr = {}
+    if list == nil then
+        return inviteArr
+    end
+    for _, unionMember in ipairs(list) do
+        local basicInfo = unionMember.basicInfo
+        local inviter = {
+            userId = basicInfo.userId,
+            name = basicInfo.name,
+            icon = basicInfo.icon,
+            level = basicInfo.level,
+            vip = basicInfo.vip,
+            dutyName = GetUnionDuty(basicInfo.authority),
+            box = basicInfo.box,
+            zone = basicInfo.zone,
+            combat = unionMember.combat,
+        }
+        table.insert(inviteArr, inviter)
+    end
+    table.sort(inviteArr, function(a,b)
+        if a.combat ~= b.combat then
+            return a.combat > b.combat
+        end
+        local zoneA = tonumber(a.zone)
+        local zoneB = tonumber(b.zone)
+        if zoneA ~= zoneB then
+            return zoneA < zoneB
+        end
+        local userA = tonumber(a.userId)
+        local userB = tonumber(b.userId)
+        if userA ~= userB then
+            return userA < userB
+        end
+    end)
+    return inviteArr
+end
+
+function DoOnExit()
+    WorldBossUtils = nil
+    outerData = nil
+end
+
+function OnCommand_InitData(objs)
+    outerData = objs[0]
+end
+
+function OnCommand_InitWorldBossInviteData(objs)
+    local function onFinished(resp)
+        local inviteArr = GetInviteArrViewData(resp and resp.list or nil)
+        self:SendNotification("RefreshWorldBossInviteView",inviteArr)
+    end
+    local data = {
+        formationPos = outerData.formationPos,
+        sixManPos = outerData.sixManPos,
+    }
+    WorldBossUtils.RequestSixManList(data,onFinished)
+end
+
+function OnCommand_ShowPlayerTips(objs)
+    local data = objs[0]
+    WorldBossUtils.ShowPlayerTip(self,data)
+end
+
+function OnCommand_Invite(objs)
+    local unionMember = objs[0]
+    local function onFinished(resp)
+        self:SendNotification("HideView")
+        local callback = outerData.callback
+        if callback then callback() end
+    end
+    local data = {
+        zone = unionMember.zone,
+        userId = unionMember.userId,
+        sixManPos = outerData.sixManPos,
+    }
+    local leaveCount = WorldBossUtils.CheckLeaveInviteCount()
+    local desp = string.format(Language:getStr("InviteLeaveCount"),leaveCount)
+    WorldBossUtils.ShowMsgBox(desp,function()
+        WorldBossUtils.RequestSixMan(data,onFinished)
+    end)
+end

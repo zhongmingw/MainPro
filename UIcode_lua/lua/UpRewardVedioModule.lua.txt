@@ -1,0 +1,26 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-04-22 15:21:23
+
+function DoInit()
+end
+
+function ResourceIds(objs)
+    local arr={}
+    return arr
+end
+
+function AssetNames(objs)
+    local arr = {"UpRewardVedioView","ItemSlot"}
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    local view = self:OpenView("UpRewardVedioView","UpRewardVedioModel")
+    local name = objs[0]
+    view:SetParamDataList(name)
+    if(onFinished ~= nil) then
+        onFinished()
+    end
+end

@@ -1,0 +1,79 @@
+
+§
+
+MailData.protoMailDatastage.proto"6
+PlayerMailItem$
+mailItem (2.MailData.MailItem"n
+SystemMailItem$
+mailItem (2.MailData.MailItem
+attachTaken (!
+attach (2.stage.RewardItem"µ
+MailItem
+
+id (
+
+fromUserId (	
+fromNickName (	
+toUserId (	
+title (	
+content (	
+sendTime (
+receiveTime (
+read	 (
+zone
+ (	"0
+SendMailReq
+reveiver (	
+content (	"
+SendMailResp
+result ("'
+ReadMailReq
+
+id (
+type ("
+ReadMailResp
+result (")
+DeleteMailReq
+
+id (
+type (" 
+DeleteMailResp
+result ("
+TakeMailAttachReq
+
+id ("<
+TakeMailAttachResp&
+rewardItems (2.stage.RewardItem""
+TakeAllMailAttachReq
+
+id ("?
+TakeAllMailAttachResp&
+rewardItems (2.stage.RewardItem"$
+DeleleAllReadMailReq
+type ("'
+DeleleAllReadMailResp
+result ("r
+GMSendMailReq
+zone (	
+nick (	
+content (	%
+
+attachment (2.stage.RewardItem
+title (	" 
+GMSendMailResp
+result ("@
+PlayerMailCd
+nick (	
+lastSendTime (
+zone (	"
+ReadAllMailReq
+type ("!
+ReadAllMailResp
+result ("2
+AddMailBlackListReq
+userId (	
+add ("&
+AddMailBlackListResp
+result (",
+PlayerMailBlackListInfo
+	blackList (	

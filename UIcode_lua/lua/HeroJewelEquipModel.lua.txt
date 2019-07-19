@@ -1,0 +1,473 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-03-27 15:53:33
+require "JewelUtils"
+local utils = require "HeroBagUtils"
+
+local curHero
+local curJewelData
+
+local jewelDataFromTbl
+
+local NO_OWNER_UID = 0
+
+local curOwnEquipJewelArr
+local curSelectEquipJewel
+local curSelectEquipJewelData
+local EQUIP_JEWEL_SLOT_NUM
+
+local jewelIndexTbl
+
+local function GetJewelDataFromTbl()
+    local data = {}
+    local tbl = ResTblContainer:GetTable(Jewel.tblName)
+    local ids = tbl:GetCol(Jewel.id)
+    for i = 0, ids.Length - 1 do
+        local id = tonumber(ids[i])
+        local infos = tbl:GetRow(id, Jewel.name, Jewel.icon, Jewel.quality, Jewel.star, Jewel.type)
+        data[id] = {
+            id = id,
+            typeId = ItemTypeEnum.Jewel,
+            name = infos[0],
+            icon = infos[1],
+            quality = tonumber(infos[2]),
+            star = tonumber(infos[3]),
+            type = tonumber(infos[4])
+        }
+    end
+    return data
+end
+
+local function GetJewelEquipViewData(jewelData, jewel)
+    if jewel.id == 0 then
+        return
+    end
+    local tbl = ResTblContainer:GetTable(Jewel.tblName)
+    jewelData.name = jewelDataFromTbl[jewel.id].name
+    jewelData.icon = jewelDataFromTbl[jewel.id].icon
+    jewelData.quality = jewelDataFromTbl[jewel.id].quality
+    jewelData.star = jewelDataFromTbl[jewel.id].star
+    jewelData.type = jewelDataFromTbl[jewel.id].type
+    jewelData.effects = JewelUtils.GetJewelEffectsById(jewel.id,jewelIndexTbl)
+    jewelData.typeId = ItemTypeEnum.Jewel
+end
+
+local function GetJewelEquipData(jewel)
+    local jewelData = table.copy(jewel)
+    GetJewelEquipViewData(jewelData, jewel)
+    return jewelData
+end
+
+local function UpdateCurJewelData()
+    curJewelData = {}
+    if curHero == nil then
+        return
+    end
+    local pb = appData:checkItem("HeroItem", curHero.uid)
+    if pb and pb.jewelIds then
+        for i,v in ipairs(pb.jewelIds) do
+            local jewelPb = appData:checkItem("JewelItem", v)
+            local jewel = nil
+            if jewelPb then
+                jewel = {
+                    uid = jewelPb.uid,
+                    id = jewelPb.id,
+                    owner = jewelPb.owner,
+                    pos = i
+                }
+            end
+            curJewelData[i] = jewel
+        end
+    end
+end
+
+local function GetJewelEquipsData()
+    local jewelsData = {}
+    for i=1, EQUIP_JEWEL_SLOT_NUM do
+        local jewelData = curJewelData[i]
+        if jewelData then
+            local jewel = GetJewelEquipData(jewelData)
+            table.insert(jewelsData, jewel)
+        else
+            table.insert(jewelsData,{id = 0, pos = i})
+        end
+    end
+    return jewelsData
+end
+
+local function GetPetEquipsChangeTypeData(oldEquips, newEquips)
+    local changeTypeData = {}
+    for i=1,#newEquips do
+        if oldEquips[i].id ~= newEquips[i].id then
+            table.insert(changeTypeData, newEquips[i].type)
+        end
+    end
+    return changeTypeData
+end
+
+local function UpdateCurSelectJewelData()
+    for i,jewel in pairs(curJewelData) do
+        if jewel.pos == curSelectEquipJewelData.pos then
+            curSelectEquipJewelData.uid = jewel.uid
+            curSelectEquipJewelData.id = jewel.id
+            curSelectEquipJewelData.owner = jewel.owner
+            GetJewelEquipViewData(curSelectEquipJewelData, jewel)
+            return
+        end
+    end
+    curSelectEquipJewelData.uid = 0
+    curSelectEquipJewelData.id = 0
+    curSelectEquipJewelData.owner = NO_OWNER_UID
+end
+
+local function GetExceptJewelDataByPos(pos)
+    local exceptData = {}
+    for i,v in pairs(curJewelData) do
+        if v.pos ~= pos then
+            table.insert(exceptData, v)
+        end
+    end
+    return exceptData
+end
+
+local function CheckJewelEquipRedFlag(jewelEquip)
+    jewelEquip.redFlag = CheckHeroSingleJewelEquipRedFlag(curHero, nil, jewelEquip, GetExceptJewelDataByPos(jewelEquip.pos)[1])
+end
+
+local function CheckJewelEquipsRedFlag(jewelEquips)
+    for i,v in ipairs(jewelEquips) do
+        CheckJewelEquipRedFlag(v)
+    end
+end
+
+local function GetExceptJewelDataByPos(pos)
+    local exceptData = {}
+    for i,v in pairs(curJewelData) do
+        if v.pos ~= pos then
+            table.insert(exceptData, v)
+        end
+    end
+    return exceptData
+end
+
+local function UpdateCurOwnCanEquipJewelArr(pos)
+    curOwnEquipJewelArr = {}
+    local exceptData = GetExceptJewelDataByPos(pos)
+    local exceptType = {}
+    for i,v in ipairs(exceptData) do
+        table.insert(exceptType, jewelDataFromTbl[v.id].type)
+    end
+    local pbs = appData:checkAllItems("JewelItem")
+    if pbs then
+        for i = 0, pbs.Length - 1 do
+            local pb = pbs[i]
+            local type = ResTblContainer:GetPropToInt(pb.id, Jewel.type, Jewel.tblName)
+            if pb.owner == NO_OWNER_UID and not ContainItem(exceptType, type) then
+                local jewel = {
+                    uid = pb.uid,
+                    id = pb.id,
+                    owner = pb.owner,
+                    typeId = ItemTypeEnum.Jewel,
+                    count = 1
+                }
+                table.insert(curOwnEquipJewelArr, jewel)
+            end
+        end
+        table.sort(curOwnEquipJewelArr,SortJewelByQualityAndStar)
+    end
+end
+
+local function CheckHasCanEquipJewel()
+    local pbs = appData:checkAllItems("JewelItem")
+    if pbs then
+        for i = 0, pbs.Length - 1 do
+            local pb = pbs[i]
+            if pb.owner == NO_OWNER_UID then
+                return true
+            end
+        end
+    end
+    utils.ShowHintBox(Language:getStr("NoJewelEquip"))
+    return false
+end
+
+local function CheckHasCanTakeOffJewel()
+    for i,v in pairs(curJewelData) do
+        if v then
+            return true
+        end
+    end
+    utils.ShowHintBox(Language:getStr("NoJewelTakeOff"))
+    return false
+end
+
+local function UpdateEquipShowData(equip)
+    equip.name = equip.name or ResTblContainer:GetPropToStr(equip.id,ItemBase.title,ItemBase.actorTbl)
+    equip.summary = equip.summary or ResTblContainer:GetPropToStr(equip.id,ItemBase.summary,ItemBase.actorTbl)
+end
+
+local function UpdateEquipCompareData(oldEquip, newEquip)
+    UpdateEquipShowData(oldEquip)
+    UpdateEquipShowData(newEquip)
+end
+
+local function NotifyHeroShowHeroJewelEquipRedTip(equipsData)
+    local ret = false
+    for i,v in ipairs(equipsData) do
+        if v.redFlag then
+            ret = true
+            break
+        end
+    end
+    MsgCenter:Broadcast(Notify_UpdateHeroShowHeroJewelEquipRedTip,ret)
+end
+
+local function PutOnEquip(jewel)
+    local onFinished = function(resp)
+        UpdateCurJewelData()
+        UpdateCurSelectJewelData()
+        local equipsData = GetJewelEquipsData()
+        CheckJewelEquipsRedFlag(equipsData)
+        for i,v in ipairs(equipsData) do
+            if v.pos == curSelectEquipJewelData.pos then
+                v.anim = true
+            end
+        end
+        self:SendNotification("RefreshJewelEquips",equipsData)
+        NotifyHeroShowHeroJewelEquipRedTip(equipsData)
+        MsgCenter:Broadcast(Notify_UpdateCurHero)
+    end
+    utils.RequestPutOnJewel(curHero.uid,jewel.uid,curSelectEquipJewelData.pos - 1,onFinished)
+end
+
+local function TakeOffJewel(jewel)
+    local onFinished = function(resp)
+        UpdateCurJewelData()
+        UpdateCurSelectJewelData()
+        local equipsData = GetJewelEquipsData()
+        CheckJewelEquipsRedFlag(equipsData)
+        for i,v in ipairs(equipsData) do
+            if v.pos == curSelectEquipJewelData.pos then
+                v.anim = true
+            end
+        end
+        self:SendNotification("RefreshJewelEquips",equipsData)
+        NotifyHeroShowHeroJewelEquipRedTip(equipsData)
+        MsgCenter:Broadcast(Notify_UpdateCurHero)
+    end
+    utils.RequestTakeOffJewel(curHero.uid,curSelectEquipJewelData.pos - 1,onFinished)
+end
+
+local function CheckJewelEquipRedFlag(jewelEquip)
+    jewelEquip.redFlag = CheckHeroSingleJewelEquipRedFlag(curHero, nil, jewelEquip, GetExceptJewelDataByPos(jewelEquip.pos)[1])
+end
+
+local function CheckJewelEquipsRedFlag(jewelEquips)
+    for i,v in ipairs(jewelEquips) do
+        CheckJewelEquipRedFlag(v)
+    end
+end
+
+local function RefreshHeroJewelEquipRedFlag()
+    local redFlag = CheckHeroJewelUpStarRedFlag().redFlag
+    local composeFlag = CheckJewelComposeRedFlag()
+    self:SendNotification("RefreshJewelRedFlag",(redFlag or composeFlag))
+    return redFlag or composeFlag
+end
+
+local function OnUpdateHeroJewelEquipRedTip(obj)
+    local ret = obj
+    MsgCenter:Broadcast(Notify_UpdateHeroShowHeroJewelEquipRedTip,ret)
+end
+
+local function OnUpdateHeroEquipJewel(obj)
+    UpdateCurJewelData()
+    local equipsData = GetJewelEquipsData()
+    CheckJewelEquipsRedFlag(equipsData)
+    self:SendNotification("RefreshJewelEquipView", curHero, equipsData)
+end
+
+local function OnHeroShowViewSwitchHero(obj)
+    curHero = obj
+    UpdateCurJewelData()
+    local equipsData = GetJewelEquipsData()
+    CheckJewelEquipsRedFlag(equipsData)
+    NotifyHeroShowHeroJewelEquipRedTip(equipsData)
+    self:SendNotification("RefreshJewelEquipView", curHero, equipsData)
+end
+
+function DoInit()
+    EQUIP_JEWEL_SLOT_NUM = GetConstValue("JewelEquip") or 2
+    jewelDataFromTbl = GetJewelDataFromTbl()
+    MsgCenter:Subscribe(Notify_UpdateHeroJewelEquipRedTip, OnUpdateHeroJewelEquipRedTip)
+    MsgCenter:Subscribe(Notify_UpdateHeroEquipJewel,OnUpdateHeroEquipJewel)
+    MsgCenter:Subscribe(Notify_HeroShowView_SwitchHero,OnHeroShowViewSwitchHero)
+    jewelIndexTbl = JewelUtils.GetJewelIdIndexByQuliatyAndTypeData()
+end
+
+function DoOnExit()
+    MsgCenter:Unsubscribe(Notify_UpdateHeroJewelEquipRedTip, OnUpdateHeroJewelEquipRedTip)
+    MsgCenter:Unsubscribe(Notify_UpdateHeroEquipJewel,OnUpdateHeroEquipJewel)
+    MsgCenter:Unsubscribe(Notify_HeroShowView_SwitchHero,OnHeroShowViewSwitchHero)
+
+    utils = nil
+
+    curHero = nil
+    curJewelData = nil
+
+    jewelDataFromTbl = nil
+
+    NO_OWNER_UID = nil
+
+    curOwnEquipJewelArr = nil
+    curSelectEquipJewel = nil
+    curSelectEquipJewelData = nil
+    EQUIP_JEWEL_SLOT_NUM = nil
+end
+
+function InitProperties()
+end
+
+function OnCommand_InitData(objs)
+    curHero = objs[0]
+    UpdateCurJewelData()
+    local equipsData = GetJewelEquipsData()
+    CheckJewelEquipsRedFlag(equipsData)
+    self:SendNotification("RefreshJewelEquipView", curHero, equipsData)
+    RefreshHeroJewelEquipRedFlag()
+end
+
+function OnCommand_UpdateJewelEquipData(objs)
+    UpdateCurJewelData()
+    local equipsData = GetJewelEquipsData()
+    CheckJewelEquipsRedFlag(equipsData)
+    self:SendNotification("RefreshJewelEquipView", curHero, equipsData)
+    RefreshHeroJewelEquipRedFlag()
+end
+
+function OnCommand_OpenJewel(objs)
+    local jewel = objs[0]
+    curSelectEquipJewelData = jewel
+    if jewel.id ~= 0 then
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            local view = CsBridge.OpenView("ItemTipView", "ItemTipModel")
+            view:SetParamDataList(jewel,itemBaseIndex+itemBtnsIndex+PropsIndex)
+            local callFunc = {
+                exchange = function(callback)
+                    callback() 
+                    UpdateCurOwnCanEquipJewelArr(jewel.pos)
+                    if #curOwnEquipJewelArr == 0 then
+                        utils.ShowHintBox(Language:getStr("NoJewelEquip"))
+                    else
+                        CsBridge.CacheAssetsByModule(self.Module,function()
+                            CsBridge.OpenView("JewelEquipSelectView", self.ModelName)
+                        end, "JewelEquipSelectView","ItemSlot")    
+                    end
+                end,
+                unWear = function(callback)
+                    callback()
+                    TakeOffJewel(jewel)
+                end
+            }
+            view:SendCommand("InitEquipData", 2, callFunc)
+            view:SendCommand("InitItemData")
+        end, "ItemTipView")
+    else
+        UpdateCurOwnCanEquipJewelArr(jewel.pos)
+        if #curOwnEquipJewelArr == 0 then
+            utils.ShowHintBox(Language:getStr("NoJewelEquip"))
+        else
+            CsBridge.CacheAssetsByModule(self.Module,function()
+                CsBridge.OpenView("JewelEquipSelectView",self.ModelName)
+            end, "JewelEquipSelectView","ItemSlot")    
+        end
+    end
+end
+
+function OnCommand_InitEquipSelectData(objs)
+    self:SendNotification("RefreshEquipSelectView",curOwnEquipJewelArr)
+end
+
+function OnCommand_SelectEquip(objs)
+    curSelectEquipJewel = objs[0]
+    if curSelectEquipJewelData.id ~= 0 then
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            CsBridge.OpenView("JewelEquipCompareView","HeroJewelEquipModel")
+        end,"JewelEquipCompareView")
+    else
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            local view = CsBridge.OpenView("ItemTipView", "ItemTipModel")
+            view:SetParamDataList(curSelectEquipJewel,itemBaseIndex+itemBtnsIndex+PropsIndex)
+            local callFunc = {
+                wear = function(callback, itemId)
+                    callback()
+                    PutOnEquip(curSelectEquipJewel)
+                end
+            }
+            view:SendCommand("InitEquipData", 1, callFunc, function()
+                self:SendNotification("ActiveEquipSelect")
+            end)
+            view:SendCommand("InitItemData")
+        end, "ItemTipView")
+    end
+end
+
+function OnCommand_InitJewelEquipCompareData(objs)
+    local newJewel = GetJewelEquipData(curSelectEquipJewel)
+    newJewel.count = 1
+    UpdateEquipCompareData(curSelectEquipJewelData,newJewel)
+    self:SendNotification("RefreshJewelCompareView",curSelectEquipJewelData,newJewel)
+end
+
+function OnCommand_ActiveEquipSelect(objs)
+    self:SendNotification("ActiveEquipSelect")
+end
+
+function OnCommand_WearEquip(objs)
+    PutOnEquip(curSelectEquipJewel)
+end
+
+function OnCommand_PutOnAllEquip(objs)
+    if not CheckHasCanEquipJewel() then
+        return
+    end
+    local onFinished = function(resp)
+        UpdateCurJewelData()
+        local equipsData = GetJewelEquipsData()
+        CheckJewelEquipsRedFlag(equipsData)
+        for i,v in ipairs(equipsData) do
+            v.anim = v.id ~= 0
+        end
+        self:SendNotification("RefreshJewelEquips",equipsData)
+        NotifyHeroShowHeroJewelEquipRedTip(equipsData)
+        MsgCenter:Broadcast(Notify_UpdateCurHero)
+    end
+    utils.RequestPutOnAllJewel(curHero.uid,onFinished)
+end
+
+function OnCommand_TakeOffAllEquip(objs)
+    if not CheckHasCanTakeOffJewel() then
+        return
+    end
+    local onFinished = function(resp)
+        UpdateCurJewelData()
+        local equipsData = GetJewelEquipsData()
+        CheckJewelEquipsRedFlag(equipsData)
+        for i,v in ipairs(equipsData) do
+            v.anim = v.id == 0
+        end
+        self:SendNotification("RefreshJewelEquips",equipsData)
+        NotifyHeroShowHeroJewelEquipRedTip(equipsData)
+        MsgCenter:Broadcast(Notify_UpdateCurHero)
+    end
+    utils.RequestTakeOffAllJewel(curHero.uid,onFinished)
+end
+
+function OnCommand_OnClose(objs)
+    curHero = nil
+    curJewelData = nil
+    curSelectEquipJewel = nil
+    curSelectEquipJewelData = nil
+    curOwnEquipJewelArr = nil
+end

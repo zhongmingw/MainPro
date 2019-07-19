@@ -1,0 +1,390 @@
+local loadedChallengeLevelItemSlot=require "ChallengeLevelItemSlot"
+
+local summon_Slider
+local process_Lab
+
+local commonGacha_freeGO
+local commonGacha_timer_Lab
+local commonGacha_noFreeGO
+local commonGacha_onceCost_Lab
+local commonGacha_tenthCost_Lab
+local commonGacha_count_Lab
+
+local seniorGacha_freeGO
+local seniorGacha_timer_Lab
+local seniorGacha_noFreeGO
+local seniorGacha_onceCost_Lab
+local seniorGacha_onceItem_Sprite
+local seniorGacha_tenthCost_Lab
+local seniorGacha_tenthItem_Sprite
+local seniorGacha_count_Lab
+
+local friendGacha_freeGO
+local friendGacha_timer_Lab
+local friendGacha_noFreeGO
+local friendGacha_onceCost_Lab
+local friendGacha_tenthCost_Lab
+local friendGacha_count_Lab
+
+local shadow_GO
+local gachaEffect_Spine
+
+local isInit = false
+local commonGachaFree = false
+local seniorGachaFree = false
+local COMMON_TYPE_CONST = 1
+local SENIOR_TYPE_CONST = 2
+local FRIEND_TYPE_CONST = 3
+local const_MultiCallDiscount = 0
+local const_HeroSummonRewardCost = 0
+
+local seniorGacha = false
+local commonGacha = false
+
+local TICKER_LOADCOMMONGACHA = "ticker_LoadCommonGacha_LotteryView"
+local TICKER_LOADSENIORGACHA = "ticker_LoadSeniorGacha_LotteryView"
+
+function DoInit()
+	self.Shadow = 1
+end
+
+function InitUI()
+    summon_Slider = self:GetComponentAtPath("Center/SummonSlider", CLS_SLIDER)
+    process_Lab = self:GetComponentAtPath("Center/SummonSlider/ProcessTxt", CLS_TEXT)
+
+    commonGacha_timeGO = self:GetGameObjectAtPath("Center/CommonGachaGO/TimerGO")
+    commonGacha_timer_Lab = self:GetComponentAtPath("Center/CommonGachaGO/TimerGO/TimerTxt", CLS_TEXT)
+    commonGacha_freeGO = self:GetGameObjectAtPath("Center/CommonGachaGO/CommonGachaOnceBtn/FreeGO")
+    commonGacha_noFreeGO = self:GetGameObjectAtPath("Center/CommonGachaGO/CommonGachaOnceBtn/NoFreeGO")
+    commonGacha_onceCost_Lab = self:GetComponentAtPath("Center/CommonGachaGO/CommonGachaOnceBtn/NoFreeGO/CostTxt", CLS_TEXT)
+    commonGacha_tenthCost_Lab = self:GetComponentAtPath("Center/CommonGachaGO/CommonGachaTenthBtn/CostTxt", CLS_TEXT)
+    commonGacha_count_Lab = self:GetComponentAtPath("Center/CommonGachaGO/ConsumeGO/CountTxt", CLS_TEXT)
+
+    seniorGacha_timeGO = self:GetGameObjectAtPath("Center/SeniorGachaGO/TimerGO")
+    seniorGacha_timer_Lab = self:GetComponentAtPath("Center/SeniorGachaGO/TimerGO/TimerTxt", CLS_TEXT)
+    seniorGacha_freeGO = self:GetGameObjectAtPath("Center/SeniorGachaGO/SeniorGachaOnceBtn/FreeGO")
+    seniorGacha_noFreeGO = self:GetGameObjectAtPath("Center/SeniorGachaGO/SeniorGachaOnceBtn/NoFreeGO")
+    seniorGacha_onceCost_Lab = self:GetComponentAtPath("Center/SeniorGachaGO/SeniorGachaOnceBtn/NoFreeGO/CostTxt", CLS_TEXT)
+    seniorGacha_onceItem_Sprite = self:GetComponentAtPath("Center/SeniorGachaGO/SeniorGachaOnceBtn/NoFreeGO/ItemSprite", CLS_IMAGE)
+    seniorGacha_tenthCost_Lab = self:GetComponentAtPath("Center/SeniorGachaGO/SeniorGachaTenthBtn/CostTxt", CLS_TEXT)
+    seniorGacha_tenthItem_Sprite = self:GetComponentAtPath("Center/SeniorGachaGO/SeniorGachaTenthBtn/ItemSprite", CLS_IMAGE)
+    seniorGacha_count_Lab = self:GetComponentAtPath("Center/SeniorGachaGO/ConsumeGO/CountTxt", CLS_TEXT)
+    seniorGacha_first_GO = self:GetGameObjectAtPath("Center/SeniorGachaGO/FirstGO")
+
+    friendGacha_timeGO = self:GetGameObjectAtPath("Center/FriendGachaGO/TimerGO")
+    friendGacha_freeGO = self:GetGameObjectAtPath("Center/FriendGachaGO/TimerGO/TimerTxt")
+    friendGacha_timer_Lab = self:GetComponentAtPath("Center/FriendGachaGO/FriendGachaOnceBtn/FreeGO", CLS_TEXT)
+    friendGacha_noFreeGO = self:GetGameObjectAtPath("Center/FriendGachaGO/FriendGachaOnceBtn/NoFreeGO")
+    friendGacha_onceCost_Lab = self:GetComponentAtPath("Center/FriendGachaGO/FriendGachaOnceBtn/NoFreeGO/CostTxt", CLS_TEXT)
+    friendGacha_tenthCost_Lab = self:GetComponentAtPath("Center/FriendGachaGO/FriendGachaTenthBtn/CostTxt", CLS_TEXT)
+    friendGacha_count_Lab = self:GetComponentAtPath("Center/FriendGachaGO/ConsumeGO/CountTxt", CLS_TEXT)
+
+    shadow_GO = self:GetGameObjectAtPath("GachaEffectGO/ShadowGO")
+    gachaEffect_Spine = self:GetComponentAtPath("GachaEffectGO/GachaEffectSpine", CLS_SKELETONGRAPHIC)
+
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+	end
+	self:SendCommand("InitSummonData")
+end
+
+function OnNotification_InitSummonData(objs)
+    local summonData = objs[0]
+    local callHeroInfo = objs[1]
+    local playerInfo = objs[2]
+    const_MultiCallDiscount = objs[3]
+    const_HeroSummonRewardCost = objs[4]
+    --cos
+    LoadSummonProcess(playerInfo)
+    LoadCommonGacha(summonData[COMMON_TYPE_CONST],callHeroInfo)
+    LoadSeniorGacha(summonData[SENIOR_TYPE_CONST],callHeroInfo)
+    LoadFriendGacha(summonData[FRIEND_TYPE_CONST],callHeroInfo)
+end
+
+function LoadSummonProcess(playerInfo)
+    process_Lab.text=playerInfo.exchangeCoin.."/"..const_HeroSummonRewardCost
+    summon_Slider.value=playerInfo.exchangeCoin/const_HeroSummonRewardCost
+end
+
+function LoadCommonGacha(data,callHeroInfo)
+    commonGachaFree=false
+    commonGacha_timeGO:SetSelfActive(true)
+    commonGacha_freeGO:SetSelfActive(false)
+    commonGacha_noFreeGO:SetSelfActive(true)
+    Timer:AddTicker(TICKER_LOADCOMMONGACHA,tonumber(data.cd)*1000+callHeroInfo.lastNormalCallTime, function (targetTime)
+        if self == nil or self.Module == nil then
+            return
+        end
+        local timeStr = CheckTimeRemain(targetTime,false)
+        commonGacha_timer_Lab.text=timeStr
+    end,function ()
+        commonGachaFree=true
+        commonGacha_timeGO:SetSelfActive(false)
+        commonGacha_freeGO:SetSelfActive(true)
+        commonGacha_noFreeGO:SetSelfActive(false)
+    end)
+    local cost = data.consume1.count
+    commonGacha_onceCost_Lab.text=tostring(cost)
+    if data.have1Count<cost then
+        SetFontColor(commonGacha_onceCost_Lab,color30)
+    else
+        SetFontColor(commonGacha_onceCost_Lab,color1)
+    end
+    cost = data.consume1.count*10
+    commonGacha_tenthCost_Lab.text=tostring(cost)
+    if data.have1Count<cost then
+        SetFontColor(commonGacha_tenthCost_Lab,color30)
+    else
+        SetFontColor(commonGacha_tenthCost_Lab,color1)
+    end
+    commonGacha_count_Lab.text=tostring(data.have1Count)
+end
+
+function LoadSeniorGacha(data,callHeroInfo)
+    seniorGachaFree=false
+    seniorGacha_timeGO:SetSelfActive(true)
+    seniorGacha_freeGO:SetSelfActive(false)
+    seniorGacha_noFreeGO:SetSelfActive(true)
+    local first = false
+    local playerHeroSummonVipRecord = appData:checkData("PlayerHeroSummonVipRecord")
+    if playerHeroSummonVipRecord~=nil then
+        first = playerHeroSummonVipRecord.firstTen
+        -- print(first)
+    end
+
+    seniorGacha_first_GO:SetSelfActive(not first)
+    Timer:AddTicker(TICKER_LOADSENIORGACHA,tonumber(data.cd)*1000+callHeroInfo.lastAdvanceCallTime,function (targetTime)
+        if self == nil or self.Module == nil then
+            return
+        end
+        local timeStr = CheckTimeRemain(targetTime,false)
+        seniorGacha_timer_Lab.text=timeStr
+    end,        function ()
+        seniorGachaFree=true
+        seniorGacha_timeGO:SetSelfActive(false)
+        seniorGacha_freeGO:SetSelfActive(true)
+        seniorGacha_noFreeGO:SetSelfActive(false)
+    end)
+    local cost1 = data.consume1.count
+    local cost2 = data.consume2.count
+    local playerInfo = appData:checkData("PlayerInfo")
+    local vip = playerInfo.vip
+    local drawDiscount = ResTblContainer:GetPropToInt(vip,VipTbl.drawDiscount,VipTbl.tblName)/10000
+    local cost2Ten = GetFloat(cost2*10*const_MultiCallDiscount/100*(1-drawDiscount))
+    if data.have1Count==0 then
+        seniorGacha_onceCost_Lab.text=tostring(cost2)
+        SetIconByResourceId(seniorGacha_onceItem_Sprite.gameObject,data.consume2.id)
+        seniorGacha_tenthCost_Lab.text=tostring(cost2Ten)
+        SetIconByResourceId(seniorGacha_tenthItem_Sprite.gameObject,data.consume2.id)
+    elseif data.have1Count>=cost1 and data.have1Count<cost1*10 then
+        seniorGacha_onceCost_Lab.text=tostring(cost1)
+        SetIconByItemId(seniorGacha_onceItem_Sprite.gameObject,data.consume1.id)
+        seniorGacha_tenthCost_Lab.text=tostring(cost2Ten)
+        SetIconByResourceId(seniorGacha_tenthItem_Sprite.gameObject,data.consume2.id)
+    elseif data.have1Count>=cost1*10 then
+        seniorGacha_onceCost_Lab.text=tostring(cost1)
+        SetIconByItemId(seniorGacha_onceItem_Sprite.gameObject,data.consume1.id)
+        seniorGacha_tenthCost_Lab.text=tostring(cost1*10)
+        SetIconByItemId(seniorGacha_tenthItem_Sprite.gameObject,data.consume1.id)
+    else
+
+    end
+    if data.have1Count<cost1 and data.have2Count<cost2 then
+        SetFontColor(seniorGacha_onceCost_Lab,color30)
+    else
+        SetFontColor(seniorGacha_onceCost_Lab,color1)
+    end
+    if data.have1Count<cost1*10 and data.have2Count<cost2Ten then
+        SetFontColor(seniorGacha_tenthCost_Lab,color30)
+    else
+        SetFontColor(seniorGacha_tenthCost_Lab,color1)
+    end
+    seniorGacha_count_Lab.text=tostring(data.have1Count)
+end
+
+function LoadFriendGacha(data,callHeroInfo)
+    local cost = data.consume1.count
+    friendGacha_onceCost_Lab.text=tostring(cost)
+    if data.have1Count<cost then
+        SetFontColor(friendGacha_onceCost_Lab,color30)
+    else
+        SetFontColor(friendGacha_onceCost_Lab,color1)
+    end
+    cost = data.consume1.count*10
+    friendGacha_tenthCost_Lab.text=tostring(cost)
+    if data.have1Count<cost then
+        SetFontColor(friendGacha_tenthCost_Lab,color30)
+    else
+        SetFontColor(friendGacha_tenthCost_Lab,color1)
+    end
+    friendGacha_count_Lab.text=tostring(data.have1Count)
+end
+
+function OnCommonGachaOnceBtnClick(sender)
+    self:SendCommand("Summon",COMMON_TYPE_CONST,1,commonGachaFree,DoSummon)
+    --DoSummon(COMMON_TYPE_CONST,1,commonGachaFree)
+end
+
+function OnCommonGachaTenthBtnClick(sender)
+    self:SendCommand("Summon",COMMON_TYPE_CONST,10,false,DoSummon)
+    --DoSummon(COMMON_TYPE_CONST,10,false)
+end
+
+function OnSeniorGachaOnceBtnClick(sender)
+    self:SendCommand("Summon",SENIOR_TYPE_CONST,1,seniorGachaFree,DoSummon)
+    --DoSummon(SENIOR_TYPE_CONST,1,seniorGachaFree)
+end
+
+function OnSeniorGachaTenthBtnClick(sender)
+    self:SendCommand("Summon",SENIOR_TYPE_CONST,10,false,DoSummon)
+    --DoSummon(SENIOR_TYPE_CONST,10,false)
+end
+
+function OnFriendGachaOnceBtnClick(sender)
+    self:SendCommand("Summon",FRIEND_TYPE_CONST,1,false,DoSummon)
+    --DoSummon(FRIEND_TYPE_CONST,1,false)
+end
+
+function OnFriendGachaTenthBtnClick(sender)
+    self:SendCommand("Summon",FRIEND_TYPE_CONST,10,false,DoSummon)
+end
+
+function DoSummon(type,action,onFinished)
+    shadow_GO:SetSelfActive(true)
+    gachaEffect_Spine.gameObject:SetSelfActive(true)
+    local ainmName = ""
+    if type==COMMON_TYPE_CONST then
+        ainmName="normal"
+    elseif type==SENIOR_TYPE_CONST then
+        ainmName="highclass"
+    elseif type==FRIEND_TYPE_CONST then
+        ainmName="heart"
+    end
+    CsBridge.audioManager:PlayUI("yilong")
+    gachaEffect_Spine:PlayAnimation(ainmName,false,
+        function (e)
+            if e=="e_apear" then
+                if action ~= nil then
+                    action()
+                end
+                shadow_GO:SetSelfActive(false)
+            end
+        end,
+        function ()
+            if onFinished~=nil then
+                onFinished()
+            end
+            gachaEffect_Spine.gameObject:SetSelfActive(false)
+        end)
+end
+
+function OnNotification_OnGachaUpdate(objs)
+    local type = objs[0]
+    local data = objs[1]
+    local callHeroInfo = objs[2]
+    local playerInfo = objs[3]
+    if type==COMMON_TYPE_CONST then
+        LoadCommonGacha(data,callHeroInfo)
+        commonGacha = true
+    elseif type==SENIOR_TYPE_CONST then
+        LoadSeniorGacha(data,callHeroInfo)
+        LoadSummonProcess(playerInfo)
+        seniorGacha = true
+    elseif type==FRIEND_TYPE_CONST then
+        LoadFriendGacha(data,callHeroInfo)
+    end
+end
+
+function OnNotification_SummonProcess(objs)
+    local playerInfo = objs[0]
+    LoadSummonProcess(playerInfo)
+end
+
+function OnRuleBtnClick(sender)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+		local view = CsBridge.OpenView("HelpView","LotteryModule",false,true)
+		view:SetData(3)
+    end,"HelpView")
+end
+
+function OnSummonBtnClick(sender)
+    self:SendCommand("SummonReward")
+end
+
+function OnCloseBtnClick(sender)
+    self:ReturnBack()
+end
+
+function ResetCommonGacha()
+    commonGacha = false
+end
+
+function FinishCommonGacha()
+    return commonGacha
+end
+
+function ResetSeniorGacha()
+    seniorGacha = false
+end
+
+function FinishSeniorGacha()
+    return seniorGacha
+end
+
+function OnClose()
+    Timer:StopTicker(TICKER_LOADCOMMONGACHA)
+    Timer:StopTicker(TICKER_LOADSENIORGACHA)
+end
+
+function DoExit()
+    self.Module=nil
+    Timer:StopTicker(TICKER_LOADCOMMONGACHA)
+    Timer:StopTicker(TICKER_LOADSENIORGACHA)
+    loadedChallengeLevelItemSlot = nil
+    summon_Slider = nil
+    process_Lab = nil
+
+    commonGacha_freeGO = nil
+    commonGacha_timer_Lab = nil
+    commonGacha_noFreeGO = nil
+    commonGacha_onceCost_Lab = nil
+    commonGacha_tenthCost_Lab = nil
+    commonGacha_count_Lab = nil
+
+    seniorGacha_freeGO = nil
+    seniorGacha_timer_Lab = nil
+    seniorGacha_noFreeGO = nil
+    seniorGacha_onceCost_Lab = nil
+    seniorGacha_onceItem_Sprite = nil
+    seniorGacha_tenthCost_Lab = nil
+    seniorGacha_tenthItem_Sprite = nil
+    seniorGacha_count_Lab = nil
+
+    friendGacha_freeGO = nil
+    friendGacha_timer_Lab = nil
+    friendGacha_noFreeGO = nil
+    friendGacha_onceCost_Lab = nil
+    friendGacha_tenthCost_Lab = nil
+    friendGacha_count_Lab = nil
+
+    shadow_GO = nil
+    gachaEffect_Spine = nil
+
+    isInit  = nil
+    commonGachaFree  = nil
+    seniorGachaFree  = nil
+    COMMON_TYPE_CONST  = nil
+    SENIOR_TYPE_CONST  = nil
+    FRIEND_TYPE_CONST = nil
+    const_MultiCallDiscount  = nil
+    const_HeroSummonRewardCost  = nil
+
+    seniorGacha  = nil
+    commonGacha = nil
+    TICKER_LOADCOMMONGACHA = nil
+    TICKER_LOADSENIORGACHA = nil
+end

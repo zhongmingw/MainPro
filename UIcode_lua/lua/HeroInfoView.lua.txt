@@ -1,0 +1,401 @@
+require "SkillItemSlot"
+local tweenUtils=CsBridge.TweenUtils
+
+local fightTxt
+local lvTxt 
+local jobIconImg 
+local jobNameTxt
+local hpTxt 
+local attackTxt 
+local defTxt 
+local speedTxt
+local gradeArr
+
+local upFightTxt
+local upLvTxt
+local upHpTxt
+local upAttackTxt
+local upDefTxt
+local upSpeedTxt
+
+local upFightPos
+local upLvPos
+local upHpPos
+local upAtkPos
+local upDefPos
+local upSpeedPos
+
+local upFight
+
+local levelUpObj
+local soulConsumeIconObj
+local needCoinTxt 
+local needSoulTxt
+local levelUpBtnNameTxt
+local levelUpFlag
+
+local maxLevelAndGradeObj
+
+local attrBgBtn
+
+local upFightMoveAnim
+local upFightFadeAnim
+local upLvMoveAnim
+local upLvFadeAnim
+local upHpMoveAnim
+local upHpFadeAnim
+local upAtkMoveAnim
+local upAtkFadeAnim
+local upDefMoveAnim
+local upDefFadeAnim
+local upSpeedMoveAnim
+local upSpeedFadeAnim
+
+local isInit = false
+local levelupped = false
+
+local function OnCloseHeroShowView(obj)
+	self:HideView(self.gameObject.name)
+end
+
+function DoInit()
+	self.Anim = 0
+	MsgCenter:Subscribe(Notify_CloseHeroShowView,OnCloseHeroShowView)
+end 
+
+function DoExit()
+	MsgCenter:Unsubscribe(Notify_CloseHeroShowView,OnCloseHeroShowView)
+	tweenUtils = nil
+	fightTxt = nil
+	lvTxt  = nil
+	jobIconImg  = nil
+	jobNameTxt = nil
+	hpTxt  = nil
+	attackTxt  = nil
+	defTxt  = nil
+	speedTxt = nil
+	gradeArr = nil
+
+	upFightTxt = nil
+	upLvTxt = nil
+	upHpTxt = nil
+	upAttackTxt = nil
+	upDefTxt = nil
+	upSpeedTxt = nil
+
+	upFightPos = nil
+	upLvPos = nil
+	upHpPos = nil
+	upAtkPos = nil
+	upDefPos = nil
+	upSpeedPos = nil
+
+	upFight = nil
+
+	levelUpObj = nil
+	soulConsumeIconObj = nil
+	needCoinTxt  = nil
+	needSoulTxt = nil
+	levelUpBtnNameTxt = nil
+	levelUpFlag = nil
+
+	maxLevelAndGradeObj = nil
+
+	attrBgBtn = nil
+
+	upFightMoveAnim = nil
+	upFightFadeAnim = nil
+	upLvMoveAnim = nil
+	upLvFadeAnim = nil
+	upHpMoveAnim = nil
+	upHpFadeAnim = nil
+	upAtkMoveAnim = nil
+	upAtkFadeAnim = nil
+	upDefMoveAnim = nil
+	upDefFadeAnim = nil
+	upSpeedMoveAnim = nil
+	upSpeedFadeAnim = nil
+
+	isInit = nil
+	levelupped = nil
+end
+
+function InitUI()
+	fightTxt = self:GetComponentAtPath("Bottom/FightNumTxt",CLS_TEXT)
+	lvTxt = self:GetComponentAtPath("Bottom/heroLv",CLS_TEXT)
+	jobIconImg = self:GetGameObjectAtPath("Bottom/job/iconImg")
+	jobNameTxt = self:GetComponentAtPath("Bottom/job/nameTxt",CLS_TEXT)
+	hpTxt = self:GetComponentAtPath("Bottom/attr/HpNumTxt",CLS_TEXT)
+	attackTxt = self:GetComponentAtPath("Bottom/attr/AtkNumTxt",CLS_TEXT)
+	defTxt = self:GetComponentAtPath("Bottom/attr/DefNumTxt",CLS_TEXT)
+	speedTxt = self:GetComponentAtPath("Bottom/attr/SpeedNumTxt",CLS_TEXT)
+
+	upFightTxt = self:GetComponentAtPath("Effect/FightUpTxt",CLS_TEXT)
+	upLvTxt = self:GetComponentAtPath("Effect/LvUpTxt",CLS_TEXT)
+	upHpTxt = self:GetComponentAtPath("Effect/HpUpTxt",CLS_TEXT)
+	upAttackTxt = self:GetComponentAtPath("Effect/AtkUpTxt",CLS_TEXT)
+	upDefTxt = self:GetComponentAtPath("Effect/DefUpTxt",CLS_TEXT)
+	upSpeedTxt = self:GetComponentAtPath("Effect/SpeedUpTxt",CLS_TEXT)
+
+	upFightPos = upFightTxt.transform:CheckPosition()
+	upLvPos = upLvTxt.transform:CheckPosition()
+	upHpPos = upHpTxt.transform:CheckPosition()
+	upAtkPos = upAttackTxt.transform:CheckPosition()
+	upDefPos = upDefTxt.transform:CheckPosition()
+	upSpeedPos = upSpeedTxt.transform:CheckPosition()
+
+	attrBgBtn = self:GetComponentAtPath("Bottom/AttrBg",CLS_BUTTON_ARCHLY)
+	attrBgBtn.ClickAnim = false
+	
+	gradeArr = {}
+	local grade = self:GetComponentAtPath("Bottom/qualit",CLS_RECTTRANSFORM)
+	for i=1,grade.childCount-1 do
+		local gradeBg = grade:GetChild(i).gameObject
+		local grade = gradeBg.transform:GetChild(0).gameObject
+		table.insert(gradeArr, {gradeBg=gradeBg,grade=grade})
+	end 
+
+	levelUpObj = self:GetGameObjectAtPath("Bottom/LevelUp")
+	local levelUpTrans = levelUpObj.transform
+	soulConsumeIconObj = levelUpTrans:GetGameObjectAtPath("soul/iconImg")
+	needCoinTxt = levelUpTrans:GetComponentAtPath("coin/numberTxt",CLS_TEXT)
+	needSoulTxt = levelUpTrans:GetComponentAtPath("soul/numberTxt",CLS_TEXT)
+	levelUpBtnNameTxt = levelUpTrans:GetComponentAtPath("LevelUpBtn/nameTxt",CLS_TEXT)
+	levelUpFlag = levelUpTrans:GetGameObjectAtPath("LevelUpBtn/NewFlag")
+
+	maxLevelAndGradeObj = self:GetGameObjectAtPath("Bottom/MaxLevelAndGrade")
+end
+
+function SetParamDataList(objs)
+	local data = objs[0]
+	self:SendCommand("InitData", data)
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+	end 
+	self:SendCommand("InitHeroInfoData")
+end
+
+local function CloseTweener(t,complete) 
+	if t then
+		t:DoKill(complete)
+	end
+end
+
+local function RefreshFight(curHero)
+	fightTxt.text = curHero.fight
+end 
+
+local function RefreshLevel(curHero)
+	lvTxt.text = tostring(curHero.allLevel).."/"..tostring(curHero.allMaxLevel)
+end 
+
+local function RefreshJob(job)
+	SetSpriteByModule(jobIconImg, ResTblContainer:GetPropToStr(job,Job.icon,Job.tblName))
+	jobNameTxt.text = ResTblContainer:GetPropToStr(job,Job.name,Job.tblName)
+end 
+
+local function RefreshGrade(curHero)
+    local quality = ResTblContainer:GetPropToInt(curHero.heroId, HeroBase.quality,HeroBase.actorTbl)
+	local maxGrade = ResTblContainer:GetPropToInt(quality,HeroQuality.maxGrade,HeroQuality.actorTbl)
+	for i=1,#gradeArr do
+		gradeArr[i].gradeBg:SetSelfActive(i<=maxGrade)
+		gradeArr[i].grade:SetSelfActive(i<=curHero.grade)
+	end 
+end 
+
+local function RefreshAttr(curHero)
+	hpTxt.text = GetValueAbbreviation(curHero.hp)
+	attackTxt.text = GetValueAbbreviation(curHero.attack)
+	defTxt.text = GetValueAbbreviation(curHero.def)
+	speedTxt.text = GetValueAbbreviation(curHero.speed)
+	if curHero.isUp then
+		upFightTxt.text = "+"..GetValueAbbreviation(curHero.upFight)
+		upLvTxt.text = "+"..GetValueAbbreviation(curHero.upLevel)
+		upSpeedTxt.text = "+"..GetValueAbbreviation(curHero.upSpeed)
+		upHpTxt.text = "+"..GetValueAbbreviation(curHero.upHp)
+		upAttackTxt.text = "+"..GetValueAbbreviation(curHero.upAttack)
+		upDefTxt.text = "+"..GetValueAbbreviation(curHero.upDef)
+
+		if upFightMoveAnim then
+			upFightMoveAnim:DoKill()
+		end
+		if upFightFadeAnim then
+			upFightFadeAnim:DoKill()
+		end
+		upFightTxt.gameObject:SetSelfActive(true)
+		upFightTxt.gameObject:SetTextAlpha(1)
+		upFightTxt.transform:ResetPosition(upFightPos)
+		upFightMoveAnim = tweenUtils.MoveToByWorld(upFightTxt.transform,upFightPos.x,upFightPos.y+10,0.7,function()
+			upFightFadeAnim = tweenUtils.TextFadeTo(upFightTxt,0,0.5,function()
+				upFightTxt.gameObject:SetSelfActive(false)
+			end)			
+		end)
+		upFightMoveAnim:DoPlay()
+
+		if upLvMoveAnim then
+			upLvMoveAnim:DoKill()
+		end
+		if upLvFadeAnim then
+			upLvFadeAnim:DoKill()
+		end 
+		upLvTxt.gameObject:SetSelfActive(true)
+		upLvTxt.gameObject:SetTextAlpha(1)
+		upLvTxt.transform:ResetPosition(upLvPos)
+		upLvMoveAnim = tweenUtils.MoveToByWorld(upLvTxt.transform,upLvPos.x,upLvPos.y+10,0.7,function()
+			upLvFadeAnim = tweenUtils.TextFadeTo(upLvTxt,0,0.5,function()
+				upLvTxt.gameObject:SetSelfActive(false)
+			end)
+		end)
+		upLvMoveAnim:DoPlay()
+
+		if upHpMoveAnim then
+			upHpMoveAnim:DoKill()
+		end
+		if upHpFadeAnim then
+			upHpFadeAnim:DoKill()
+		end
+		upHpTxt.gameObject:SetSelfActive(true)
+		upHpTxt.gameObject:SetTextAlpha(1)
+		upHpTxt.transform:ResetPosition(upHpPos)
+		upHpMoveAnim = tweenUtils.MoveToByWorld(upHpTxt.transform,upHpPos.x,upHpPos.y+10,0.7,function()
+			upHpFadeAnim = tweenUtils.TextFadeTo(upHpTxt,0,0.5,function()
+				upHpTxt.gameObject:SetSelfActive(false)
+			end)
+		end)
+		upHpMoveAnim:DoPlay()
+
+		if upAtkMoveAnim then
+			upAtkMoveAnim:DoKill()
+		end
+		if upAtkFadeAnim then
+			upAtkFadeAnim:DoKill()
+		end
+		upAttackTxt.gameObject:SetSelfActive(true)
+		upAttackTxt.gameObject:SetTextAlpha(1)
+		upAttackTxt.transform:ResetPosition(upAtkPos)
+		upAtkMoveAnim = tweenUtils.MoveToByWorld(upAttackTxt.transform,upAtkPos.x,upAtkPos.y+10,0.7,function()
+			upAtkFadeAnim = tweenUtils.TextFadeTo(upAttackTxt,0,0.5,function()
+				upAttackTxt.gameObject:SetSelfActive(false)
+			end)
+		end)
+		upAtkMoveAnim:DoPlay()
+
+		if upDefMoveAnim then
+			upDefMoveAnim:DoKill()
+		end
+		if upDefFadeAnim then
+			upDefFadeAnim:DoKill()
+		end
+		upDefTxt.gameObject:SetSelfActive(true)
+		upDefTxt.gameObject:SetTextAlpha(1)
+		upDefTxt.transform:ResetPosition(upDefPos)
+		upDefMoveAnim = tweenUtils.MoveToByWorld(upDefTxt.transform,upDefPos.x,upDefPos.y+10,0.7,function()
+			upDefFadeAnim = tweenUtils.TextFadeTo(upDefTxt,0,0.5,function()
+				upDefTxt.gameObject:SetSelfActive(false)
+			end)
+		end)
+		upDefMoveAnim:DoPlay()
+	
+		if upSpeedMoveAnim then
+			upSpeedMoveAnim:DoKill()
+		end
+		if upSpeedFadeAnim then
+			upSpeedFadeAnim:DoKill()
+		end
+		upSpeedTxt.gameObject:SetSelfActive(true)
+		upSpeedTxt.gameObject:SetTextAlpha(1)
+		upSpeedTxt.transform:ResetPosition(upSpeedPos)
+		upSpeedMoveAnim = tweenUtils.MoveToByWorld(upSpeedTxt.transform,upSpeedPos.x,upSpeedPos.y+10,0.7,function()
+			upSpeedFadeAnim = tweenUtils.TextFadeTo(upSpeedTxt,0,0.5,function()
+				upSpeedTxt.gameObject:SetSelfActive(false)
+			end)
+		end)
+		upSpeedMoveAnim:DoPlay()
+	end 
+end
+
+function OnClose()
+	CloseTweener(upFightMoveAnim,true)
+	CloseTweener(upFightFadeAnim,true)
+	CloseTweener(upLvMoveAnim,true)
+	CloseTweener(upLvFadeAnim,true)
+	CloseTweener(upHpMoveAnim,true)
+	CloseTweener(upHpFadeAnim,true)
+	CloseTweener(upAtkMoveAnim,true)
+	CloseTweener(upAtkFadeAnim,true)
+	CloseTweener(upDefMoveAnim,true)
+	CloseTweener(upDefFadeAnim,true)
+	CloseTweener(upSpeedMoveAnim,true)
+	CloseTweener(upSpeedFadeAnim,true)
+	levelUpObj:SetSelfActive(false)
+	maxLevelAndGradeObj:SetSelfActive(false)
+	self:SendCommand("OnClose")
+end
+
+function OnNotification_RefreshHeroLevelRedTip(objs)
+	levelUpFlag:SetSelfActive(objs[0])
+end
+
+function OnNotification_RefreshHeroInfo(objs)
+	local curHero = objs[0]
+	RefreshFight(curHero)
+	RefreshLevel(curHero)
+	RefreshJob(curHero.job)
+	RefreshGrade(curHero)
+	RefreshAttr(curHero)
+end
+
+function OnNotification_RefreshConsume(objs)
+	local upGrade,coinConsume,soulConsume = objs[0],objs[1],objs[2]
+
+	if coinConsume == -1 and soulConsume == -1 then
+		levelUpObj:SetSelfActive(false)
+		maxLevelAndGradeObj:SetSelfActive(true)
+	else 
+		if upGrade then
+			SetIconByResourceId(soulConsumeIconObj,4)
+		else
+			SetIconByResourceId(soulConsumeIconObj,3)
+		end 
+		needCoinTxt:SetText(GetValueAbbreviation(coinConsume))
+		needSoulTxt:SetText(GetValueAbbreviation(soulConsume))
+		SetFontColor(needCoinTxt,CheckResEnough(ResourceEnum.Coin,coinConsume) and color25 or color30)
+		SetFontColor(needSoulTxt,CheckResEnough(upGrade and ResourceEnum.GreenSoul or ResourceEnum.BattleSoul,soulConsume) and color25 or color30)
+		levelUpObj:SetSelfActive(true)
+		maxLevelAndGradeObj:SetSelfActive(false)
+	end 
+end 
+
+function OnNotification_RefreshLevelUpBtn(objs)
+	local maxLevel = objs[0]
+	if maxLevel then
+		levelUpBtnNameTxt.text = Language:getStr("GradeUp")
+	else 
+		levelUpBtnNameTxt.text = Language:getStr("LevelUp")
+	end 
+	levelupped = true
+end
+
+function OnLevelUpBtnClick(sender)
+	self:SendCommand("HeroLevelUp")
+end 
+
+function OnAttrBgClick(sender)
+	self:SendCommand("OpenDetailAttr")
+end 
+
+function OnDetailBtnClick(sender)
+	self:SendCommand("OpenDetailAttr")
+end
+
+function ResetLevelStatus()
+    levelupped = false
+end
+
+function FinishLevelup()
+    return levelupped
+end

@@ -1,0 +1,50 @@
+--[[
+	file: SevenDaysActivityUtils.lua
+	author: zhangyue
+	description: SevenDaysActivity utilities
+]]
+
+local SevenDaysStatusEnum =
+{
+	locked = 0,
+	enabled = 2,
+	claimed = 1,
+}
+
+local function ClaimSevenDaysReward(dayId, currentActivityID, onFinished, model)
+	local url, requestCls, responseCls = "loginReward", "LoginRewardReq", "LoginRewardResp"
+	local req = {
+		activityId = currentActivityID,
+		dayId = dayId,
+	}
+	local finishedCbk = function(resp)
+		local confirmCbk = function()
+			onFinished(currentActivityID)
+			model:SendNotification("SevenActivityRewardClaimed")
+		end
+		ShowRewardReceivedTip(model, resp.rewards, confirmCbk)
+	end
+	HttpRequest(url, requestCls, responseCls, req, finishedCbk)
+end
+
+local function GetItemViewData(activityData)
+	local allItemData = {}
+	local dayText = Language:getStr("dayIdx")
+	for day, item in pairs(activityData.items) do
+		local itemViewData = {}
+		itemViewData.day = string.format(dayText, day)
+		itemViewData.dayId = day
+		itemViewData.state = item.state
+		itemViewData.rewards = item.config.rewards
+		itemViewData.claimBtnEnabled = item.state == SevenDaysStatusEnum.enabled
+		itemViewData.showMask = item.state == SevenDaysStatusEnum.claimed
+		table.insert(allItemData, itemViewData)
+	end
+	return allItemData
+end
+
+
+return{
+	ClaimSevenDaysReward = ClaimSevenDaysReward,
+	GetItemViewData = GetItemViewData,
+}

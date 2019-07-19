@@ -1,0 +1,26 @@
+local battleInfo
+
+function AssetNames(objs)
+  local arr={"BattleView","HeadStateView","energybar_p","Mask"}
+  return arr
+end
+
+function DoInit()
+	MsgCenter:Broadcast(Notify_OnBattleStart,battleInfo)
+end
+
+function OnEnter(objs,onFinished)
+	battleInfo = objs[0]
+	CsBridge.MoneyBanner.SetBannerVisible(false)
+	local view=self:OpenView("BattleView","BattleModel")
+	view:SetData(battleInfo)	
+	if(onFinished ~= nil)then
+		onFinished()  
+	end
+end
+
+function OnExit()
+	CsBridge.MoneyBanner.SetBannerVisible(true)
+	MsgCenter:Broadcast(Notify_OnBattleEnd,battleInfo)
+	battleInfo = nil
+end

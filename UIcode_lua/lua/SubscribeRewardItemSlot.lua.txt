@@ -1,0 +1,118 @@
+require "ItemSlot"
+
+---绑定左右两边的数据
+local function BindLeftAndRightItemData(slot, itemData, lrData, pathFirst)
+    local slotTrans = slot.transform
+    ---@type UnityEngine.GameObject
+    local pathObj = slotTrans:GetGameObjectAtPath(pathFirst)
+    ---@type Client.Library.ButtonArchly
+    local pathButton = slotTrans:GetComponentAtPath(pathFirst, CLS_BUTTON_ARCHLY)
+    ---@type UnityEngine.GameObject
+    local pathSelectedObj = slotTrans:GetGameObjectAtPath(pathFirst .. "/selected")
+    ---@type UnityEngine.GameObject
+    local pathNormalObj = slotTrans:GetGameObjectAtPath(pathFirst .. "/normal")
+    ---@type UnityEngine.GameObject
+    local pathLightImgObj = slotTrans:GetGameObjectAtPath(pathFirst .. "/LightImg")
+    ---@type Client.Library.UIItemGrid
+    local pathItemGrid = slotTrans:GetComponentAtPath(pathFirst .. "/ItemGrid", CLS_UI_ITEM_GRID)
+    ---@type UnityEngine.GameObject
+    local pathGotObj = slotTrans:GetGameObjectAtPath(pathFirst .. "/Get")
+    ---@type UnityEngine.GameObject
+    local pathLightImgFObj = slotTrans:GetGameObjectAtPath(pathFirst .. "/LightImgF")
+    ---@type UnityEngine.GameObject
+    local getSelectedObj = slotTrans:GetGameObjectAtPath(pathFirst .. "/GetSelected")
+
+    if lrData.notShow == true then
+        pathObj:SetActive(false)
+        return
+    end
+    pathItemGrid:RefreshItemSlots(lrData.rewardArr, slot.m_grid.viewBase.gameObject, "ItemSlot")
+    if lrData.got == true then
+        if itemData.showSelect == true then
+            getSelectedObj:SetActive(true)
+            pathGotObj:SetActive(false)
+        else
+            getSelectedObj:SetActive(false)
+            pathGotObj:SetActive(true)
+        end
+    else
+        pathGotObj:SetActive(false)
+        getSelectedObj:SetActive(false)
+    end
+
+    if itemData.showSelect == true then
+        pathNormalObj:SetActive(false)
+        pathSelectedObj:SetActive(true)
+    else
+        pathNormalObj:SetActive(true)
+        pathSelectedObj:SetActive(false)
+    end
+
+    if lrData.showLight == true then
+        if itemData.showSelect == true then
+            pathLightImgObj:SetActive(true)
+            pathLightImgFObj:SetActive(false)
+        else
+            pathLightImgObj:SetActive(false)
+            pathLightImgFObj:SetActive(true)
+        end
+        local itemArr = pathItemGrid:GetAllItems()
+        for i = 0, itemArr.Length - 1 do
+            local itemTrans = itemArr[i].transform
+            local itemButton = itemTrans:GetComponent(CLS_BUTTON_ARCHLY)
+            itemButton.enabled = false
+        end
+        pathButton.enabled = true
+    else
+        pathLightImgFObj:SetActive(false)
+        pathLightImgObj:SetActive(false)
+        pathButton.enabled = false
+    end
+
+    CsBridge.IconData.SetIconByName(pathSelectedObj, lrData.selectBgName)
+    CsBridge.IconData.SetIconByName(pathNormalObj, lrData.bgName)
+end
+
+function OnSubscribeRewardItemSlotBindValue(slot, data)
+    local slotTrans = slot.transform
+    BindLeftAndRightItemData(slot, data, data.leftData, "Left")
+    BindLeftAndRightItemData(slot, data, data.rightData, "Right")
+
+    ---@type UnityEngine.UI.Slider
+    local slider = slotTrans:GetComponentAtPath("Slider", CLS_SLIDER)
+    ---@type UnityEngine.GameObject
+    local sliderObj = slider.gameObject
+    ---@type UnityEngine.UI.Slider
+    local sliderOther = slotTrans:GetComponentAtPath("SliderOther", CLS_SLIDER)
+    ---@type UnityEngine.GameObject
+    local sliderOtherObj = sliderOther.gameObject
+    ---@type UnityEngine.TextMesh
+    local centerProgressTxt = slotTrans:GetComponentAtPath("Center/progressTxt", CLS_TEXT)
+    ---@type UnityEngine.GameObject
+    local centerProgressTxtObj = centerProgressTxt.gameObject
+    ---@type UnityEngine.GameObject
+    local centerGotImgObj = slotTrans:GetGameObjectAtPath("Center/GotImg")
+    ---@type UnityEngine.GameObject
+    local iconImgObj = slotTrans:GetGameObjectAtPath("iconImg")
+    ---@type UnityEngine.GameObject
+    local centerPreGotObj = slotTrans:GetGameObjectAtPath("CenterPre")
+    ---@type UnityEngine.GameObject
+    local centerPreGotImgObj = slotTrans:GetGameObjectAtPath("CenterPre/GotImg")
+    ---@type UnityEngine.TextMesh
+    local centerPreProgressTxt = slotTrans:GetComponentAtPath("CenterPre/progressTxt", CLS_TEXT)
+    ---@type UnityEngine.GameObject
+    local centerPrePreProgressTxt = centerPreProgressTxt.gameObject
+
+    centerProgressTxt.text = data.progressStr
+    sliderObj:SetActive(data.showSliderOne)
+    sliderOtherObj:SetActive(not data.showSliderOne)
+    iconImgObj:SetActive(data.showSliderOne)
+    slider.value = data.sliderValue
+    sliderOther.value = data.sliderValue
+    centerGotImgObj:SetActive(data.showGetProgress)
+    centerProgressTxtObj:SetActive(not data.showGetProgress)
+    centerPreGotObj:SetActive(data.showPreProgressObj)
+    centerPreGotImgObj:SetActive(data.preShowGetProgress)
+    centerPreProgressTxt.text = tostring(data.preProgress)
+    centerPrePreProgressTxt:SetActive(not data.preShowGetProgress)
+end

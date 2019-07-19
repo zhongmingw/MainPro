@@ -1,0 +1,51 @@
+
+Š
+CallHero.protoCallHerostage.proto"*
+CallHeroReq
+type (
+count ("2
+CallHeroResp"
+heroIds (2.stage.RewardItem"(
+GetHeroSummonRewardHeroReq
+
+id ("@
+GetHeroSummonRewardHeroResp!
+heroId (2.stage.RewardItem"8
+BuyReq 
+buyList (2.CallHero.Goods
+shop ("
+BuyResp
+status ("/
+Goods
+
+id (
+count (
+uid ("A
+ZoneBuyLimitItem
+version (
+key (	
+remains ("1
+PlayerBuyLimitItem
+key (	
+bought ("*
+
+RequestKey
+key (	
+version ("=
+ZoneBuyLimitItemReq&
+itemKeys (2.CallHero.RequestKey"&
+ZoneBuyLimitItemResp
+status ("Y
+ShopItem
+type ("
+	goodsList (2.CallHero.Goods
+lastFreeRefreshTime ("
+RefreshShopReq
+shop ("!
+RefreshShopResp
+result ("h
+PlayerHeroSummonVipRecord
+count (
+first (
+firstTen (
+lastAdvanceCallTime (

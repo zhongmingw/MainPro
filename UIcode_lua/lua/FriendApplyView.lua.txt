@@ -1,0 +1,89 @@
+local searchBtn
+local applyGrid
+local input
+local curIndex=0
+local nothing
+
+function DoInit()
+    self.Anim = 0
+    self.Shadow=0
+    searchBtn = self:GetComponentAtPath("other/searchBtn" ,CLS_BUTTON_ARCHLY)
+    applyGrid = self:GetComponentAtPath("other/playerSV/ScrollRect/Viewport/Grid" ,CLS_UI_ITEM_GRID)
+    input = CsBridge.GetInputFromView(self, "other/searchInput")
+    nothing = self:GetGameObjectAtPath("other/Nothing")
+end
+
+function IsSetAnchor()
+    return true
+end
+
+function BeoforeReturnBack()
+    self.gameObject:SetSelfActive(false)
+end
+
+function OnAnimationFinished()
+    self:SendCommand("InitApply")
+    refreshBtn()
+end
+
+function OnsearchInputInputValChanged(obj,val)
+    refreshBtn()
+end
+
+function refreshBtn()
+    if input.text == "" or input.text == nil then
+        searchBtn.Gray=true
+    else
+        searchBtn.Gray=false
+    end
+end
+
+function OnNotification_InitApply(objs)
+    local friends = objs[0].friends
+    if friends and #friends > 0 then
+        nothing:SetSelfActive(false)
+        applyGrid.gameObject:SetSelfActive(true)
+        applyGrid:RefreshItemSlots(objs[0].friends, self.gameObject, "FriendApplyItemSlot")
+    else
+        nothing:SetSelfActive(true)
+        applyGrid.gameObject:SetSelfActive(false)
+    end
+end
+
+function OnsearchBtnClick(sender)
+    self:SendCommand("SearchFriend",input.text)
+end
+
+function OnGridPlayerClick(sender)
+	local data = sender.m_data
+	self:SendCommand("ShowPlayerTips", data)
+end
+
+function OnFriendApplyItemSlotBindValue(slot,data)
+    local nickTxt=slot.transform:Find("name01Txt"):GetComponent(CLS_TEXT)
+    local timeTxt=slot.transform:Find("number01Txt"):GetComponent(CLS_TEXT)
+    local player=slot.transform:Find("Player")
+    BindPlayerBaseInfoValue(player,data)
+    nickTxt.text=FormatWorldPlayerName(data.nick, data.zone)
+    timeTxt.text=CsBridge.timeManager:checkTimePass(data.lastOnlineTime)
+end
+
+function OnGridapplyBtnClick(obj)
+    curIndex=obj.m_index
+    self:SendCommand("ApplyFriend", obj.m_data)
+end
+
+function OnNotification_ApplyFriend(objs)
+    local friendList=objs[0]
+    local removed=objs[1]
+    applyGrid:ScreenItemSlots(friendList.friends, self.gameObject, "FriendApplyItemSlot")
+end
+
+function DoExit()
+	self.Module=nil
+    searchBtn = nil
+    applyGrid = nil
+    input = nil
+    curIndex = nil
+    nothing = nil
+end

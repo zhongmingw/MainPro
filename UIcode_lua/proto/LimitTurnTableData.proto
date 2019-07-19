@@ -1,0 +1,81 @@
+import "TurnTableData.proto";
+import "playerData.proto";
+import "stage.proto";
+package LimitTurnTableData;
+
+message RefreshActivityLotteryResp
+{
+    required int32 result = 1;
+    required int32 ActivityLotteryResetPrice = 2;
+    required int32 ActivityCoinPrice = 3;
+    required int32 ActivityLotteryDiscount = 4;
+    required int32 ActivityLotteryTenxLimit = 5;
+}
+
+message GetLotteryActivityHitRecordReq
+{
+    required int32 id = 1; //无用
+}
+
+message GetLotteryActivityHitRecordResp
+{
+    repeated Record records = 1;
+}
+
+message LotteryActivityHistoryInfo
+{
+    repeated Record records = 1;
+    required int32 group = 2;
+}
+
+message Record
+{
+    required int32 type = 1;
+    required int32 id = 2;
+    required int32 count = 3;
+    required string nick = 4;
+}
+
+message LotteryActivityInfo
+{
+    repeated TurnTableData.DrawItem drawItems = 1;
+    required int64 lastRefreshTime = 2; //上次刷新时间
+    required bool hasFreeRefresh = 3; //是否有免费的刷新
+    required int32 count = 4; //抽取次数，每次刷新重置
+    required int32 acId = 5; //活动id
+}
+
+message GetLotteryActivityRankReq
+{
+    required int32 count = 1; //需要前多少名
+}
+
+message GetLotteryActivityRankResp
+{
+    repeated LotteryActivityRankItem rankItems = 1; //前N名
+    required LotteryActivityRankItem playerRankItem = 2; //玩家自己的排名
+}
+
+message LotteryActivityRankItem 
+{
+    required playerData.PlayerBaseInfo playerBaseInfo = 1;
+    required int32 score = 2;
+    required int32 rank = 3;
+}
+
+message GetLotteryRankRewardReq
+{
+    required int32 useless = 1;
+}
+
+message GetLotteryRankRewardResp
+{
+    repeated LotteryActivityRankRewardConfig rewardConfigs = 1;       
+}
+
+message LotteryActivityRankRewardConfig
+{
+    required int32 min = 1;
+    required int32 max = 2;
+    repeated stage.RewardItem rewardItems = 3;
+}

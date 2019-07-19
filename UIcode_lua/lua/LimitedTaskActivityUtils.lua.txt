@@ -1,0 +1,97 @@
+---按id排序
+local function SortTaskList(a, b)
+    if a.receiveState ~= b.receiveState then
+        return a.receiveState < b.receiveState
+    else
+        return a.id < b.id
+    end
+end
+
+---重新排列数据
+local function ReSortTaskList(taskList, greenFrontImgName, orangeFrontImaName)
+    local stateEnum = {
+        CAN_RECEIVE = 1,
+        NOT_FINISHED = 2,
+        RECEIVED = 3,
+    }
+    for i = 1, #taskList do
+        if taskList[i].active == true then
+            taskList[i].btnGray = false
+            taskList[i].curCount = taskList[i].count
+            taskList[i].frontImgName = greenFrontImgName
+            taskList[i].showGot = false
+            taskList[i].receiveState = stateEnum.CAN_RECEIVE
+        end
+        if taskList[i].curCount < taskList[i].count then
+            taskList[i].btnGray = true
+            taskList[i].frontImgName = orangeFrontImaName
+            taskList[i].showGot = false
+            taskList[i].receiveState = stateEnum.NOT_FINISHED
+        end
+        if taskList[i].curCount >= taskList[i].count and taskList[i].active == false then
+            taskList[i].btnGray = true
+            taskList[i].frontImgName = greenFrontImgName
+            taskList[i].showGot = true
+            taskList[i].receiveState = stateEnum.RECEIVED
+        end
+        taskList[i].canReceive = taskList[i].active
+        taskList[i].progressValue = taskList[i].curCount / taskList[i].count
+        taskList[i].progressValueStr = tostring(taskList[i].curCount) .. '/' .. tostring(taskList[i].count)
+    end
+    table.sort(taskList, SortTaskList)
+    return taskList
+end
+
+---初始化界面数据
+local function InitViewData(viewData, activityData)
+    local greenFrontImgName = "new_com_jindutiao3"
+    local orangeFrontImaName = "new_com_jindutiao1"
+    viewData.zeroPosData = nil
+    viewData.taskList = {}
+    if activityData and activityData.taskList and #activityData.taskList > 0 then
+        viewData.taskList = activityData.taskList
+    end
+    if activityData and activityData.zeroPos then
+        viewData.zeroPosData = activityData.zeroPos
+        viewData.zeroPosData.canReceive = viewData.zeroPosData.active
+        if viewData.zeroPosData.active == true then
+            ---可领取
+            viewData.zeroPosData.curCount = viewData.zeroPosData.count
+            viewData.zeroPosData.frontImgName = greenFrontImgName
+            viewData.zeroPosData.btnGray = false
+            viewData.zeroPosData.showGot = false
+        else
+            if viewData.zeroPosData.curCount >= viewData.zeroPosData.count then
+                --- 已领取
+                viewData.zeroPosData.frontImgName = greenFrontImgName
+                viewData.zeroPosData.btnGray = true
+                viewData.zeroPosData.showGot = true
+            else
+                viewData.zeroPosData.frontImgName = orangeFrontImaName
+                viewData.zeroPosData.btnGray = true
+                viewData.zeroPosData.showGot = false
+            end
+        end
+
+        viewData.zeroPosData.progressValue = viewData.zeroPosData.curCount / viewData.zeroPosData.count
+        viewData.zeroPosData.progressValueStr = tostring(viewData.zeroPosData.curCount) .. '/' .. tostring(viewData.zeroPosData.count)
+    end
+    viewData.taskList = ReSortTaskList(viewData.taskList, greenFrontImgName, orangeFrontImaName)
+end
+
+---获取完成奖励
+local function GetRewardForFinishTask(data, callback)
+    local req = {}
+    req.acid = data.acid
+    req.id = data.id
+    HttpRequest("dailyTaskActivityReward", "LimitedTaskActivityRewardReq", "LimitedTaskActivityRewardResp", req, function(resp)
+        if callback then
+            callback(resp)
+        end
+    end)
+end
+
+return {
+    InitViewData = InitViewData,
+    GetRewardForFinishTask = GetRewardForFinishTask,
+}

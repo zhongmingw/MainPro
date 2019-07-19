@@ -1,0 +1,132 @@
+--[[
+	file: UnionUtils.lua
+	author: hangang
+	description: Union utilities
+]]
+
+json = require "json"
+
+UnionMemberType =
+{
+	Other = 1,
+	Member = 2,
+	Elder = 3,
+	Leader = 4,
+}
+
+UnionAuthorities = 
+{
+	Dissolve = 1,
+	GranteApplicaiton = 2,
+	KickoutElder = 3,
+	KickoutMember = 4,
+	PromoteElder = 5,
+	PromoteLeader = 6,
+	Demote = 7,
+	UpdateNotification = 8,
+	UnionMail = 9,
+	RecruitNewMember = 10,
+	UpdateSettings = 11,
+	ChangeBanner = 12,
+	SetAutoGrant = 13,
+}
+
+MemberAuthorities = 
+{
+	[UnionMemberType.Member] = {},
+	[UnionMemberType.Leader] = 
+	{
+		[1] = UnionAuthorities.Dissolve,
+		[2] = UnionAuthorities.GranteApplicaiton,
+		[3] = UnionAuthorities.KickoutElder,
+		[4] = UnionAuthorities.KickoutMember,
+		[5] = UnionAuthorities.PromoteElder,
+		[6] = UnionAuthorities.UpdateNotifycation,
+		[7] = UnionAuthorities.UnionMail,
+		[8] = UnionAuthorities.RecruitNewMember,
+		[9] = UnionAuthorities.UpdateSettings,
+		[10] = UnionAuthorities.PromoteLeader,
+		[11] = UnionAuthorities.Demote,
+		[12] = UnionAuthorities.ChangeBanner,
+		[13] = UnionAuthorities.SetAutoGrant,
+	},
+	[UnionMemberType.Elder] = 
+	{
+		[1] = UnionAuthorities.GranteApplicaiton,
+		[2] = UnionAuthorities.KickoutMember,
+		[3] = UnionAuthorities.UnionMail
+	}
+}
+
+ServerEnum_AutoGrant =
+{
+	Off = 0,
+	On = 1
+}
+
+ServerEnum_GrantOptions =
+{
+	Granted = 1,
+	Rejected = 2,
+}
+
+ServerEnum_OperationResult =
+{
+	Succeeded = 0,
+	UnionDisbanded = 1,
+	WrongAuthority = 2,
+}
+
+ServerEnum_ApplyResponse =
+{
+	ApplicationReceived = 0,
+	Granted = 1, --Auto granted
+}
+
+ID_UNION_COIN = 9
+
+ServerEnum_OperationResult =
+{
+	Succeeded = 0,
+	UnionDisbanded = 1,
+	WrongAuthority = 2,
+}
+
+ServerEnum_DungeonStatus = {
+	AllFinished = 1,
+	Processing = 0,
+}
+
+ServerEnum_OrderStatus = {
+	Finished = 1,
+	Processing = 0,
+}
+
+local UnityHelper=CS.Client.Library.UnityHelper
+
+function GetDungeonBossID(dungeonID)
+	return ResTblContainer:GetPropToInt(dungeonID, GuildDungeon.bossId, GuildDungeon.tblName)
+end
+
+function GetMonsterModelName(monsterID)
+	local actorID = ResTblContainer:GetPropToInt(monsterID, Monster.actorId, Monster.actorTbl)
+	return ResTblContainer:GetPropToStr(actorID, HeroBase.model, HeroBase.actorTbl)
+end
+
+function GetMonsterName(monsterID)
+	local actorID = ResTblContainer:GetPropToInt(monsterID, Monster.actorId, Monster.actorTbl)
+	return ResTblContainer:GetPropToStr(actorID, HeroBase.title, HeroBase.actorTbl)
+end
+
+function GetMonsterLevel(monsterID)
+	return ResTblContainer:GetPropToInt(monsterID, Monster.level, Monster.actorTbl)
+end
+
+function GetMonsterGroupID(monsterID)
+	local actorID = ResTblContainer:GetPropToInt(monsterID, Monster.actorId, Monster.actorTbl)
+	return ResTblContainer:GetPropToInt(actorID, HeroBase.group, HeroBase.actorTbl)
+end
+
+function FormatUnionLog(jsonStr)
+	return json.decode(jsonStr)
+end

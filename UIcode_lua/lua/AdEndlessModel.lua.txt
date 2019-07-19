@@ -1,0 +1,55 @@
+local showAdData = {}
+
+function DoInit()
+
+end
+
+---初始化界面数据
+function OnCommand_InitViewData(objs)
+    local adData = objs[0]
+    if adData ~= nil then
+        adData = adData.list
+        if #adData > 1 then
+            for i = 1, #adData do
+                table.insert(showAdData, #showAdData + 1, adData[i])
+            end
+            local tempLast = {}
+            tempLast.id = adData[1].id
+            tempLast.skipType = adData[1].skipType
+            tempLast.skipParameter = adData[1].skipParameter
+            tempLast.SlideshowPicture = adData[1].SlideshowPicture
+
+            local tempFirst = {}
+            tempFirst.id = adData[#adData].id
+            tempFirst.skipType = adData[#adData].skipType
+            tempFirst.skipParameter = adData[#adData].skipParameter
+            tempFirst.SlideshowPicture = adData[#adData].SlideshowPicture
+
+            table.insert(showAdData, 1, tempFirst)
+            table.insert(showAdData, #showAdData + 1, tempLast)
+        elseif #adData == 1 then
+            showAdData[1] = adData[1]
+        else
+            showAdData = {}
+        end
+    end
+    self:SendNotification("InitViewData", showAdData, adData)
+end
+
+---点击图片，跳转到对应的界面上
+function OnCommand_OpenTargetView(objs)
+    if objs ~= nil then
+        local targetViewData = objs[0]
+        if targetViewData.skipType and targetViewData.skipType > 0 then
+            MsgCenter:Broadcast(Notify_OpenActivityView, { id = targetViewData.skipType, data = targetViewData.skipParameter })
+        end
+        local req = {}
+        req.id = targetViewData.id
+        HttpRequestEx("activitySlideshowLog", "ActivitySlideshowLogReq", "ActivitySlideshowLogResp", req, nil, true, false)
+    end
+end
+
+function DoOnExit()
+    showAdData = nil
+end
+

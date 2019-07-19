@@ -1,0 +1,50 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-04-16 10:51:53
+]]
+
+function class(className, super)
+    local superType = type(super)
+    if super and superType ~= "table" then
+        print(className.." ----- super class need a table, but cur super is a "..superType)
+        return
+    end
+
+    local clazz
+
+    if super then
+        clazz = {}
+        clazz.super = super
+    else
+        clazz = {
+            Ctor = function(...)end,
+            Finalize = function()end,
+        }
+    end
+
+    clazz.__name = className
+    setmetatable(clazz, {
+        __index = super,
+        __call = function(ins, ...)
+            local instance = setmetatable({}, { __index = clazz })
+            instance.class = clazz
+            instance:Ctor(...)
+            return instance
+        end,
+        __tostring = function(ins)
+            return "["..ins.__name.."]"
+        end,
+        __gc = function(ins)
+            ins:Finalize()
+        end
+    })
+    return clazz
+end
+
+function super(obj, ...)
+    if obj and (obj.super and obj.super.Ctor) then
+        obj.super.Ctor(obj, ...)
+    end
+end

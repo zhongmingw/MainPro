@@ -1,0 +1,209 @@
+
+---@type table 服务器返回的界面数据
+local respData
+---@type function 界面数据刷新返回
+local refreshCallback
+---@type number 活动id
+local curActivityId
+---@type table 当前抢购数据
+local changedThisTimeGoodsData = {}
+---@type Client.Library.ViewModelBase
+local curModel
+---@type boolean 是否重新获取界面数据
+local reGotViewData = false
+
+---设置工具使用的model
+local SetModelAndCallback = function(activityId, model, callback)
+    curActivityId = activityId
+    curModel = model
+    refreshCallback = callback
+end
+
+---获取界面数据
+local DoGetViewData = function(activityId, model)
+    local req = {}
+    curModel = model
+    req.activityId = activityId
+    HttpRequest("rush2BuyShop", "Rush2BuyShopReq", "Rush2BuyShopResp", req, function(resp)
+        if refreshCallback then
+            reGotViewData = false
+            respData = resp
+            refreshCallback(resp)
+        end
+        if resp == nil then
+            changedThisTimeGoodsData.endTime = nil
+            changedThisTimeGoodsData.startTime = nil
+        end
+    end)
+end
+
+---购买物品
+local function DoBuyItem(currentItemData, count, model)
+    DoGetViewData(curActivityId, curModel)
+    local req = {}
+    req.goodsId = currentItemData.id
+    req.count = count
+    HttpRequest("rush2Buy", "Rush2BuyReq", "Rush2BuyResp", req, function(resp)
+        local rewards = {}
+        local reward = {}
+        reward.id = currentItemData.reward.id
+        reward.count = currentItemData.reward.count * count
+        reward.typeId = currentItemData.reward.typeId,
+        table.insert(rewards, reward)
+        local confirmCbk = function()
+            DoGetViewData(curActivityId, curModel)
+        end
+        ShowRewardReceivedTip(model, rewards, confirmCbk)
+    end)
+end
+
+---获取剩余时间
+local function GetRestTime(endTime)
+    if not endTime then
+        return ""
+    end
+    local showDays = false
+    return CheckTimeRemain(endTime, showDays)
+end
+
+---判断抢购是否开始
+local function IsSaleStart(targetData)
+    if targetData ~= nil then
+        return targetData.startTime and targetData.startTime - 0.5 * 1000 <= CsBridge.timeManager.ServerTime
+    else
+        return false
+    end
+end
+
+---判断抢购是否结束
+local function IsSaleEnd(targetData)
+    if targetData ~= nil then
+        return targetData.endTime and targetData.endTime <= CsBridge.timeManager.ServerTime
+    else
+        return false
+    end
+end
+
+---获取显示的时间
+local function GetConstTime(value)
+    if not value then
+        return ""
+    end
+
+    local temp = CsBridge.timeManager:checkTimeSend(value)
+    temp = string.gsub(temp, ' ', "", 10)
+    return string.sub(temp, 0, 5)
+end
+
+---改变当前抢购的数据结构
+local ChangeThisTimeGoodsItemData = function(thisTimeData)
+    changedThisTimeGoodsData = {}
+    changedThisTimeGoodsData.showData = {}
+    changedThisTimeGoodsData.isStartSale = false
+    changedThisTimeGoodsData.isEndSale = false
+    changedThisTimeGoodsData.showTimeTxt = ""
+    if thisTimeData ~= nil and thisTimeData.goods ~= nil then
+        for i = 1, #thisTimeData.goods do
+            local temp = {}
+            temp.id = thisTimeData.goods[i].id
+            temp.goods = thisTimeData.goods[i].reward
+            temp.price = thisTimeData.goods[i].originalCost--原来的的价格
+            temp.reward = thisTimeData.goods[i].reward
+
+            temp.discountPrice = thisTimeData.goods[i].cost.count --折扣后的价格
+            temp.single = temp.discountPrice
+            temp.basePrice = temp.discountPrice
+
+            temp.priceTypeId = temp.price.id
+            temp.priceType = temp.price.typeId
+
+            temp.remain = thisTimeData.goods[i].count
+            temp.count = thisTimeData.goods[i].count
+            temp.allRemain = thisTimeData.goods[i].remain
+            temp.remainCount = temp.allRemain
+
+            temp.startTime = thisTimeData.startTime
+            temp.endTime = thisTimeData.endTime
+            temp.isStartEndBtn = true
+            temp.isStartSale = IsSaleStart(thisTimeData)
+            temp.isEndSale = IsSaleEnd(thisTimeData)
+            if thisTimeData.goods[i].limit and thisTimeData.goods[i].limit > 0 then
+                temp.limited = true
+                temp.limit = thisTimeData.goods[i].limit
+                temp.goods.limited = true
+            end
+            table.insert(changedThisTimeGoodsData.showData, temp)
+        end
+        changedThisTimeGoodsData.startTime = thisTimeData.startTime
+        changedThisTimeGoodsData.endTime = thisTimeData.endTime
+        changedThisTimeGoodsData.isStartEndBtn = true
+        changedThisTimeGoodsData.isStartSale = IsSaleStart(thisTimeData)
+        changedThisTimeGoodsData.isEndSale = IsSaleEnd(thisTimeData)
+
+        if changedThisTimeGoodsData.startTime and changedThisTimeGoodsData.startTime <= CsBridge.timeManager.ServerTime then
+            changedThisTimeGoodsData.showTimeTxt = GetRestTime(changedThisTimeGoodsData.endTime)
+        else
+            changedThisTimeGoodsData.showTimeTxt = GetRestTime(changedThisTimeGoodsData.startTime)
+        end
+    end
+    return changedThisTimeGoodsData
+end
+
+---每秒更新子倒计时
+local function RefreshSubRestTime()
+    if changedThisTimeGoodsData ~= nil then
+        if changedThisTimeGoodsData.endTime and changedThisTimeGoodsData.endTime < CsBridge.timeManager.ServerTime then
+            if reGotViewData == false then
+                if refreshCallback then
+                    refreshCallback(nil)
+                end
+                reGotViewData = true
+                ChangeThisTimeGoodsItemData()
+                DoGetViewData(curActivityId, curModel)
+            end
+            curModel:HideView("DealView")
+            return
+        end
+        if changedThisTimeGoodsData.endTime and changedThisTimeGoodsData.startTime and changedThisTimeGoodsData.startTime <= CsBridge.timeManager.ServerTime then
+            changedThisTimeGoodsData.showTimeTxt = GetRestTime(changedThisTimeGoodsData.endTime)
+        elseif changedThisTimeGoodsData.endTime and changedThisTimeGoodsData.startTime then
+            changedThisTimeGoodsData.showTimeTxt = GetRestTime(changedThisTimeGoodsData.startTime)
+            local temp = string.gsub(changedThisTimeGoodsData.showTimeTxt, ' ', "", 10)
+            if string.endswith(temp, "00:00:00") then
+                DoGetViewData(curActivityId, curModel)
+                curModel:HideView("DealView")
+            end
+        end
+    end
+    return changedThisTimeGoodsData
+end
+
+---改变下一次抢购的数据
+local ChangeNextTimeGoodsItemData = function(nexTimeData)
+    local result = {}
+    result.showData = {}
+    result.showTimeTxt = ""
+    if nexTimeData then
+        local showStartTime = GetConstTime(nexTimeData.startTime)
+        local showEndTime = GetConstTime(nexTimeData.endTime)
+        if showStartTime ~= "" and showEndTime ~= "" then
+            result.showTimeTxt = showStartTime .. '-' .. showEndTime
+        else
+            result.showTimeTxt = ""
+        end
+        if nexTimeData.goods and #nexTimeData.goods > 0 then
+            for i = 1, #nexTimeData.goods do
+                table.insert(result.showData, nexTimeData.goods[i].reward)
+            end
+        end
+    end
+    return result
+end
+
+return {
+    SetModelAndCallback = SetModelAndCallback,
+    RefreshSubRestTime = RefreshSubRestTime,
+    ChangeThisTimeGoodsItemData = ChangeThisTimeGoodsItemData,
+    ChangeNextTimeGoodsItemData = ChangeNextTimeGoodsItemData,
+    DoBuyItem = DoBuyItem,
+}

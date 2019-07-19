@@ -1,0 +1,35 @@
+
+Å
+DaliyLotteryActivity.protoDaliyLotteryActivitystage.proto".
+GetDailyRandomPackageReq
+
+activityId ("{
+GetDailyRandomPackageResp
+isRandom (9
+rewards (2(.DaliyLotteryActivity.DailyRandomPackage
+	packageId ("£
+DailyRandomPackage
+
+activityId (
+packageLevel (
+packagePicture (	(
+packageReward (2.stage.RewardItem
+packagePrice (
+payId (
+canBuy (
+vip (
+price	 (
+pid
+ (
+currency (	
+title (	
+desp (	
+currencySign (	"(
+RandomDailyPackageReq
+useless ("+
+RandomDailyPackageResp
+	packageId (",
+GmRefreshRandomPackageReq
+useless (",
+GmRefreshRandomPackageResp
+status (

@@ -1,0 +1,28 @@
+function OnSoulImprintItemMaskSlotBindValue(slot, data)
+    local slotTrans = slot.transform
+    local icon_Sprite = slotTrans:Find("HeroItemSlot/IconSprite")
+    local havaOwnerObj = slotTrans:Find("HeroItemSlot/havaOwner")
+    if icon_Sprite then
+        icon_Sprite = icon_Sprite:GetComponent("UnityEngine.UI.Image")
+    else
+        icon_Sprite = slotTrans:Find("HeroItemSlot/IconMask/IconSprite"):GetComponent("UnityEngine.UI.Image")
+    end
+    slot.m_SelectSprite = slotTrans:GetGameObjectAtPath("HeroItemSlot/CheckSprite")
+    if data then
+        if (data.IsSelected ~= nil) then
+            slot.m_SelectSprite:SetSelfActive(data.IsSelected)
+        else
+            slot.m_SelectSprite:SetSelfActive(false)
+        end
+        if data.emblemOwnerUid and data.emblemOwnerUid > 0 then
+            if havaOwnerObj then
+                havaOwnerObj.gameObject:SetSelfActive(true)
+            end
+        else
+            if havaOwnerObj then
+                havaOwnerObj.gameObject:SetSelfActive(false)
+            end
+        end
+        SetIconByHeroId(icon_Sprite.gameObject, data.heroId)
+    end
+end

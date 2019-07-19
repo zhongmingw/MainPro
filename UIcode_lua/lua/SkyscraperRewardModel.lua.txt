@@ -1,0 +1,88 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-05-27 11:23:23
+
+local utils = require "SkyscraperUtils"
+
+local function GetSkyscraperRewardData()
+    local rewardData = {
+        rewards = {},
+        startIdx = -1,
+    }
+    local skyTowerItem = appData:checkData("SkyTowerItem")
+    if skyTowerItem == nil then
+        return rewardData
+    end
+    local takenIds = {}
+    local extraRewards = skyTowerItem.extraRewards or {}
+    for _,takenId in ipairs(extraRewards) do
+        takenIds[takenId] = true
+    end
+    local playerCurId = skyTowerItem.id
+
+    local nextTakenId = utils.GetNextTakenId(playerCurId)
+
+    local tblData = utils.GetSkyscraperExtraTblData()
+    local count = #tblData
+    for i=1,count do
+        local data = tblData[i]
+        local reward = {
+            id = data.id,
+            rewards = data.rewards,
+            completed = playerCurId >= data.id,
+            received = takenIds[data.id],
+            desp = string.format(Language:getStr("Skyscraper_PassFloor"),data.id)
+        }
+        if reward.completed and not reward.received then
+            rewardData.startIdx = i-1
+        end
+        if data.id == nextTakenId and rewardData.startIdx == -1 then
+            rewardData.startIdx = math.max(i-1, 0)
+        end
+        table.insert(rewardData.rewards,reward)
+    end
+    return rewardData
+end
+
+local function CheckTakenSkyscraperReward(id)
+    local skyTowerItem = appData:checkData("SkyTowerItem")
+    if skyTowerItem == nil or skyTowerItem.extraRewards == nil then
+        return true
+    end
+    for _,takenId in ipairs(skyTowerItem.extraRewards) do
+        if takenId == id then
+            return true
+        end
+    end
+    return false
+end
+
+function DoOnExit()
+    utils = nil
+end
+
+function OnCommand_InitSkyscraperRewardData(objs)
+    local rewardData = GetSkyscraperRewardData()
+    self:SendNotification("RefreshSkyscraperRewardView",rewardData)
+end
+
+function OnCommand_ShowTip(objs)
+    local data = objs[0]
+    ShowTip(self,data.typeId,data.id)
+end
+
+function OnCommand_ReceiveReward(objs)
+    local data = objs[0]
+    if not data.completed then
+        utils.ShowHintBox(Language:getStr("Skyscraper_NoCanGet"))
+        return
+    end
+    local function onFinished(resp)
+        ShowRewardReceivedTip(self,resp.rewardItems,function()
+            data.received = CheckTakenSkyscraperReward(data.id)
+            self:SendNotification("RefreshSingleSkyscraperReward",data)
+        end)
+    end
+    utils.RequestGetSkyTowerExtraReward(data.id,onFinished)
+end

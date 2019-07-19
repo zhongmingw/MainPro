@@ -1,0 +1,36 @@
+local HeroAttrData = require "HeroAttrData"
+
+local curHero
+
+local function PackDetailArr()
+	local detailArr={}
+	local attrs = HeroAttrData.GetHeroAttrsByHero(curHero)
+	for i, data in ipairs(attrs) do  
+		local newData={}
+		newData.id=data.id
+		newData.name= data.name
+		newData.type= data.type
+		newData.value= data.val
+		if data.fightVal~=0 then--过滤掉废弃属性
+			newData.DoNum=data.showVal
+			if data.id ~= HeroAttrEnum.MAGIC_ATK and data.id ~= HeroAttrEnum.MAGIC_DEF then
+				table.insert(detailArr,newData)
+			end 
+		end
+    end
+    return detailArr
+end
+
+function OnCommand_InitData(objs)
+    curHero = objs[0]
+end
+
+function OnCommand_InitAttrDetailData()
+    local data = PackDetailArr()
+    self:SendNotification("RefreshAttrDetailView",data)
+end
+
+function DoOnExit()
+    HeroAttrData = nil
+    curHero = nil
+end

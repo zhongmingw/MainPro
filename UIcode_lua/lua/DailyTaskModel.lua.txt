@@ -1,0 +1,85 @@
+local dailyTaskUtils = require "DailyTaskUtils"
+
+---@type Client.Library.ViewBase
+local oldViewBase
+---@type Client.Library.ViewModelBase
+local selfModelBase
+---@type number
+local targetIndex = DailyTaskTogType.DailyTaskDetails
+
+---刷新订阅红点
+local function RefreshSubscribeRed()
+    dailyTaskUtils.GetSubscribeState(function(subState)
+        local showRed = dailyTaskUtils.CanGetSubscribeReward(subState)
+        selfModelBase:SendNotification("RefreshSubscribeRed", showRed)
+    end)
+end
+
+function DoInit()
+    selfModelBase = self
+    dailyTaskUtils.ClearServerData()
+    dailyTaskUtils.SetRefreshRedCallback(RefreshSubscribeRed)
+end
+
+---打开日常任务界面
+local function OpenDailyTaskDetailsView()
+    CsBridge.CacheAssetsByModule(selfModelBase.Module, function()
+        oldViewBase = CsBridge.OpenView("DailyTaskDetailsView", "DailyTaskDetailsModel", false, false)
+    end, "DailyTaskDetailsView", "DailyTaskItemSlot", "ItemSlot")
+end
+
+---打开奖励界面
+local function OpenSubscribeRewardView()
+    CsBridge.CacheAssetsByModule(selfModelBase.Module, function()
+        oldViewBase = CsBridge.OpenView("SubscribeRewardView", "SubscribeRewardModel", false, false)
+    end, "SubscribeRewardView", "SubscribeRewardItemSlot", "ItemSlot")
+end
+
+---打开对应的界面
+local function OpenTargetView()
+    if targetIndex == DailyTaskTogType.DailyTaskDetails then
+        OpenDailyTaskDetailsView()
+    elseif targetIndex == DailyTaskTogType.SubscribeReward then
+        OpenSubscribeRewardView()
+    end
+    selfModelBase:SendNotification("OpenTargetView", targetIndex)
+end
+
+---打开子界面
+local function OpenSubTargetView(index)
+    targetIndex = index
+    if oldViewBase then
+        selfModelBase:HideView(oldViewBase.name)
+    end
+    OpenTargetView()
+end
+
+function DoEnable()
+    if oldViewBase == nil then
+        return
+    end
+    if targetIndex == DailyTaskTogType.DailyTaskDetails then
+        OpenDailyTaskDetailsView()
+    end
+end
+
+function OnCommand_RefreshSubscribeRed()
+    RefreshSubscribeRed()
+end
+
+---打开子界面
+function OnCommand_OpenTargetView(objs)
+    OpenSubTargetView(objs[0])
+end
+
+function OnCommand_OpenDefaultTargetView(objs)
+    OpenSubTargetView(objs[0])
+    RefreshSubscribeRed()
+end
+
+function DoOnExit()
+    dailyTaskUtils.ClearServerData()
+    oldViewBase = nil
+    selfModelBase = nil
+    targetIndex = nil
+end

@@ -1,0 +1,18 @@
+package ElementFusionData;
+
+message UseElementCrystalReq 
+{
+    required int32 heroId = 1;
+    repeated ElementCrystalItem items = 2;
+}
+
+message ElementCrystalItem 
+{
+    required int32 id = 1;
+    required int32 count = 2;
+}
+
+message UseElementCrystalResp 
+{
+    required int32 result = 1;
+}

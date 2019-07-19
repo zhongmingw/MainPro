@@ -1,0 +1,355 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-04-27 17:32:24
+
+local dealInfo
+local refreshCallback
+
+local function GetMaxNumWithPrice(price)
+    local maxNum = 0
+    local allCount = GetCountByItemType(price.id,price.typeId)
+    local singleCount = price.count
+    maxNum = math.floor(allCount/singleCount)
+    return maxNum == 0 and 1 or maxNum
+end
+
+function OnCommand_InitData(objs)
+    local info = objs[0]
+    refreshCallback = objs[1]
+    dealInfo = {}
+    dealInfo.type = info.type
+    dealInfo.base = {}
+    dealInfo.num = {}
+    dealInfo.base.title = info.title
+    dealInfo.base.btn = info.btn 
+    dealInfo.base.item = info.item
+    if dealInfo.type == 1 then --出售
+        dealInfo.base.priceIcon = 1
+        dealInfo.num.maxNum = dealInfo.base.item.count
+        dealInfo.num.curNum = dealInfo.base.item.count
+        dealInfo.price = {}
+        dealInfo.price.single = ResTblContainer:GetPropToInt(dealInfo.base.item.id,ItemBase.price,ItemBase.actorTbl)
+        dealInfo.price.all = GetAllPrice()
+        dealInfo.price.checkEnough = false
+    elseif dealInfo.type == 2 then --交换
+        dealInfo.base.maxExchangeNum = dealInfo.base.item.count
+        dealInfo.num.maxNum = dealInfo.base.item.count
+        dealInfo.num.curNum = dealInfo.base.item.count
+    elseif dealInfo.type == 3 then --使用
+        dealInfo.num.maxNum = dealInfo.base.item.count
+        dealInfo.num.curNum = dealInfo.base.item.count
+    elseif dealInfo.type == 4 then  --合成（碎片）
+        dealInfo.num.composeNum = ResTblContainer:GetPropToInt(dealInfo.base.item.id,PiecesComposition.count,PiecesComposition.actorTbl)
+        local maxNum = math.floor(dealInfo.base.item.count/dealInfo.num.composeNum)
+        local bagNum = CheckHeroBagNum()
+        dealInfo.num.maxNum = math.min(bagNum <= 0 and 1 or bagNum, maxNum)
+        dealInfo.num.curNum = dealInfo.num.maxNum
+    elseif dealInfo.type == 5 then --购买
+        dealInfo.base.priceIcon = info.resId
+        dealInfo.base.single = info.single
+        dealInfo.num.curNum = 1
+        dealInfo.price = {}
+        dealInfo.price.single = info.single
+        dealInfo.price.all = GetAllPrice()
+        dealInfo.price.checkEnough = true
+        dealInfo.itemData = info.itemData
+        if info.itemData then
+            local price = {
+                typeId = dealInfo.itemData.priceType,
+                id = dealInfo.base.priceIcon,
+                count = dealInfo.price.single,
+            }
+            local maxPriceNum = GetMaxNumWithPrice(price)
+            if info.itemData.limited then
+                dealInfo.num.maxNum = math.min(dealInfo.base.item.count, maxPriceNum)
+            else
+                
+                if info.itemData.inventory and info.itemData.inventory >= 0 then
+                    dealInfo.num.maxNum = math.min(info.itemData.inventory, maxPriceNum)
+                else
+                    dealInfo.num.maxNum = maxPriceNum
+                end
+            end
+        else
+            local price = {
+                typeId = ItemTypeEnum.Resource,
+                id = dealInfo.base.priceIcon,
+                count = dealInfo.price.single,
+            }
+            dealInfo.num.maxNum = GetMaxNumWithPrice(price)
+        end
+    elseif dealInfo.type == DealType.GetInput then --输入次数
+        dealInfo = info
+        dealInfo.num = {}
+        dealInfo.num.maxNum = dealInfo.itemCount
+        dealInfo.num.curNum = 1
+    end
+end
+
+function OnCommand_InitView(objs)
+    if dealInfo.type == 1 then
+        self:SendNotification("InitNum",dealInfo)
+        self:SendNotification("RefreshPrice",dealInfo.price.all,dealInfo.base.priceIcon,dealInfo.price.checkEnough)
+        self:SendNotification("InitSellView",dealInfo.base)
+    elseif dealInfo.type == 2 then
+        self:SendNotification("InitNum",dealInfo)
+        self:SendNotification("InitExchangeView",dealInfo.base)
+    elseif dealInfo.type == 3 then
+        self:SendNotification("InitNum",dealInfo)
+        self:SendNotification("InitUseView",dealInfo.base)
+    elseif dealInfo.type == 4 then
+        self:SendNotification("InitNum",dealInfo)
+        self:SendNotification("InitComposeView",dealInfo.base)
+    elseif dealInfo.type == 5 then
+        self:SendNotification("InitNum",dealInfo)
+        if dealInfo.itemData then
+            self:SendNotification("InitBuyView",dealInfo.base,dealInfo.itemData)
+            self:SendNotification("RefreshPrice",dealInfo.price.all,dealInfo.base.priceIcon,dealInfo.price.checkEnough,tonumber(dealInfo.itemData.priceType))
+        else
+            self:SendNotification("InitBuyView",dealInfo.base)
+            self:SendNotification("RefreshPrice",dealInfo.price.all,dealInfo.base.priceIcon,dealInfo.price.checkEnough)
+        end
+    elseif dealInfo.type == DealType.GetInput then --输入次数
+        self:SendNotification("InitGetInputView",dealInfo)
+        end
+end
+
+function OnCommand_Deal(objs)
+    if dealInfo.type == 1 then
+        Sell()
+    elseif dealInfo.type == 2 then
+        Exchange() 
+    elseif dealInfo.type == 3 then
+        Use() 
+    elseif dealInfo.type == 4 then
+        Compose()
+    elseif dealInfo.type == 5 then
+        Buy() 
+	elseif dealInfo.type == DealType.GetInput then --输入次数
+		local doCallback = true
+		self:SendNotification("CloseView",dealInfo.type)
+        refreshCallback(dealInfo.num.curNum, dealInfo.destructionType)
+    end 
+end
+
+--sell logic
+
+function Sell()
+    local req = {
+        sellList = {
+            {
+                id = dealInfo.base.item.id,
+                count = dealInfo.num.curNum
+            }
+        }
+    }
+	HttpRequest("sellPackItem", "SellReq", "SellResp", req, OnSellResp)
+end
+
+local function ShowRewardView(rewards)
+    CloseView(true)
+    self:SendNotification("DealFinished")
+    local toMergeRewards = true
+    PopRewardView(self, rewards)
+end
+
+function OnSellResp(resp)
+    if resp.coin ~= 0 then
+        local rewards = {
+            {
+                id = 1,
+                typeId = 1,
+                count = resp.coin
+            }
+        }
+        ShowRewardView(rewards)
+    end
+end
+
+--exchange logic
+function Exchange(objs)
+    if dealInfo.num.curNum == 0 then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("Deal_NoCount"),2)
+        return
+    end
+    local req = {
+        id = dealInfo.base.item.id,
+        count = dealInfo.num.curNum
+    }
+    HttpRequest("exchangeItem", "ExchangeItemReq", "NormalExchangeItemResp", req, OnExchangeResp)
+end
+
+function OnExchangeResp(resp)
+    if resp then
+        CloseView(true)
+    end
+end
+
+--use logic
+function Use(objs)
+    local req = {
+        uid = 0,
+        id = dealInfo.base.item.id,
+        count = dealInfo.num.curNum
+    }
+    HttpRequest("openTreasure", "OpenTreasureReq", "OpenTreasureResp", req, OnUseResp)
+end
+
+function OnUseResp(resp)
+    if resp.rewards ~= nil then
+        ShowRewardView(resp.rewards)
+    end
+end
+
+--compose logic
+function Compose(objs)
+    if dealInfo.num.curNum == 0 then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("Deal_NoCount"),2)
+        return
+    end
+    if GetPieceType(dealInfo.base.item.id) == PieceType.Hero and not CheckHeroBagEnough(dealInfo.num.curNum,true) then
+        return
+    end
+    local req = {
+        id = dealInfo.base.item.id,
+        count = dealInfo.num.curNum
+    }
+    HttpRequest("composePieces", "ComposePiecesReq", "ComposePiecesResp", req, OnComposeResp)
+end
+
+function OnComposeResp(resp)
+    if resp ~= nil and resp.rewards ~= nil then
+        ShowRewardView(resp.rewards)
+    end
+end
+
+--buy logic
+function Buy(objs)
+    if dealInfo.num.curNum == 0 then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("Deal_NoCount"),2)
+        return
+    end
+    if dealInfo.itemData then
+        local enough = false
+        if dealInfo.itemData.priceType == ItemTypeEnum.Resource then
+            enough =  CheckResEnough(dealInfo.itemData.priceTypeId,GetAllPrice(),false)
+        else
+            enough =  CheckPackItemEnough(dealInfo.itemData.priceTypeId,GetAllPrice(),false)
+        end
+        if not enough then
+            if dealInfo.itemData.priceType == ItemTypeEnum.Resource then
+                CsBridge.hintUILayer:ShowHintBox(string.format(Language:getStr("ResNotEnough"), GetNameByResId(dealInfo.base.priceIcon)),2)
+                return
+            else
+                CsBridge.hintUILayer:ShowHintBox(string.format(Language:getStr("ResNotEnough"), GetItemName(dealInfo.base.priceIcon)),2)
+                return
+            end
+        end
+        if refreshCallback then
+            refreshCallback(dealInfo.num.curNum)
+        end
+    else
+        if not CheckResEnough(dealInfo.base.priceIcon, dealInfo.price.all) then
+            CsBridge.hintUILayer:ShowHintBox(string.format(Language:getStr("ResNotEnough"), GetNameByResId(dealInfo.base.priceIcon)),2)
+            return
+        end
+        local req = {
+            id = dealInfo.base.item.id,
+            count = dealInfo.num.curNum
+        }
+        HttpRequest("buyItem", "BuyItemReq", "BuyItemResp", req, OnBuyResp)
+    end
+end
+
+function OnBuyResp(resp)
+    if resp.result == 0 then
+        CsBridge.hintUILayer:ShowRewardBox(dealInfo.base.item.typeId,dealInfo.base.item.id,dealInfo.num.curNum)
+        CloseView(true)
+    end
+end
+
+--common logic
+function OnCommand_ShowItemTip(objs)
+    if dealInfo.itemData then
+        local itemType = dealInfo.itemData.reward.typeId
+        if itemType == ItemTypeEnum.Hero then
+            ShowHeroTip(self, dealInfo.itemData.reward.id, 1, 1)
+        else
+            ShowTip(self, dealInfo.itemData.reward.typeId, dealInfo.itemData.reward.id)
+        end
+    else
+        ShowTip(self,dealInfo.base.item.typeId,dealInfo.base.item.id)
+    end
+end
+
+function OnCommand_ChangeNum(objs)
+    ChangeCurNum(tonumber(objs[0]))
+end
+
+function OnCommand_ReduceNum(objs)
+    if dealInfo.num.curNum - 1 < 0 then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("Deal_NoCount"),2)
+        return
+    end
+    ChangeCurNum(dealInfo.num.curNum-1)
+end
+
+function OnCommand_AddNum(objs)
+    if dealInfo.num.curNum + 1 > dealInfo.num.maxNum then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("HasMax"),2)
+        return
+    end
+    ChangeCurNum(dealInfo.num.curNum+1)
+end
+
+function ChangeCurNum(num)
+    num = num or 1
+    if num > dealInfo.num.maxNum then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("HasMax"),2)
+        dealInfo.num.curNum = dealInfo.num.maxNum
+    elseif num < 1 then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("Deal_NoCount"),2)
+    else
+        dealInfo.num.curNum = num
+    end
+    if dealInfo.price ~= nil then
+        dealInfo.price.all = GetAllPrice()
+        if dealInfo.itemData then
+            self:SendNotification("RefreshPrice",dealInfo.price.all,dealInfo.base.priceIcon,dealInfo.price.checkEnough,tonumber(dealInfo.itemData.priceType))
+        else
+            self:SendNotification("RefreshPrice",dealInfo.price.all,dealInfo.base.priceIcon,dealInfo.price.checkEnough)
+        end
+    end
+    self:SendNotification("RefreshNum",dealInfo.num.curNum)
+end
+
+function CheckPackItemCount(itemId)
+    local item = appData:checkItem("PackItem",itemId)
+    local count = item ~= nil and item.count or 0
+    return count
+end
+
+function GetAllPrice()
+    return dealInfo.price.single*dealInfo.num.curNum
+end
+
+function OnCommand_CloseView(objs)
+    CloseView(false)
+end
+
+function CloseView(doCallback) 
+    self:SendNotification("CloseView",dealInfo.type)
+    if doCallback then
+        refreshCallback()
+    end
+end
+
+function GetItemName(id)
+    return ResTblContainer:GetPropToStr(id,ItemBase.title,ItemBase.actorTbl)
+end
+
+function DoOnExit()
+    dealInfo = nil
+    refreshCallback = nil
+end

@@ -1,0 +1,111 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-11-05 11:32:12
+
+require "GPGoodsItemSlot"
+
+local isInit = false
+
+local titleImgObj, countdownTxt, titleArtImg, descTxt
+local viewData
+local goodsGrid
+
+function DoInit()	
+    self.Anim = 0
+    self.Shadow = 0
+end
+
+function InitUI()
+    titleImgObj = self:GetGameObjectAtPath("BGS/bgImg")
+    countdownTxt = self:GetComponentAtPath("BGS/TimeTxt",CLS_TEXT)
+    titleArtImg = self:GetComponentAtPath("BGS/TitleArtImg",CLS_LOCALIZE)
+    descTxt = self:GetComponentAtPath("BGS/DespTxt",CLS_TEXT)
+    goodsGrid = self:GetComponentAtPath("Center/itemSV/ScrollRect/Viewport/GoodsGrid",CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+end
+
+function Active()
+    self:SendCommand("UpdateGroupPurchaseRemain")
+end
+
+function OnNotification_RefreshActivityView(objs)
+	if self.gameObject.activeInHierarchy then
+		viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function RefreshView(data)
+    descTxt.text = data.desc
+    SetServerActivityArtFontByImage(titleArtImg,data.image)
+    countdownTxt.text = data.restTime
+    CsBridge.IconData.SetRawImageByName(titleImgObj, data.image)
+    goodsGrid:RefreshItemSlots(data.itemList,self.gameObject,"GPGoodsItemSlot")
+end
+
+function OnNotification_RefreshCountdown(objs)
+	local data = objs[0]
+	RefreshCountdown(data)
+end
+
+function RefreshCountdown(countdownData)
+	if not viewData then--not ready
+		return
+	end
+
+	local currentActivityID = viewData.id
+	for activityID, restTime in pairs(countdownData) do
+		if activityID == currentActivityID then
+			countdownTxt.text = restTime
+			return
+		end
+	end
+end
+
+function OnHelpBtnClick(sender)
+    ShowHelpTip(self,INSTRUCTION_GROUP_PURCHASE)
+end
+
+function OnGoodsGridItemSlotClick(obj)
+    local data = obj.m_data.goods
+    self:SendCommand("OpenTipView",data)
+end
+
+function OnGoodsGridBuyBtnClick(obj)
+    local data = obj.m_data
+    self:SendCommand("OpenGroupPurchaseDetailView",data)
+end
+
+function OnMyGPBtnClick(sender)
+    self:SendCommand("OpenMyGroupPurchaseDetailView")
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function OnMaskClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+
+function OnNotification_CloseActivityView(obj)
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+    isInit = nil
+    titleImgObj = nil 
+    countdownTxt = nil 
+    titleArtImg = nil 
+    descTxt = nil
+    viewData = nil
+    goodsGrid = nil
+end

@@ -1,0 +1,149 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-07-27 17:13:50
+
+local isInit = false
+
+local iconImgObj
+local levelTxtObj
+local levelObj
+local oldLevelTxt
+local newLevelTxt
+
+local attrs
+
+local tipObj
+
+local waitAnim = false
+
+local resetIconImgObjPos
+local resetLevelTxtObjPos
+local resetLevelObjPos
+local resetAttrPos
+
+function DoInit()
+    self.Anim = 0
+    self.Shadow = 2
+end
+
+function InitUI()
+    iconImgObj = self:GetGameObjectAtPath("Center/IconImg")
+    levelTxtObj = self:GetGameObjectAtPath("Center/LevelTxt")
+    levelObj = self:GetGameObjectAtPath("Center/Level")
+    local levelObjTrans = levelObj.transform
+    oldLevelTxt = levelObjTrans:GetComponentAtPath("OldNumTxt" ,CLS_TEXT)
+    newLevelTxt = levelObjTrans:GetComponentAtPath("NewNumTxt" ,CLS_TEXT)
+
+    attrs = {}
+    local heroAttrs = self.transform:Find("Center/Attrs")
+    for i=0,heroAttrs.childCount-1 do
+        local attr = heroAttrs:GetChild(i)
+        table.insert(attrs, {
+            attrObj = attr,
+            nameTxt = attr:GetComponentAtPath("NameTxt" ,CLS_TEXT),
+            oldValTxt = attr:GetComponentAtPath("OldNumTxt" ,CLS_TEXT),
+            newValTxt = attr:GetComponentAtPath("NewNumTxt" ,CLS_TEXT)
+        })
+    end
+    tipObj = self:GetGameObjectAtPath("Center/TipTxt")
+
+    resetIconImgObjPos = iconImgObj.transform:CheckLocalPosition()
+    resetLevelTxtObjPos = levelTxtObj.transform:CheckLocalPosition()
+    resetLevelObjPos = levelObj.transform:CheckLocalPosition()
+    resetAttrPos = attrs[1].attrObj:CheckLocalPosition()
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitCampElementFusionLevelUpData")
+end
+
+function OnClose() 
+    ResetView()
+    self:SendCommand("CampElementFusionLevelUpEnd")
+end
+
+function OnNotification_RefreshCampElementFusionLevelUpView(objs)
+    local curCamp = objs[0]
+    InitData(curCamp)
+    ShowAnim()
+end
+
+function InitData(curCamp)
+    CsBridge.IconData.SetIconByName(iconImgObj, curCamp.fg)
+    oldLevelTxt.text = Language:getStr("LV.")..curCamp.level-1 
+    newLevelTxt.text = Language:getStr("LV.")..curCamp.level
+    for i,attr in ipairs(attrs) do
+        attr.nameTxt.text = curCamp.attrs[i].name
+        attr.oldValTxt.text = curCamp.oldAttrs[i].tbVal
+        attr.newValTxt.text = curCamp.attrs[i].tbVal
+    end
+end
+
+function ShowAnim()
+    waitAnim = true
+    ShowMoveAnim(iconImgObj.transform)
+    ShowMoveAnim(levelTxtObj.transform,0.1)
+    ShowMoveAnim(levelObj.transform,0.15)
+    ShowMoveAnim(attrs[1].attrObj,0.2)
+    ShowMoveAnim(attrs[2].attrObj,0.25)
+    ShowMoveAnim(attrs[3].attrObj,0.3,function()
+        tipObj:SetSelfActive(true)
+        waitAnim = false
+    end)
+end
+
+function ShowMoveAnim(trans,delay,onFinished)
+    local t1 = CsBridge.TweenUtils.ObjectFadeTo(trans.gameObject,1,0.1)
+    local t2 = CsBridge.TweenUtils.MoveTo(trans,0,0,0.5)
+    if delay then
+        t1:DoDelay(delay)
+        t2:DoDelay(delay)
+    end
+    if onFinished then
+        t2:OnCompleteAction(onFinished)
+    end
+    t1:DoPlay()
+    t2:DoPlay()
+end
+
+function ResetView()
+    iconImgObj.transform:ResetLocalPosition(resetIconImgObjPos)
+    iconImgObj:SetAlpha(0)
+    levelTxtObj.transform:ResetLocalPosition(resetLevelTxtObjPos)
+    levelTxtObj:SetAlpha(0)
+    levelObj.transform:ResetLocalPosition(resetLevelObjPos)
+    levelObj:SetAlpha(0)
+    for i,attr in ipairs(attrs) do
+        attr.attrObj:ResetLocalPosition(resetAttrPos)
+        attr.attrObj.gameObject:SetAlpha(0)
+    end
+    tipObj:SetSelfActive(false)
+end
+
+function OnMaskClick(sender)
+    if waitAnim then
+        return 
+    end
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+    isInit = nil
+    iconImgObj = nil
+    levelTxtObj = nil
+    levelObj = nil
+    oldLevelTxt = nil
+    newLevelTxt = nil
+    attrs = nil
+    tipObj = nil
+    waitAnim = nil
+    resetIconImgObjPos = nil
+    resetLevelTxtObjPos = nil
+    resetLevelObjPos = nil
+    resetAttrPos = nil
+end

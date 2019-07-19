@@ -1,0 +1,88 @@
+---判断大富翁的红点
+local function RefreshMonopolyRedFlag()
+    local needNum = GetConstValue("ExpendVigor")
+    local playerInfo = appData:checkData("PlayerInfo")
+    local myNum = playerInfo.zillionaire or 0
+    return myNum >= needNum
+end
+
+---判断采矿的红点
+local function RefreshMiningRedFlag()
+    local result = false
+    local mineInfo = appData:checkData("MineInfo")
+    local MAX_CAVE_NUMBER = GetConstValue("MineralNumber")
+    if mineInfo ~= nil then
+        if mineInfo.takeMineIds == nil then
+            result = true
+            return result
+        end
+        if #mineInfo.takeMineIds < MAX_CAVE_NUMBER then
+            result = true
+        else
+            result = false
+        end
+    else
+        result = false
+    end
+    return result
+end
+
+---获取红点
+local function GetRedFlag(slotItem)
+    if slotItem.uiOpenId == UI_OPEN_TYPE_MONOPOLY then
+        slotItem.showRedFlag = RefreshMonopolyRedFlag()
+    elseif slotItem.uiOpenId == UI_OPEN_TYPE_MINING then
+        slotItem.showRedFlag = RefreshMiningRedFlag()
+    else
+        slotItem.showRedFlag = false
+    end
+
+end
+
+---初始化界面数据
+local function InitViewData(items)
+    local result = {}
+    if items == nil or #items <= 0 then
+        return result
+    end
+    for i = #items, 1, -1 do
+        local item = items[i]
+        local slotItem = {}
+        slotItem.id = item.id
+        slotItem.name = item.name
+        slotItem.tips = item.tips
+        slotItem.tipsParent = item.tips .. "123456"
+        slotItem.background = item.background
+        slotItem.uiOpenId = item.uiOpenId
+        slotItem.open = item.open
+        slotItem.isFirst = false
+        if slotItem.open then
+            GetRedFlag(slotItem)
+        else
+            slotItem.showRedFlag = false
+        end
+        table.insert(result, slotItem)
+    end
+    table.sort(result, SortById)
+    result[#result].isFirst = true
+    return result
+end
+
+---获取界面数据
+local function GetViewData(callback)
+    local req = {}
+    req.useless = 1
+    HttpRequest("checkExploreEnter", "CheckExploreEnterReq", "CheckExploreEnterResp", req, function(resp)
+        if resp then
+            local viewData = InitViewData(resp.items)
+            if callback then
+                callback(viewData)
+            end
+        end
+    end)
+end
+
+return {
+    InitViewData = InitViewData,
+    GetViewData = GetViewData,
+}

@@ -1,0 +1,92 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-01-22 11:45:24
+]]
+
+local function GetAttrName(id)
+    return ResTblContainer:GetPropToStr(id,Attribute.name,Attribute.actorTbl)
+end
+
+--[[
+    @desc: 获取属性的显示值
+    author:dyl
+    time:2018-12-12 16:59:56
+    --@type: 属性类型
+	--@val: 属性值
+    return 20% or 20
+]]
+local function GetAttrShowVal(type, val)
+    if type == AttributeBonusType.Percent then
+        return ((val/DEFAULT_PERCENT_RATE)*100).."%"
+    elseif type == AttributeBonusType.Abs then
+        return val
+    end
+end
+
+local function GetAttrData(id, type, val, name)
+    return {
+        id = id,
+        type = type,
+        val = val or 0,
+        name = name or GetAttrName(id),
+        showVal = GetAttrShowVal(type, val)
+    }
+end
+
+local function CalcAttrVal(lattr, rattr)
+    if rattr.type == AttributeBonusType.Abs then
+        return rattr.val
+    elseif rattr.type == AttributeBonusType.Percent then
+        if lattr.type == AttributeBonusType.Percent then
+            return rattr.val
+        elseif lattr.type == AttributeBonusType.Abs then
+            return lattr.val * (rattr.val / DEFAULT_PERCENT_RATE)
+        end
+    else
+        return 0
+    end
+end
+
+local function CalcAttr(lattr, battr, rattr)
+    lattr.val = lattr.val + math.floor(CalcAttrVal(battr, rattr))
+    lattr.showVal = GetAttrShowVal(lattr.type, lattr.val)
+end
+
+--[[
+    @desc: 获取属性
+    author:dyl
+    time:2018-12-06 14:58:07
+    --@id: 属性id
+	--@str: 属性类型+值的字符串
+    return [id, type, val, showVal, name]
+]]
+local function GetAttrDataFromTblStr(id, str)
+    local infos = SplitString(str, ",")
+    return GetAttrData(id, tonumber(infos[0]), tonumber(infos[1]))
+end
+
+--[[
+    @desc: 获取属性
+    author:dyl
+    time:2018-12-06 14:59:00
+    --@str: 属性id+类型+值的字符串 
+    return 属性数组[id, type, val, showVal, name]
+]]
+local function GetAttrsDataFromTblStr(str)
+    local infos = SplitString(str, ";")
+    local attrs = {}
+    for i = 0, infos.Length - 1 do
+        local subInfos = SplitString(infos[i], ",")
+        table.insert(attrs, GetAttrData(tonumber(subInfos[0]), tonumber(subInfos[1]), tonumber(subInfos[2])))
+    end
+    return attrs
+end
+
+return {
+    GetAttrData = GetAttrData,
+    GetAttrDataFromTblStr = GetAttrDataFromTblStr,
+    GetAttrsDataFromTblStr = GetAttrsDataFromTblStr,
+    CalcAttr = CalcAttr,
+}

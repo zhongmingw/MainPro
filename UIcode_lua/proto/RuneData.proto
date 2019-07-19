@@ -1,0 +1,70 @@
+package RuneData;
+
+message RuneConversionRecord
+{
+    required int32 heroUid = 1;
+    required int32 level = 2;
+    repeated int32 attributes = 3;
+}
+
+message GetRuneReq
+{
+    required int32 heroUid = 1;
+}
+
+message GetRuneResp
+{
+    required int32 status = 1;
+}
+
+message RuneConversionReq
+{
+    required int32 heroUid = 1;
+}
+
+message RuneConversionResp
+{
+    repeated int32 attributes = 1;
+}
+
+message RuneConversionSaveReq
+{
+    required int32 heroUid = 1;
+}
+
+message RuneConversionSaveResp
+{
+    required int32 status = 1;
+}
+
+message RuneConversionCancelReq
+{
+    required int32 heroUid = 1;
+}
+
+message RuneConversionCancelResp
+{
+    required int32 status = 1;
+}
+
+message RuneUpgradeReq
+{
+    required int32 heroUid = 1;
+    required int32 isLock = 2;
+}
+
+message RuneUpgradeResp
+{
+    repeated int32 attributes = 1;
+}
+
+message GmRuneDowngradeReq
+{
+    required int32 heroUid = 1;
+    required int32 level = 2;
+}
+
+message GmRuneDowngradeResp
+{
+    required int32 result = 1;
+}

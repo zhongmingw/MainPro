@@ -1,0 +1,144 @@
+local inited = false
+
+local own_Lab
+local price_Lab
+local donateCount_Lab
+local timer_Lab
+local noMax_GO
+local max_GO
+local progress_Slider
+local progress_Lab
+local moneyDonationOnceBtn_GO 
+local gemDonationOnceBtn_GO 
+
+local guildTradeDonation
+
+function DoInit()
+    self.Shadow = 0
+    self.Anim = 0
+    local vip = appData:checkData("PlayerInfo").vip
+    guildTradeDonation = GetConstValue("guildTradeDonation")+ResTblContainer:GetPropToInt(vip,VipTbl.donateCountAdd,VipTbl.tblName)
+end 
+
+function InitUI()
+    gemPrice_Lab = self:GetComponentAtPath("Center/CemPriceTxt" ,CLS_TEXT)
+    moneyPrice_Lab = self:GetComponentAtPath("Center/MoneyPriceTxt" ,CLS_TEXT)
+    donateCount_Lab = self:GetComponentAtPath("Center/DonateCountTxt" ,CLS_TEXT)
+    timer_Lab = self:GetComponentAtPath("Center/TimerTxt" ,CLS_TEXT)
+    noMax_GO = self:GetGameObjectAtPath("Center/NoMaxGO")
+    max_GO = self:GetGameObjectAtPath("Center/MaxLevelGO")
+    progress_Slider = self:GetComponentAtPath("Center/ProgressSlider" ,CLS_SLIDER)
+    progress_Lab = self:GetComponentAtPath("Center/ProgressTxt" ,CLS_TEXT)
+    moneyDonationOnceBtn_GO = self:GetGameObjectAtPath("Center/MoneyDonationOnceBtn")
+    gemDonationOnceBtn_GO = self:GetGameObjectAtPath("Center/GemDonationBtn")
+end
+
+function OnOpen()
+    -- body
+end
+
+function OnAnimationFinished()
+	if not inited then
+        InitUI()
+        inited = true
+	end 
+    self:SendCommand("InitPortLevelupData")
+end 
+
+function OnNotification_InitPortLevelupView(objs)
+    local portData = objs[0]
+    local tradeUpgradeConsumptionData = objs[1]
+    
+    moneyPrice_Lab.text = tostring(tradeUpgradeConsumptionData[1].consumption.count)
+    gemPrice_Lab.text = tostring(tradeUpgradeConsumptionData[2].consumption.count)
+    donateCount_Lab.text = "("..portData.millDonateCount.."/"..guildTradeDonation..")"
+
+    moneyDonationOnceBtn_GO:SetSelfAndChildrenGray(portData.millDonateCount==guildTradeDonation)
+    gemDonationOnceBtn_GO:SetSelfAndChildrenGray(portData.millDonateCount==guildTradeDonation)
+    
+    local reloadTime = GetConstValue("commonReloadTime") * 3600000
+    local endTime = GetReloadTimestamp(reloadTime)
+    local onLooping = function (targetTime)
+        timer_Lab.text=CheckTimeRemain(endTime)
+    end
+    local onFinished = function()
+        self:SendCommand("InitPortLevelupData")
+    end
+    Timer:AddTicker(self.gameObject.name, endTime, onLooping, onFinished)
+
+    progress_Slider.value =  portData.exp/portData.needExp 
+    progress_Lab.text = portData.exp.."/"..portData.needExp 
+    max_GO:SetSelfActive(portData.level == portData.maxLevel)
+    noMax_GO:SetSelfActive(portData.level ~= portData.maxLevel)
+    SetPortLevelShow(portData.level,portData.maxLevel)
+end
+
+function SetPortLevelShow(level,maxLevel)
+    if level == maxLevel then
+        local maxItemSlot = max_GO.transform:GetGameObjectAtPath("MaxMillItemSlot")
+        BindMillItemSlot(maxItemSlot,maxLevel)
+    else
+        local curItemSlot = noMax_GO.transform:GetGameObjectAtPath("CurMillItemSlot")
+        BindMillItemSlot(curItemSlot,level)
+        local nextItemSlot = noMax_GO.transform:GetGameObjectAtPath("NextMillItemSlot")
+        BindMillItemSlot(nextItemSlot,level+1)
+    end
+end
+
+function BindMillItemSlot(go,level)
+	local slotTrans = go.transform
+    local ship_Sprite = slotTrans:GetComponentAtPath("ShipSprite" ,CLS_IMAGE)
+    local rate_Lab = slotTrans:GetComponentAtPath("RateTxt" ,CLS_TEXT)
+    local reduce_Lab = slotTrans:GetComponentAtPath("ReduceTxt" ,CLS_TEXT)
+    local maxOrderCount_Lab = slotTrans:GetComponentAtPath("MaxOrderCountTxt" ,CLS_TEXT)
+    local level_Lab = slotTrans:GetComponentAtPath("LevelTxt" ,CLS_TEXT)
+
+    local tbl=ResTblContainer:GetTable(GuildTradeUpgrade.tblName)   
+    local shipIcon = tbl:Get(level,GuildTradeUpgrade.shipIcon)
+    CsBridge.IconData.SetIconByName(ship_Sprite.gameObject,shipIcon)
+    local rate = tbl:GetInt(level,GuildTradeUpgrade.productIncrease)
+    rate_Lab.text = "+"..tostring(rate/100).."%"
+    local reduce = tbl:GetInt(level,GuildTradeUpgrade.timeReduction)
+    reduce_Lab.text = "-"..tostring(reduce/100).."%"
+    local count = tbl:GetInt(level,GuildTradeUpgrade.count)
+    maxOrderCount_Lab.text = tostring(count)
+    if tbl:GetInt(level,GuildTradeUpgrade.exp)~=0 then
+        level_Lab.text = "Lv."..tostring(level)
+    else
+        level_Lab.text = "Lv.Max"
+    end
+end
+
+function OnMoneyDonationOnceBtnClick(sender)
+    self:SendCommand("MillDonate",guildTradeDonation,1)
+end
+
+function OnGemDonationBtnClick(sender)
+    self:SendCommand("MillDonate",guildTradeDonation,2)
+end
+
+function OnHelpBtnClick(sender)
+	self:SendCommand("OpenHelpView", self.gameObject.name)
+end
+
+function OnClose()
+    Timer:StopTicker(self.gameObject.name)
+end
+
+function DoExit()
+    Timer:StopTicker(self.gameObject.name)
+    inited = false
+
+    own_Lab = nil
+    price_Lab = nil
+    donateCount_Lab = nil
+    timer_Lab = nil
+    noMax_GO = nil
+    max_GO = nil
+    progress_Slider = nil
+    progress_Lab = nil
+    moneyDonationOnceBtn_GO  = nil
+    gemDonationOnceBtn_GO  = nil
+
+    guildTradeDonation = nil
+end

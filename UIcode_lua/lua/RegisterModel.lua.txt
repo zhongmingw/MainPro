@@ -1,0 +1,30 @@
+function DoInit()
+   
+end
+
+function InitProperties()
+end
+
+function OnCommand_RegisterUser(objs)
+	local req = {
+		userName = objs[0],
+		pwd = objs[1]
+	}
+	HttpRequest("newRegister", "RegisterRequest", "GlobalLoginResp", req, OnRegisterUserResp)
+end
+
+function OnCommand_BindUser(objs)
+	local req = {
+		user = objs[0],
+		pwd = objs[1]
+	}
+	HttpRequest("bindUser", "BindUserReq", "BindUserResp", req, OnBindUserResp)
+end
+
+function OnRegisterUserResp(resp)
+	self:SendNotification("RegisterUserResp", resp)
+end
+
+function OnBindUserResp(resp)
+	self:SendNotification("BindUserResp", resp)
+end

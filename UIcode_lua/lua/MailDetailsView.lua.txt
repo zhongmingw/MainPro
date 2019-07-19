@@ -1,0 +1,65 @@
+local loadedRewardItemSlot=require "RewardItemSlot"
+
+local mailDetailsGrid
+local title_Lab
+local content_Lab
+local sender_Lab
+
+local attachBtnObj
+
+function DoInit()
+
+	mailDetailsGrid=self.transform:Find("Dynamic/MailDetailsViewGrid"):GetComponent("UIItemGrid")
+
+	title_Lab=self.transform:Find("Dynamic/TitleTxt"):GetComponent(CLS_TEXT)
+	content_Lab=self.transform:Find("Dynamic/ContentTxt"):GetComponent(CLS_TEXT)
+	sender_Lab=self.transform:Find("Dynamic/SenderTxt"):GetComponent(CLS_TEXT)
+
+	attachBtnObj = self.transform:Find("Dynamic/AttachBtn").gameObject
+end
+
+function OnOpen()
+
+end
+
+function OnNotification_InitMailDetailsView(objs)
+	local mailData=objs[0]
+	if mailData.attach~=nil then
+		attachBtnObj:SetActive(not mailData.attachTaken)
+		mailDetailsGrid.gameObject:SetActive(not mailData.attachTaken)
+		mailDetailsGrid:RefreshItemSlots(mailData.attach,self.gameObject,"RewardItemSlot")
+	else
+		attachBtnObj:SetActive(false)
+		mailDetailsGrid.gameObject:SetActive(false)
+	end
+	title_Lab.text=mailData.mailItem.title
+    content_Lab.text=mailData.mailItem.content
+	sender_Lab.text=mailData.mailItem.fromNickName
+
+end
+
+function OnMailGridItemBtnClick(obj)
+
+end
+
+function OnAttachBtnClick(sender)
+	self:SendCommand("Attach")
+end
+
+function OnDeleteBtnClick(sender)
+	self:SendCommand("Delete")
+end
+
+function OnCloseBtnClick(sender)
+	self:HideView(self.gameObject.name)
+end
+
+
+function DoExit()
+	loadedRewardItemSlot = nil
+	mailDetailsGrid = nil
+	title_Lab = nil
+	content_Lab = nil
+	sender_Lab = nil
+	attachBtnObj = nil
+end

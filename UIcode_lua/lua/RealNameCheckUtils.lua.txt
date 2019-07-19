@@ -1,0 +1,151 @@
+---显示tip
+local function ShowHintTip(localStr)
+    CsBridge.hintUILayer:ShowHintBox(Language:getStr(localStr), 2)
+end
+
+---初始化实名认证界面数据
+local function InitRealNameCheckViewData()
+    local viewData = {}
+    viewData.ruleStr = Language:getStr("RealNameCheckRule")
+    viewData.rewardArr = {}
+    viewData.submitBtnStr = Language:getStr("CheckRealNameGetReward")
+    local authenticationRewardTbl = ResTblContainer:GetTable(AuthenticationReward.actorTbl)
+    local ids = ResTblContainer:GetIds(AuthenticationReward.actorTbl)
+    if ids == nil then
+        return viewData
+    end
+    for i = 0, ids.Length - 1 do
+        local rewardStr = authenticationRewardTbl:Get(tonumber(ids[i]), AuthenticationReward.reward)
+        local rowRewardArr = GetRewardFromTbl(rewardStr)
+        if rowRewardArr then
+            for k = 1, #rowRewardArr do
+                table.insert(viewData.rewardArr, rowRewardArr[k])
+            end
+        end
+    end
+    return viewData
+end
+
+---中国身份证号码验证
+local function ChinaIdCardNumberCheck(idCardStr)
+    local LONG_COUNT = 18
+    local MOD_BASE = 11
+    if idCardStr == nil or idCardStr == "" or #idCardStr ~= LONG_COUNT then
+        return false
+    end
+    local perArr = {}
+    local weightArr = { 7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2 }
+    local validateArr = { "1", "0", "x", "9", "8", "7", "6", "6", "4", "3", "2" }
+    for i = 1, #idCardStr do
+        perArr[i] = string.sub(idCardStr, i, i)
+    end
+    local sum = 0
+    for i = 1, LONG_COUNT - 1 do
+        sum = sum + tonumber(perArr[i]) * weightArr[i]
+    end
+    local mode = math.fmod(sum, MOD_BASE)
+    local lastNumberStr = perArr[#perArr]
+    if string.lower(validateArr[mode + 1]) == string.lower(lastNumberStr) then
+        return true
+    end
+
+    return false
+end
+
+---检查中文名字
+local function ChinaIdRealNameCheck(realNameStr)
+    if realNameStr == nil or realNameStr == "" then
+        return false
+    end
+    local strLength = #realNameStr
+    local FONT_LENGTH = 3
+    if strLength <= 0 or strLength / FONT_LENGTH % 1 ~= 0 then
+        return false
+    end
+
+    local TWO_TWO_EIGHT = 228
+    local TWO_THREE_THREE = 233
+    local ONE_EIGHT_FOUR = 184
+    local ONE_TWO_EIGHT = 128
+    local ONE_NINE_NINE = 191
+    local TWO_FOUR_ZERO = 240
+    local TWO_TWO_FOUR = 224
+
+    --判断是否全部为中文
+    for i = 1, strLength, FONT_LENGTH do
+        local fontByte = string.byte(realNameStr, i)
+        if fontByte >= TWO_FOUR_ZERO or fontByte < TWO_TWO_FOUR then
+            return false
+        end
+    end
+
+    --判断中文中是否有中文标点符号
+    for i = 1, strLength, FONT_LENGTH do
+        local byte1 = string.byte(realNameStr, i)
+        local byte2 = string.byte(realNameStr, i + 1)
+        local byte3 = string.byte(realNameStr, i + 2)
+
+        if byte1 < TWO_TWO_EIGHT or byte1 > TWO_THREE_THREE then
+            return false
+        end
+        if byte1 == TWO_TWO_EIGHT and byte2 < ONE_EIGHT_FOUR then
+            return false
+        end
+        if byte1 == TWO_TWO_EIGHT and byte2 == ONE_EIGHT_FOUR and byte3 < ONE_TWO_EIGHT then
+            return false
+        end
+        if byte1 == TWO_THREE_THREE and byte2 > ONE_NINE_NINE then
+            return false
+        end
+        if byte1 == TWO_THREE_THREE and byte2 == ONE_NINE_NINE and byte3 > ONE_NINE_NINE then
+            return false
+        end
+    end
+    return true
+end
+
+---检查实名认证信息
+local function CheckRealNameInfo(realNameStr, idCardStr)
+    if not ChinaIdRealNameCheck(realNameStr) then
+        ShowHintTip("InputRightRealName")
+        return false
+    end
+
+    if not ChinaIdCardNumberCheck(idCardStr) then
+        ShowHintTip("InputRightIDCardNumber")
+        return false
+    end
+
+    return true
+end
+
+---完成实名认证
+local function FinishRealNameCheck(realNameStr, idCardStr, callback)
+    local req = {}
+    req.ID = idCardStr
+    req.name = realNameStr
+    HttpRequest("identityVerify", "IdentityVerifyReq", "IdentityVerifyResp", req, function(resp)
+        if resp and callback then
+            callback(resp)
+        end
+    end)
+end
+
+---检查是否实名认证过
+local function CheckRealName(callback)
+    local req = {}
+    req.useless = 1
+    HttpRequest("checkIdentityVerify", "CheckIdentityVerityReq", "CheckIdentityVerityResp", req, function(resp)
+        if resp and callback then
+            callback(resp.isAuth)
+        end
+    end)
+end
+
+return {
+    CheckRealNameInfo = CheckRealNameInfo,
+    FinishRealNameCheck = FinishRealNameCheck,
+    InitRealNameCheckViewData = InitRealNameCheckViewData,
+    CheckRealName = CheckRealName,
+    ShowHintTip = ShowHintTip,
+}

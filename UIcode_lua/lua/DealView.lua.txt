@@ -1,0 +1,287 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-04-27 17:32:07
+require('ItemBaseUtils')
+
+local titleTxt
+
+local itemObj
+local qualityImgObj
+local iconImgObj
+
+local numObj
+local numInput
+
+local slider
+
+local priceObj
+local priceIconObj
+local priceTxt
+
+local dealBtn
+local dealBtnName
+local dealed = false
+
+local isInit = false
+
+function DoInit()
+    self.Shadow = 1
+end
+
+function InitUI()
+    titleTxt = self:GetComponentAtPath("Top/TitleTxt" ,CLS_TEXT)
+
+    itemObj = self:GetGameObjectAtPath("Center/Item")
+    local itemTrans = itemObj.transform
+    qualityImgObj = itemTrans:GetGameObjectAtPath("FrameSprite")
+    iconImgObj = itemTrans:GetGameObjectAtPath("IconSprite")
+
+    numObj = self:GetGameObjectAtPath("Center/Num")
+    numInput  = numObj.transform:GetComponentAtPath("Input" ,CLS_INPUT)
+    slider = self:GetComponentAtPath("Center/Num/Slider",CLS_SLIDER)
+
+    priceObj = self:GetGameObjectAtPath("Center/Price")
+    local priceTrans = priceObj.transform
+    priceIconObj = priceTrans:GetGameObjectAtPath("PriceIcon")
+    priceTxt = priceTrans:GetComponentAtPath("PriceTxt" ,CLS_TEXT)
+
+    dealBtn = self:GetGameObjectAtPath("Center/DealBtn")
+    dealBtnName = self:GetComponentAtPath("Center/DealBtn/NameTxt" ,CLS_TEXT)
+end
+
+function IsSetAnchor()
+    self.transform.parent:SetAsLastSibling()
+    return true
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+
+    self:SendCommand("InitView")
+end
+
+function OnNotification_InitGetInputView(objs)
+    local viewData = objs[0]
+
+    titleTxt.text = viewData.title
+    if viewData.item then
+        BindItemBaseValue(itemObj.gameObject.transform, viewData.item)
+    else
+        SetIconByItemId(iconImgObj, viewData.itemId)
+        SetQualityByItemId(qualityImgObj, viewData.itemId)
+    end
+    
+    slider.maxValue = viewData.num.maxNum
+    slider.value = viewData.defaultCount or 1
+    dealBtnName:SetText(viewData.confirmBtnText)
+
+    itemObj:SetSelfActive(viewData.showItem or true)
+    numObj:SetSelfActive(viewData.showInput or true)
+    priceObj:SetSelfActive(viewData.showPrice or false)
+    dealBtn:SetSelfActive(viewData.showConfirm or true)
+    ShowNum(viewData.defaultCount or 1)
+end
+
+function OnNotification_InitSellView(objs)
+    ShowBaseInfo(objs[0])
+    itemObj:SetSelfActive(true)
+    numObj:SetSelfActive(true)
+    priceObj:SetSelfActive(true)
+    dealBtn:SetSelfActive(true)
+end
+
+function OnNotification_InitExchangeView(objs)
+    ShowBaseInfo(objs[0])
+    itemObj:SetSelfActive(true)
+    numObj:SetSelfActive(true)
+    dealBtn:SetSelfActive(true)
+end
+
+function OnNotification_InitUseView(objs)
+    ShowBaseInfo(objs[0])
+    itemObj:SetSelfActive(true)
+    numObj:SetSelfActive(true)
+    dealBtn:SetSelfActive(true)
+end
+
+function OnNotification_InitComposeView(objs)
+    ShowBaseInfo(objs[0])
+    itemObj:SetSelfActive(true)
+    numObj:SetSelfActive(true)
+    dealBtn:SetSelfActive(true)
+end
+
+function OnNotification_InitBuyView(objs)
+    if objs.Length > 1 then
+        ShowBaseInfo(objs[0],objs[1])
+    else
+        ShowBaseInfo(objs[0])
+    end
+    itemObj:SetSelfActive(true)
+    numObj:SetSelfActive(true)
+    priceObj:SetSelfActive(true)
+    dealBtn:SetSelfActive(true)
+end
+
+function OnNotification_InitNum(objs)
+    local info = objs[0]
+    local curNum = info.num.curNum
+    local maxNum = info.num.maxNum
+    ShowNum(curNum)
+    slider.maxValue = maxNum
+    slider.value = curNum
+end
+
+function OnNotification_RefreshNum(objs)
+    local curNum = objs[0]
+    ShowNum(curNum)
+    slider.value = curNum
+end
+
+function OnNotification_RefreshPrice(objs)
+    if objs.Length == 3 then
+        ShowPrice(objs[0],objs[1],objs[2])
+    elseif objs.Length == 4 then
+        ShowPrice(objs[0],objs[1],objs[2],objs[3])
+    end
+end
+
+function ShowBaseInfo(base,itemData)
+    titleTxt.text = base.title
+    dealBtnName:SetText(base.btn)
+    if itemData then
+        BindItemBaseValue(itemObj.gameObject.transform, itemData.reward)
+        local consume = {}
+        consume.typeId = itemData.priceType
+        consume.id = itemData.priceTypeId
+        consume.count = base.single
+        ShowOneConsume(priceIconObj, priceTxt, consume)
+    else
+        SetIconByItemId(iconImgObj,base.item.id)
+        SetQualityByItemId(qualityImgObj,base.item.id)
+        if base.priceIcon ~= nil then
+            SetIconByResourceId(priceIconObj,base.priceIcon)
+        end
+    end
+end
+
+function ShowNum(num)
+    numInput.text = tostring(num)
+end
+
+function ShowPrice(num,resId,checkEnough,resType)
+    priceTxt.text = tostring(num)
+    if checkEnough then
+        SetFontColorWithEnough(priceTxt,function()
+            if resType then
+                if resType == ItemTypeEnum.Resource then
+                    return CheckResEnough(resId,num,false)
+                else
+                    return CheckPackItemEnough(resId,num,false)
+                end
+            else
+                return CheckResEnough(resId,num,false)
+            end
+        end,{155,82,42})
+    end
+end
+
+function OnItemClick(sender)
+    self:SendCommand("ShowItemTip")
+end
+
+function OnInputInputValChanged(sender,val)
+    self:SendCommand("ChangeNum",val)
+end
+
+function OnReduceBtnClick(sender)
+    self:SendCommand("ReduceNum")
+end
+
+function OnAddBtnClick(sender)
+    self:SendCommand("AddNum")
+end
+
+function OnSliderValueChanged(sender, val)
+    val = math.floor(val)
+    self:SendCommand("ChangeNum",val)
+end
+
+function OnDealBtnClick(sender)
+    self:SendCommand("Deal")
+end
+
+function OnCloseBtnClick(sender)
+    self:SendCommand("CloseView")
+end
+
+function OnMaskClick(sender)
+    self:SendCommand("CloseView")
+end
+
+function OnNotification_DealFinished(objs)
+    dealed = true
+end
+
+function OnNotification_CloseView(objs)
+    dealed = true
+    Close(objs[0])
+end
+
+function Close(type)
+    titleTxt.text = ""
+    SetFontColor(priceTxt,{155,82,42})
+    if type == 1 then
+        itemObj:SetSelfActive(false)
+        numObj:SetSelfActive(false)
+        priceObj:SetSelfActive(false)
+        dealBtn:SetSelfActive(false)
+    elseif type == 2 then
+        itemObj:SetSelfActive(false)
+        numObj:SetSelfActive(false)
+        dealBtn:SetSelfActive(false)
+    elseif type == 3 then
+        itemObj:SetSelfActive(false)
+        numObj:SetSelfActive(false)
+        dealBtn:SetSelfActive(false)
+    elseif type == 4 then
+        itemObj:SetSelfActive(false)
+        numObj:SetSelfActive(false)
+        dealBtn:SetSelfActive(false)
+    elseif type == 5 then
+        itemObj:SetSelfActive(false)
+        numObj:SetSelfActive(false)
+        priceObj:SetSelfActive(false)
+        dealBtn:SetSelfActive(false)
+    end
+    self:HideView(self.gameObject.name)
+end
+
+function ResetDeal()
+    dealed = false
+end
+
+function FinishDeal()
+    return dealed
+end
+
+function DoExit()
+    titleTxt = nil
+    itemObj = nil
+    qualityImgObj = nil
+    iconImgObj = nil
+    numObj = nil
+    numInput = nil
+    priceObj = nil
+    priceIconObj = nil
+    priceTxt = nil
+    dealBtn = nil
+    dealBtnName = nil
+    dealed = nil
+    isInit = nil
+    slider = nil
+end

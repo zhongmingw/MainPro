@@ -1,0 +1,17 @@
+
+Å
+GetGoldProto.protoGetGoldProtostage.proto"8
+GetGoldInfo
+takenIds (
+lastRefreshTime ("
+
+GetGoldReq
+
+id ("5
+GetGoldResp&
+rewardItems (2.stage.RewardItem"
+GMResetGetGoldReq
+
+id ("$
+GMResetGetGoldResp
+result (

@@ -1,0 +1,48 @@
+local typeTogGroup
+local typeTogs
+local curType=1
+
+function initUI()
+	typeTogGroup= self.transform:Find("Top/TypeTogGroup"):GetComponent("ToggleGroupArchly")
+	typeTogs={}
+	for  i = 1,2 do
+		local tog=typeTogGroup.transform.Find("TypeTog"..i):GetComponent("ToggleArchly")
+		table.insert(typeTogs,tog)
+	end
+end
+
+function OnAnimationFinished()
+    initUI();
+    OnTypeTog1Click(nil);
+end
+
+function OnTypeTog1Click(sender)
+	DoFilterByType(1)
+	CsBridge.OpenView("HeroBagView","HeroBagModel",true,true)
+	self:HideView("BookView")
+end
+function OnTypeTog2Click(sender)
+	DoFilterByType(2)
+	CsBridge.OpenView("BookView","BookModel",true,true)
+	self:HideView("HeroBagView")
+end
+
+function OnTypeTogGroupClick(_isOn,_index)
+end
+
+function  DoFilterByType(_index)
+	curType=_index
+	if(typeTogs[_index].isOn==false)then
+		typeTogs[_index].isOn=true
+	end
+end
+
+function OnCloseBtnClick(sender)
+	self:ReturnBack()
+end
+
+function DoExit()
+	typeTogGroup = nil
+	typeTogs = nil
+	curType = nil
+end

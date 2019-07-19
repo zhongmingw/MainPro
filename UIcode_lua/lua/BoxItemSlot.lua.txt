@@ -1,0 +1,17 @@
+function OnBoxItemSlotBindValue(slot,data)
+
+    local box_Spine = slot:GetComponentAtPath("BoxSpine" ,CLS_SKELETONGRAPHIC)
+    local boxNum_Lab = slot:GetComponentAtPath("BoxNumTxt" ,CLS_TEXT)
+
+    boxNum_Lab.text=tostring(data.count)
+    if data.state==0 then
+        box_Spine.freeze = true;
+        box_Spine:ChangeMaterial("SpineGray")
+    elseif data.state==1 then
+        box_Spine:ChangeMaterial("boxidel_Material")
+        box_Spine:PlayAnimation("full_stand",true,nil,nil)
+    else
+        box_Spine:ChangeMaterial("boxidel_Material")
+        box_Spine:PlayAnimation("empty_stand",true,nil,nil)
+    end
+end

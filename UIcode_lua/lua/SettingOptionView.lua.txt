@@ -1,0 +1,216 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-05-30 15:40:38
+
+local settingVersionUtils = require "SettingVersionUtils"
+local sdkHelper = CS.Client.Library.SDKHelper.instance
+
+local playerBaseTF
+local playerNameTxt
+local playerUserNameTxt
+local playerPwdTxt
+local tips
+
+local resetPwdBtnObj
+local bindUserBtnObj
+local backLoginBtnObj
+local changeAccountBtnObj
+
+local musicOnBtnObj
+local musicOffBtnObj
+local soundOnBtnObj
+local soundOffBtnObj
+local marqueeOnBtnObj
+local marqueeOffBtnObj
+
+local facebookObj, cdkeyObj
+local keyInput
+local realNameCheckObj
+local realNameCheckBtn
+local realNameCheckTxt
+
+local isInit = false
+
+function DoInit()
+    self.Anim = 0
+end
+
+function InitUI()
+    local viewTrans = self.transform
+    playerBaseTF = viewTrans:Find("Center/Player/PlayerBase")
+    playerNameTxt = viewTrans:GetComponentAtPath("Center/Player/NameTxt", CLS_TEXT)
+    playerUserNameTxt = viewTrans:GetComponentAtPath("Center/Player/UserNameTxt", CLS_TEXT)
+    local playerPwdTxtTrans = viewTrans:Find("Center/Player/PwdTxt")
+    if playerPwdTxtTrans then
+        playerPwdTxt = viewTrans:GetComponentAtPath("Center/Player/PwdTxt", CLS_TEXT)
+    end
+    tips = viewTrans:GetGameObjectAtPath("Center/Tips")
+
+    local gridTrans = viewTrans:Find("Center/SwitchSV/ScrollRect/Viewport/Grid")
+    musicOnBtnObj = gridTrans:GetGameObjectAtPath("Music/MusicOnBtn")
+    musicOffBtnObj = gridTrans:GetGameObjectAtPath("Music/MusicOffBtn")
+    soundOnBtnObj = gridTrans:GetGameObjectAtPath("Sound/SoundOnBtn")
+    soundOffBtnObj = gridTrans:GetGameObjectAtPath("Sound/SoundOffBtn")
+    marqueeOnBtnObj = gridTrans:GetGameObjectAtPath("Marquee/MarqueeOnBtn")
+    marqueeOffBtnObj = gridTrans:GetGameObjectAtPath("Marquee/MarqueeOffBtn")
+
+    facebookObj = gridTrans:GetGameObjectAtPath("Facebook")
+    cdkeyObj = gridTrans:GetGameObjectAtPath("CDKey")
+    keyInput = gridTrans:GetComponentAtPath("CDKey/KeyInput", CLS_INPUT)
+    local realNameTrans = gridTrans:Find("RealNameCheck")
+    if realNameTrans then
+        realNameCheckObj = gridTrans:GetGameObjectAtPath("RealNameCheck")
+        realNameCheckBtn = gridTrans:GetComponentAtPath("RealNameCheck/OpenRealNameBtn", CLS_BUTTON_ARCHLY)
+        realNameCheckTxt = gridTrans:GetComponentAtPath("RealNameCheck/OpenRealNameBtn/name02Txt", CLS_TEXT)
+    end
+
+    resetPwdBtnObj = viewTrans:GetGameObjectAtPath("Center/ResetPwdBtn")
+    bindUserBtnObj = viewTrans:GetGameObjectAtPath("Center/BindUserBtn")
+    changeAccountBtnObj = viewTrans:GetGameObjectAtPath("Center/ChangeAccountBtn")
+    backLoginBtnObj = viewTrans:GetGameObjectAtPath("Center/BackLoginBtn")
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = false
+    end
+    self:SendCommand("InitSettingOptionData")
+end
+
+function OnNotification_RefreshSettingOptionView(objs)
+    local player = objs[0]
+    local option = objs[1]
+
+    BindPlayerBaseInfoValue(playerBaseTF, player)
+
+    playerNameTxt:SetText(player.name)
+    settingVersionUtils.SetPlayerUserNameTxt(playerUserNameTxt, player)
+    if playerPwdTxt then
+        playerPwdTxt:SetText(Language:getStr("Global_74") .. ": " .. player.pwd)
+    end
+    tips:SetSelfActive(not sdkHelper.enableSDK and player.isAnonLogin)
+    resetPwdBtnObj:SetSelfActive(not sdkHelper.enableSDK and not player.isAnonLogin)
+    settingVersionUtils.SetBindUserBtnState(bindUserBtnObj, sdkHelper, player)
+    backLoginBtnObj:SetSelfActive(sdkHelper.enableSDK)
+    changeAccountBtnObj:SetSelfActive(not sdkHelper.enableSDK)
+    musicOnBtnObj:SetSelfActive(option.music)
+    musicOffBtnObj:SetSelfActive(not option.music)
+    soundOnBtnObj:SetSelfActive(option.sound)
+    soundOffBtnObj:SetSelfActive(not option.sound)
+    marqueeOnBtnObj:SetSelfActive(option.marquee)
+    marqueeOffBtnObj:SetSelfActive(not option.marquee)
+
+    if showCDKey then
+        keyInput.text = ""
+    end
+end
+
+function OnNotification_UpdatePlayerPwd(objs)
+    if playerPwdTxt then
+        playerPwdTxt.text = Language:getStr("Global_74") .. ": " .. objs[0]
+    end
+end
+
+function OnNotification_PlayBg(objs)
+    self:PlayBg(objs[0])
+end
+
+function OnNotification_OnExchangeFinished(objs)
+    keyInput.text = ""
+end
+
+function OnNotification_SetExchangeEnabled(objs)
+    local openState = objs[0]
+    cdkeyObj:SetSelfActive(openState.giftEnabled)
+    facebookObj:SetSelfActive(openState.faceBookEnabled)
+    if realNameCheckObj and openState.authenticationOpen == true then
+        realNameCheckObj:SetSelfActive(openState.authenticationOpen)
+        realNameCheckBtn.Gray = openState.checkBtnGray
+        realNameCheckTxt.text = openState.checkBtnTxtStr
+    end
+end
+
+function OnMusicOnBtnClick(sender)
+    self:SendCommand("SwitchMusic")
+end
+
+function OnMusicOffBtnClick(sender)
+    self:SendCommand("SwitchMusic")
+end
+
+function OnSoundOnBtnClick(sender)
+    self:SendCommand("SwitchSound")
+end
+
+function OnSoundOffBtnClick(sender)
+    self:SendCommand("SwitchSound")
+end
+
+function OnMarqueeOnBtnClick(sender)
+    self:SendCommand("SwitchMarquee")
+end
+
+function OnMarqueeOffBtnClick(sender)
+    self:SendCommand("SwitchMarquee")
+end
+
+function OnLanguageSelectBtnClick(sender)
+    self:SendCommand("OpenSelectLanguageView")
+end
+
+function OnChangeAccountBtnClick(sender)
+    self:SendCommand("ChangeAccount")
+end
+
+function OnBindUserBtnClick(sender)
+    self:SendCommand("OpenBindUserView")
+end
+
+function OnResetPwdBtnClick(sender)
+    self:SendCommand("OpenChangePwdView")
+end
+
+function OnBackLoginBtnClick(sender)
+    self:SendCommand("BackLoginView")
+end
+
+function OnExchangeBtnClick(sender)
+    local key = keyInput.text
+    self:SendCommand("ExchangeKey", key)
+end
+
+function OnOpenRealNameBtnClick()
+    self:SendCommand("RealNameCheck")
+end
+
+function DoExit()
+    playerBaseTF = nil
+    playerNameTxt = nil
+    playerUserNameTxt = nil
+    playerPwdTxt = nil
+    tips = nil
+
+    resetPwdBtnObj = nil
+    bindUserBtnObj = nil
+    backLoginBtnObj = nil
+    changeAccountBtnObj = nil
+
+    musicOnBtnObj = nil
+    musicOffBtnObj = nil
+    soundOnBtnObj = nil
+    soundOffBtnObj = nil
+
+    facebookObj = nil
+    cdkeyObj = nil
+    keyInput = nil
+
+    isInit = nil
+    marqueeOnBtnObj = nil
+    marqueeOffBtnObj = nil
+    realNameCheckObj = nil
+    realNameCheckBtn = nil
+    realNameCheckTxt = nil
+    settingVersionUtils = nil
+end

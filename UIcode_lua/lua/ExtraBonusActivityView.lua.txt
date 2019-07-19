@@ -1,0 +1,106 @@
+--[[
+	file: ExtraBonusActivityView.lua
+	author: hangang
+	description:View for PVEBonus activity,WheelBouns activity etc.
+]]
+
+require "ItemSlot"
+
+local titleImgObj, pveTipsObj, wheelTipsObj
+local itemsGrid
+
+local bgImg
+local titleArtTxt
+
+local viewData
+
+function DoInit()
+	self.Shadow = CsBridge.ShadowType.None
+	InitUI()
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	local path = "BGS/bgImg"
+
+	path = "Bottom/Grid"
+	itemsGrid = selfTrans:Find(path)
+
+	path = "Bottom/tipsTxtPVE"
+	pveTipsObj = self:GetComponentAtPath(path,CLS_TEXT)
+
+	path = "Bottom/tipsTxtWheel"
+	wheelTipsObj = self:GetGameObjectAtPath(path)
+
+	bgImg = self:GetGameObjectAtPath("BGS/BgImg")
+	titleArtTxt = self:GetComponentAtPath("BGS/TitleArtImg",CLS_LOCALIZE)
+end
+
+function OnNotification_RefreshActivityView(objs)
+	if self.gameObject.activeInHierarchy then
+		viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function RefreshView(data)
+	bgImg:SetSelfActive(data.bg~=nil)
+	if data.bg ~= nil then
+        CsBridge.IconData.SetRawImageByName(bgImg,data.bg)
+        SetServerActivityArtFontByImage(titleArtTxt,data.bg)
+    end
+	ShowRewards(itemsGrid, data.rewards)
+	pveTipsObj.text = data.desc
+end
+
+function ShowRewards(rewardGrid, rewards)	
+	local rewardCount = #rewards
+	for i = 0, rewardGrid.childCount - 1 do
+		local itemTrans = rewardGrid:GetChild(i)
+		if i < rewardCount then
+			itemTrans.gameObject:SetActive(true)
+			BindItemBaseValue(itemTrans, rewards[i+1])
+		else
+			itemTrans.gameObject:SetActive(false)
+		end
+	end
+end
+
+function OnItemSlot1Click(obj)
+	local itemIndex = 1
+	OnGridItemClick(obj, itemIndex)
+end
+
+function OnItemSlot2Click(obj)
+	local itemIndex = 2
+	OnGridItemClick(obj, itemIndex)
+end
+
+function OnItemSlot3Click(obj)
+	local itemIndex = 3
+	OnGridItemClick(obj, itemIndex)
+end
+
+function OnItemSlot4Click(obj)
+	local itemIndex = 4
+	OnGridItemClick(obj, itemIndex)
+end
+
+function OnGridItemClick(obj, itemIndex)
+	local itemData = viewData.rewards[itemIndex]
+    self:SendCommand("OpenTipView", itemData)
+end
+
+function OnNotification_CloseActivityView(obj)
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	titleImgObj = nil
+	pveTipsObj = nil
+	wheelTipsObj = nil
+	itemsGrid = nil
+	bgImg = nil
+	titleArtTxt = nil
+	viewData = nil
+end

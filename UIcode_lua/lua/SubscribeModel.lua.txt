@@ -1,0 +1,76 @@
+local dailyTaskUtils = require "DailyTaskUtils"
+local subscribeUtils = require "SubscribeUtils"
+local payTbl = nil
+local SCRIBE_ID = nil
+local viewData = nil
+
+
+function DoInit()
+    payTbl = ResTblContainer:GetTable(PayTbl.tblName)
+    SCRIBE_ID = GetConstValue("SubscribePayId")
+end
+
+---获取界面数据
+local function GetViewData()
+    dailyTaskUtils.GetCanBuySubscribe(function(stateResult)
+        viewData = {}
+        viewData.subState = stateResult
+        viewData.adStr = string.format(Language:getStr("DayForFree"), GetConstValue("SubscribeFreeDay"))
+        viewData.price = GetShowPrice(payTbl:Get(SCRIBE_ID, PayTbl.currencySign), payTbl:GetInt(SCRIBE_ID, PayTbl.price))
+        GetRemainTimeData(viewData, stateResult.subEndTime)
+        viewData.buyBtnGray = not stateResult.canPayBuy
+        viewData.rewardBtnGray = not stateResult.canGetPayReward
+        viewData.itemArr = subscribeUtils.GetSubscribeDiamondAndVipReward(SCRIBE_ID)
+        viewData.showGetBtn = #viewData.itemArr > 0
+        self:SendNotification("GetSubscribeViewState", viewData)
+    end)
+end
+
+function DoEnable()
+    GetViewData()
+end
+
+local function ShowHintTip(localStr)
+    CsBridge.hintUILayer:ShowHintBox(Language:getStr(localStr), 2)
+end
+
+---获取界面数据
+function OnCommand_GetSubscribeViewState()
+    GetViewData()
+end
+
+---打开商城界面
+function OnCommand_OpenPayModule()
+    if viewData.buyBtnGray then
+        ShowHintTip("SubscribeNotOver")
+        return
+    end
+    self:ShowModule("PayModule", nil, true, nil, false)
+end
+
+---显示物品提示信息
+function OnCommand_ShowItemTip(objs)
+    local data = objs[0]
+    ShowItemTip(self, data)
+end
+
+function OnCommand_GetAutoSub(objs)
+    if viewData.rewardBtnGray then
+        if viewData.subState.canPayBuy then
+            ShowHintTip("SubscribeNotHave")
+        else
+            ShowHintTip("1218")
+        end
+        return
+    end
+    subscribeUtils.GetSubscribeReward(function(resp)
+        ShowRewardReceivedTip(self, resp.rewardItems, GetViewData, true)
+    end)
+end
+
+function DoOnExit()
+    dailyTaskUtils = nil
+    payTbl = nil
+    SCRIBE_ID = nil
+    viewData = nil
+end

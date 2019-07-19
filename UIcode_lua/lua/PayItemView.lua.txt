@@ -1,0 +1,94 @@
+require "PayItemSlot"
+
+local grid
+
+local payTbls
+local currentItem
+
+local viewClosed = true
+
+function DoInit()
+    self.Anim = 0
+    grid=self:GetComponentAtPath("OTHER/shopSV/ScrollRect/Viewport/Grid" ,"UIItemGrid")
+end
+
+function IsSetAnchor()
+    return true
+end
+
+function OnAnimationFinished()
+    self:SendCommand("InitPayItem")
+end
+
+function OnNotification_InitPayItem(objs)
+    payTbls=objs[0]
+    grid:RefreshItemSlots(payTbls.tbls, self.gameObject, "PayItemSlot")
+end
+
+function OnGridPayItemSlotClick(obj)
+    currentItem = obj
+    self:SendCommand("DoPay",obj.m_data)
+end
+
+function OnGridCardInfoBtnClick(sender)
+    local instuctionID = 31
+    local itemData = sender.m_data
+    if itemData.id == 8 then
+        instuctionID = 32
+    end
+    if itemData.type == PayTableTypeEnum.Subscribe then
+        instuctionID = INSTRUCTION_SUBSCRIBE
+    end
+    local view = CsBridge.OpenView("HelpView","PayModel",false,true)
+    view:SetData(instuctionID)
+end
+
+function OnNotification_payed(objs)
+    local data=objs[0].data
+    grid:SingleRefreshSlot(data)
+    PlayGemRewardFx()
+end
+
+function OnNotification_ShipSuccess(objs)
+    local rewards = objs[1]
+    CsBridge.MoneyBanner.SetBannerVisible(true)
+    ShowRewardReceivedTip(self,rewards,function()
+        CS.Client.Library.TimeManager.instance:Wait(1,function()
+            CsBridge.MoneyBanner.SetBannerVisible(false)
+        end);
+    end)
+end
+
+function PlayGemRewardFx()
+    local MoneyBanner = CS.Client.Library.MoneyBanner
+    MoneyBanner.SetBannerVisible(true)
+    local duration = 0.6
+    local onOneFinished = nil
+    local onFinished = OnGemRewardFxFinished
+    MoneyBanner.PlayGemFlyEffect(currentItem.transform.position, duration, onOneFinished, onFinished)
+end
+
+function OnGemRewardFxFinished()
+    if not viewClosed then
+        CsBridge.MoneyBanner.SetBannerVisible(false)
+    end
+end
+
+function BeoforeReturnBack()
+    self.gameObject:SetSelfActive(false)
+end
+
+function OnOpen()
+    viewClosed = false
+end
+
+function OnClose()
+    viewClosed = true
+end
+
+function DoExit()
+    grid = nil
+    payTbls = nil
+    currentItem = nil
+    viewClosed  = nil
+end

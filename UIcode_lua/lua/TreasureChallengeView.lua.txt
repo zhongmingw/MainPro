@@ -1,0 +1,54 @@
+require "TreasureChallengeItemSlot"
+
+---@type Client.Library.UIItemGrid
+local itemGrid
+---@type Client.Library.ViewBase
+local selfViewBase
+---@type boolean
+local hasItem = false
+
+function DoInit()
+    selfViewBase = self
+    itemGrid = selfViewBase:GetComponentAtPath("Center/ItemSV/ScrollRect/Viewport/SVGrid", CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+    selfViewBase:SendCommand("GetViewData")
+end
+
+function Active()
+    selfViewBase:SendCommand("GetViewData")
+end
+
+---获取界面数据
+function OnNotification_GetViewData(objs)
+    local viewData = objs[0]
+    itemGrid:RefreshItemSlots(viewData, selfViewBase.gameObject, "TreasureChallengeItemSlot")
+    hasItem = true
+end
+
+---是否有数据
+function CheckHasItemSlot()
+    return hasItem
+end
+
+---关闭按钮点击
+function OnCloseBtnClick()
+    selfViewBase:ReturnBack()
+end
+
+---item点击
+function OnSVGridBgBtnClick(obj)
+    local data = obj.m_data
+    selfViewBase:SendCommand("OpenTargetView", data)
+end
+
+function OnClose()
+    itemGrid:ClearItems()
+end
+
+function DoExit()
+    itemGrid = nil
+    selfViewBase = nil
+    hasItem = nil
+end

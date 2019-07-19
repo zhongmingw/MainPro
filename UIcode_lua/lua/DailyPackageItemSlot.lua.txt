@@ -1,0 +1,37 @@
+local loadedClientData=require "ClientData"
+local luaIconData=require "IconData"
+require "ItemSlot"
+
+function OnDailyPackageItemSlotBindValue(slot, data)
+    local selfTrans = slot.transform
+    local buyBtn_GO = selfTrans:GetComponentAtPath("BuyBtn",CLS_BUTTON_ARCHLY)
+    local priceType_Lab = selfTrans:GetComponentAtPath("BuyBtn/PriceTxt",CLS_TEXT)
+    local price_Lab = selfTrans:Find("BuyBtn/PriceTxt"):GetComponent(CLS_TEXT)
+    local timer_Lab = selfTrans:Find("CannotBuyBtn/TimerTxt"):GetComponent(CLS_TEXT)
+    local tip_GO = selfTrans:Find("icon01Img").gameObject
+    local end_GO = selfTrans:Find("EndGO").gameObject
+    local count_Lab = slot:GetComponentAtPath("LimitCountTxt" ,CLS_TEXT)
+    local vipExp_Lab = slot:GetComponentAtPath("VipExpTxt" ,CLS_TEXT)
+	local itemsGrid = slot:GetComponentAtPath("ItemGrid" ,CLS_UI_ITEM_GRID)
+    buyBtn_GO.Gray = data.status~=2
+    end_GO:SetSelfActive(data.status==1)
+    timer_Lab.gameObject:SetSelfActive(data.status==3)
+    tip_GO:SetSelfActive(not data.isEnd)
+    if data.status == 3 then
+        CsBridge.timeManager:FixTimeTimer(slot.gameObject,
+        function (targetTime)
+            if self == nil or self.Module == nil then
+                return
+            end
+            if timer_Lab==nil then
+                return
+            end
+            local timeStr = CheckTimeRemain(targetTime,false)
+            timer_Lab.text=timeStr
+        end,nil,GetCommonReloadTime())
+    end
+    price_Lab.text=data.priceText
+    count_Lab.text=Language:getStr("Global_99").."  <color=#42FF00FF>"..data.remain.."</color>"
+    vipExp_Lab.text=data.expText
+	itemsGrid:RefreshItemSlots(data.rewards,slot.m_grid.viewBase.gameObject,"ItemSlot")
+end

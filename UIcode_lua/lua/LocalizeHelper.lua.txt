@@ -1,0 +1,3 @@
+function GetLocalStr(key)
+    return Language:getStr(key)
+end

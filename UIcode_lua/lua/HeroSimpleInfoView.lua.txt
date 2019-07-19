@@ -1,0 +1,289 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-05-28 10:13:35
+
+require "SkillItemSlot"
+require "ItemSlot"
+require "SoulImprintItemSlot"
+
+local heroBase 
+local nameTxt 
+local gradeArr
+local raceImgObj
+local jobTxt
+local fightTxt 
+local hpTxt
+local attackTxt
+local defTxt
+local speedTxt
+
+local heroInfoItem
+local heroAttrItem
+local heroSkillItem
+local heroEquipItem
+local heroRuneItem
+local heroRelicItem
+local heroJewelItem
+local heroSoulItem
+local heroElementItem
+
+local skillGrid
+local equipGrid
+local runeGrid
+local relicGrid
+local jewelGrid
+local campAttrTxts = {}
+local heroAttrTxts = {}
+
+local curHero
+
+local isInit =false
+
+function DoInit()	
+    self.Shadow = 1
+    self.Anim = 8
+end
+
+function InitUI()
+	local viewTrans = self.transform
+    local infoGrid_TF = viewTrans:Find("Center/ScrollRect/Viewport/InfoGrid")
+    heroBase = viewTrans:Find("Center/ScrollRect/Viewport/InfoGrid/HeroInfoItem/HeroBase")
+    nameTxt = infoGrid_TF:GetComponentAtPath("HeroInfoItem/NameTxt" ,CLS_TEXT)
+    gradeArr = {}
+	local grade = viewTrans:Find("Center/ScrollRect/Viewport/InfoGrid/HeroInfoItem/Grade")
+    for i=0,grade.childCount-1 do
+        local g = grade:GetChild(i)
+        local gradeBg = g.transform:GetChild(0).gameObject
+		local grade = g.transform:GetChild(1).gameObject
+		table.insert(gradeArr, {gradeBg=gradeBg,grade=grade})
+	end 
+    raceImgObj = infoGrid_TF:GetGameObjectAtPath("HeroInfoItem/RaceImg")
+    jobTxt = infoGrid_TF:GetComponentAtPath("HeroInfoItem/JobTxt" ,CLS_TEXT)
+
+    fightTxt = infoGrid_TF:GetComponentAtPath("HeroInfoItem/FightTxt" ,CLS_TEXT)
+    hpTxt = infoGrid_TF:GetComponentAtPath("HeroAttrItem/Hp/HpTxt" ,CLS_TEXT)
+    attackTxt = infoGrid_TF:GetComponentAtPath("HeroAttrItem/Attack/AttackTxt" ,CLS_TEXT)
+    defTxt = infoGrid_TF:GetComponentAtPath("HeroAttrItem/Def/DefTxt" ,CLS_TEXT)
+    speedTxt = infoGrid_TF:GetComponentAtPath("HeroAttrItem/Speed/SpeedTxt" ,CLS_TEXT)
+
+    heroInfoItem = infoGrid_TF:GetGameObjectAtPath("HeroInfoItem")
+    heroAttrItem = infoGrid_TF:GetGameObjectAtPath("HeroAttrItem")
+    heroSkillItem = infoGrid_TF:GetGameObjectAtPath("HeroSkillItem")
+    heroEquipItem = infoGrid_TF:GetGameObjectAtPath("HeroEquipItem")
+    heroRuneItem = infoGrid_TF:GetGameObjectAtPath("HeroRuneItem")
+    heroRelicItem = infoGrid_TF:GetGameObjectAtPath("HeroRelicItem")
+    heroJewelItem = infoGrid_TF:GetGameObjectAtPath("HeroJewelItem")
+    heroSoulItem = infoGrid_TF:GetGameObjectAtPath("HeroSoulItem")
+    heroElementItem = infoGrid_TF:GetGameObjectAtPath("HeroElementItem")
+
+    skillGrid = infoGrid_TF:GetComponentAtPath("HeroSkillItem/SkillGrid" ,CLS_UI_ITEM_GRID)
+    equipGrid = infoGrid_TF:GetComponentAtPath("HeroEquipItem/EquipGrid" ,CLS_UI_ITEM_GRID)
+    runeGrid = infoGrid_TF:GetComponentAtPath("HeroRuneItem/RuneGrid" ,CLS_UI_ITEM_GRID)
+    relicGrid = infoGrid_TF:GetComponentAtPath("HeroRelicItem/RelicGrid" ,CLS_UI_ITEM_GRID)
+    jewelGrid = infoGrid_TF:GetComponentAtPath("HeroJewelItem/JewelGrid" ,CLS_UI_ITEM_GRID)
+    soulGrid = infoGrid_TF:GetComponentAtPath("HeroSoulItem/SoulGrid" ,CLS_UI_ITEM_GRID)
+
+    local campAttrs = infoGrid_TF:Find("HeroElementItem/CampAttrs")
+    for i=0,campAttrs.childCount-1 do
+        local attr = campAttrs:GetChild(i)
+        table.insert(campAttrTxts,{
+            nameTxt = attr:GetComponentAtPath("NameTxt" ,CLS_TEXT),
+            valTxt = attr:GetComponentAtPath("NumTxt" ,CLS_TEXT)
+        })
+    end
+    local heroAttrs = infoGrid_TF:Find("HeroElementItem/HeroAttrs")
+    for i=0,heroAttrs.childCount-1 do
+        local attr = heroAttrs:GetChild(i)
+        table.insert(heroAttrTxts,{
+            nameTxt = attr:GetComponentAtPath("NameTxt" ,CLS_TEXT),
+            valTxt = attr:GetComponentAtPath("NumTxt" ,CLS_TEXT)
+        })
+    end
+end
+
+function OnAnimationFinished()
+    if (not isInit) then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("GetHeroDetailData")
+end 
+
+function OnNotification_RefreshSimpleInfoView(objs)
+    local attrData = objs[0]
+    curHero = attrData.curHero
+    local curHeroEquipArr = attrData.curHeroEquipArr
+    local campAttr = attrData.campAttr
+    local heroArr = attrData.heroArr
+    local curHeroRelicArr = attrData.curHeroRelicArr
+    local curHeroRuneArr = attrData.curHeroRuneArr
+    local curHeroJewelArr = attrData.curHeroJewelArr
+    local emblem = attrData.emblemHero
+    RefreshHeroBase(curHero)
+    RefreshGrade(curHero)
+    RefreshAttr(curHero)
+    RefreshSkill(curHero)
+    RefreshEquip(curHeroEquipArr)
+    RefreshElement(campAttr,heroArr)
+    RefreshRelic(curHeroRelicArr)
+    RefreshRune(curHeroRuneArr)
+    RefreshJewel(curHeroJewelArr)
+    RefreshSoul(emblem)
+end
+
+function RefreshHeroBase(curHero)
+    BindHeroBaseValue(heroBase,curHero)
+    nameTxt:SetText(curHero.name)
+    SetJobIconAndNameByHeroId(raceImgObj,jobTxt,curHero.heroId)
+    fightTxt:SetText(GetValueAbbreviation(curHero.fight))
+end
+
+function RefreshGrade(curHero)
+    for i=1,#gradeArr do
+		gradeArr[i].gradeBg:SetSelfActive(i<=curHero.maxGrade)
+		gradeArr[i].grade:SetSelfActive(i<=curHero.grade)
+	end 
+end 
+
+function RefreshAttr(curHero)
+    hpTxt:SetText(GetValueAbbreviation(curHero.hp))
+	attackTxt:SetText(GetValueAbbreviation(curHero.attack))
+	defTxt:SetText(GetValueAbbreviation(curHero.def))
+	speedTxt:SetText(GetValueAbbreviation(curHero.speed))
+end
+      
+function RefreshSkill(curHero)
+    skillGrid:RefreshItemSlots(curHero.skill,self.gameObject,"SkillItemSlot")
+end
+
+function RefreshEquip(curHeroEquipArr)
+    if #curHeroEquipArr > 0 then
+        heroEquipItem:SetSelfActive(true)
+        equipGrid:RefreshItemSlots(curHeroEquipArr,self.gameObject,"ItemSlot")
+    else
+        heroEquipItem:SetSelfActive(false)
+    end
+end
+
+function RefreshRune(curHeroRuneArr)
+    if #curHeroRuneArr > 0 then
+        heroRuneItem:SetSelfActive(true)
+        runeGrid:RefreshItemSlots(curHeroRuneArr,self.gameObject,"ItemSlot")
+    else
+        heroRuneItem:SetSelfActive(false)
+    end
+end
+
+function RefreshRelic(curHeroRelicArr)
+    if #curHeroRelicArr > 0 then
+        heroRelicItem:SetSelfActive(true)
+        relicGrid:RefreshItemSlots(curHeroRelicArr,self.gameObject,"ItemSlot")
+    else
+        heroRelicItem:SetSelfActive(false)
+    end
+end
+
+function RefreshJewel(curHeroJewelArr)
+    if #curHeroJewelArr > 0 then
+        heroJewelItem:SetSelfActive(true)
+        jewelGrid:RefreshItemSlots(curHeroJewelArr,self.gameObject,"ItemSlot")
+    else
+        heroJewelItem:SetSelfActive(false)
+    end
+end
+
+function RefreshSoul(emblem)
+    if emblem then
+        heroSoulItem:SetSelfActive(true)
+        soulGrid:RefreshItemSlots({emblem},self.gameObject,"SoulImprintItemSlot")
+    else
+        heroSoulItem:SetSelfActive(false)
+    end
+end
+
+function OnSoulGridSoulImprintItemSlotClick(obj)
+    local data = obj.m_data
+    local soulImprintItemBagUtils = require('SoulImprintItemBagUtils')
+    local heroInfo = soulImprintItemBagUtils.GetPreviewSoulImprintItem(data)
+    local result = soulImprintItemBagUtils.InitSoulItemTipsViewData(heroInfo)
+    if result then
+        result.showBtn.btnParentState = false
+        result.showBtn.useBtnState = false
+    end
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("SoulImprintItemTipView", "HeroShowModel")
+        view:SetParamDataList(result)
+    end, "SoulImprintItemTipView", "SoulItemTipsAttrItemSlot")
+end
+
+function RefreshElement(campAttr,heroArr)
+    if #campAttr>0 or #heroArr>0 then
+        heroElementItem:SetSelfActive(true)
+        for i,attr in ipairs(campAttrTxts) do
+            attr.nameTxt.text = campAttr[i] and campAttr[i].name or "-"
+            attr.valTxt.text = campAttr[i] and "+"..campAttr[i].tbVal or "-"
+        end
+        for i,attr in ipairs(heroAttrTxts) do
+            attr.nameTxt.text = heroArr[i] and heroArr[i].name or "-"
+            attr.valTxt.text = heroArr[i] and "+"..heroArr[i].tbVal or "-"
+        end
+    else
+        heroElementItem:SetSelfActive(false)
+    end
+end
+
+function OnSkillGridItemClick(obj)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("SkillTipView","SkillTipModel",false,true)
+		view:SendCommand("InitData",obj.m_data)
+	end, "SkillTipView")
+end
+
+function OnEquipGridItemSlotClick(obj)
+    local data = obj.m_data
+    data.curHero = curHero
+    ShowRewardTip(self,data)
+end
+
+function OnRuneGridItemSlotClick(obj)
+    local data = obj.m_data
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("ItemTipView", "ItemTipModel")
+        view:SetParamDataList(data,itemBaseIndex+PropsIndex+itemSuitIndex+itemBtnsIndex+itemActivateIndex)
+        view:SendCommand("InitItemData")
+    end, "ItemTipView")
+
+end
+
+function OnRelicGridItemSlotClick(obj)
+    local data = obj.m_data
+    data.curHero = curHero
+    ShowRelicTip(self,data)
+end
+
+function OnJewelGridItemSlotClick(obj)
+    local data = obj.m_data
+    data.curHero = curHero
+    ShowRewardTip(self,data)
+end
+
+function OnHeroSimpleInfoBtnClick(sender)
+    self:SendCommand("OpenDetailAttr")
+end 
+
+function func()
+    heroBase = nil
+    nameTxt  = nil
+    gradeArr = nil
+    raceImgObj = nil
+    jobTxt = nil
+    fightTxt  = nil
+    hpTxt = nil
+    attackTxt = nil
+    defTxt = nil
+    speedTxt = nil
+    skillGrid = nil
+
+    isInit  = nil
+end

@@ -1,0 +1,66 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-03-14 15:33:20
+
+--等级不够时显示，等级达到后隐藏
+local composeCheckImgObj
+local fumoCheckImgObj
+
+local composeFlag
+
+function DoInit()
+    composeCheckImgObj = self.transform:Find("Dynamic/Compose/ComposeBtn/checkImg").gameObject
+    composeFlag = self.transform:Find("Dynamic/Compose/ComposeBtn/NewFlag").gameObject
+    fumoCheckImgObj = self.transform:Find("Dynamic/Fumo/FumoBtn/checkImg").gameObject
+end
+
+function OnAnimationFinished()
+    RefresheView()
+end
+
+function OnDoUnhide()
+    RefresheView()
+end
+
+function RefresheView()
+    if UIOpen(7,false) then
+        composeCheckImgObj:SetActive(false)
+        composeFlag:SetActive(#CheckEquipmentCompose()~=0)
+    else
+        composeCheckImgObj:SetActive(true)
+        composeFlag:SetActive(false)
+    end    
+end
+
+function OnComposeBtnClick(sender)
+    if not UIOpen(7) then
+        return
+    end
+    self:ShowModule("EquipmentComposeModule", {}, true)
+end
+
+function OnComposeRuleBtnClick()
+    CsBridge.CacheAssetsByModule(self.Module,
+    function()
+        local view = CsBridge.OpenView("HelpView","EquipmentModel",false,true)
+        view:SetData(5)
+    end, "HelpView")
+end
+
+function OnFumoBtnClick(sender)
+    CsBridge.hintUILayer:ShowHintBox(Language:getStr("Coming_Soon"))
+end
+
+function OnCloseBtnClick(sender)
+    self:ReturnBack()
+end
+
+function DoExit()
+    composeCheckImgObj = nil
+    fumoCheckImgObj = nil
+
+    composeFlag = nil
+end
+
+

@@ -1,0 +1,67 @@
+--[[
+	file: PayTypeView.lua
+	author: hangang
+	description:����ѡ��֧������
+]]
+
+local toggles
+local confirmCbk, cancelCbk
+
+function DoInit()
+	self.Shadow = 1
+
+	local toggleGp = self.transform:Find("Center/PayToggleGroup");
+	toggles = {}
+	for i = 0, toggleGp.childCount - 1 do
+		local toggle = toggleGp:GetChild(i):GetComponent(CLS_TOGGLE_ARCHLY)
+		toggles[i + 1] = toggle
+	end
+    toggles[1].isOn = true;
+end
+
+function IsSetAnchor()
+    self.transform.parent:SetAsLastSibling()
+    return true
+end
+
+function SetParamDataList(obj)
+	confirmCbk = obj[0]
+	if obj.Length > 1 then
+		cancelCbk = obj[1]
+	end
+end
+
+function OnConfirmBtnClick(sender)
+	if confirmCbk then
+		for i = 1, #toggles do
+			local toggle = toggles[i]
+			if toggle.isOn then
+				confirmCbk(i - 1)
+				break
+			end
+		end
+	end
+
+	self:HideView(self.gameObject.name)
+end
+
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close()
+	self:HideView(self.gameObject.name)
+	if cancelCbk then
+		cancelCbk()
+	end
+end
+
+function DoExit()
+	toggles = nil
+	confirmCbk = nil
+	cancelCbk = nil
+end

@@ -1,0 +1,26 @@
+
+’
+
+Maze.protoMazeBattleData.proto"&
+EnterLabyrinthReq
+	enterNext ("R
+LabyrinthResp
+labyrinthResp (	*
+
+battleInfo (2.BattleData.BattleInfo"
+MoveReq
+moveReq (	"%
+DeleteLabyrinthReq
+useless ("%
+DeleteLabyrinthResp
+status ("6
+
+UseItemReq
+itemId (
+row (
+col ("
+GMSkipFloorReq
+floor ("-
+GMGetItemReq
+itemId (
+count (

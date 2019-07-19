@@ -1,0 +1,163 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-04-26 16:05:35
+
+require "MazeShopItemSlot"
+
+local isInit = false
+
+local dragAreaTrans
+local dragAreaWidth
+local gridArr
+local leftArrowObj
+local rightArrowObj
+local waitSwitchAnim = false
+
+local function ShowMoveTweener(trans,x,y,duration,ease,onFinished)
+    return CsBridge.TweenUtils.MoveTo(trans,x,y,duration,onFinished,ease or 0)
+end
+
+local function ResetDragArea()
+    local pos = dragAreaTrans:CheckLocalPosition()
+    pos.x = 0
+    dragAreaTrans:ResetLocalPosition(pos)
+end
+
+function DoInit()	
+    self.Shadow = 1
+end
+
+function OnClose()
+    for i,v in ipairs(gridArr) do
+        v.grid:ClearItems()
+    end
+end
+
+function DoExit()
+    isInit = nil
+
+    dragAreaTrans = nil
+    dragAreaWidth = nil
+    gridArr = nil
+    leftArrowObj = nil
+    rightArrowObj = nil
+    waitSwitchAnim = nil
+end
+
+local function InitGrid(path)
+    table.insert(gridArr,{
+        obj =  self:GetGameObjectAtPath(path),
+        trans = self:GetComponentAtPath(path,CLS_RECTTRANSFORM),
+        grid = self:GetComponentAtPath(path,CLS_UI_ITEM_GRID)
+    })
+end
+
+local function SetDragEnable(enable)
+    waitSwitchAnim = not enable
+end
+
+local function InitUI()
+    gridArr = {}
+    InitGrid("Mask/LShopGrid")
+    InitGrid("Mask/CShopGrid")
+    InitGrid("Mask/RShopGrid")
+    table.insert(gridArr,lshopGridTrans)
+    table.insert(gridArr,cshopGridTrans)
+    table.insert(gridArr,rshopGridTrans)
+    dragAreaTrans = self:GetComponentAtPath("DragArea",CLS_RECTTRANSFORM)
+    dragAreaWidth = dragAreaTrans:CheckSizeDelta().x
+    leftArrowObj = self:GetGameObjectAtPath("LeftArrow")
+    rightArrowObj = self:GetGameObjectAtPath("RightArrow")
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    local lInitPos = gridArr[1].trans:CheckLocalPosition()
+    local cInitPos = gridArr[2].trans:CheckLocalPosition()
+    local rInitPos = gridArr[3].trans:CheckLocalPosition()
+    self:SendCommand("InitMazeShopData",lInitPos,cInitPos,rInitPos,dragAreaWidth)
+end
+
+function OnDragAreaBeginDrag(obj)
+    local pos = obj.transform:CheckLocalPosition()
+    self:SendCommand("BeginDrag",pos)
+end
+
+function OnDragAreaDrag(obj)
+    local pos = obj.transform:CheckLocalPosition()
+    self:SendCommand("OnDrag",pos)
+end
+
+function OnDragAreaEndDrag(obj)
+    local pos = obj.transform:CheckLocalPosition()
+    self:SendCommand("EndDrag",pos)
+end
+
+function OnNotification_RefreshMazeShopView(objs)
+    local shopData,leftEnable,rightEnable = objs[0],objs[1],objs[2]
+    for i,shop in pairs(shopData) do
+        gridArr[i].grid:RefreshItemSlots(shop,self.gameObject,"MazeShopItemSlot")
+    end
+    leftArrowObj:SetSelfActive(leftEnable)
+    rightArrowObj:SetSelfActive(rightEnable)
+end
+
+function OnNotification_RefreshGridsChangePos(objs)
+    local deltaX,idxArr = objs[0],objs[1]
+    for _,idx in ipairs(idxArr) do
+        local gridTrans = gridArr[idx].trans
+        local pos = gridTrans:CheckLocalPosition()
+        pos.x = pos.x + deltaX
+        gridTrans:ResetLocalPosition(pos)
+    end
+end
+
+function OnNotification_RefreshGridsToPos(objs)
+    local gridsToPosDic = objs[0]
+    local onFinished = objs[1]
+    local duration = 0.3
+    local tweener
+    SetDragEnable(false)
+    for idx,pos in pairs(gridsToPosDic) do
+        tweener = ShowMoveTweener(gridArr[idx].trans,pos.x,pos.y,duration)
+    end
+    tweener:OnCompleteAction(function()
+        onFinished()
+        SetDragEnable(true)
+    end)
+    ResetDragArea()
+end
+
+function OnNotification_ResetGridsPos(objs)
+    local idxPosDic = objs[0]
+    local duration = 0.3
+    for idx,pos in pairs(idxPosDic) do
+        ShowMoveTweener(gridArr[idx].trans,pos.x,pos.y,duration)
+    end
+    ResetDragArea()
+end
+
+function OnNotification_SwitchGridsPos(objs)
+    local idx,tPos,data,leftEnable,rightEnable = objs[0],objs[1],objs[2],objs[3],objs[4]
+    gridArr[idx].trans:ResetLocalPosition(tPos)
+    leftArrowObj:SetSelfActive(leftEnable)
+    rightArrowObj:SetSelfActive(rightEnable)
+end
+
+function OnLeftArrowClick(sender)
+    if waitSwitchAnim then
+        return
+    end
+    self:SendCommand("MoveToRight")
+end
+
+function OnRightArrowClick(sender)
+    if waitSwitchAnim then
+        return
+    end
+    self:SendCommand("MoveToLeft")
+end

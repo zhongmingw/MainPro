@@ -1,0 +1,141 @@
+local msgCenter = require('MsgCenter')
+
+---@type UnityEngine.TextMesh
+local oneTogNameTxt
+---@type Client.Library.ToggleGroupArchly
+local raceTogGroup
+---@type table
+local raceTogArr
+---@type UnityEngine.Transform
+local raceFlagTrans
+---@type Client.Library.UIItemGrid
+local heroGrid
+---@type UnityEngine.GameObject
+local centerTipsObj
+
+---@type number 当前类别的下标
+local curRace = 0
+---@type table 当前英雄数组
+local curHeroArr = {}
+
+function DoInit()
+    self.Shadow = 1
+
+    centerTipsObj = self:GetGameObjectAtPath("CenterTips")
+
+    oneTogNameTxt = self:GetComponentAtPath("TopLeft/HeroBookTog/nameTxt", CLS_TEXT)
+    raceTogGroup = self:GetComponentAtPath("Center/RaceTogGroup", CLS_RECTTRANSFORM)
+    raceTogArr = {}
+    for i = 1, raceTogGroup.childCount - 1 do
+        local tog = raceTogGroup:GetChild(i):GetComponent("ToggleArchly")
+        tog.ClickAnim = true
+        if i >= 2 then
+            tog.SubImg = tog.transform:GetComponentAtPath("icon01Img", CLS_IMAGE)
+        end
+        table.insert(raceTogArr, tog)
+    end
+    raceFlagTrans = raceTogGroup:Find("RaceFlag")
+
+    heroGrid = self:GetComponentAtPath("Center/HeroSV/ScrollRect/Viewport/HeroGrid", CLS_UI_ITEM_GRID)
+end
+
+---刷新数据
+local function RefreshData()
+    self:SendCommand("InitBookListData", curRace)
+end
+
+---刷新界面
+local function RefreshView()
+    centerTipsObj:SetActive(curHeroArr == nil or #curHeroArr <= 0)
+    heroGrid:RefreshItemSlots(curHeroArr, self.gameObject, "HeroItemSlot")
+end
+
+---用英雄类别刷新界面
+---@param race number
+local function ScreenHeroView(race)
+    if not raceTogArr[race + 1].isOn then
+        local offset = 10
+        if curRace > race then
+            offset = -offset
+        end
+        curRace = race
+        raceTogArr[curRace + 1].isOn = true
+        local targetX = raceTogArr[curRace + 1].transform.localPosition.x
+        local t1 = CsBridge.TweenUtils.MoveTo(raceFlagTrans, targetX + offset, raceFlagTrans.localPosition.y, 0.15, function()
+            local t2 = CsBridge.TweenUtils.MoveTo(raceFlagTrans, targetX, raceFlagTrans.localPosition.y, 0.05)
+            t2:DoPlay()
+        end)
+        t1:DoPlay()
+        self:SendCommand("HeroListBookScreenHero", curRace)
+    end
+end
+
+function OnAnimationFinished()
+    RefreshData()
+end
+
+---接收初始化所有英雄通知
+function OnNotification_InitBookListData(objs)
+    curHeroArr = objs[0]
+    RefreshView()
+end
+
+---英雄点击事件
+function OnHeroGridHeroItemSlotClick(obj)
+    if obj ~= nil then
+        local data = obj:GetItemData().data
+        self:SendCommand("ChoseHeroBookListOneData", data)
+        self:HideView(self.gameObject.name)
+    end
+end
+
+function OnRaceTog1Click(sender)
+    ScreenHeroView(HeroGroupType.AllGroupType)
+end
+
+function OnRaceTog2Click(sender)
+    ScreenHeroView(HeroGroupType.Water)
+end
+
+function OnRaceTog3Click(sender)
+    ScreenHeroView(HeroGroupType.Electric)
+end
+
+function OnRaceTog4Click(sender)
+    ScreenHeroView(HeroGroupType.Soil)
+end
+
+function OnRaceTog5Click(sender)
+    ScreenHeroView(HeroGroupType.Fire)
+end
+
+function OnRaceTog6Click(sender)
+    ScreenHeroView(HeroGroupType.Light)
+end
+
+function OnRaceTog7Click(sender)
+    ScreenHeroView(HeroGroupType.Night)
+end
+
+---遮罩点击
+function OnMaskClick()
+    self:HideView(self.gameObject.name)
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function OnClose()
+
+end
+
+function DoExit()
+    msgCenter = nil
+    raceTogGroup= nil
+    raceTogArr= nil
+    heroGrid= nil
+    centerTipsObj = nil
+    curRace = nil
+    curHeroArr= nil
+end

@@ -1,0 +1,200 @@
+local txt_cost_coin
+local txt_cost_soul
+
+local txt_coin
+local txt_soul
+
+local attrListObj
+
+local txt_levelName
+local txt_levelNum1
+local txt_levelNum2
+
+local txt_hpName
+local txt_hpNum1
+local txt_hpNum2
+
+local txt_attackName
+local txt_attackNum1
+local txt_attackNum2
+
+local txt_defName
+local txt_defNum1
+local txt_defNum2
+
+local txt_speedName
+local txt_speedNum1
+local txt_speedNum2
+
+
+local go_skill
+local go_skillNo
+local img_skillIcon
+local txt_skillName
+local txt_skillDesp
+
+
+local isInit = false
+
+function DoInit()
+	self.Shadow = 1
+end
+
+function InitUI()
+	txt_coin=self:GetComponentAtPath("Top/Coin/NumTxt",CLS_TEXT)
+	txt_soul=self:GetComponentAtPath("Top/Stone/NumTxt",CLS_TEXT)
+	
+	txt_cost_coin=self:GetComponentAtPath("Bottom/Consume/CoinNumTxt",CLS_TEXT)
+	txt_cost_soul=self:GetComponentAtPath("Bottom/Consume/StoneNumTxt",CLS_TEXT)
+	
+	go_skill=self:GetGameObjectAtPath("Center/Skill/Has")
+	go_skillNo=self:GetGameObjectAtPath("Center/Skill/No")
+	local skillTrans = go_skill.transform
+	img_skillIcon=skillTrans:GetGameObjectAtPath("SkillItem/skillImg")
+	txt_skillName=skillTrans:GetComponentAtPath("SkillName",CLS_TEXT)
+	txt_skillDesp=skillTrans:GetComponentAtPath("SkillDesp",CLS_TEXT)
+	InitAttr()
+end
+
+function InitAttr()
+	attrListObj=self:GetGameObjectAtPath("Center/AttrList")
+	txt_levelName=self:GetComponentAtPath("Center/AttrList/Level/Name",CLS_TEXT)
+	txt_levelNum1=self:GetComponentAtPath("Center/AttrList/Level/Num1",CLS_TEXT)
+	txt_levelNum2=self:GetComponentAtPath("Center/AttrList/Level/Num2",CLS_TEXT)
+	
+	txt_hpName=self:GetComponentAtPath("Center/AttrList/Hp/Name",CLS_TEXT)
+	txt_hpNum1=self:GetComponentAtPath("Center/AttrList/Hp/Num1",CLS_TEXT)
+	txt_hpNum2=self:GetComponentAtPath("Center/AttrList/Hp/Num2",CLS_TEXT)
+	
+	txt_attackName=self:GetComponentAtPath("Center/AttrList/Attack/Name",CLS_TEXT)
+	txt_attackNum1=self:GetComponentAtPath("Center/AttrList/Attack/Num1",CLS_TEXT)
+	txt_attackNum2=self:GetComponentAtPath("Center/AttrList/Attack/Num2",CLS_TEXT)
+	
+	txt_defName=self:GetComponentAtPath("Center/AttrList/Def/Name",CLS_TEXT)
+	txt_defNum1=self:GetComponentAtPath("Center/AttrList/Def/Num1",CLS_TEXT)
+	txt_defNum2=self:GetComponentAtPath("Center/AttrList/Def/Num2",CLS_TEXT)
+	
+	txt_speedName=self:GetComponentAtPath("Center/AttrList/Speed/Name",CLS_TEXT)
+	txt_speedNum1=self:GetComponentAtPath("Center/AttrList/Speed/Num1",CLS_TEXT)
+	txt_speedNum2=self:GetComponentAtPath("Center/AttrList/Speed/Num2",CLS_TEXT)
+end
+
+function SetParamDataList(objs)
+	local hero = objs[0]
+	self:SendCommand("InitData",hero)
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+	end 
+	self:SendCommand("InitGradeUpData")
+end 
+
+function OnNotification_RefreshGradeTopView(objs)
+	txt_coin.text = GetValueAbbreviation(objs[0])
+	txt_soul.text = GetValueAbbreviation(objs[1])
+end 
+
+function OnNotification_RefreshGradeConsumeView(objs)
+	txt_cost_coin:SetText(GetValueAbbreviation(objs[0]))
+	txt_cost_soul:SetText(GetValueAbbreviation(objs[1]))
+	SetFontColor(txt_cost_coin,CheckResEnough(ResourceEnum.Coin,objs[0]) and color25 or color30)
+	SetFontColor(txt_cost_soul,CheckResEnough(ResourceEnum.GreenSoul,objs[1]) and color25 or color30)
+end 
+
+function OnNotification_RefreshAttr(objs)
+	local attrs = objs[0]
+	--max level
+	txt_levelName.text = attrs[1].name
+	txt_levelNum1.text = GetValueAbbreviation(attrs[1].curValue)
+	txt_levelNum2.text = GetValueAbbreviation(attrs[1].nextValue)
+
+	--hp
+	txt_hpName.text = attrs[2].name
+	txt_hpNum1.text = GetValueAbbreviation(attrs[2].curValue)
+	txt_hpNum2.text = GetValueAbbreviation(attrs[2].nextValue)
+
+	--attack
+	txt_attackName.text = attrs[3].name
+	txt_attackNum1.text = GetValueAbbreviation(attrs[3].curValue)
+	txt_attackNum2.text = GetValueAbbreviation(attrs[3].nextValue)
+
+	--def
+	txt_defName.text = attrs[4].name
+	txt_defNum1.text = GetValueAbbreviation(attrs[4].curValue)
+	txt_defNum2.text = GetValueAbbreviation(attrs[4].nextValue)
+
+	--speed
+	txt_speedName.text = attrs[5].name
+	txt_speedNum1.text = GetValueAbbreviation(attrs[5].curValue)
+	txt_speedNum2.text = GetValueAbbreviation(attrs[5].nextValue)
+end 
+
+function OnNotification_RefreshOpenSkill(objs)
+	local skill = objs[0]
+	if skill == nil then
+		go_skill:SetSelfActive(false)
+		go_skillNo:SetSelfActive(true)
+	else 
+		CsBridge.IconData.SetIconByName(img_skillIcon,skill.icon)
+		txt_skillName.text = skill.name
+		txt_skillDesp.text = skill.des
+		go_skillNo:SetSelfActive(false)
+		go_skill:SetSelfActive(true)
+	end 
+end
+
+function OnNotification_CloseGradeUpView(objs)
+	Close()
+end 
+
+function OnSkillItemClick(sender)
+	self:SendCommand("InitGradeOpenSkillTip")
+end 
+
+function OnConfirmBtnClick(sender)
+	self:SendCommand("HeroGradeUp")
+end
+
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close()
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	 txt_cost_coin = nil
+	 txt_cost_soul = nil
+	 txt_coin = nil
+	 txt_soul = nil
+	 attrListObj = nil
+	 txt_levelName = nil
+	 txt_levelNum1 = nil
+	 txt_levelNum2 = nil
+	 txt_hpName = nil
+	 txt_hpNum1 = nil
+	 txt_hpNum2 = nil
+	 txt_attackName = nil
+	 txt_attackNum1 = nil
+	 txt_attackNum2 = nil
+	 txt_defName = nil
+	 txt_defNum1 = nil
+	 txt_defNum2 = nil
+	 txt_speedName = nil
+	 txt_speedNum1 = nil
+	 txt_speedNum2 = nil
+	 go_skill = nil
+	 go_skillNo = nil
+	 img_skillIcon = nil
+	 txt_skillName = nil
+	 txt_skillDesp = nil
+	 isInit = nil
+end

@@ -1,0 +1,176 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-03-08 16:13:42
+
+local isInit = false
+
+local spineRoot
+local bgSpine
+local upHeroTrans
+local heroGrid
+local titleTxt
+
+local refreshItem
+local onceConsume
+local tenthConsume
+local UP_LOTTERY_ONCE = 1
+local UP_LOTTERY_TENTH = 10
+
+local effectObj
+
+function DoInit()	
+    self.Shadow = 1
+end
+
+function InitUI()
+    spineRoot = self:GetComponentAtPath("BGS/Spine",CLS_RECTTRANSFORM)
+    upHeroTrans = self:GetComponentAtPath("Center/banner/UpHero",CLS_RECTTRANSFORM)
+    heroGrid = self:GetComponentAtPath("Center/heroSV/ScrollRect/Viewport/HeroGrid",CLS_UI_ITEM_GRID)
+    refreshItem = {
+        icon = self:GetGameObjectAtPath("Center/RefreshItem/IconImg"),
+        num = self:GetComponentAtPath("Center/RefreshItem/NumTxt",CLS_TEXT)
+    }
+    onceConsume = {
+        icon = self:GetGameObjectAtPath("button/LotteryOnceBtn/Consume/IconImg"),
+        num = self:GetComponentAtPath("button/LotteryOnceBtn/Consume/NumTxt",CLS_TEXT)
+    }
+    tenthConsume = {
+        icon = self:GetGameObjectAtPath("button/LotteryTenthBtn/Consume/IconImg"),
+        num = self:GetComponentAtPath("button/LotteryTenthBtn/Consume/NumTxt",CLS_TEXT)
+    }
+    titleTxt = self:GetComponentAtPath("Center/TitleTxt",CLS_TEXT)
+    effectObj = self:GetGameObjectAtPath("Effect")
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitUpLotteryData")
+end
+
+local function RefreshBGSpine()
+    local spineName = "UpLotterySpine"
+    local animName = "loop"
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local obj = CsBridge.objectCache:CreateObject(spineName,true,spineRoot)
+        bgSpine = obj:GetComponent(CLS_SKELETONGRAPHIC)
+        bgSpine:PlayAnimation(animName,true)
+    end,spineName)
+end
+
+local function RefreshUpHero(upHero)
+    BindItemBaseValue(upHeroTrans, upHero)
+    SetUpdateEffect(upHeroTrans)
+end
+
+local function RefreshHeroPool(heroPool)
+    heroGrid:RefreshItemSlots(heroPool,self.gameObject,"ItemSlot")
+end
+
+local function RefreshConsumeBtnState(consumes)
+    SetFontColorWithEnough(onceConsume.num,function()
+        return CheckItemEnough(consumes[UP_LOTTERY_ONCE].id,consumes[UP_LOTTERY_ONCE].typeId,consumes[UP_LOTTERY_ONCE].count,false)
+    end,color2)
+    SetFontColorWithEnough(tenthConsume.num,function()
+        return CheckItemEnough(consumes[UP_LOTTERY_TENTH].id,consumes[UP_LOTTERY_TENTH].typeId,consumes[UP_LOTTERY_TENTH].count,false)
+    end,color2)
+end
+
+local function RefreshConsumes(consumes)
+    ShowOneConsume(onceConsume.icon, onceConsume.num, consumes[UP_LOTTERY_ONCE])
+    ShowOneConsume(tenthConsume.icon, tenthConsume.num, consumes[UP_LOTTERY_TENTH])
+    RefreshConsumeBtnState(consumes)
+end
+
+local function RefreshTopView(topRes)
+    ShowOneConsume(refreshItem.icon, refreshItem.num, topRes)
+end
+
+function OnNotification_RefreshUpLotteryView(objs)
+    local upHero, heroPool, consumes, topRes, title = objs[0], objs[1], objs[2], objs[3], objs[4]
+    RefreshBGSpine()
+    RefreshUpHero(upHero)
+    RefreshHeroPool(heroPool)
+    RefreshConsumes(consumes)
+    RefreshTopView(topRes)
+    titleTxt.text = title
+end
+
+function OnNotification_RefreshConsumeBtnState(objs)
+    local consumes = objs[0]
+    RefreshConsumeBtnState(consumes)
+end
+
+function OnNotification_RefreshTopView(objs)
+    local topRes = objs[0]
+    RefreshTopView(topRes)
+end
+
+function OnNotification_RefreshUpHero(objs)
+    local upHero = objs[0]
+    RefreshUpHero(upHero)
+end
+
+function OnNotification_ShowLotteryEffect(objs)
+    local onFinished = objs[0]
+    effectObj:SetSelfActive(true)
+    bgSpine:PlayAnimation("chouqu",false,function()
+        effectObj:SetSelfActive(false)
+        bgSpine:PlayAnimation("loop",true)
+        onFinished()
+    end)
+end
+
+function OnRefreshBtnClick(sender)
+    self:SendCommand("RefreshUpHero")
+end
+
+function OnLotteryOnceBtnClick(sender)
+    self:SendCommand("Lottery", UP_LOTTERY_ONCE)
+end
+
+function OnLotteryTenthBtnClick(sender)
+    self:SendCommand("Lottery", UP_LOTTERY_TENTH)
+end
+
+function OnHelpBtnClick(sender)
+    ShowHelpTip(self,INSTRUCTION_UP_LOTTERY)
+end
+
+function OnUpHeroClick(sender)
+    self:SendCommand("ShowUpHeroTip")
+end
+
+function OnHeroGridItemSlotClick(obj)
+    local data = obj.m_data
+    self:SendCommand("ShowTip",data)
+end
+
+function OnAddBtnClick(sender)
+    self:SendCommand("AddRefreshItem")
+end
+
+function OnCloseBtnClick(sender)
+    self:ReturnBack()
+end
+
+function DoExit( ... )
+    isInit = nil
+
+    spineRoot = nil
+    bgSpine = nil
+    upHeroTrans = nil
+    heroGrid = nil
+    titleTxt = nil
+
+    refreshItem = nil
+    onceConsume = nil
+    tenthConsume = nil
+    UP_LOTTERY_ONCE = nil
+    UP_LOTTERY_TENTH = nil
+
+    effectObj = nil
+end

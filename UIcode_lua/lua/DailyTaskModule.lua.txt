@@ -1,0 +1,19 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-03-12 10:54:53
+
+function DoInit()
+end
+
+function AssetNames(objs)
+    local arr = {"DailyTaskView", "DailyTaskItemSlot"}
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    self:OpenView("DailyTaskView", "DailyTaskModel")
+    if(onFinished ~= nil) then
+        onFinished()
+    end
+end

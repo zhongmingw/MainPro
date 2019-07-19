@@ -1,0 +1,590 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-06-14 16:37:45
+local FormationUtils = require "FormationUtils"
+local ScreenUtils = require "ScreenUtils"
+local WorldBossUtils = require "WorldBossUtils"
+
+local MAX_POS = 6
+local heroFormationData
+local auraArr
+
+local downHeroViewData
+local draggingHero
+local droppingHero
+
+local outerData
+
+local function CheckFormationEmpty()
+    for i=1,MAX_POS do
+        if heroFormationData[i] then
+            return false
+        end
+    end
+    return true
+end
+
+local function CheckEmptyPos()
+    local pos = 0
+    for i=1,MAX_POS do
+        if heroFormationData[i] == nil then
+            pos = i
+            break
+        end
+    end
+    return pos
+end
+
+local function CheckHeroIsOther(hero)
+    return hero.uid ~= 0 and heroFormationData[hero.pos].other
+end
+
+local function GetOtherHeroByFormationData(formationData)
+    for _, heroData in pairs(formationData) do
+        if heroData.other then
+            return heroData
+        end
+    end
+end
+
+local function GetHeroDataByHero(hero, pos, other)
+    return {
+        uid = hero.uid,
+        heroId = hero.heroId,
+        pos = pos,
+        other = other,
+    }
+end
+
+local function GetUpHeroViewDataByHero(hero, pos)
+    local tbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    local viewData = {}
+    if hero then
+        viewData = table.copy(hero)
+        viewData.pos = pos
+        viewData.race = hero.race or tbl:GetInt(hero.heroId,HeroBase.group)
+        viewData.quality = hero.quality or tbl:GetInt(hero.heroId,HeroBase.quality)
+    else
+        viewData.pos = pos
+        viewData.uid = 0
+        viewData.heroId = 0
+    end
+    return viewData
+end
+
+local function GetHeroDataByFormation(formationType)
+    local heroData = {}
+    local formation = appData:checkItem("Formation",formationType)
+    local heroIds = formation and formation.heroIds or {}
+    for i,heroPb in ipairs(heroIds) do
+        local hero = GetHeroDataByHero(heroPb,heroPb.pos,false)
+        heroData[hero.pos] = hero
+    end
+    local wbpInfo = appData:checkData("WorldBossPlayerInfo")
+    if wbpInfo.sixMan then
+        local hero = GetHeroDataByHero(wbpInfo.sixMan,wbpInfo.sixManPos,true)
+        heroData[hero.pos] = hero
+    end
+    return heroData
+end
+
+local function CheckHeroRepeatByHeroArr(hero,heroArr)
+    local tbl = ResTblContainer:GetTable(Hero.actorTbl)
+    local relationId = tbl:GetInt(hero.heroId,Hero.relationId)
+    local heroIdRepeat, reIdRepeat = false, false
+    for i,other in ipairs(heroArr) do
+        local other_reId = tbl:GetInt(other.heroId,Hero.relationId)
+        heroIdRepeat = hero.heroId == other.heroId
+        reIdRepeat = relationId ~= 0 and relationId == other_reId
+        if heroIdRepeat or reIdRepeat then
+            return heroIdRepeat, reIdRepeat
+        end
+    end
+    return heroIdRepeat, reIdRepeat
+end
+
+local function GetUpHeroViewData(heroFormationData)
+    local tbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    local upHeroArr = {}
+    for i=1, MAX_POS do
+        local heroData = heroFormationData[i]
+        local hero
+        if heroData == nil then
+            hero = GetUpHeroViewDataByHero(nil, i)
+        else
+            local pb
+            if heroData.other then
+                pb = appData:checkData("WorldBossPlayerInfo").sixMan
+            else
+                pb = appData:checkItem("HeroItem",heroData.uid)
+            end
+            hero = GetUpHeroViewDataByHero(pb, heroData.pos)   
+        end     
+        table.insert(upHeroArr,hero)
+    end
+    return upHeroArr
+end
+
+local function GetDownHeroViewData(upHeroArr)
+    local tbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    local downHeroArr = {}
+    local pbs = appData:checkAllItems("HeroItem")
+    if pbs == nil then
+        return downHeroArr
+    end
+    local heroIdRepeatDic = {}
+    local reIdRepeatDic = {}
+    for i=0, pbs.Length-1 do
+        local pb = pbs[i]
+        local hero = table.copy(pb)
+        hero.raceId = tbl:GetInt(hero.heroId,HeroBase.group)
+        hero.quality = tbl:GetInt(hero.heroId,HeroBase.quality)
+        hero.IsSelected = table.get(upHeroArr, function(upHero)
+            local isOther = heroFormationData[upHero.pos] and heroFormationData[upHero.pos].other
+            return not isOther and upHero.uid == hero.uid
+        end) ~= nil
+        if not hero.IsSelected then
+            local relationId = ResTblContainer:GetPropToInt(hero.heroId,Hero.relationId,Hero.actorTbl)
+            local isRepeat = heroIdRepeatDic[hero.heroId] or reIdRepeatDic[relationId]
+            if isRepeat == nil then
+                local heroIdRepeat, reIdRepeat = CheckHeroRepeatByHeroArr(hero,upHeroArr)
+                heroIdRepeatDic[hero.heroId] = heroIdRepeat
+                if relationId ~= 0 then
+                    reIdRepeatDic[relationId] = reIdRepeat
+                end
+                isRepeat = heroIdRepeat or reIdRepeat
+            end
+            hero.isRepeat = isRepeat
+        end
+        table.insert(downHeroArr,hero)
+    end
+    table.sort(downHeroArr, SortHeroByQuality)
+    return downHeroArr
+end
+
+local function GetHeroArrFight(heroArr)
+    local fight = 0
+    for i,hero in ipairs(heroArr) do
+        if hero.uid ~= 0 then
+            if heroFormationData[hero.pos].other then
+                local wbpInfo = appData:checkData("WorldBossPlayerInfo")
+                fight = fight + wbpInfo.sixManCombat
+            else
+                fight = fight + GetHeroFight(hero)
+            end
+        end
+    end
+    return fight
+end
+
+local function GetUpHeroArr()
+    local heroArr = {}
+    for _,hero in pairs(heroFormationData) do
+        local hero = {
+            uid = hero.uid,
+            heroId = hero.heroId
+        }
+        table.insert(heroArr,hero)
+    end
+    return heroArr
+end
+
+local function GetWorldBossFormationViewData()
+    local upHeroArr = GetUpHeroViewData(heroFormationData)
+    downHeroViewData = GetDownHeroViewData(upHeroArr)
+    local curAura = FormationUtils.CalcAura(auraArr,upHeroArr)
+    local fight = GetHeroArrFight(upHeroArr)
+    local inviteEnable = WorldBossUtils.CheckHasInviteCount()
+    local viewData = {
+        upHeroArr = upHeroArr,
+        downHeroArr = downHeroViewData,
+        curAura = curAura,
+        fight = fight,
+        inviteEnable = inviteEnable,
+    }
+    return viewData
+end
+
+local function ScreenHero(race)
+    race = race - 1
+    local newDownArr = {}
+    for i,v in ipairs(downHeroViewData) do
+        if race == 0 or race == v.raceId then
+            table.insert(newDownArr, v)
+        end 
+    end
+    self:SendNotification("ScreenWorldBossFormationView",newDownArr)
+end
+
+local function CheckUpFormationFull()
+    local count = 0
+    local withOtherCount = 0
+    for _, heroData in pairs(heroFormationData) do
+        if not heroData.other then
+            count = count + 1
+        end
+        withOtherCount = withOtherCount + 1
+    end
+    if withOtherCount >= MAX_POS then
+        WorldBossUtils.ShowHintBox(Language:getStr("heroFull"))
+        return true
+    end
+    if count >= MAX_POS - 1 then
+        WorldBossUtils.ShowHintBox(Language:getStr("HeroNeedInvite"))
+        return true
+    end
+    return false
+end
+
+local function UpHeroEffect(hero,slot)
+    local pos = CheckEmptyPos()
+    local viewData = {
+        hero = hero,
+        pos = pos,
+        slot = slot,
+        index = pos - 1
+    }
+    self:SendNotification("ShowUpHeroEffect",viewData)
+end
+
+local function GetChangeDownHeroArrByUpHero(hero, isUp)
+    local changeDownHeroArr = {}
+    local heroIdRepeatDic = {}
+    local reIdRepeatDic = {}
+    local changeDownHeroArr = {}
+    for _, downHero in ipairs(downHeroViewData) do
+        if downHero.uid == hero.uid then
+            downHero.IsSelected = isUp
+            table.insert(changeDownHeroArr, downHero)
+        else
+            local relationId = ResTblContainer:GetPropToInt(hero.heroId,Hero.relationId,Hero.actorTbl)
+            local pbRelationId = ResTblContainer:GetPropToInt(downHero.heroId,Hero.relationId,Hero.actorTbl)
+            local heroIdRepeat = hero.heroId == downHero.heroId
+            local reIdRepeat = relationId ~= 0 and relationId == pbRelationId
+            if heroIdRepeat or reIdRepeat then
+                downHero.isRepeat = isUp
+                table.insert(changeDownHeroArr, downHero)
+            end
+        end
+    end
+    return changeDownHeroArr
+end
+
+local function UpHero(data)
+    local hero = data.hero
+    local pos = data.pos
+    local index = data.index
+    local tbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    heroFormationData[pos] = GetHeroDataByHero(hero,pos,false)
+    local pb = appData:checkItem("HeroItem",hero.uid)
+    local upHero = GetUpHeroViewDataByHero(pb,pos)
+    upHero.anim = true
+    local changeUp = {
+        index = pos - 1,
+        hero = upHero,
+    }
+    local changeDownHeroArr = GetChangeDownHeroArrByUpHero(hero,true)
+    local upHeroArr = GetUpHeroViewData(heroFormationData)
+    local curAura = FormationUtils.CalcAura(auraArr,upHeroArr)
+    local fight = GetHeroArrFight(upHeroArr)
+    local viewData = {
+        changeUp = changeUp,
+        changeDownHeroArr = changeDownHeroArr,
+        curAura = curAura,
+        fight = fight,
+    }
+    self:SendNotification("RefreshUpHeroView",viewData) 
+end
+
+local function GetFormationPosByHero(hero)
+    local pos = 0
+    for _, heroData in pairs(heroFormationData) do
+        if hero.uid == heroData.uid then
+            pos = heroData.pos
+            break
+        end
+    end
+    return pos
+end
+
+local function DownHero(hero)
+    local pos = hero.pos or GetFormationPosByHero(hero)
+    if pos == 0 then
+        return
+    end
+    heroFormationData[pos] = nil
+    local upHero = GetUpHeroViewDataByHero(nil, pos)
+    local changeUp = {
+        index = pos - 1,
+        hero = upHero,
+    }
+    local changeDownHeroArr = GetChangeDownHeroArrByUpHero(hero,false)
+    local upHeroArr = GetUpHeroViewData(heroFormationData)
+    local curAura = FormationUtils.CalcAura(auraArr,upHeroArr)
+    local fight = GetHeroArrFight(upHeroArr)
+    local viewData = {
+        changeUp = changeUp,
+        changeDownHeroArr = changeDownHeroArr,
+        curAura = curAura,
+        fight = fight,
+    }
+    self:SendNotification("RefreshUpHeroView",viewData) 
+end
+
+local function GetFormationDataWithSix(FormationData)
+    local formationPos = {}
+    local sixManPos = 0
+    for _, heroData in pairs(FormationData) do
+        if heroData.other then
+            sixManPos = heroData.pos
+        else
+            local data = {
+                pos = heroData.pos,
+                uid = heroData.uid,
+                heroId = heroData.heroId,
+            }
+            table.insert(formationPos, data)
+        end
+    end
+    return {
+        formationPos = formationPos,
+        sixManPos = sixManPos
+    }
+end
+
+local function GetInviteOtherViewData()
+    local wbpInfo = appData:checkData("WorldBossPlayerInfo")
+    if wbpInfo.sixMan then
+        local hero = GetHeroDataByHero(wbpInfo.sixMan,wbpInfo.sixManPos,true)
+        heroFormationData[hero.pos] = hero
+    end
+    local upHeroArr = GetUpHeroViewData(heroFormationData)
+    local curAura = FormationUtils.CalcAura(auraArr,upHeroArr)
+    local fight = GetHeroArrFight(upHeroArr)
+    local inviteEnable = WorldBossUtils.CheckHasInviteCount()
+    local viewData = {
+        upHero = upHeroArr[wbpInfo.sixManPos],
+        index = wbpInfo.sixManPos - 1,
+        curAura = curAura,
+        fight = fight,
+        inviteEnable = inviteEnable,
+    }
+    return viewData
+end
+
+function DoInit()
+    auraArr = FormationUtils.GetAuraArr()
+end
+
+function DoOnExit()
+    heroFormationData = nil
+    auraArr = nil
+
+    FormationUtils = nil
+    ScreenUtils = nil
+    WorldBossUtils = nil
+
+    MAX_POS = nil
+
+    downHeroViewData = nil
+    draggingHero = nil
+    droppingHero = nil
+
+    outerData = nil
+end
+
+function OnCommand_InitData(objs)
+    outerData = objs[0]
+end
+
+function OnCommand_InitWorldBossFormationData(objs)
+    ScreenUtils.InitScreen(ScreenHero)
+    heroFormationData = GetHeroDataByFormation(FormationTypeEnum.FormationType_WorldBoss)
+    local viewData = GetWorldBossFormationViewData()
+    self:SendNotification("RefreshWorldBossFormationView",viewData)
+end
+
+function OnCommand_OpenAuraView(objs)
+    CsBridge.CacheAssetsByModule(self.Module,
+    function()
+        local view = CsBridge.OpenView("aureoleView","FormationModel",true,true)
+        local upHeroArr = GetUpHeroArr()
+        local curAura = FormationUtils.CalcAura(auraArr,upHeroArr)
+		view:SetParamDataList(auraArr, curAura)
+	end, "aureoleView","aureoleItemSlot")
+end
+
+function OnCommand_SelectUpHero(objs)
+    local hero = objs[0]
+    if hero.uid == 0 then
+        return
+    end
+    if CheckHeroIsOther(hero) then
+        WorldBossUtils.ShowHintBox(Language:getStr("WorldBossInviterNoDown"))
+        return
+    end
+    DownHero(hero)
+end
+
+function OnCommand_SelectDownHero(objs)
+    local hero, slot = objs[0], objs[1]
+    if ShowSoulImprintedTip(hero) then
+		return
+    end
+    if hero.IsSelected then
+        DownHero(hero)
+    else
+        if CheckUpFormationFull() then
+            return
+        end
+        if hero.isRepeat then
+            WorldBossUtils.ShowHintBox(Language:getStr("heroRepeat"))
+            return
+        end
+        UpHeroEffect(hero,slot)
+    end
+end
+
+function OnCommand_UpHero(objs)
+    local data = objs[0]
+    UpHero(data)
+end
+
+function OnCommand_HeroBeginDrag(objs)
+    local slot = objs[0]
+    local hero = slot.m_data
+    if hero.uid == 0 then
+        return
+    end
+    local pos = hero.pos
+    local newHero = GetUpHeroViewDataByHero(nil,pos)
+    local viewData = {
+        hero = hero,
+        newHero = newHero,
+        slot = slot,
+        index = slot.m_index,
+    }
+    self:SendNotification("RefreshHeroBeginDrag",viewData)
+    draggingHero = hero
+end
+
+function OnCommand_HeroEndDrag(objs)
+    if draggingHero == nil then
+        return
+    end
+    local slot = objs[0]
+    local hero = slot.m_data
+    local dragHero
+    local dragPos = hero.pos
+    local function RevertDragHero()
+        dragHero = GetUpHeroViewDataByHero(draggingHero,dragPos)
+        dragHero.anim = false
+        local viewData = {
+            dragHero = dragHero,
+            dragIndex = dragPos - 1,
+        }
+        self:SendNotification("RefreshHeroEndDrag",viewData)
+        draggingHero = nil
+        droppingHero = nil
+    end
+    if droppingHero == nil then
+        RevertDragHero()
+        return
+    end
+    local dropHero
+    local dropPos = droppingHero.pos
+    if dragPos == dropPos then
+        RevertDragHero()
+        return
+    end
+    if droppingHero.uid == 0 then
+        local heroDragData = heroFormationData[dragPos]
+        heroFormationData[dropPos] = GetHeroDataByHero(heroDragData,dropPos,heroDragData.other)
+        heroFormationData[dragPos] = nil
+        dragHero = GetUpHeroViewDataByHero(nil,dragPos)
+        dropHero = GetUpHeroViewDataByHero(draggingHero,dropPos)
+        dropHero.anim = false
+    else
+        local tmpHero = heroFormationData[dragPos]
+        local dropHeroData = heroFormationData[dropPos]
+        heroFormationData[dragPos] = GetHeroDataByHero(dropHeroData,dragPos,dropHeroData.other)
+        heroFormationData[dropPos] = GetHeroDataByHero(tmpHero,dropPos,tmpHero.other)
+        dragHero = GetUpHeroViewDataByHero(droppingHero,dragPos)
+        dropHero = GetUpHeroViewDataByHero(draggingHero,dropPos)
+        dragHero.anim = false
+        dropHero.anim = false
+    end
+    draggingHero = nil
+    droppingHero = nil
+    local viewData = {
+        dragHero = dragHero,
+        dragIndex = dragPos - 1,
+        dropHero = dropHero,
+        dropIndex = dropPos - 1,
+    }
+    self:SendNotification("RefreshHeroEndDrag",viewData)
+end
+
+function OnCommand_HeroDrop(objs)
+    if draggingHero == nil then
+        return
+    end
+    local slot = objs[0]
+    if slot.gameObject.name ~= "HeroItemSlot" then
+        return
+    end
+    local data = slot.m_data
+    if data.uid ~= draggingHero.uid then
+        droppingHero = data
+    end
+end
+
+function OnCommand_GoToBattle(objs)
+    local function confirmCbk()
+        self:SendNotification("HideView")
+        local formationData = GetFormationDataWithSix(heroFormationData)
+        local formationCallback = outerData.formationCallback
+        if formationCallback then formationCallback(formationData) end
+    end
+    if CheckFormationEmpty() then
+        WorldBossUtils.ShowHintBox(Language:getStr("noUpHero"))
+        return
+    end
+    local otherHeroData = GetOtherHeroByFormationData(heroFormationData)
+    if otherHeroData == nil then
+        WorldBossUtils.ShowFirstMsgBox(
+            "DontInviteToBattle",
+            Language:getStr("DontInviteToBattle"),
+            confirmCbk)
+    else
+        confirmCbk()
+    end
+
+end
+
+function OnCommand_InviteOther(objs)
+    if not WorldBossUtils.CheckPlayerHasUnion() then
+        WorldBossUtils.ShowHintBox(Language:getStr("WorldBossDontInvite"))
+        return
+    end
+    if not WorldBossUtils.CheckHasInviteCount() then
+        WorldBossUtils.ShowHintBox(Language:getStr("WorldBossDontInviteCount"))
+        return
+    end
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("WorldBossInviteView","WorldBossInviteModel")
+        local formationData = GetFormationDataWithSix(heroFormationData)
+        local function callback()
+            local viewData = GetInviteOtherViewData()
+            self:SendNotification("RefreshInviteOtherView",viewData)
+        end
+        local otherHeroData = GetOtherHeroByFormationData(heroFormationData)
+        local data = {
+            formationPos = formationData.formationPos,
+            callback = callback,
+            sixManPos = otherHeroData and otherHeroData.pos or CheckEmptyPos()
+        }
+        view:SetParamDataList(data)
+    end,"WorldBossInviteView","WorldBossInviteItemSlot")
+end

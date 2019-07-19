@@ -1,0 +1,129 @@
+--[[
+	file: LeaderboardActivityRewardView.lua
+	author: hangang
+	description: Leaderboard activity rewards panel
+]]
+
+require "ItemSlot"
+
+local curRankTxt, ruleTxt, cdTxt
+local ownRewardGrid, rewardGrid
+local claimBtn, claimTipsObj
+
+local viewData
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 1     --shadow type
+	InitUI()            --cache UI items
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	local path = "Center/ScrollRect/Viewport/RewardGrid"
+	rewardGrid = selfTrans:GetComponentAtPath(path, CLS_UI_ITEM_GRID)
+
+    local rewardGridTrans = selfTrans:Find(path)    
+    path = "SelfRewardGO/CurRankTxt"
+    curRankTxt = rewardGridTrans:GetComponentAtPath(path, CLS_TEXT)
+    
+    path = "SelfRewardGO/OwnRewardGrid"
+    ownRewardGrid = rewardGridTrans:GetComponentAtPath(path, CLS_UI_ITEM_GRID)
+
+	path = "SelfRewardGO/ClaimBtn"
+    claimBtn = rewardGridTrans:GetComponentAtPath(path, CLS_BUTTON_ARCHLY)
+
+	path = "SelfRewardGO/ClaimBtn/Tips"
+	claimTipsObj = rewardGridTrans:GetGameObjectAtPath(path)
+
+    path = "RuleGO/RuleTxt"
+    ruleTxt = rewardGridTrans:GetComponentAtPath(path, CLS_TEXT)
+
+    path = "TimerGO/TimeTxt"
+    cdTxt = rewardGridTrans:GetComponentAtPath(path, CLS_TEXT)
+end
+
+--UIController events handlers-------------------------------------------------------
+function OnNotification_RefreshLeadersActivityRwrdView(objs)
+	if self.gameObject.activeInHierarchy then
+		viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function RefreshView(data)
+    curRankTxt.text = data.curRank
+    ruleTxt.text = data.rules
+	ownRewardGrid:RefreshItemSlots(data.ownRewards, self.gameObject, "ItemSlot")
+	rewardGrid:RefreshItemSlots(data.rewards, self.gameObject, "APArenaRewardItemSlot")
+
+	claimBtn.interactable = data.claimBtnEnabled
+	claimTipsObj:SetActive(data.claimBtnEnabled)
+	
+	local scroll = self:GetComponentAtPath("Center/ScrollRect", "UnityEngine.UI.ScrollRect")
+	scroll.verticalNormalizedPosition = 1
+end
+
+function OnAPArenaRewardItemSlotBindValue(slot,data)
+	local rankingTxt=slot:GetComponentAtPath("RankTxt",CLS_TEXT)
+	rankingTxt.text = data.rankText
+
+	local ribbonImageObj=slot:GetGameObjectAtPath("RankSprite",CLS_IMAGE)
+	ribbonImageObj:SetActive(data.showRibbon)
+	if data.showRibbon then
+		CsBridge.IconData.SetIconByName(ribbonImageObj, data.ribbonIcon)
+	end
+
+	local rewardGrid = slot:GetComponentAtPath("RewardGrid",CLS_UI_ITEM_GRID)
+	rewardGrid:RefreshItemSlots(data.rewards, self.gameObject, "ItemSlot")
+end
+
+function OnNotification_LeadersActivityRewardClaimed(objs)
+	claimBtn.interactable = false
+	claimTipsObj:SetActive(false)
+end
+
+--UI event handlers-------------------------------------------------------------------
+function OnRewardGridItemSlotClick(obj)
+	if obj.gameObject.name == "ItemSlot" then
+		local item = obj.m_data
+    	self:SendCommand("OpenTipView", item)
+	end
+end
+
+function OnOwnRewardGridItemSlotClick(obj)
+	local item = obj.m_data
+    self:SendCommand("OpenTipView", item)
+end
+
+function OnClaimBtnClick(obj)
+    self:SendCommand("ClaimLeadersActivityRewards")
+end
+
+function OnMaskClick(obj)
+	Close()
+end
+
+function OnCloseBtnClick(obj)
+	Close()
+end
+
+function Close()
+	local viewName = self.gameObject.name
+	self:HideView(viewName)
+	if viewData.onClosed then
+		viewData.onClosed()
+	end
+end
+
+function DoExit()
+	curRankTxt = nil 
+	ruleTxt = nil 
+	cdTxt = nil
+	ownRewardGrid = nil 
+	rewardGrid = nil
+	claimBtn = nil 
+	claimTipsObj = nil
+
+	viewData = nil
+end

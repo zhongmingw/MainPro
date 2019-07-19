@@ -1,0 +1,71 @@
+require "SoulRankItemSlot"
+local isInit = false
+local rankGrid
+local palyer_TF
+local rank_Lab
+local power_Lab
+local INITIAL_RANK = 10000
+function DoInit()
+	self.Shadow = 1
+end 
+
+function InitUI()
+	rankGrid = self:GetComponentAtPath("playerSV/ScrollRect/Viewport/Grid",CLS_UI_ITEM_GRID)
+	palyer_TF = self:GetComponentAtPath("PlayerBase",CLS_RECTTRANSFORM)
+	rank_Lab = self:GetComponentAtPath("RankNumTxt",CLS_TEXT)
+    power_Lab = self:GetComponentAtPath("PowerNumTxt",CLS_TEXT)
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+	end
+	self:SendCommand("InitRankViewData")
+end
+
+function OnNotification_RefreshRankView(objs)
+	local rankItems = objs[0]
+	local myRankItem = objs[1]
+	rankGrid:RefreshItemSlots(rankItems,self.gameObject,"SoulRankItemSlot")
+	rank_Lab.text = myRankItem.rank == 0 and INITIAL_RANK or myRankItem.rank
+	power_Lab.text = myRankItem.combat
+	BindPlayerBaseInfoValue(palyer_TF,myRankItem.playerBaseInfo)
+end
+
+function OnGridPlayerBaseClick(obj)
+	local data = obj.m_data
+	if data.robot then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("ArenaTargetCannotSee"))
+		return
+	end
+	CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			local view = CsBridge.OpenView("PlayerInfoView", "PlayerInfoModel",true,true)
+			view.transform.parent:SetAsLastSibling()
+			local isLocal = false
+			local uid = data.playerBaseInfo.userId
+			local zone = data.playerBaseInfo.zone
+			view:SetParamDataList(isLocal, uid, zone)
+		end, "PlayerInfoView","AchievementItemSlot")
+end
+
+function CloseView()
+	self:HideView(self.gameObject.name)
+end
+
+function OnClose()
+
+end
+
+function OnCloseBtnClick(sender)
+    CloseView()
+end
+
+function OnMaskClick(sender)
+	CloseView()
+end
+
+function DoExit()
+	rankGrid = nil
+end

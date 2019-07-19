@@ -1,0 +1,60 @@
+require("ItemSlot")
+require("HeroMatItemSlot")
+
+local rewardGrid
+local itemGrid
+local heroMatGrid
+
+function DoInit()
+	self.Shadow = 2
+	self.Anim = 1
+    InitUI()
+end
+
+function InitUI()
+	rewardGrid = self:GetComponentAtPath("Center/RewardGrid" ,CLS_UI_ITEM_GRID)
+	itemGrid = self:GetComponentAtPath("Center/ItemGrid" ,CLS_UI_ITEM_GRID)
+	heroMatGrid = self:GetComponentAtPath("Center/HeroMatGrid" ,CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+    self:SendCommand("InitHeroGangComposeData")
+end
+
+function OnNotification_RefreshHeroGangComposeView(objs)
+    local data = objs[0]
+    rewardGrid:RefreshItemSlots(data.rewards, self.gameObject, "ItemSlot")
+    itemGrid:RefreshItemSlots(data.prices, self.gameObject, "ItemSlot")
+    heroMatGrid:RefreshItemSlots(data.materials , self.gameObject, "HeroMatItemSlot")
+end
+
+function OnNotification_CloseHeroGangComposeView(objs)
+    self:HideView(self.gameObject.name)
+end
+
+function OnHeroMatGridHeroMatItemSlotClick(obj)
+    local index = obj.m_index
+    self:SendCommand("OpenMaterialSelect",index)
+end
+
+function OnRewardGridItemSlotClick(obj)
+	self:SendCommand("OpenTipView",obj.m_data)
+end 
+
+function OnItemGridItemSlotClick(obj)
+	self:SendCommand("OpenTipView",obj.m_data)
+end 
+
+function OnDetermineBtnClick(sender)
+    self:SendCommand("HeroGangCompose")
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+    rewardGrid = nil
+    itemGrid = nil
+    heroMatGrid = nil
+end

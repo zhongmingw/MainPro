@@ -1,0 +1,143 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-04-16 18:04:52
+]]
+local MazeDef = require "MazeDef"
+local MazeUtils = require "MazeUtils"
+local GridType = MazeDef.GridType
+local GridState = MazeDef.GridState
+
+
+--Grid class
+local MazeGrid = class("MazeGrid")
+
+function MazeGrid:Ctor(row, col, state, type)
+    self.row = row
+    self.col = col
+    self.state = state
+    self.type = type
+end
+
+function MazeGrid:Finalize()
+    print(string.format("finalize---",self.__name))
+end
+
+--[[
+    @level:public 
+    @desc:bind ui and value
+    --@trans: ui recttransform
+    return
+]]
+function MazeGrid:BindValue(trans)
+    if self.state == GridState.Off then
+        self:BindOffStateValue(trans)
+    elseif self.state == GridState.On then
+        self:BindOnStateValue(trans)
+    elseif self.state == GridState.Block then
+        self:BindBlockStateValue(trans)
+    end
+end
+
+--[[
+    @level:public 
+    @desc: click grid
+    --@openFinished:open grid
+	--@clickFinished: click grid after open
+    return
+]]
+function MazeGrid:Trigger(data)
+    local da = {
+        curPlayer = data.curPlayer
+    }
+    if self.state == GridState.Off then
+        da.onFinished = data.openFinished
+        self:Open(da)
+    elseif self.state == GridState.On then
+        da.onFinished = data.clickFinished
+        self:Click(da)
+    elseif self.state == GridState.Block then
+        da.onFinished = data.blockFinished
+        self:Block(da)
+    end
+end
+
+function MazeGrid:SetData(svrData)end
+
+function MazeGrid:ShowOpenAnim(trans)
+    local effectTrans = trans:GetComponentAtPath("Effect",CLS_RECTTRANSFORM)
+    local spineName = "MazeOpenSpine"
+    local animName = "yes"
+    CsBridge.CacheAssetsByGroup(MazeDef.MazeModuleName,function()
+        local obj = CsBridge.objectCache:CreateObject(spineName,true,effectTrans)
+        local skeleton = obj:GetComponent(CLS_SKELETONGRAPHIC)
+        skeleton:PlayAnimation(animName,false,function()
+            CsBridge.GameObject.Destroy(obj)
+        end)
+    end,spineName)
+end
+
+--protect
+function MazeGrid:BindOffStateValue(trans)
+    local bg = trans:GetGameObjectAtPath("BgImg")
+    local blockFlag = trans:GetGameObjectAtPath("BgImg/BlockFlag")
+    local monsterRootObj = trans:GetGameObjectAtPath("MonsterRoot")
+    local monsterRoot = trans:GetComponentAtPath("MonsterRoot/Monster",CLS_RECTTRANSFORM)
+    local iconImg = trans:GetGameObjectAtPath("IconImg")
+    SetSpriteByModule(bg,MazeDef.GridBaseStateIconNames[self.state])
+    blockFlag:SetSelfActive(false)
+    iconImg:SetSelfActive(false)
+    bg:SetSelfActive(true)
+    monsterRootObj:SetSelfActive(false)
+    MazeUtils.DestroyModel(monsterRoot)
+end
+
+--protect
+function MazeGrid:BindOnStateValue(trans)
+    local bg = trans:GetGameObjectAtPath("BgImg")
+    local blockFlag = trans:GetGameObjectAtPath("BgImg/BlockFlag")
+    local monsterRootObj = trans:GetGameObjectAtPath("MonsterRoot")
+    local monsterRoot = trans:GetComponentAtPath("MonsterRoot/Monster",CLS_RECTTRANSFORM)
+    local iconImg = trans:GetGameObjectAtPath("IconImg")
+    blockFlag:SetSelfActive(false)
+    iconImg:SetSelfActive(false)
+    SetSpriteByModule(bg,MazeDef.GridBaseTypeIconNames[self.type])
+    bg:SetSelfActive(true)
+    monsterRootObj:SetSelfActive(false)
+    MazeUtils.DestroyModel(monsterRoot)
+end
+
+--protect
+function MazeGrid:BindBlockStateValue(trans)
+    local bg = trans:GetGameObjectAtPath("BgImg")
+    local blockFlag = trans:GetGameObjectAtPath("BgImg/BlockFlag")
+    local monsterRootObj = trans:GetGameObjectAtPath("MonsterRoot")
+    local monsterRoot = trans:GetComponentAtPath("MonsterRoot/Monster",CLS_RECTTRANSFORM)
+    local iconImg = trans:GetGameObjectAtPath("IconImg")
+    SetSpriteByModule(bg,MazeDef.GridBaseStateIconNames[self.state])
+    blockFlag:SetSelfActive(true)
+    iconImg:SetSelfActive(false)
+    bg:SetSelfActive(true)
+    monsterRootObj:SetSelfActive(false)
+    MazeUtils.DestroyModel(monsterRoot)
+end
+
+--protect
+function MazeGrid:Open(data)
+    local da = {
+        row = self.row,
+        col = self.col
+    }
+    data.onFinished(da)
+end
+
+--protect
+function MazeGrid:Click(data)end
+
+--protect
+function MazeGrid:Block(data)
+    data.onFinished()
+end
+
+return MazeGrid

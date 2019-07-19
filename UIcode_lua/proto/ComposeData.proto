@@ -1,0 +1,53 @@
+import "stage.proto";
+package ComposeData;
+
+message ComposeEquipReq 
+{
+	required int32 id = 1;
+	required int32 count = 2;
+}
+
+message ComposeEquipResp 
+{
+	repeated stage.RewardItem rewardItems = 1;
+}
+
+message DeComposeHeroReq 
+{
+	repeated int32 uidList = 1;
+}
+
+message DeComposeHeroResp 
+{
+	repeated stage.RewardItem results = 1;
+}
+
+message ComposeHeroReq 
+{
+	required int32 id = 1;
+	required int32 mainMaterialId = 2;
+	repeated int32 subMaterial1 = 3;
+	repeated int32 subMaterial2 = 4;
+	repeated int32 subMaterial3 = 5;
+}
+
+message ComposeHeroResp
+{
+	required int32 uid = 1;
+	repeated stage.RewardItem rewardItems = 2;
+}
+
+message HeroBreakReq 
+{
+	required int32 id = 1; //合成的目标英雄ID
+	required int32 mainMaterialUId = 2; //主材料英雄uid
+	repeated int32 subMaterial1 = 3; //副材料1, 英雄的uid列表
+	repeated int32 subMaterial2 = 4; //副材料2，英雄的uid列表
+	repeated int32 subMaterial3 = 5; //副材料3，英雄的uid列表，万能英雄卡id<0
+}
+
+message HeroBreakResp 
+{
+	repeated stage.RewardItem rewardItems = 1; //返还的物品列表
+	required int32 status = 2;
+}

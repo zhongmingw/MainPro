@@ -1,0 +1,63 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-05-23 14:47:18
+
+local isInit = false
+
+local despTxt
+local despTxtTrans
+local iconImgObj
+local typeImgObj
+
+function DoInit()	
+    self.Shadow = 1
+    self.Anim = 8
+end
+
+local function InitUI()
+    iconImgObj=self:GetGameObjectAtPath("Center/BaseInfo/IconImg")
+    typeImgObj = self:GetGameObjectAtPath("Center/BaseInfo/TypeImg")
+	despTxt=self:GetComponentAtPath("Center/DesTxt",CLS_TEXT)
+    despTxtTrans=despTxt.transform
+end
+
+function OnOpen()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+end
+
+function SetParamDataList(objs)
+    local data = objs[0]
+    self:SendCommand("InitData",data)
+end
+
+function DoExit()
+    isInit = nil
+
+    despTxt = nil
+    despTxtTrans = nil
+    iconImgObj = nil
+    typeImgObj = nil
+end
+
+local function HideView()
+    self:HideView(self.gameObject.name)
+end
+
+function OnNotification_RefreshMazeBuffTipView(objs)
+    local buff = objs[0]
+    SetSpriteByModule(iconImgObj,buff.icon,self.Module)
+    SetSpriteByModule(typeImgObj,buff.typeIcon,self.Module)
+
+    despTxt.text=buff.desp
+    local sizeDelta = despTxtTrans:CheckSizeDelta()
+    sizeDelta.y = despTxt.preferredHeight
+    despTxtTrans:ResetSizeDelta(sizeDelta)
+end
+
+function OnMaskClick(sender)
+    HideView()
+end

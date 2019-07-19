@@ -1,0 +1,19 @@
+package AdData;
+
+message PlayerAdInfo
+{	
+    required int64 lastVideoTime = 1;//激励视频
+    required int64 lastHasteAutoTaskTime = 2;
+    required int32 adCount = 3;
+    required bool isOpen = 4;
+}
+
+message GetAdRewardReq
+{
+    required int32 useless = 1;
+}
+
+message GetAdRewardResp 
+{
+    required int32 status = 1;
+}

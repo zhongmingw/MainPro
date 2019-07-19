@@ -1,0 +1,22 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-04-08 13:50:29
+
+function DoInit()
+end
+
+function AssetNames(objs)
+    local arr = {"DragonCrystalView","ElementalSummonView"}
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    local view = self:OpenView("DragonCrystalView", "DragonCrystalModel")
+    if objs~=nil and objs.Length == 1 then
+        view:SendCommand("OpenTypeView", objs[0])
+    end
+    if(onFinished ~= nil) then
+        onFinished()
+    end
+end

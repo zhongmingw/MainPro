@@ -1,0 +1,301 @@
+--[[
+	file: LeaderboardModel.lua
+	author: hangang
+	description: Union battle view controller
+]]
+
+require "LeaderboardUtils"
+
+local cachedPowerData, cachedLevelData,
+	 cachedGloryRoadData, cachedTowerData
+
+local curPowerLeaderboardType = PowerLeaderboardType.Local
+
+local SIGNAL_EMPTY_TIPS = "SetEmptyTips"
+local SIGNAL_REFRESH_LEVEL_VIEW = "RefreshLevelView"
+
+local RIBBON_IDX_MAX = 3
+local ICON_NAME_RIBBON = "new_com_paiming"
+
+------View events handler-----------------------------------------------------------------
+function OnCommand_OpenPowerView(objs)
+    OpenPowerView()
+end
+
+function OnCommand_OpenLevelView(objs)
+    OpenLevelView()
+end
+
+function OnCommand_OpenGloryRoadView(objs)
+    OpenGloryRoadView()
+end
+
+function OnCommand_OpenTowerView(objs)
+    OpenTowerView()
+end
+
+function OnCommand_PlayerBaseClicked(objs)
+	local playerData = objs[0]
+	local parentViewName = objs[1]
+
+	OpenPlayerInfoView(self, playerData, parentViewName)
+end
+
+function OnCommand_CloseLeadersView(objs)
+	self:SendNotification("CloseLeadersView")
+end
+
+function OnCommand_SwitchPowerLeaderboard(objs)
+	if curPowerLeaderboardType == PowerLeaderboardType.Local then
+		curPowerLeaderboardType = PowerLeaderboardType.Global
+	else
+		curPowerLeaderboardType = PowerLeaderboardType.Local
+	end
+
+	OpenPowerView()
+end
+
+function OnCommand_ShowPowerLeaderboardTips(objs)
+	local parentViewName = objs[0]
+	local instuctionID = 51
+	CsBridge.CacheAssetsByModule( self.Module,
+		function()
+			local view = CsBridge.OpenView("HelpView","LeaderboardModel", false, true)
+			view:SetData(instuctionID)
+		end,
+		"HelpView")
+end
+
+------Helpers-----------------------------------------------------------------------------
+--Power leaderboard--------------
+function OpenPowerView()
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			self:SendNotification("CloseLeadersView")
+			local view = CsBridge.OpenView("PlayerPowerRankView", "LeaderboardModel", false, false)
+			TryRefreshPowerView()
+		end, 
+		"PlayerPowerRankView",
+		"PlayerPowerItemSlot")
+end
+
+function TryRefreshPowerView()
+	local finishedCallback = function(resp)
+		cachedPowerData = resp
+		cachedPowerData.rankInfos = cachedPowerData.rankInfos or {}
+		RefreshPowerView()
+	end
+
+	if curPowerLeaderboardType == PowerLeaderboardType.Local then
+		FetchPowerLeaderboard(finishedCallback)
+	else
+		FetchGlobalPowerLeaderboard(finishedCallback)
+	end
+end
+
+function RefreshPowerView()
+	local viewData = GetPowerViewData(cachedPowerData)
+	self:SendNotification("RefreshPowerView", viewData)
+	self:SendNotification(SIGNAL_EMPTY_TIPS, #viewData.playerList == 0)
+end
+
+function GetPowerViewData(data)
+	local viewData = {}
+	viewData.ownData = GetLevelItemViewData(data.selfRankInfo)
+
+	local playerList = {}
+	viewData.playerList = playerList
+
+	for k, playerData in pairs(cachedPowerData.rankInfos) do
+		local itemViewData = GetLevelItemViewData(playerData)
+		table.insert(playerList, itemViewData)
+	end
+
+	local key = curPowerLeaderboardType == PowerLeaderboardType.Local
+		and "LocalLeaderboard" or "GlobalLeaderboard"
+	viewData.title = Language:getStr(key)
+	key = curPowerLeaderboardType == PowerLeaderboardType.Local
+		and "GlobalSever" or "LocalServer"
+	viewData.switchBtnTitle = Language:getStr(key)
+	
+	return viewData
+end
+
+--Level leaderboard--------------
+function OpenLevelView()
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			self:SendNotification("CloseLeadersView")
+			local view = CsBridge.OpenView("PlayerLevelRankView", "LeaderboardModel", false, false)
+			TryRefreshLevelView()
+		end, 
+		"PlayerLevelRankView",
+		"PlayerLevelItemSlot")
+end
+
+function TryRefreshLevelView()
+	local finishedCallback = function(resp)
+		cachedLevelData = resp
+		cachedLevelData.rankInfos = cachedLevelData.rankInfos or {}
+		RefreshLevelView()
+	end
+	FetchLevelLeaderboard(finishedCallback)
+end
+
+function RefreshLevelView()
+	local viewData = GetLevelViewData(cachedLevelData)
+	self:SendNotification(SIGNAL_REFRESH_LEVEL_VIEW, viewData)
+	self:SendNotification(SIGNAL_EMPTY_TIPS, #viewData.playerList == 0)
+end
+
+function GetLevelViewData(data)
+	local viewData = {}
+	local ownData = GetLevelItemViewData(data.selfRankInfo)
+	ownData.value = ResTblContainer:
+			GetPropToStr(data.selfRankInfo.score, Campaign.name, Campaign.actorTbl)
+	local headerText = Language:getStr("Level")
+	ownData.headerText = headerText
+	viewData.ownData = ownData
+
+	local playerList = {}
+	viewData.playerList = playerList
+
+	for k, playerData in pairs(cachedLevelData.rankInfos) do
+		local itemViewData = GetLevelItemViewData(playerData)
+		itemViewData.value = ResTblContainer:
+			GetPropToStr(playerData.score, Campaign.name, Campaign.actorTbl)
+		itemViewData.headerText = headerText
+		table.insert(playerList, itemViewData)
+	end
+	
+	return viewData
+end
+
+function GetLevelItemViewData(itemData)
+	local itemViewData = {}
+	itemViewData.name = FormatWorldPlayerName(itemData.playerBaseInfo.name, itemData.playerBaseInfo.zone)
+	itemViewData.power = itemData.combat
+	itemViewData.playerInfo = itemData.playerBaseInfo
+
+	local rank = itemData.rank
+	itemViewData.rank = rank > 0 and tostring(rank) or "-"
+	itemViewData.showRibbon = rank <= RIBBON_IDX_MAX and rank > 0
+	itemViewData.ribbonIcon = ICON_NAME_RIBBON .. itemViewData.rank
+
+	return itemViewData
+end
+
+--Glory road leaderboard--------------
+function OpenGloryRoadView()
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			self:SendNotification("CloseLeadersView")
+			local view = CsBridge.OpenView("PlayerLevelRankView", "LeaderboardModel", false, false)
+			TryRefreshGloryRoadView()
+		end, 
+		"PlayerLevelRankView",
+		"PlayerLevelItemSlot")
+end
+
+function TryRefreshGloryRoadView()
+	local finishedCallback = function(resp)
+		cachedGloryRoadData = resp
+		cachedGloryRoadData.rankInfos = cachedGloryRoadData.rankInfos or {}
+		RefreshGloryRoadView()
+	end
+	FetchGloryRoadLeaderboard(finishedCallback)
+end
+
+function RefreshGloryRoadView()
+	local viewData = GetGloryRoadViewData(cachedGloryRoadData)
+	self:SendNotification(SIGNAL_REFRESH_LEVEL_VIEW, viewData)
+	self:SendNotification(SIGNAL_EMPTY_TIPS, #viewData.playerList == 0)
+end
+
+function GetGloryRoadViewData(data)
+	local viewData = {}
+	local ownData = GetLevelItemViewData(data.selfRankInfo)
+	ownData.value = FormatGloryRoadLevel(data.selfRankInfo.score)
+	local headerText = Language:getStr("SkyscraperRankItemSlot_name02Txt_855")
+	ownData.headerText = headerText
+	viewData.ownData = ownData
+
+	local playerList = {}
+	viewData.playerList = playerList
+
+	for k, playerData in pairs(cachedGloryRoadData.rankInfos) do
+		local itemViewData = GetLevelItemViewData(playerData)
+		itemViewData.value = FormatGloryRoadLevel(playerData.score)
+		itemViewData.headerText = headerText
+		table.insert(playerList, itemViewData)
+	end
+	
+	return viewData
+end
+
+--Endless tower leaderboard--------------
+function OpenTowerView()
+	CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			self:SendNotification("CloseLeadersView")
+			local view = CsBridge.OpenView("PlayerLevelRankView", "LeaderboardModel", false, false)
+			TryRefreshTowerView()
+		end, 
+		"PlayerLevelRankView",
+		"PlayerLevelItemSlot")
+end
+
+function TryRefreshTowerView()
+	local finishedCallback = function(resp)
+		cachedTowerData = resp
+		cachedTowerData.rankInfos = cachedTowerData.rankInfos or {}
+		RefreshTowerView()
+	end
+	FetchTowerLeaderboard(finishedCallback)
+end
+
+function RefreshTowerView()
+	local viewData = GetTowerViewData(cachedTowerData)
+	self:SendNotification(SIGNAL_REFRESH_LEVEL_VIEW, viewData)
+	self:SendNotification(SIGNAL_EMPTY_TIPS, #viewData.playerList == 0)
+end
+
+function GetTowerViewData(data)
+	local viewData = {}
+	local headerText = Language:getStr("SkyscraperRankItemSlot_name02Txt_855")
+	local ownData = GetLevelItemViewData(data.selfRankInfo)
+	ownData.value = tostring(data.selfRankInfo.score)
+	ownData.headerText = headerText
+	viewData.ownData = ownData
+
+	local playerList = {}
+	viewData.playerList = playerList
+
+	for k, playerData in pairs(cachedTowerData.rankInfos) do
+		local itemViewData = GetLevelItemViewData(playerData)
+		itemViewData.value = tostring(playerData.score)
+		itemViewData.headerText = headerText
+		table.insert(playerList, itemViewData)
+	end
+
+	return viewData
+end
+
+function DoOnExit()
+	cachedPowerData = nil 
+	cachedLevelData = nil
+	cachedGloryRoadData = nil 
+	cachedTowerData = nil
+
+	curPowerLeaderboardType  = nil
+
+	SIGNAL_EMPTY_TIPS  = nil
+	SIGNAL_REFRESH_LEVEL_VIEW  = nil
+
+	RIBBON_IDX_MAX  = nil
+	ICON_NAME_RIBBON  = nil
+end

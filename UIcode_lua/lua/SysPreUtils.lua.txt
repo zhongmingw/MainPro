@@ -1,0 +1,83 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-05-31 11:57:55
+]]
+
+local function GetSysPreTblData()
+    local data = {}
+    local tbl = ResTblContainer:GetTable(UIOpenBase.actorTbl)
+    local ids = tbl:GetCol(UIOpenBase.id)
+    local OK = 1
+    for i=0,ids.Length-1 do
+        local id = tonumber(ids[i])
+        local preview = tbl:GetInt(id,UIOpenBase.preview)
+        if CheckUIOpen(id) and preview == OK then
+            local name = tbl:Get(id,UIOpenBase.name)
+            local icon = tbl:Get(id,UIOpenBase.icon)
+            local level = tbl:GetInt(id,UIOpenBase.level)
+            local desp = tbl:Get(id,UIOpenBase.desc)
+            local sysPreData = {
+                id = id,
+                level = level,
+                name = name,
+                icon = icon,
+                desp = desp,
+            }
+            table.insert(data,sysPreData)
+        end
+    end
+    table.sort(data,function(a,b)
+        if a.level ~= b.level then
+            return a.level < b.level
+        end
+        return a.id < b.id
+    end)
+    return data
+end
+
+local function GetOpenSysByLevel(level,count,tbl)
+    tbl = tbl or GetSysPreTblData()
+    local openSys = {}
+    local c = 0
+    for i,sysData in ipairs(tbl) do
+        if sysData.level > level then
+            break
+        end
+        if sysData.level == level and c < count then
+           table.insert(openSys, sysData)
+           c = c+1
+        end
+    end
+    return openSys
+end
+
+local function GetOpenSysClosestLevel(level,count,tbl)
+    tbl = tbl or GetSysPreTblData()
+    local openSys = {}
+    local c = 0
+    local hasFindClosestLevel = false
+    local closestLevel
+    for i,sysData in ipairs(tbl) do
+        if closestLevel and closestLevel < sysData.level then
+            break
+        end
+        if closestLevel == nil and level < sysData.level then
+            closestLevel = sysData.level
+        end
+        if closestLevel and closestLevel == sysData.level then
+            if c < count then
+                table.insert(openSys, sysData)
+                c = c+1
+             end
+        end
+    end
+    return openSys
+end
+
+return {
+    GetSysPreTblData = GetSysPreTblData,
+    GetOpenSysByLevel = GetOpenSysByLevel,
+    GetOpenSysClosestLevel = GetOpenSysClosestLevel,
+}

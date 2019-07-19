@@ -1,0 +1,98 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-05-15 14:18:14
+]]
+
+local function AddVec2WithVec2(vec1, vec2)
+    return {
+         x = vec1.x + vec2.x,
+         y= vec1.y + vec2.y
+    }
+end
+
+local function MinusVec2WithVec2(vec1, vec2)
+    return {
+         x = vec1.x - vec2.x,
+         y = vec1.y - vec2.y
+    }
+end
+
+local function MulVec2WithNum(vec, num)
+    return {
+         x = vec.x * num,
+         y = vec.y * num
+    }
+end
+
+local function EqualsVec2(vec1, vec2)
+    return vec1.x == vec2.x and vec1.y == vec2.y
+end
+
+local function DotVec2(vec1, vec2)
+    return vec1.x * vec2.x + vec1.y * vec2.y
+end
+
+local function CrossVec2(vec1, vec2)
+    return vec1.x * vec2.y - vec2.x * vec1.y
+end
+
+local function RotationVec2(vec, angle)
+   local x = vec.x
+   local y = vec.y
+   angle = math.pi * angle / 180
+   local sin = math.sin(angle)
+   local cos = math.cos(angle)
+   local newX = x * cos + y * sin
+   local newY = x * -sin + y * cos
+   return {
+        x = newX,
+        y = newY
+   }
+end
+
+local function GetCalcVec2(vec)
+    local v = {
+        x = vec.x,
+        y = vec.y
+    }
+    local calc = {}
+    calc.__add = function(a, b)
+        local result = AddVec2WithVec2(a,b)
+        setmetatable(result, calc)
+        return result
+    end
+    calc.__sub = function(a, b)
+        local result = MinusVec2WithVec2(a,b)
+        setmetatable(result, calc)
+        return result
+    end
+    calc.__mul = function(a, b)
+        if type(b) == "number" then
+            local result = MulVec2WithNum(a,b)
+            setmetatable(result, calc)
+            return result
+        end
+        if type(a) == "number" then
+            local result = MulVec2WithNum(b,a)
+            setmetatable(result, calc)
+            return result
+        end
+        return "no mul two vec2"
+    end
+    calc.__eq = function(a, b)
+        local result = EqualsVec2(a,b)
+        setmetatable(result,calc)
+        return result
+    end
+    setmetatable(v,calc)
+    return v
+end
+
+return {
+    RotationVec2 = RotationVec2,
+    DotVec2 = DotVec2,
+    CrossVec2 = CrossVec2,
+    GetCalcVec2 = GetCalcVec2,
+}

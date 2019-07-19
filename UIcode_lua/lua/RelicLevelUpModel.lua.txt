@@ -1,0 +1,393 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-03-27 14:21:35
+
+local utils = require "HeroBagUtils"
+
+local curHero
+
+local curRelic
+local curRelicMaterialArr
+local allRelicMaterialArr
+local ownRelicMatArr
+
+local relicExpDataFromTbl
+
+local function CalcRelicSupplyExp(relic)
+    --(当前神器星级 + 2)*(当前神器星级 - 1) * 经验等级 /2+ 默认提供经验
+    local expData = relicExpDataFromTbl[relic.id]
+    local exp = expData.exp
+    local supplyExp = expData.supplyExp
+    
+    return math.floor((relic.level+2)*(relic.level-1)*exp*0.5+supplyExp)
+end
+
+local function CalcRelicLevelUpExp(targetRelic)
+    local exp = relicExpDataFromTbl[targetRelic.id].exp
+    return targetRelic.level*exp
+end
+
+local function UpdateHeroRelicData(hero)
+    if hero == nil then
+        return
+    end
+    local newHero = appData:checkItem("HeroItem",hero.uid)
+    hero.relicId = newHero.relicId
+    hero.relic = utils.GetRelic(newHero.relicId)
+end
+
+local function GetRelicMaterialsExp()
+    local materialsExp = 0
+    for i,relicMaterial in ipairs(curRelicMaterialArr) do
+        if relicMaterial.id ~= 0 then
+            materialsExp = materialsExp + relicMaterial.supplyExp*relicMaterial.count
+        end
+    end
+    return materialsExp
+end
+
+--获取根据经验神器能升到的最大等级
+local function GetRelicUpToMaxLevel(exp,curRelic)
+    local upToLevel = 0
+    local newRelic = {
+        id = curRelic.id,
+        level = curRelic.level
+    }
+    local maxLevel = ResTblContainer:GetPropToInt(curRelic.quality,RelicQuality.star,RelicQuality.tblName)
+    while exp > 0 and newRelic.level < maxLevel do
+        newRelic.level = newRelic.level + 1
+        local levelUpExp = CalcRelicLevelUpExp(newRelic)
+        exp = exp - levelUpExp
+        upToLevel = exp >= 0 and upToLevel+1 or upToLevel
+    end
+    return upToLevel
+end
+
+--获取要达到最大等级需要的材料的数量
+local function GetRelicMatCountToMaxLevel(matRelic)
+    local curSupplyExp = curRelic.exp+GetRelicMaterialsExp()
+    local toMaxLevelNeedExp = 0
+    local newRelic = {
+        id = curRelic.id,
+        level = curRelic.level
+    }
+    local maxLevel = ResTblContainer:GetPropToInt(curRelic.quality,RelicQuality.star,RelicQuality.tblName)
+    while newRelic.level < maxLevel do
+        newRelic.level = newRelic.level+1
+        toMaxLevelNeedExp = toMaxLevelNeedExp + CalcRelicLevelUpExp(newRelic)
+    end
+    local curMatExp = matRelic.supplyExp or CalcRelicSupplyExp(matRelic)
+    return math.ceil((toMaxLevelNeedExp - curSupplyExp) / curMatExp)
+end
+
+local function GetNewRelic()
+    local newRelic = {}
+    if curRelic.hasMaxLevel then
+        newRelic.id = 0
+        return newRelic
+    end
+    newRelic.id = curRelic.id
+    newRelic.typeId = ItemTypeEnum.Relic
+    local upToLevel = GetRelicUpToMaxLevel(curRelic.exp+GetRelicMaterialsExp(),curRelic)
+    if upToLevel == 0 then
+        upToLevel = 1
+    end
+    newRelic.level = curRelic.level+upToLevel
+    newRelic.owner = curRelic.owner
+    return newRelic 
+end
+
+local function InitRelicLevelUpData()
+    local pbs = appData:checkAllItems("RelicItem")
+    allRelicMaterialArr = {}
+    ownRelicMatArr = {}
+    if pbs ~= nil then
+        local tbl=ResTblContainer:GetTable(Relic.tblName)
+        for i=0,pbs.Length-1 do
+            local pb = pbs[i]
+            if pb.owner == nil or pb.owner == 0 then
+                local quality = tbl:GetInt(pb.id, Relic.quality)
+                local relicMaterial = {
+                    id = pb.id,
+                    uid = pb.uid,
+                    level = pb.level,
+                    quality = quality,
+                    supplyExp = CalcRelicSupplyExp(pb),
+                    typeId = ItemTypeEnum.Relic,
+                    count =1
+                }
+                local attrs = GetRelicAttrs(relicMaterial.id,relicMaterial.level)
+                relicMaterial.propInfos = attrs.baseAttrs
+                relicMaterial.activateAttrs = attrs.activateAttrs
+                table.insert(allRelicMaterialArr,relicMaterial)
+                table.insert(ownRelicMatArr, relicMaterial)
+            else
+                if pb.uid == curHero.relic.uid then
+                    curRelic = {
+                        id = pb.id,
+                        uid = pb.uid,
+                        level = pb.level,
+                        exp = pb.exp,
+                        owner = pb.owner,
+                        typeId = ItemTypeEnum.Relic
+                    }
+                    curRelic.quality = curHero.relic.quality
+                    curRelic.hasMaxLevel = curRelic.level >= GetRelicMaxLevel(curRelic.quality)
+                    if not curRelic.hasMaxLevel then
+                        local newRelic = {
+                            id = curRelic.id,
+                            level = curRelic.level + 1
+                        }
+                        curRelic.levelUpExp = CalcRelicLevelUpExp(newRelic)
+                    end
+                end
+            end
+        end
+        allRelicMaterialArr = MergeRelic(allRelicMaterialArr)
+        table.sort(allRelicMaterialArr,SortRelicByQuality)
+    end
+    curRelicMaterialArr = {}
+    table.insert(curRelicMaterialArr, {id=0})
+    table.insert(curRelicMaterialArr, {id=0})
+    table.insert(curRelicMaterialArr, {id=0})
+    table.insert(curRelicMaterialArr, {id=0})
+end
+
+local function CheckMaterialInAllMaterial(mat)
+    for i,material in ipairs(allRelicMaterialArr) do
+        if material.id == mat.id and material.level == mat.level then
+            return i
+        end
+    end
+    return 0
+end
+
+local function CheckMaterialInCurMaterial(mat)
+    for i,curMaterial in ipairs(curRelicMaterialArr) do
+        if curMaterial.id == mat.id and curMaterial.level == mat.level then
+            return i
+        end
+    end
+    return 0
+end
+
+local function CheckCurMaterialEmptyPos()
+    for i,v in ipairs(curRelicMaterialArr) do
+        if v.id == 0 then
+            return i
+        end
+    end
+    return 0
+end
+
+local function GetMaterialUidsByRelic(relic)
+    local uidList = {}
+    local count = 0
+    for i,v in ipairs(ownRelicMatArr) do
+        if v.id == relic.id and v.level == relic.level and (v.owner == 0 or v.owner == nil) then
+            table.insert(uidList, v.uid)
+            count = count+1
+            if count >= relic.count then
+                return uidList
+            end
+        end
+    end
+    return uidList
+end
+
+local function GetCurMaterialUids()
+    local uidList = {}
+    for i,material in ipairs(curRelicMaterialArr) do
+        if material.id ~= 0 then
+            local uids = GetMaterialUidsByRelic(material)
+            table.insertto(uidList, uids)
+        end
+    end
+    return uidList
+end
+
+local function UpdateRelicMaterial(curMaterial)
+    self:SendNotification("UpdateRelicMaterial",curMaterial,allRelicMaterialArr,curRelic.levelUpExp,curRelic.exp+GetRelicMaterialsExp(),GetNewRelic())
+end
+
+local function UpdateSingleRelicMaterial(curMaterial,relicMaterial)
+    self:SendNotification("UpdateSingleRelicMaterial",curMaterial,relicMaterial,curRelic.levelUpExp,curRelic.exp+GetRelicMaterialsExp(),GetNewRelic())
+end
+
+function SelectRelicMaterial(relicMaterial,relicMaterialPos,count)
+    local needCount = GetRelicMatCountToMaxLevel(relicMaterial)
+    if needCount <= 0 then
+        utils.ShowHintBox(Language:getStr("RelicMaterialHasToMaxLevel"))
+        return
+    end
+    count = math.min(needCount,count)
+    local index = CheckMaterialInCurMaterial(relicMaterial)
+    if index == 0 then
+        index = CheckCurMaterialEmptyPos()
+        if index == 0 then
+            utils.ShowHintBox(Language:getStr("RelicMaxSelectMaterial"))
+            return
+        end
+        
+        curRelicMaterialArr[index].id = relicMaterial.id
+        curRelicMaterialArr[index].level = relicMaterial.level
+        curRelicMaterialArr[index].supplyExp = relicMaterial.supplyExp
+        curRelicMaterialArr[index].typeId = relicMaterial.typeId
+        curRelicMaterialArr[index].quality = relicMaterial.quality
+        curRelicMaterialArr[index].count = 0
+        local attrs = GetRelicAttrs(curRelicMaterialArr[index].id,curRelicMaterialArr[index].level)
+        curRelicMaterialArr[index].propInfos = attrs.baseAttrs
+        curRelicMaterialArr[index].activateAttrs = attrs.activateAttrs
+    end
+
+    if count >= relicMaterial.count then
+        curRelicMaterialArr[index].count = curRelicMaterialArr[index].count+relicMaterial.count
+        table.remove(allRelicMaterialArr, relicMaterialPos)
+        UpdateRelicMaterial(curRelicMaterialArr[index])
+    else
+        curRelicMaterialArr[index].count = curRelicMaterialArr[index].count+count
+        relicMaterial.count = relicMaterial.count - count
+        UpdateSingleRelicMaterial(curRelicMaterialArr[index],relicMaterial)
+    end
+end
+
+local function CancelSelectRelicMaterial(pos)
+    local cancelMat = curRelicMaterialArr[pos]
+    local index = CheckMaterialInAllMaterial(cancelMat)
+    if index == 0 then
+        local relicMaterial = {
+            id = cancelMat.id,
+            level = cancelMat.level,
+            supplyExp = cancelMat.supplyExp,
+            typeId = cancelMat.typeId,
+            count = cancelMat.count,
+            quality = cancelMat.quality,
+        }
+        local attrs = GetRelicAttrs(relicMaterial.id,relicMaterial.level)
+        relicMaterial.propInfos = attrs.baseAttrs
+        relicMaterial.activateAttrs = attrs.activateAttrs
+        table.insert(allRelicMaterialArr, relicMaterial)
+        table.sort(allRelicMaterialArr,SortRelicByQuality)
+    else
+        allRelicMaterialArr[index].count = allRelicMaterialArr[index].count + cancelMat.count
+    end
+    cancelMat.id = 0
+    if index == 0 then
+        UpdateRelicMaterial(cancelMat)
+    else
+        UpdateSingleRelicMaterial(cancelMat,allRelicMaterialArr[index])
+    end
+end
+
+function DoInit()
+    relicExpDataFromTbl = utils.GetRelicExpDataFromTbl()
+end
+
+function InitProperties()
+end
+
+function DoOnExit()
+    utils = nil
+
+    curHero = nil
+
+    curRelic = nil
+    curRelicMaterialArr = nil
+    allRelicMaterialArr = nil
+
+    relicExpDataFromTbl = nil
+end
+
+function OnCommand_InitData(objs)
+    curHero = objs[0]
+end
+
+function OnCommand_InitRelicLevelUpData(objs)
+    InitRelicLevelUpData()
+    self:SendNotification("RefreshRelicLevelUpView",curRelic,GetNewRelic(),curRelicMaterialArr,allRelicMaterialArr)
+end
+
+function OnCommand_ShowOldRelicTip(objs)
+    ShowRelicTip(self,curRelic)
+end
+
+function OnCommand_ShowNewRelicTip(objs)
+    if curRelic.hasMaxLevel then
+        return
+    end
+    ShowRelicTip(self,GetNewRelic())
+end
+
+function OnCommand_OpenMaterialSelectView(objs)
+    if curRelic.hasMaxLevel then
+        utils.ShowHintBox(Language:getStr("RelicHasMaxLevel"))
+        return
+    end
+    local matRelic = objs[0]
+    local matRelicPos = objs[1] + 1
+    local dealInfo = {
+        item = {
+            typeId = matRelic.typeId,
+            id = matRelic.id,
+        },
+        itemCount = matRelic.count,
+        title = Language:getStr("RelicMaterialCountSelectTitle"),
+        confirmBtnText = Language:getStr("local_confirm"),
+        type = DealType.GetInput
+    }
+    ShowDealView(self,dealInfo,function(num)
+        SelectRelicMaterial(matRelic,matRelicPos,num)
+    end)
+end
+
+function OnCommand_CancelSelectRelicMaterial(objs)
+    local index = objs[0]+1
+    if curRelicMaterialArr[index].id == 0 then
+        return
+    end
+    CancelSelectRelicMaterial(index)
+end
+
+function OnCommand_RelicLevelUp(objs)
+    if curRelic.hasMaxLevel then
+        utils.ShowHintBox(Language:getStr("RelicHasMaxLevel"))
+        return
+    end
+    local materialUids = GetCurMaterialUids()
+    if #materialUids == 0 then
+        utils.ShowHintBox(Language:getStr("RelicNoMaterial"))
+        return
+    end
+    local onFinished = function(resp)
+        if resp.status == 0 then
+            local level = curRelic.level
+            UpdateHeroRelicData(curHero)
+            InitRelicLevelUpData()
+            local exp = curRelic.levelUpExp == nil and 0 or curRelic.exp/curRelic.levelUpExp
+            self:SendNotification("ShowRelicLevelUpEffect",exp,curRelic.level-level,function()
+                local refreshRelicLevelUpView = function()
+                    self:SendNotification("RefreshRelicLevelUpView",curRelic,GetNewRelic(),curRelicMaterialArr,allRelicMaterialArr)
+                end
+                if level ~= curHero.relic.level then
+                    local rewards = {}
+                    table.insert(rewards, {id=curHero.relic.id,typeId=ItemTypeEnum.Relic,level=curHero.relic.level})
+                    ShowRewardReceivedTip(self, rewards, refreshRelicLevelUpView)
+                else
+                    refreshRelicLevelUpView()
+                end                            
+            end)
+            MsgCenter:Broadcast(Notify_UpdateHeroSingleEquip)
+            MsgCenter:Broadcast(Notify_UpdateHeroEquipRedTip)
+            MsgCenter:Broadcast(Notify_UpdateCurHero)
+        end
+    end
+    utils.RequestRelicUpgrade(curRelic.uid,materialUids,onFinished)
+end
+
+function OnCommand_OnClose(objs)
+    curHero = nil  
+    curRelic = nil
+    curRelicMaterialArr = nil
+    allRelicMaterialArr = nil
+end

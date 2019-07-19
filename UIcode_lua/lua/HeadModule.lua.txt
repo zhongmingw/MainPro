@@ -1,0 +1,15 @@
+function AssetNames( objs )
+    local arr = {"PlayerInfoView", "RenameView", "AchievementItemSlot", "HeadIconItemSlot"}
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    local view = self:OpenView("PlayerInfoView", "PlayerInfoModel")
+	local isLocal = true
+	local uid = 0
+	local zone = 0
+    view:SetParamDataList(isLocal, uid, zone)
+    if(onFinished ~= nil) then
+        onFinished()
+    end
+end

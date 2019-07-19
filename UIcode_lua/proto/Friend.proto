@@ -1,0 +1,227 @@
+import "stage.proto";
+import "playerData.proto";
+package Friend;
+
+message FriendBasicInfoResp 
+{
+    required string userId=1;
+    required string nick=2;
+    required int32 level=3;
+    required int32 icon=4;
+    required int64 lastOnlineTime=5;
+    required int32 vip=6;
+    required playerData.BoxItem box = 7; //炫彩头像
+    required string zone = 8;
+}
+
+message FriendResp
+{       
+    required FriendBasicInfoResp friendBasicInfoResp=1;//基础信息
+    required bool haveMonster=2;
+    required bool canDonate=3;
+    required bool canReceive=4;
+    required int32 monsterId=5;
+    required int32 monsterLevel=6;
+    required int32 curHpPercentage=7;//x%
+    required int64 lastFightingTime=8;//上次切磋时间
+    required bool sheild=9; //是否被屏蔽
+}
+    
+message MyFriendsReq 
+{
+    required int32 useless=1;
+}
+
+message MyFriendsResp 
+{
+    repeated FriendResp friends=1;
+    required int64 fightingCdRemain = 2;
+}
+
+message MyApplysReq 
+{
+    required int32 useless=1;
+}
+    
+message MyApplysResp 
+{
+    repeated FriendBasicInfoResp applys=1;
+}
+
+message RecommendFriendsReq
+{
+    required int32 useless=1;
+}
+    
+message RecommendFriendsResp 
+{
+    repeated FriendBasicInfoResp recommends=1;
+}
+
+message SearchFriendsReq 
+{
+    required string nick=1;
+}
+    
+message SearchFriendsResp 
+{
+    repeated FriendBasicInfoResp results=1;
+}
+
+message ApplyFriendsReq 
+{
+    repeated string userIds=1;
+}
+    
+message ApplyFriendsResp 
+{
+    required int32 status=1;
+}
+
+message ApprovalFriendsReq 
+{
+    repeated string userIds=1;
+    required int32 decision=2;//申请结果：1.同意；2.拒绝
+}
+    
+message ApprovalFriendsResp 
+{
+    required int32 status=1;
+}
+
+message RemoveFriendReq 
+{
+    repeated string userIdList=1;
+}
+    
+message RemoveFriendResp 
+{
+    required int32 status=1;
+}
+
+message DonateFriendCoinReq 
+{
+    repeated string userIds=1;
+}
+    
+ message DonateFriendCoinResp 
+ {
+    required int32 donateCount=1;//捐赠数
+}
+
+message ReceiveFriendCoinReq 
+{
+    repeated string userIds=1;
+}
+    
+message ReceiveFriendCoinResp 
+{
+    required int32 receiveCount=1;//收取数
+}
+
+message ChallengeFriendReq
+{
+    required string userId=1; //目标的id
+    repeated stage.FormationPos formationPos=2; //我方阵容
+}
+
+message SearchMonsterReq 
+{
+    required int32 useless=1;
+}
+    
+message SearchMonsterResp 
+{
+    repeated stage.RewardItem rewardItems=1;
+    required PlayerMonsterSearch playerMonsterSearch = 2;
+    required PlayerMonsterSearchRecord playerMonsterSearchRecord = 3;
+}
+
+message RefreshStrengthReq 
+{
+    required int32 useless=1;
+}
+    
+message RefreshStrengthResp 
+{
+    required int32 status=1;
+}
+
+message ChallengeMyBossReq 
+{
+    repeated stage.FormationPos formationPos=1; //我方阵容
+}
+
+message ChallengeFriendBossReq 
+{
+    repeated stage.FormationPos formationPos=1; //我方阵容
+    required string userId=2;//好友ID
+}
+
+message GetFriendsHelpRankReq
+{
+    required int32 count=1; //需要前多少名
+}
+
+message FriendsHelpRankItem
+{
+	required playerData.PlayerBaseInfo playerBaseInfo=1;
+	required int32 score=2;
+	required int32 rank=3;
+}
+
+message GetFriendsHelpRankResp
+{
+    repeated FriendsHelpRankItem rankItems=1; //前N名
+    required FriendsHelpRankItem playerRankItem=2; //玩家自己的排名
+    required int64 seasonEndTime=3;
+}
+
+message PlayerMonsterSearch 
+{
+    required int32 monsterFaceId=1;//外形ID
+    required int32 monsterPropId=2;//战斗属性ID
+    required int32 monsterLevel=3;//boss等级
+    required int64 monsterMaxHp=4;
+    required int64 monsterCurHp=5;//剩余血量
+}
+
+message PlayerMonsterSearchRecord
+{
+    required int32 searchCount=1;//搜寻数值
+    required int64 lastSearchTime=2;//上次搜寻时间
+    required int64 strengthRecoveryStartTime=3;//体力开始恢复时间
+    required bool isStrengthFull=4;//体力是否满
+}
+
+message RefreshMonsterInfoReq 
+{
+    required int32 useless = 1;
+}
+    
+message RefreshMonsterInfoResp
+{
+    required PlayerMonsterSearch playerMonsterSearch = 1;
+    required PlayerMonsterSearchRecord playerMonsterSearchRecord = 2;
+}
+
+message FriendSheildReq
+{
+    required int32 type=1; //1。屏蔽，2。取消屏蔽
+    required string userId=2;
+}
+
+message FriendSheildResp
+{
+    required int32 result=1;
+}
+
+message GmGetMonsterReq 
+{
+    required int32 useless = 1;
+}
+
+message GmGetMonsterResp 
+{
+    required int32 status = 1;
+}

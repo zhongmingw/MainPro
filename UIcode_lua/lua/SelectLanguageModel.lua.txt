@@ -1,0 +1,22 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-03-09 14:53:57
+
+local languages
+
+function DoInit()
+    languages = {"zh-hans"}
+end
+
+function DoOnExit()
+	languages = nil
+end
+
+function InitProperties()
+end
+
+function OnCommand_ChangeLanguage(objs)
+    LanguageTbl.Language = languages[objs[0]]
+    self:SendNotification("ChangeLanguageSuccess", LanguageTbl.Language)
+end

@@ -1,0 +1,124 @@
+local selfName_Lab
+local enemyName_Lab
+local selfScore_Lab
+local enemyScore_Lab
+local selfScoreDelta_Lab
+local enemyScoreDelta_Lab
+local score_Lab
+
+local selfHead_TF
+local enemyHead_TF
+
+local failSpine
+local battleInfo={}
+
+local getReward=false
+local isGot=false
+
+function DoInit()
+	self.Shadow = 2
+	selfName_Lab=self:GetComponentAtPath("Center/PlayerGO/NameTxt",CLS_TEXT)
+	enemyName_Lab=self:GetComponentAtPath("Center/EnemyGO/NameTxt",CLS_TEXT)
+	selfScore_Lab=self:GetComponentAtPath("Center/PlayerGO/ScoreTxt",CLS_TEXT)
+	enemyScore_Lab=self:GetComponentAtPath("Center/EnemyGO/ScoreTxt",CLS_TEXT)
+	selfScoreDelta_Lab=self:GetComponentAtPath("Center/PlayerGO/DetalTxt",CLS_TEXT)
+    enemyScoreDelta_Lab=self:GetComponentAtPath("Center/EnemyGO/DetalTxt",CLS_TEXT)
+    score_Lab=self:GetComponentAtPath("Center/ScoreTxt",CLS_TEXT)
+
+	selfHead_TF=self:GetComponentAtPath("Center/PlayerGO/PlayerBase",CLS_RECTTRANSFORM)
+	enemyHead_TF=self:GetComponentAtPath("Center/EnemyGO/PlayerBase",CLS_RECTTRANSFORM)
+
+	failSpine = self:GetComponentAtPath("SpineGO/FailSpine",CLS_SKELETONGRAPHIC)
+end
+
+function SetData(data)
+	battleInfo=data
+	local battleEndInfo = battleInfo.battleEndInfo
+
+	local playerInfo = battleEndInfo.selfPlayerBaseInfo
+	local enemyInfo = battleEndInfo.targetPlayerBaseInfo
+	BindPlayerBaseInfoValue(selfHead_TF,playerInfo)
+	BindPlayerBaseInfoValue(enemyHead_TF,enemyInfo)
+	selfName_Lab.text=playerInfo.name
+    enemyName_Lab.text=enemyInfo.name
+
+	if battleEndInfo.type == 44 then
+		score_Lab.text= ""
+		selfScore_Lab.text = "0"
+		enemyScore_Lab.text = "1"
+		selfScoreDelta_Lab.gameObject:SetSelfActive(false)
+		enemyScoreDelta_Lab.gameObject:SetSelfActive(false)
+	else
+		local result = battleEndInfo.multipleTeamArenaResult
+		score_Lab.text=result.redWin..":"..result.blackWin
+		selfScore_Lab.gameObject:SetSelfActive(result.redScore ~= nil and result.redScore~=0)
+		enemyScore_Lab.gameObject:SetSelfActive(result.blackScore ~= nil and result.blackScore~=0)
+		selfScoreDelta_Lab.gameObject:SetSelfActive(result.deltaScore ~= nil and result.deltaScore~=0)
+		enemyScoreDelta_Lab.gameObject:SetSelfActive(result.deltaScore ~= nil and result.deltaScore~=0)
+		if result.redScore ~= nil and result.redScore~=0 then
+			selfScore_Lab.text=tostring(battleEndInfo.multipleTeamArenaResult.redScore)
+			enemyScore_Lab.text=tostring(battleEndInfo.multipleTeamArenaResult.blackScore)
+			selfScoreDelta_Lab.text="(+"..battleEndInfo.multipleTeamArenaResult.deltaScore..")"
+			enemyScoreDelta_Lab.text="(-"..battleEndInfo.multipleTeamArenaResult.deltaScore..")"
+		end
+	end
+end
+
+function OnOpen()
+	failSpine:PlayAnimation("apear",false,nil,
+	function ()
+		failSpine:PlayAnimation("stand",true,nil,nil)
+	end)
+	CsBridge.audioManager:PlayUI(ResTblContainer:GetPropToStr(1,sound.name,sound.tblName))
+end
+
+function OnAnimationFinished()
+	if battleInfo.battleEndInfo==nil then
+		return 
+	end
+	if battleInfo.battleEndInfo.dropItems~=nil then
+		dropGrid:RefreshItemSlots(MergeRewards(battleInfo.battleEndInfo.dropItems),self.gameObject,"ItemSlot")
+	end
+	if battleInfo.battleEndInfo.randomReward~=nil and battleInfo.isRecord~=true then
+		CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			local view = CsBridge.OpenView("RandomRewardView", "WinModel",false,true)
+			view:SetData(battleInfo.battleEndInfo.randomReward)
+		end,"RandomRewardView")
+	end
+end
+
+function OnDetailBtnClick(sender)
+	ShowBattleRecordView({battleInfo},self)
+end
+
+local function Close(onClose)
+	self:HideView(self.gameObject.name)
+	if onClose then
+		onClose()
+	end
+end
+
+function OnCloseBtnClick(sender)
+	Close(battleInfo.onClose)
+end
+
+function OnMaskClick()
+	Close(battleInfo.onClose)
+end
+
+function DoExit()
+	selfName_Lab = nil
+	enemyName_Lab = nil
+	selfScore_Lab = nil
+	enemyScore_Lab = nil
+	selfScoreDelta_Lab = nil
+	enemyScoreDelta_Lab = nil
+	score_Lab = nil
+	selfHead_TF = nil
+	enemyHead_TF = nil
+	failSpine = nil
+	battleInfo = nil
+	getReward = nil
+	isGot = nil
+end

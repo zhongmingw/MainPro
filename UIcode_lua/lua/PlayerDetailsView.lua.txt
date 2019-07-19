@@ -1,0 +1,135 @@
+local loadedUpHeroItemSlot=require "UpHeroItemSlot"
+
+local name_Lab
+local uionName_Lab
+local fight_Lab
+local lv_Lab
+
+local icon_Sprite
+local frame_Sprite
+
+local formationGrid
+
+local playerDetails
+
+local playerDetailsData
+
+local applyBtn 
+local reportBtn 
+local screenBtn 
+local sendMailBtn 
+
+function DoInit()
+
+	name_Lab=self.transform:Find("Dynamic/PlayerDetails/NameTxt"):GetComponent(CLS_TEXT)
+	lv_Lab=self.transform:Find("Dynamic/PlayerDetails/LvTxt"):GetComponent(CLS_TEXT)
+	uionName_Lab=self.transform:Find("Dynamic/UnionNameTxt"):GetComponent(CLS_TEXT)
+	fight_Lab=self.transform:Find("Dynamic/FightTxt"):GetComponent(CLS_TEXT)
+
+	icon_Sprite = self.transform:Find("Dynamic/PlayerDetails/IconSprite"):GetComponent("UnityEngine.UI.Image")
+	frame_Sprite = self.transform:Find("Dynamic/PlayerDetails/FrameSprite"):GetComponent("UnityEngine.UI.Image")
+	
+	formationGrid=self.transform:Find("Dynamic/FormationGrid"):GetComponent("UIItemGrid")
+
+	applyBtn=self.transform:Find("Dynamic/ApplyBtn"):GetComponent("ButtonArchly")
+	report=self.transform:Find("Dynamic/ReportBtn"):GetComponent("ButtonArchly")
+	screenBtn=self.transform:Find("Dynamic/ScreenBtn"):GetComponent("ButtonArchly")
+	sendMailBtn=self.transform:Find("Dynamic/SendMailBtn"):GetComponent("ButtonArchly")
+end
+
+function OnOpen()
+	applyBtn.Gray = true
+	report.Gray = true
+	screenBtn.Gray = true
+	sendMailBtn.Gray = true
+end
+
+function SetData(data)
+	playerDetailsData=data
+
+	fight_Lab.text=tostring(playerDetailsData.combat)
+	name_Lab.text=playerDetailsData.playerBaseInfo.name
+	lv_Lab.text=tostring(playerDetailsData.playerBaseInfo.level)
+	if uionName_Lab~=nil then
+		name_Lab.text=playerDetailsData.playerBaseInfo.uionName
+	end	
+	SetIconByHeadId(icon_Sprite.gameObject,playerDetailsData.playerBaseInfo.icon)
+	--IconData.SetIconByName(obj.gameObject,str)
+	local formationData = {}
+	for i,v in ipairs(playerDetailsData.formation) do
+		local data = {}
+		data.pos=v.formationPos.pos
+		data.heroId=v.formationPos.heroId
+		data.level=v.heroLevel
+		data.grade=v.heroGrade
+		table.insert(formationData,data)
+	end
+
+	formationGrid:RefreshItemSlots(formationData,self.gameObject,"UpHeroItemSlot")
+end
+
+
+function OnApplyBtnClick(sender)
+	--self:SendCommand("Apply",nil)
+	CsBridge.hintUILayer:ShowHintBox(Language:getStr("Coming_Soon"))
+end
+
+function OnNotification_Apply(objs)
+   CsBridge.hintUILayer:ShowHintBox(Language:getStr("1039"))
+end
+
+function OnReportBtnClick(sender)
+	--self:SendCommand("Report",nil)
+	CsBridge.hintUILayer:ShowHintBox(Language:getStr("Coming_Soon"))	
+end
+
+function OnNotification_Report(objs)
+   CsBridge.hintUILayer:ShowHintBox(Language:getStr("1039"))
+end
+
+function OnScreenBtnClick(sender)
+	--self:SendCommand("Screen",nil)
+	CsBridge.hintUILayer:ShowHintBox(Language:getStr("Coming_Soon"))	
+end
+
+function OnNotification_Screen(objs)
+   CsBridge.hintUILayer:ShowHintBox(Language:getStr("1039"))
+end
+
+function OnSendMailBtnClick(sender)
+	CsBridge.hintUILayer:ShowHintBox(Language:getStr("Coming_Soon"))	
+end
+
+
+
+function OnCloseBtnClick(sender)
+	self:HideView(self.gameObject.name)
+end
+
+
+
+function OnClose()
+
+end
+
+function DoExit()
+	loadedUpHeroItemSlot = nil
+	name_Lab = nil
+	uionName_Lab = nil
+	fight_Lab = nil
+	lv_Lab = nil
+
+	icon_Sprite = nil
+	frame_Sprite = nil
+
+	formationGrid = nil
+
+	playerDetails = nil
+
+	playerDetailsData = nil
+
+	applyBtn  = nil
+	reportBtn  = nil
+	screenBtn  = nil
+	sendMailBtn  = nil
+end

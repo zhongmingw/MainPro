@@ -1,0 +1,99 @@
+--[[
+	file: TripleGiftView.lua
+	author: hangang
+	description: First charge triple gift view
+]]
+
+local panels
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 2     --shadow type
+	InitUI()            --cache UI items
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	panels = {}
+	local path = "Step"
+	local panelCount = 3
+	for i = 1, panelCount do
+		local panel = {}
+		panels[i] = panel
+		local panelTrans = selfTrans:Find(path .. i)
+		panel.gameObject = panelTrans.gameObject
+		panel.rewardGrid = panelTrans:GetComponentAtPath("RewardGrid", CLS_UI_ITEM_GRID)
+		local goalTrans = panelTrans:Find("goalTxt")
+		if goalTrans then
+			panel.goalTxt = goalTrans:GetComponent(CLS_TEXT)
+		end
+	end
+end
+
+--On animation finished event--------------------------------------------------------
+function OnAnimationFinished()
+	self:SendCommand("GetBaseViewData")	
+end
+
+--Unhide event--------------------------------------------------------
+function OnDoUnhide()
+	self:SendCommand("GetBaseViewData")	
+	self.transform.parent:SetAsLastSibling()
+end
+
+--UIController events handlers-------------------------------------------------------
+function OnNotification_RefreshView(objs)
+	RefreshView(objs[0])
+end
+
+function RefreshView(data)
+	local currentStep = data.step
+	if currentStep == 0 then
+		Close()
+	else
+		for i = 1, #panels do
+			local panel = panels[i]
+			panel.gameObject:SetActive(i == currentStep)
+			if i == currentStep then
+				panel.rewardGrid:RefreshItemSlots(data.rewards, self.gameObject, "ItemSlot")
+			end
+			
+			if panel.goalTxt then
+				panel.goalTxt.text = data.goal
+			end
+		end
+	end
+end
+
+--UI event handlers-------------------------------------------------------------------
+function OnBuyBtnClick(sender)
+	self:SendCommand("BuyBtnClicked")
+end
+
+function OnRewardGridItemSlotClick(obj)
+	if obj.gameObject.name == "ItemSlot" then
+		local item = obj.m_data
+    	self:SendCommand("OpenTipView", item)
+	end
+end
+
+--On closing--------------------------------------------------------------------------
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close() 
+	self:ReturnBack()
+end
+
+function DoExit()
+	panels = nil
+end
+
+function DoExit()
+	panels = nil
+end

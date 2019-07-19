@@ -1,0 +1,268 @@
+--[[
+	file: LeaderboardActivityView.lua
+	author: hangang
+	description:View for power leaderboard activity and arena leaderboard activity
+]]
+
+local titleImgObj, instructionPanelObj, countdownTxt, descTxt
+local leadersPanelObj, leaderIcons
+local itemsGrid
+local rankingCDTxt, rewardTipsObj
+local ownDataTrans
+local titleArtTxt
+
+local viewData
+
+local LABEL_HEIGHT_1 = 73--活动结束倒计时text高度
+local LABEL_HEIGHT_2 = -130--钻石排行榜活动结束倒计时text高度
+local COUNT_LABEL_POSX_1 = 23--活动倒计时text的posx值
+local COUNT_LABEL_POSX_2 = -67--钻石排行榜倒计时text的posx值
+local ENDLABEL_POSX_1 = 155--活动结束text的posx值
+local ENDLABEL_POSX_2 = 65--钻石排行榜结束text的posx值
+
+function DoInit()
+	self.Shadow = CS.Client.Library.ShadowType.None
+	InitUI()
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	local path = "Title/titleImg"
+	titleImgObj = self:GetGameObjectAtPath(path)
+
+	path = "Title/countdownTxt"
+	countdownTxt = self:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Title/endLabel"
+	endLabel = self:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Title/titleTxt"
+	titleTxt = self:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "Leaders"
+	leadersPanelObj = self:GetGameObjectAtPath(path)
+
+	leaderIcons = {}
+	local leadersRoot = selfTrans:Find(path)
+	for i = 0, leadersRoot.childCount - 1 do
+		local leaderTrans = leadersRoot:GetChild(i)
+		local leader = {}
+		leader.transform = leaderTrans
+		leader.playerBaseTrans = leaderTrans:Find("PlayerBase")
+		leader.nameTxt = leaderTrans:GetComponentAtPath("NameTxt", CLS_TEXT)
+		leaderIcons[i + 1] = leader
+	end
+
+	path = "Description"
+	instructionPanelObj = self:GetGameObjectAtPath(path)
+
+	path = "Description/descTxt"
+	descTxt = self:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "ItemSV/ScrollRect/Viewport/Grid"
+	itemsGrid = self:GetComponentAtPath(path ,CLS_UI_ITEM_GRID)
+
+	path = "rankingCDTxt"
+	rankingCDTxt = self:GetComponentAtPath(path ,CLS_TEXT)
+
+	path = "RewardBtn/Tips"
+	rewardTipsObj = self:GetGameObjectAtPath(path)
+
+	path = "Bottom/LeaderboardActivityItemSlot"
+	ownDataTrans = selfTrans:Find(path)
+
+	titleArtTxt = self:GetComponentAtPath("Title/TitleArtImg",CLS_LOCALIZE)
+end
+
+function OnNotification_LeadersActivityRewardClaimed(objs)
+	if rewardTipsObj then
+		rewardTipsObj:SetActive(false)
+	end
+end
+
+function OnNotification_RefreshActivityView(objs)
+	if self.gameObject.activeInHierarchy then
+		viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function RefreshView(data)
+	CsBridge.IconData.SetRawImageByName(titleImgObj, data.image)
+	countdownTxt.text = data.restTime
+	if data.activityType == ActivityType.GemLeaders then--钻石消耗排行榜特殊处理
+		instructionPanelObj:SetActive(false)
+		leadersPanelObj:SetActive(false)
+		CsBridge.UnityHelper.SetAnchoredPosition(countdownTxt.gameObject, COUNT_LABEL_POSX_2, LABEL_HEIGHT_2)
+		CsBridge.UnityHelper.SetAnchoredPosition(endLabel.gameObject, ENDLABEL_POSX_2, LABEL_HEIGHT_2)
+		SetServerActivityArtFontByImage(titleArtTxt,data.image)
+		titleArtTxt.gameObject:SetActive(true)
+		SetServerActivityArtFontByImage(titleArtTxt,data.image)
+		titleArtTxt.gameObject:SetActive(true)
+	else
+		titleArtTxt.gameObject:SetActive(false)
+		CsBridge.UnityHelper.SetAnchoredPosition(countdownTxt.gameObject, COUNT_LABEL_POSX_1, LABEL_HEIGHT_1)
+		CsBridge.UnityHelper.SetAnchoredPosition(endLabel.gameObject, ENDLABEL_POSX_1, LABEL_HEIGHT_1)
+		instructionPanelObj:SetActive(not data.showLeaders)
+		descTxt.text = data.desc
+		leadersPanelObj:SetActive(data.showLeaders)
+		if data.showLeaders then
+			local leadersData = data.playerList
+			for i = 1, #leaderIcons do
+				local leader = leaderIcons[i]
+				for k, itemViewData in pairs(leadersData) do
+					if itemViewData.id == i then
+						BindPlayerBaseInfoValue(leader.playerBaseTrans, itemViewData.playerInfo)
+						leader.nameTxt.text = itemViewData.name
+						leader.data = itemViewData
+						break
+					end
+				end
+			end
+		end
+	end
+
+	StartCountdown(data.rankingEndTime)
+
+	rewardTipsObj:SetActive(data.showClaimTips)
+
+	itemsGrid:RefreshItemSlots(data.playerList, self.gameObject, "LeaderboardActivityItemSlot")
+	BindSlotData(ownDataTrans, data.ownData)
+end
+
+function StartCountdown(endTime)
+	rankingCDTxt.text = "-"
+	local now = CsBridge.timeManager.ServerTime
+	if endTime > now then
+		local onLooping = function()
+			if rankingCDTxt then
+				rankingCDTxt.text = CheckTimeRemain(endTime)
+			end
+		end
+		local onFinished = function()
+			if rankingCDTxt then
+				rankingCDTxt.text = ""
+				if self.gameObject.activeInHierarchy then
+					self:SendCommand("LeadersActivityCDFinished")
+				end
+			end
+		end
+		Timer:AddTicker(self.gameObject.name, endTime, onLooping, onFinished)
+	end
+end
+
+function OnNotification_RefreshCountdown(objs)
+	local data = objs[0]
+	RefreshCountdown(data)
+end
+
+function RefreshCountdown(countdownData)
+	if not viewData then--not ready
+		return
+	end
+
+	local currentActivityID = viewData.id
+	for activityID, restTime in pairs(countdownData) do
+		if activityID == currentActivityID then
+			countdownTxt.text = restTime
+			return
+		end
+	end
+end
+
+function OnLeaderboardActivityItemSlotBindValue(slot, data)
+	BindSlotData(slot.transform, data)	
+end
+
+function BindSlotData(slotTrans, data)
+	local selfTrans = slotTrans
+
+	path = "NameTxt"
+	local nameText = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+	nameText.text = data.name
+
+	path = "ValueTxt"
+	local valueTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+	valueTxt.text = data.power or ""
+
+	path = "headerTxt"
+	local headerTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+	headerTxt.text = data.header
+
+	path = "RankTxt"
+	local rankTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+	rankTxt.text = data.rank
+
+	path = "RankSprite"
+	local ribbonImageObj = selfTrans:GetGameObjectAtPath(path)
+	ribbonImageObj:SetActive(data.showRibbon)
+	if data.showRibbon then
+		CsBridge.IconData.SetIconByName(ribbonImageObj, data.ribbonIcon)
+	end
+
+	path = "PlayerBase"
+	local playerRoot = selfTrans:Find(path)
+	BindPlayerBaseInfoValue(playerRoot,data.playerInfo)
+end
+
+function OnGridPlayerBaseClick(obj)
+	local playerData = obj.m_data.playerInfo
+	self:SendCommand("OpenPlayerView", playerData)
+end
+
+function OnPlayerBaseClick(sender)
+	local trans = sender.transform.parent
+	if trans == ownDataTrans then
+		local playerData = viewData.ownData.playerInfo
+		self:SendCommand("OpenPlayerView", playerData)
+	else
+		print("error.............................................")
+	end
+end
+
+function OnRewardBtnClick(sender)
+	self:SendCommand("GetLeaderboardActivityRewards")
+end
+
+function OnLeaderClick(sender)
+	local trans = sender.transform
+	for k, leader in pairs(leaderIcons) do
+		if leader.transform == trans and leader.data then	
+			self:SendCommand("OpenPlayerView", leader.data.playerInfo)
+			break
+		end
+	end
+end
+
+function OnNotification_CloseActivityView(obj)
+	local viewName = self.gameObject.name
+	Timer:StopTicker(viewName)
+	self:HideView(viewName)
+end
+
+function OnClose()
+	Timer:StopTicker(self.gameObject.name)
+end
+
+function DoExit()
+	Timer:StopTicker(self.gameObject.name)
+	titleImgObj = nil 
+	instructionPanelObj = nil 
+	countdownTxt = nil 
+	descTxt = nil
+	leadersPanelObj = nil 
+	leaderIcons = nil
+	itemsGrid = nil
+	rankingCDTxt = nil 
+	rewardTipsObj = nil
+	ownDataTrans = nil
+ 	titleArtTxt = nil
+	viewData = nil
+
+	LABEL_HEIGHT_1  = nil
+	LABEL_HEIGHT_2  = nil
+	COUNT_LABEL_POSX_1  = nil
+	COUNT_LABEL_POSX_2  = nil
+	ENDLABEL_POSX_1  = nil
+	ENDLABEL_POSX_2  = nil
+end

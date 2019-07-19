@@ -1,0 +1,79 @@
+local yield_return = (require 'cs_coroutine').yield_return
+
+local loadedHeroSummonShopRowItemSlot=require "HeroSummonShopRowItemSlot"
+local loadedHeroSummonShopItemSlot=require "HeroSummonShopItemSlot"
+
+local IconData=CS.Client.Library.IconData
+local UnityHelper=CS.Client.Library.UnityHelper
+
+local itemData
+
+local heroSummonShopRowGrid
+local exchangeCoinCount_Lab
+
+function DoInit()
+
+	heroSummonShopRowGrid=self.transform:Find("Dynamic/ScrollRect/Viewport/HeroSummonShopRowGrid"):GetComponent("UIItemGrid")
+	exchangeCoinCount_Lab=self.transform:Find("Dynamic/ExchangeCoinCountGO/ExchangeCoinCountTxt"):GetComponent(CLS_TEXT)
+end
+
+function OnOpen()
+
+end
+
+function OnNotification_UpdateHeroShowView(objs)
+	local itemRowsData = objs[0]
+
+    heroSummonShopRowGrid:RefreshItemSlots(itemRowsData,self.gameObject,"HeroSummonShopRowItemSlot")
+end
+
+function OnNotification_UpdatePlayerInfo(objs)
+    local playerInfo=objs[0]
+	exchangeCoinCount_Lab.text=tostring(GetValueAbbreviation(playerInfo.exchangeCoin))
+end
+
+function OnHeroSummonShopGridItemBtnClick(obj)
+	itemData=obj.m_data
+	local playerInfo = appData:checkData("PlayerInfo")
+	if playerInfo.exchangeCoin>=itemData.price then
+		CsBridge.CacheAssetsByModule(self.Module,function()
+			local view = CsBridge.OpenView("BuyItemView","LotteryModel",false,true)
+			view:SetParamDataList(itemData,itemBaseIndex+itemDespIndex,ItemBaseTable)	
+		end, "BuyItemView")
+	else
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr(tostring(1017)))
+	end
+end
+
+function OnHeroSummonShopGridDetailsBtnClick(obj)
+	CsBridge.CacheAssetsByModule(self.Module,function()
+		itemData=obj.m_data
+		local view = CsBridge.OpenView("ItemTipView","ItemTipModel",false,true)
+		local reward = {
+			id = itemData.reward.id,
+			typeId = itemData.reward.typeId,
+			count = itemData.count
+		}
+		view:SetParamDataList(reward,itemBaseIndex+itemDespIndex+PropsIndex+itemSuitIndex)
+		view:SendCommand("InitItemData")
+	end, "ItemTipView")
+
+end
+
+function OnCloseBtnClick(sender)
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	yield_return = nil
+
+	loadedHeroSummonShopRowItemSlot = nil
+	loadedHeroSummonShopItemSlot = nil
+	IconData = nil
+	UnityHelper = nil
+
+	itemData = nil
+
+	heroSummonShopRowGrid = nil
+	exchangeCoinCount_Lab = nil
+end

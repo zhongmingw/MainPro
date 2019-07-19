@@ -1,0 +1,38 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-05-21 10:02:18
+
+    --USES:
+    local QueueAction = QueueActionMgr:CreateQueueAction()
+    QueueAction:Add(action):Add(action):Start(action)
+    action的签名是action(exit) 调用exit即为结束当前action
+]]
+local QueueAction = require "QueueAction"
+
+local QueueActionMgr = {}
+
+function QueueActionMgr:Init()
+    self.queueActionList = {}
+end
+
+function QueueActionMgr:CreateQueueAction()
+    for _, queueAction in ipairs(self.queueActionList) do
+        if queueAction:IsEmpty() then
+            return queueAction
+        end
+    end
+    local qa = QueueAction()
+    table.insert(self.queueActionList, qa)
+    return qa
+end
+
+function QueueActionMgr:Clear()
+    for i=1,#self.queueActionList do
+        self.queueActionList[i] = nil
+    end
+    self.queueActionList = nil
+end
+
+return QueueActionMgr

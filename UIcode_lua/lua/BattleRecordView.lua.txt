@@ -1,0 +1,215 @@
+local BattleRecordItemSlot =require "BattleRecordItemSlot"
+local WorldBossUtils = require "WorldBossUtils"
+
+local RecordGrid
+
+local battleInfos = {}
+local maxHurtNum = 0
+local maxCureNum = 0
+local maxDefendNum = 0
+
+local CUR_TYPE = {
+	HURT = 1,
+	CURE = 2,
+	DEFEND = 3,
+}
+
+local curIndex = CUR_TYPE.HURT
+
+local togGroup
+
+local stopIntValueChangedTimer = false
+
+local function IntValueChanged(old, new, onLoop, onFinished, duration)
+    local allCount = 10
+    local endTime = CsBridge.timeManager.ServerTime+duration*1000
+    local delta = math.floor((new - old)/allCount)
+    local cur = old
+	local d = duration/allCount
+	local oldT = 0
+	CsBridge.timeManager:UpdateFrame(duration, function(t)
+		if t - oldT >= d then
+			oldT = t
+			cur = cur + delta
+			if onLoop then
+				onLoop(cur)
+			end
+		end
+	end,function()
+		if onFinished then
+            onFinished()
+        end
+	end,function()
+        return stopIntValueChangedTimer
+	end)
+end
+
+function DoInit()
+	self.Shadow = 2
+	RecordGrid= self:GetComponentAtPath("Center/ScrollRect/Viewport/RecordGrid",CLS_UI_ITEM_GRID)
+
+	togGroup = self:GetComponentAtPath("Center/TogGroup",CLS_TOGGLE_GROUP_ARCHLY)
+end
+
+function SetData(data)
+	battleInfos=data
+end
+
+function OnAnimationFinished()
+	self:SendCommand("OnReset",battleInfos)
+end
+
+function OnNotification_OnReset(objs)
+	maxHurtNum,maxCureNum,maxDefendNum = objs[0],objs[1],objs[2]
+	curIndex = CUR_TYPE.HURT
+	togGroup:SetToggleOn(CUR_TYPE.HURT)
+end
+
+function OnTogGroupClick(isOn,index)
+	if not isOn then
+		return 
+	end
+	curIndex = index
+	if index == CUR_TYPE.HURT then
+		self:SendCommand("RefreshHurtInfo")
+	elseif index == CUR_TYPE.CURE then
+		self:SendCommand("RefreshCureInfo")
+	elseif index == CUR_TYPE.DEFEND then
+		self:SendCommand("RefreshDefendInfo")
+	end
+end
+
+function OnNotification_RefreshHurtInfo(objs)
+	local hurtArr = objs[0]
+	RecordGrid:RefreshItemSlots(hurtArr,self.gameObject,"BattleRecordItemSlot")
+end
+
+function OnNotification_RefreshCureInfo(objs)
+	local cureArr = objs[0]
+	RecordGrid:RefreshItemSlots(cureArr,self.gameObject,"BattleRecordItemSlot")
+end
+
+function OnNotification_RefreshDefendInfo(objs)
+	local defendArr = objs[0]
+	RecordGrid:RefreshItemSlots(defendArr,self.gameObject,"BattleRecordItemSlot")
+end
+
+
+function OnCloseBtnClick(sender)
+	self:HideView(self.gameObject.name)
+end
+
+function OnMaskClick()
+	self:HideView(self.gameObject.name)
+end
+
+function OnBattleRecordItemSlotBindValue(slot,data)
+	local leftPanel = slot:GetGameObjectAtPath("LeftRecord")
+	local rightPanel = slot:GetGameObjectAtPath("RightRecord")
+	local leftData = data.redArr
+	if leftData then
+		leftPanel:SetActive(true)
+		local leftTxt_num=slot.transform:Find("LeftRecord/num"):GetComponent(CLS_TEXT)
+		local leftSlider=slot.transform:Find("LeftRecord/Slider"):GetComponent("UnityEngine.UI.Slider")
+		local leftHeroBase_TF=slot.transform:Find("LeftRecord/HeroGO/HeroBase")
+		local isBoss = ResTblContainer:GetPropToInt(leftData.heroData.heroId,HeroBase.isBoss,HeroBase.actorTbl)
+		if isBoss == 1 then
+			WorldBossUtils.BindWorldBossBaseValue(leftHeroBase_TF,leftData.heroData)
+		else
+			BindHeroBaseValue(leftHeroBase_TF,leftData.heroData)
+		end
+		leftTxt_num.text= "0"
+		leftSlider.value=0
+		IntValueChanged(0,leftData.value,function(x)
+			leftTxt_num.text= tostring(x)
+		end, function()
+			leftTxt_num.text= leftData.value
+		end, 0.2)
+		if(curIndex == CUR_TYPE.HURT)then
+			if maxHurtNum == 0 then
+				leftSlider.value=0
+			else
+				local endValue = leftData.value/maxHurtNum
+				CsBridge.TweenUtils.DOSliderValue(leftSlider,endValue,0.2)
+			end
+		elseif(curIndex == CUR_TYPE.CURE) then
+			if maxCureNum == 0 then
+				leftSlider.value=0
+			else
+				local endValue = leftData.value/maxCureNum
+				CsBridge.TweenUtils.DOSliderValue(leftSlider,endValue,0.2)
+			end
+		elseif(curIndex == CUR_TYPE.DEFEND) then
+			if maxDefendNum == 0 then
+				leftSlider.value=0
+			else
+				local endValue = leftData.value/maxDefendNum
+				CsBridge.TweenUtils.DOSliderValue(leftSlider,endValue,0.2)
+			end
+		end
+	else
+		leftPanel:SetActive(false)
+	end
+
+	local rightData = data.blackArr
+	if rightData then
+		rightPanel:SetActive(true)
+		local rightTxt_num=slot.transform:Find("RightRecord/num"):GetComponent(CLS_TEXT)
+		local rightSlider=slot.transform:Find("RightRecord/Slider"):GetComponent("UnityEngine.UI.Slider")
+		local rightHeroBase_TF=slot.transform:Find("RightRecord/HeroGO/HeroBase")
+		local isBoss = ResTblContainer:GetPropToInt(rightData.heroData.heroId,HeroBase.isBoss,HeroBase.actorTbl)
+		if isBoss == 1 then
+			WorldBossUtils.BindWorldBossBaseValue(rightHeroBase_TF,rightData.heroData)
+		else
+			BindHeroBaseValue(rightHeroBase_TF,rightData.heroData)
+		end
+		rightTxt_num.text= "0"
+		rightSlider.value=0
+		IntValueChanged(0,rightData.value,function(x)
+			rightTxt_num.text= tostring(x)
+		end, function()
+			rightTxt_num.text= rightData.value
+		end, 0.2)
+		if(curIndex == CUR_TYPE.HURT)then
+			if maxHurtNum == 0 then
+				rightSlider.value=0
+			else
+				local endValue = rightData.value/maxHurtNum
+				CsBridge.TweenUtils.DOSliderValue(rightSlider,endValue,0.2)
+			end
+		elseif(curIndex == CUR_TYPE.CURE) then
+			if maxCureNum == 0 then
+				rightSlider.value=0
+			else
+				local endValue = rightData.value/maxCureNum
+				CsBridge.TweenUtils.DOSliderValue(rightSlider,endValue,0.2)
+			end
+		elseif(curIndex == CUR_TYPE.DEFEND) then
+			if maxDefendNum == 0 then
+				rightSlider.value=0
+			else
+				local endValue = rightData.value/maxDefendNum
+				CsBridge.TweenUtils.DOSliderValue(rightSlider,endValue,0.2)
+			end
+		end
+	else
+		rightPanel:SetActive(false)
+	end
+end
+
+function OnClose()
+	togGroup:SetAllTogglesOff()
+end
+
+function DoExit()
+	stopIntValueChangedTimer = true
+	WorldBossUtils = nil
+	RecordGrid = nil
+	battleInfos = nil
+	maxHurtNum = nil
+	maxCureNum = nil
+	maxDefendNum = nil
+	curIndex = nil
+	togGroup = nil
+	stopIntValueChangedTimer = nil
+end

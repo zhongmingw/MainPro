@@ -1,0 +1,48 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-05-31 21:28:59
+
+
+local curHero 
+local callback
+
+function DoInit()
+end
+
+function InitProperties()
+end
+
+function OnCommand_GetHeroData(objs)
+    curHero = {}
+    local hero = objs[0]
+    curHero.heroId = hero.id
+    curHero.name = hero.title or global_heroBaseArr[curHero.heroId].title
+    curHero.quality = hero.quality or global_heroBaseArr[curHero.heroId].quality
+    curHero.group = hero.group or global_heroBaseArr[curHero.heroId].group
+    curHero.model = hero.model or global_heroBaseArr[curHero.heroId].model
+    curHero.distillationStar = hero.distillationStar or 0
+    curHero.breakLevel = hero.breakLevel or 0
+    curHero.level = 1
+    curHero.grade = 1
+    curHero.skill = GetHeroSkillArr(curHero)
+    curHero.isBreak = curHero.quality >= BREAK_QUALITY
+
+    if objs.Length == 2 then
+        callback = objs[1]
+    end
+end
+
+function OnCommand_InitHeroGetData(objs)
+    self:SendNotification("RefreshHeroGetView",curHero)
+end
+
+function OnCommand_CloseView(objs)
+	local onHided = callback
+    self:HideView("HeroGetView", onHided)
+end
+
+function DoOnExit()
+    curHero  = nil
+    callback = nil
+end

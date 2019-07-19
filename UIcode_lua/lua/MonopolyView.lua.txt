@@ -1,0 +1,361 @@
+require "MonopolyIconItemSlot"
+
+local BGIMG_HEIGHT = 135
+local ICON_HEIGHT = 120
+local END_POS = 60
+local bgSprite
+local iconRoot--头像框
+local modelPos = 1--玩家初始位置
+local scroll
+local viewport
+local content
+local stageGrid_TF
+local slotsData = {}
+local throwButton--投掷按钮
+local activityPanel--奇遇事件panel
+local activityIconGrid--奇遇事件活动icon
+local activityIconTrans
+local activityIconSpacing
+local activityIconGridColWidth = 100
+local activityIconItemSlotHeight = 83
+local autoBtn--自动投掷按钮
+local shadeRect --遮罩
+local energyNumTxt
+local costGemTxt
+local iconTips
+local triggerImg
+local diceSpineRoot
+local diceImg
+local leftTopPanel
+local iconBgImg
+local isInit = false
+
+function DoInit( ... )
+	-- body
+	self.Shadow = 1
+end
+
+function InitUI( ... )
+	-- body
+	scroll = self:GetComponentAtPath("Center/ScrollRect" ,"UnityEngine.UI.ScrollRect")
+	viewport=scroll.viewport
+	content=scroll.content
+	stageGrid_TF = self.transform:Find("Center/ScrollRect/Viewport/StageGrid")
+	bgSprite1 = stageGrid_TF:GetComponentAtPath("BGS/BackroundImage1",CLS_RAWIMAGE)
+	bgSprite2 = stageGrid_TF:GetComponentAtPath("BGS/BackroundImage2",CLS_RAWIMAGE)
+	iconRoot = stageGrid_TF.transform:Find("PlayerBaseItemSlot")
+	throwButton = self.transform:Find("ThrowButton")
+	local palyer_TF = iconRoot.transform:Find("PlayerBase")
+	local playerInfo = appData:checkData("PlayerInfo")
+
+	autoBtn = self:GetComponentAtPath("Bottom/AutoBtn",CLS_TOGGLE_ARCHLY)
+	shadeRect = self.transform:Find("Bottom/Shade")
+
+	energyNumTxt = self:GetComponentAtPath("Bottom/Energy/NumTxt",CLS_TEXT)
+
+	costGemTxt = self:GetComponentAtPath("Bottom/NumBgImg/NumTxt",CLS_TEXT)
+
+	iconTips = self.transform:Find("IconTips")
+	triggerImg =  iconTips:GetGameObjectAtPath("Image")
+
+	diceSpineRoot = self.transform:Find("diceSpineRoot")
+	diceImg = diceSpineRoot:GetGameObjectAtPath("diceImg")
+
+	leftTopPanel = self.transform:Find("leftTop")
+	iconBgImg = self:GetComponentAtPath("leftTop/IconBgImg" ,CLS_IMAGE)
+
+	--奇遇事件
+	activityPanel = self.transform:Find("leftTop/IconBgImg/ActPanel")
+	activityIconGrid = self.transform:GetComponentAtPath("leftTop/IconBgImg/ActPanel/ActivityIconGrid",CLS_UI_ITEM_GRID)
+	activityIconTrans = activityIconGrid.transform
+	activityIconSpacing = activityIconTrans:GetComponent("GridLayoutGroup").spacing
+
+	BindPlayerBaseInfoValue(palyer_TF,playerInfo)
+	for i=1,60 do
+		local stageSlot = stageGrid_TF.transform:Find("MonopolyItemSlot"..i)
+		table.insert(slotsData,stageSlot)
+	end
+end
+
+function OnAnimationFinished( ... )
+	-- body
+	if not isInit then
+		InitUI()
+		isInit = true
+	end
+	self:SendCommand("InitMap",iconRoot,slotsData)
+end
+
+function SetData(data)
+	-- body
+	if data then
+	end
+end
+
+local function ScrollToCenter(ItemSlot,onFinished)
+	local slot_y = -ItemSlot.anchoredPosition.y
+	local max_y = content.rect.size.y - viewport.rect.size.y
+	local min_y = 700
+	if slot_y > min_y then
+		local distance = slot_y-min_y
+		if distance > max_y then
+			distance = max_y
+		end
+		CsBridge.TweenUtils.MoveToByAnchored(content,content.anchoredPosition.x,distance,2.0,onFinished)
+	else
+		CsBridge.TweenUtils.MoveToByAnchored(content,content.anchoredPosition.x,0,2.0,onFinished)
+	end
+end
+
+function OnNotification_ScrollToCenter(objs)
+	local pos = objs[0]
+	local itemSlot = slotsData[pos]
+	ScrollToCenter(itemSlot,function()
+	end)
+end
+
+function OnNotification_TriggerIncident(objs)
+	local icon = objs[0]
+	local eventPoint = objs[1]
+	CsBridge.IconData.SetIconByName(triggerImg, icon)
+	local pox = throwButton.transform.localPosition.x
+	local poy = throwButton.transform.localPosition.y
+	local nextPox = leftTopPanel.transform.localPosition.x - leftTopPanel.transform.sizeDelta.x/2
+	local nextPoy = leftTopPanel.transform.localPosition.y - leftTopPanel.transform.sizeDelta.x/2
+	iconTips.gameObject:SetPosition(pox,poy)
+	CsBridge.UnityHelper.SetlocalScale(iconTips.gameObject,0.1,0.1,0.1)
+	iconTips.gameObject:SetActive(true)
+    local t1 = CsBridge.TweenUtils.ScaleTo(iconTips.transform,1,1,0.5)
+    t1:OnCompleteAction(function()
+   		local t3 = CsBridge.TweenUtils.ScaleTo(iconTips.transform,0.4,0.4,0.4)
+        local t2 = CsBridge.TweenUtils.MoveTo(iconTips.transform,nextPox,nextPoy,0.8,function()
+            iconTips.gameObject:SetActive(false)
+            self:SendCommand("InitMonopolyActData")
+        end)
+        t2:DoPlay()
+        t3:DoPlay()
+    end)
+    t1:DoPlay()
+end
+
+function OnNotification_RefreshCostNum(objs)
+	local costNum = objs[0]
+	costGemTxt.text = costNum
+end
+
+function OnNotification_RefreshActivityIconView(objs)
+	local activityIconData = objs[0]
+	local count = #activityIconData
+	local sizeDelta = {
+		x = activityIconGridColWidth + activityIconSpacing.x,
+		y = count*activityIconItemSlotHeight + (count - 1)*activityIconSpacing.y,
+	}
+	activityIconTrans:ResetSizeDelta(sizeDelta)
+	if count > 0 then
+		iconBgImg.gameObject:SetActive(true)
+		local imgSizeData = {
+			x = iconBgImg.transform.sizeDelta.x,
+			y = iconBgImg.transform.sizeDelta.y,
+		}
+		imgSizeData.y = BGIMG_HEIGHT + (count-1)*ICON_HEIGHT
+		iconBgImg.transform:ResetSizeDelta(imgSizeData)
+	else
+		iconBgImg.gameObject:SetActive(false)
+	end
+	activityIconGrid:RefreshItemSlots(activityIconData,self.gameObject,"MonopolyIconItemSlot")
+end
+
+function OnNotification_RefreshActivityIconCountDown(objs)
+	local slots = activityIconGrid:GetAllItems()
+	if slots then
+		for i=0, slots.Length-1 do
+			local slot = slots[i]
+			local data = slot.m_data
+			if data then
+				local timeTxt = slot:GetComponentAtPath("bgImg/TimeTxt",CLS_TEXT)
+				timeTxt.text = CheckTimeRemain(data.endTime)
+			end
+		end
+	end
+end
+
+--精力刷新
+function OnNotification_RefreshEnergy(objs)
+	local num = objs[0]
+	energyNumTxt.text = num
+end
+
+--购买精力
+function OnAddBtnClick(sender)
+	self:SendCommand("BuyEnergyItem")
+end
+
+function OnRuleBtnClick(sender)
+	ShowHelpTip(self,INSTRUCTION_MONOPOLY)
+end
+
+function OnNotification_RefreshBgImage(objs)
+	local modelGroupName1 = objs[0]
+	local modelGroupName2 = objs[1]
+	CsBridge.CacheAssetsByModule(self.Module,function()
+	    local texture1 = CsBridge.objectCache:SharedTexture2D(modelGroupName1)
+	    local texture2 = CsBridge.objectCache:SharedTexture2D(modelGroupName2)
+	    bgSprite1.texture = texture1
+	    bgSprite2.texture = texture2
+	end,modelGroupName1,modelGroupName2)
+end
+
+local function ClearPlayerPos(playerPos)
+	--玩家位置
+	local playerSlot = slotsData[playerPos]
+	local routeImg = playerSlot:GetGameObjectAtPath("RouteSprite")
+	local selectImg = playerSlot:GetGameObjectAtPath("SelectImg")
+	CsBridge.IconData.SetIconByName(routeImg, "new_com_dizuo2")
+	selectImg:SetActive(false)
+end
+
+function OnNotification_PlaySpine(objs)
+	local movePos = objs[0]
+	local location = objs[1]
+	local diceSpine = diceSpineRoot.transform
+	throwButton.gameObject:SetActive(false)
+	shadeRect.gameObject:SetActive(true)
+	local playerPos = location - movePos
+	if location == 1 then
+		playerPos = END_POS - movePos
+	end
+	ClearPlayerPos(playerPos)
+	CsBridge.CacheAssetsByModule(self.Module,function()
+        local spineObj = CsBridge.objectCache:CreateObject("DiceSpine", true)
+        spineObj.transform:SetParent(diceSpine,false)
+        spineObj:GetComponent("SkeletonGraphic"):PlayAnimation("yaotouzi",false,function()
+            DestroyModel(spineObj)
+            CsBridge.IconData.SetIconByName(diceImg, "new_com_shaizi" .. movePos)
+            diceImg.gameObject:SetActive(true)
+            local t1 = CsBridge.TweenUtils.ScaleTo(iconTips.transform,1,1,0.5)
+		    t1:OnCompleteAction(function()
+		    	diceImg.gameObject:SetActive(false)
+            	self:SendCommand("RefreshIconPos",location)
+		    end)
+	    end)
+    end,"DiceSpine")
+end
+
+local function ClearItemSlot()
+	for k,v in pairs(slotsData) do
+		local iconImg = v:GetGameObjectAtPath("IconImg")
+		local spineRootObj = v:GetGameObjectAtPath("spineRoot")
+		local routeImg = v:GetGameObjectAtPath("RouteSprite")
+		local selectImg = v:GetGameObjectAtPath("SelectImg")
+		selectImg:SetSelfActive(false)
+		iconImg:SetSelfActive(false)
+		CsBridge.IconData.SetIconByName(routeImg, "new_com_dizuo2")
+		iconImg:SetSelfActive(false)
+		spineRootObj:SetSelfActive(false)
+	end
+end
+
+function OnNotification_RefreshMap(objs)
+	-- body
+	local eventPoint = objs[0]
+	local playerPos = objs[1]
+	ClearItemSlot()
+	--奇遇事件图标显示
+	for k,v in pairs(eventPoint) do
+		local pos = v.location
+		local qyId = v.id
+		local active = v.active
+		local itemSlot = slotsData[pos]
+		local iconImg = itemSlot:GetGameObjectAtPath("IconImg")
+		local routeImg = itemSlot:GetGameObjectAtPath("RouteSprite")
+		local iconTrans = iconImg.transform
+		local spineRootObj = itemSlot:GetGameObjectAtPath("spineRoot")
+    	local spineRoot = spineRootObj.transform
+
+		local updateObj = spineRoot.childCount ~= 0 and spineRoot:GetChild(0) or nil
+		if updateObj ~= nil then
+			CsBridge.SpineHelper.ClearSpineModel("",updateObj.gameObject)
+		end
+		if not active then
+	    	CsBridge.CacheAssetsByModule(self.Module,function()
+	            CsBridge.objectCache:CreateObject("IconSpine", true, spineRoot)
+	        end,"IconSpine")
+	        CsBridge.IconData.SetIconByName(iconImg, v.icon)
+	        CsBridge.IconData.SetIconByName(routeImg, "new_com_xuanzhong2")
+			iconImg:SetSelfActive(true)
+			spineRootObj:SetSelfActive(true)
+	    end
+	end
+	--玩家位置
+	local playerSlot = slotsData[playerPos]
+	local routeImg = playerSlot:GetGameObjectAtPath("RouteSprite")
+	local selectImg = playerSlot:GetGameObjectAtPath("SelectImg")
+	CsBridge.IconData.SetIconByName(routeImg, "new_com_xuanzhong2")
+	selectImg:SetActive(true)
+end
+
+function OnActivityIconGridMonopolyIconItemSlotClick(obj)
+	local data = obj.m_data
+	self:SendCommand("OpenActivityView",data)
+end
+
+function OnNotification_RefreshThrowBtn(objs)
+	local flag = objs[0]
+	throwButton.gameObject:SetActive(flag)
+	shadeRect.gameObject:SetActive(not flag)
+end
+
+--自选步数按钮
+function OnThrowBtnClick(sender)
+	CsBridge.CacheAssetsByModule(self.Module,function()
+		-- body
+		CsBridge.OpenView("ThrowPointView","MonopolyModel",false,true)
+	end,"ThrowPointView")
+end
+
+--投掷按钮
+function OnThrowButtonClick(sender)
+	self:SendCommand("ThrowPoint",0)
+end
+--自动投掷
+function OnNotification_AutoThrow()
+	self:SendCommand("ThrowPoint",0)
+end
+
+function OnAutoBtnClick(sender)
+	self:SendCommand("AutoThrow",not autoBtn.isOn)
+end
+
+function OnCloseBtnClick(sender)
+    Close()
+end
+
+function Close()
+    self:ReturnBack()
+end
+
+function DoExit()
+    self.Module = nil
+    bgSprite = nil
+	iconRoot = nil
+	modelPos = nil
+	scroll = nil
+	viewport = nil
+	content = nil
+	stageGrid_TF = nil
+	slotsData = nil
+	throwButton = nil
+	activityPanel = nil
+	activityIconGrid = nil
+	activityIconTrans = nil
+	activityIconSpacing = nil
+	activityIconGridColWidth = nil
+	activityIconItemSlotHeight = nil
+	autoBtn = nil
+	shadeRect = nil
+	energyNumTxt = nil
+	costGemTxt = nil
+	iconTips = nil
+	triggerImg = nil
+	isInit = nil
+end

@@ -1,0 +1,11 @@
+local http
+
+function DoInit()
+   http=CS.Client.Library.HttpBehaviour.instance
+end
+
+function InitProperties()
+end
+
+function OnCommand_EnterGame()
+end

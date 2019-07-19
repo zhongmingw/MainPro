@@ -1,0 +1,14 @@
+
+function AssetNames(objs)
+    local arr = {"HonorCityView"}
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    local view = self:OpenView("HonorCityView", "HonorCityModel")
+    local endTime = objs[0]
+    view:SetParamDataList(endTime)
+    if(onFinished ~= nil) then
+        onFinished()
+    end
+end

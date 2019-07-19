@@ -1,0 +1,14 @@
+
+function OnHeroMatItemSlotBindValue(slot, data)
+    local heroBaseTF = slot.transform:Find("HeroBase")
+    local NumTxt = slot:GetComponentAtPath("NumTxt" ,CLS_TEXT) --slot.transform:Find("NumTxt"):GetComponent(CLS_TEXT)
+    local redFlag = slot:GetGameObjectAtPath("NewFlag") --slot.transform:Find("NewFlag").gameObject
+
+    BindHeroBaseValue(heroBaseTF,data)
+    NumTxt.text = #data.putMatList.."/"..data.count
+    SetFontColorWithEnough(NumTxt,function()
+        return #data.putMatList >= data.count
+    end)
+    heroBaseTF.gameObject:SetSelfAndChildrenGray(#data.putMatList == 0)
+    redFlag:SetSelfActive(data.redFlag)
+end

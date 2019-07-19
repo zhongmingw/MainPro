@@ -1,0 +1,81 @@
+require "DailyChargeItemSlot"
+
+local titleImgObj, countdownTxt, descTxt
+local itemsGrid
+local topImg
+local titleArtImg
+local viewData
+
+function DoInit()
+	self.Shadow = CS.Client.Library.ShadowType.None
+	self.Anim = 0
+    InitUI()
+end
+
+function InitUI()
+    local selfTrans = self.transform
+	local path = "Center/Title/titleImg"
+	titleImgObj = self:GetGameObjectAtPath(path) --selfTrans:Find(path).gameObject
+
+	path = "Center/Title/countdownTxt"
+    countdownTxt = self:GetComponentAtPath(path ,CLS_TEXT) --selfTrans:Find(path):GetComponent(CLS_TEXT)
+    
+    path = "Center/Title/DespTxt"
+    descTxt = self:GetComponentAtPath(path,CLS_TEXT)
+
+	path = "Center/awardSV/ScrollRect/Viewport/DailyChargeGrid"
+	itemsGrid = self:GetComponentAtPath(path ,CLS_UI_ITEM_GRID) --selfTrans:Find(path):GetComponent(CLS_UI_ITEM_GRID)
+    titleArtImg = self:GetComponentAtPath("Center/Title/TitleArtImg",CLS_LOCALIZE)
+end
+
+function OnNotification_RefreshActivityView(objs)
+	if self.gameObject.activeInHierarchy then
+		viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function RefreshView(data)
+    descTxt.text = data.desc
+    SetServerActivityArtFontByImage(titleArtImg,data.image)
+	countdownTxt.text = data.restTime
+
+	itemsGrid:RefreshItemSlots(data.itemList, self.gameObject, "DailyChargeItemSlot")
+end
+
+function OnNotification_RefreshCountdown(objs)
+	local data = objs[0]
+	RefreshCountdown(data)
+end
+
+function RefreshCountdown(countdownData)
+	if not viewData then--not ready
+		return
+	end
+
+	local currentActivityID = viewData.id
+	for activityID, restTime in pairs(countdownData) do
+		if activityID == currentActivityID then
+			countdownTxt.text = restTime
+			return
+		end
+	end
+end
+
+function OnRewardGridItemSlotClick(obj)
+    self:SendCommand("OpenTipView",obj.m_data)
+end
+
+function OnNotification_CloseActivityView(obj)
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	titleImgObj = nil
+	countdownTxt = nil
+	descTxt = nil
+	itemsGrid = nil
+	topImg = nil
+	titleArtImg = nil
+	viewData = nil
+end

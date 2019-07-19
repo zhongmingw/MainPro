@@ -1,0 +1,21 @@
+
+function OnExpeditionHeroItemSlotBindValue(slot,data)
+	local slotTrans = slot.transform
+	slot.m_SelectSprite= slot:GetGameObjectAtPath("CheckSprite")
+	local heroBase_TF = slotTrans:Find("HeroBase")
+	local hp_Slider = slot:GetComponentAtPath("CurHPSlider" ,CLS_SLIDER)
+
+	HeroItemSlotBindValue(slot,data)
+	BindHeroBaseValue(heroBase_TF,data)
+
+	heroBase_TF.gameObject:SetSelfAndChildrenGray(false)
+
+	if data.curHp==nil then
+		hp_Slider.value=1
+	elseif data.curHp<=0 then
+		hp_Slider.value=0
+		heroBase_TF.gameObject:SetSelfAndChildrenGray(true)
+	else
+		hp_Slider.value=data.curHp/data.maxHp
+	end
+end

@@ -1,0 +1,396 @@
+local curMail
+local mailArr
+local sysMailArr
+local playerMailArr
+local curType = 1
+local allMailTaken = false
+local allMailRead = false
+
+function DoInit()
+
+end
+
+function InitProperties()
+
+end
+
+function OnCommand_InitMailData(objs)
+    MsgCenter:Broadcast(NOtify_CheckFailedOrder, self)
+    GetMailArr(curType)
+    --CheckAllMailTaken()
+    table.sort(mailArr,SortByMailStatus)
+    self:SendNotification("OpenTypeView",curType)
+    self:SendNotification("RefreshView",mailArr,curType)
+    if mailArr ~= nil then
+        SelectMail(1)
+        if curType == 2 then
+            self:SendNotification("RefreshReplyBtn",curMail)
+        end
+    end
+end 
+
+function OnCommand_SwitchType(objs)
+    local type = objs[0]
+    if curType == type then
+        return
+    end
+    curType = type
+    GetMailArr(curType)
+    CheckAllMailTaken()
+    table.sort(mailArr,SortByMailStatus)
+    self:SendNotification("OpenTypeView",curType)
+    self:SendNotification("RefreshView",mailArr,curType)
+    curMail = nil
+    if #mailArr ~= 0 then
+        SelectMail(1)
+        if curType == 2 then
+            self:SendNotification("RefreshReplyBtn",curMail)
+        end
+    end
+end 
+
+function GetMailArr(type)
+    if curType == 1 then
+        InitSysMailArr()
+        mailArr = sysMailArr
+    elseif curType == 2 then
+        InitPlayerMailArr()
+        mailArr = playerMailArr
+    end
+end
+
+function CheckAllMailTaken()
+    for i,mail in ipairs(mailArr) do
+        if mail.attach ~= nil and not mail.attachTaken then
+            allMailTaken = false
+            return
+        elseif mail.attach == nil and not mail.mailItem.read then
+            allMailRead = false
+            return
+        end
+    end
+    allMailTaken = true
+    allMailRead = true
+end
+
+function InitSysMailArr()
+    sysMailArr = {}
+    local pbs = appData:checkAllItems("SystemMailItem")
+    if pbs == nil then
+        return
+    end
+    for i=0,pbs.Length-1 do
+        local mail = {}
+        mail.attach = pbs[i].attach
+        mail.attachTaken = pbs[i].attachTaken
+        mail.mailItem = {
+            id = pbs[i].mailItem.id,
+            fromUserId = pbs[i].mailItem.fromUserId,
+            fromNickName = pbs[i].mailItem.fromNickName,
+            toUserId = pbs[i].mailItem.toUserId,
+            title = pbs[i].mailItem.title,
+            content = pbs[i].mailItem.content,
+            sendTime = pbs[i].mailItem.sendTime,
+            receiveTime = pbs[i].mailItem.receiveTime,
+            read = pbs[i].mailItem.read
+        }
+        mail.type = curType
+        if mail.attach ~= nil then
+            mail.status = mail.attachTaken and 2 or 1
+        else
+            mail.status = mail.mailItem.read and 2 or 1
+            
+        end
+        table.insert(sysMailArr, mail)
+    end 
+end
+
+function InitPlayerMailArr()
+    playerMailArr={}
+    local pbs = appData:checkAllItems("PlayerMailItem")
+    if pbs == nil then
+        return
+    end
+    for i=0,pbs.Length-1 do
+        local mail = {}
+        local pbMailItem = pbs[i].mailItem
+        mail.mailItem = {
+            id = pbMailItem.id,
+            fromUserId = pbMailItem.fromUserId,
+            fromNickName = pbMailItem.fromNickName,
+            toUserId = pbMailItem.toUserId,
+            title = string.format(Language:getStr("Mail_FromPlayer"),FormatWorldPlayerName(pbMailItem.fromNickName, pbMailItem.zone)),
+            content = pbMailItem.content,
+            sendTime = pbMailItem.sendTime,
+            receiveTime = pbMailItem.receiveTime,
+            read = pbMailItem.read,
+            zone = pbMailItem.zone or "",
+        }
+        mail.inBlackList = CheckInBlackList(mail.mailItem.fromUserId)
+        mail.type = curType
+        mail.status = mail.mailItem.read and 2 or 1
+        table.insert(playerMailArr, mail)
+    end 
+    --table.sort(playerMailArr,SortByRead)
+end
+
+function SortByMailStatus(a,b)
+    if a.status ~= b.status then
+        return a.status < b.status 
+    end
+    return a.mailItem.id > b.mailItem.id
+end
+
+function OnCommand_SelectMail(objs)
+    local index = objs[0]+1
+    SelectMail(index)
+end
+
+function SelectMail(index)
+    local mail = mailArr[index]
+    if curMail == mail then
+        return
+    end
+    if curMail ~= nil then
+        CancelCurSelectMail()
+    end
+    curMail = mail
+    if not curMail.mailItem.read then
+        ReadMail()
+    else
+        self:SendNotification("SelectMail",index-1)
+        self:SendNotification("RefreshMail",curMail)   
+        if curType == 2 then
+            self:SendNotification("RefreshReplyBtn",curMail)
+        end 
+    end
+end
+
+function CancelCurSelectMail(index)
+    self:SendNotification("CancelSelectMail",GetMailIndex(mailArr,curMail.mailItem.id)-1)
+end
+
+function ReadMail()
+    if curMail.mailItem.read then
+        return
+    end
+    local req = {
+        id = curMail.mailItem.id,
+        type = curType
+    }
+    HttpRequest("readMail", "ReadMailReq", "ReadMailResp", req, OnReadMail)
+end
+
+function OnReadMail(resp)
+    if resp~= nil then 
+        if curType == 1 then
+            InitSysMailArr()
+        elseif curType == 2 then
+            InitPlayerMailArr()
+        end
+
+        local idx = GetMailIndex(mailArr,curMail.mailItem.id)
+        UpdateMail(mailArr[idx])
+        curMail = mailArr[idx]
+        --CheckAllMailTaken()
+        self:SendNotification("SelectMail",idx-1)
+        self:SendNotification("RefreshMail",curMail)
+    end
+end
+
+function OnCommand_ReceiveMailReward(objs)
+    if curMail.attachTaken then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("Mail_AttachTaken"))
+        return
+    end
+    local req={
+        id = curMail.mailItem.id
+    }
+    HttpRequest("takeMailAttach", "TakeMailAttachReq", "TakeMailAttachResp", req,OnReceiveMailReward)
+end
+
+function OnReceiveMailReward(resp)
+    if resp~= nil then
+        InitSysMailArr()
+        UpdateMail(curMail)
+        local confirmCbk = function()
+            self:SendNotification("UpdateMailItemSlot")
+            self:SendNotification("RefreshMail",curMail)
+        end
+        ShowRewardReceivedTip(self, resp.rewardItems, confirmCbk)
+    end
+end
+
+function OnCommand_AutoAttach(objs)
+    CheckAllMailTaken()
+    if allMailTaken then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("Mail_NoAttackCanTaken"))
+        return
+    end
+    local req={
+        type = curType
+    }
+    HttpRequest("takeAllMailAttach", "TakeAllMailAttachReq", "TakeAllMailAttachResp", req,OnAutoAttach)
+end
+
+function OnAutoAttach(resp)
+    if resp~= nil then
+        InitSysMailArr()
+        for i,v in ipairs(mailArr) do
+            UpdateMail(v)
+        end
+        local confirmCbk = function()
+            self:SendNotification("UpdateMailItemSlot")
+            self:SendNotification("RefreshView",mailArr,curType)
+            self:SendNotification("RefreshMail",curMail)
+        end
+        ShowRewardReceivedTip(self, resp.rewardItems, confirmCbk)
+    end
+end
+
+function OnCommand_AutoDelete(objs)
+    CheckAllMailTaken()
+    if not allMailTaken or not allMailRead then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("Mail_NoCanDelete"))
+        return
+    end
+    if #mailArr == 0 then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("Mail_NoDelete"))
+        return
+    end
+    if CheckHasBlackListMail() then
+        CsBridge.messageManager:showAlertView(Language:getStr("Mail_ConfirmDelete"),Language:getStr("Mail_HasInBlackList"),
+        Language:getStr("local_cancel"),nil,
+        Language:getStr("local_confirm"), function()
+            local req={
+                type = curType
+            }
+            HttpRequest("deleleAllReadMail", "DeleleAllReadMailReq", "DeleleAllReadMailResp", req,OnAutoDelete)        
+        end)
+    else
+        local req={
+            type = curType
+        }
+        HttpRequest("deleleAllReadMail", "DeleleAllReadMailReq", "DeleleAllReadMailResp", req,OnAutoDelete)
+    end
+end
+
+function OnAutoDelete(resp)
+    if resp~= nil then 
+        GetMailArr(curType)
+        --CheckAllMailTaken()
+        self:SendNotification("RefreshView",mailArr,curType)
+    end
+end
+
+function OnCommand_AutoRead(objs)
+    CheckAllMailTaken()
+    if allMailRead then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("Mail_AllMailRead"))
+        return
+    end
+    local req = {
+        type = curType
+    }
+    HttpRequest("readAllMail","ReadAllMailReq","ReadAllMailResp",req,
+    function(resp)
+        if resp.result == 0 then
+            InitPlayerMailArr()
+            for i,v in ipairs(mailArr) do
+                UpdateMail(v)
+            end
+            self:SendNotification("RefreshView",mailArr,curType)
+            self:SendNotification("RefreshMail",curMail)
+            self:SendNotification("RefreshReplyBtn",curMail)
+        end
+    end)
+end
+
+function OnCommand_AddMailBlackList(objs)
+    DoMailBlackList(curMail.mailItem.fromUserId,not curMail.inBlackList)
+end
+
+function DoMailBlackList(userId,add)
+    local req = {
+        userId = userId,
+        add = add
+    }
+    HttpRequest("addMailBlackList","AddMailBlackListReq","AddMailBlackListResp",req,function(resp)
+        if resp.result == 0 then
+            InitPlayerMailArr()
+            for i,v in ipairs(mailArr) do
+                UpdateMail(v)
+            end
+            self:SendNotification("RefreshBanBtnState",curMail.inBlackList)
+        end
+    end)
+end
+
+function OnCommand_Reply(objs)
+    if not CheckPlayerCanSendPrivateMail() then
+        return
+    end
+    local nickName = curMail.mailItem.fromNickName
+    local userId = curMail.mailItem.fromUserId
+    local zone = curMail.mailItem.zone
+    CsBridge.CacheAssetsByModule(
+		self.Module,
+		function()
+			self:Deactive("MailView")
+			local view=CsBridge.OpenView("SendMailView","SendMailModel",false,true)
+            view:SetParamDataList(nickName, userId, zone, function()
+                self:Active("MailView")
+            end)
+		end, 
+		"SendMailView")
+end
+
+function UpdateMail(mail) 
+    local newMail = curType == 1 and sysMailArr[GetMailIndex(sysMailArr,mail.mailItem.id)] or playerMailArr[GetMailIndex(playerMailArr,mail.mailItem.id)]
+    mail.status = newMail.status
+    mail.attachTaken = newMail.attachTaken
+    mail.mailItem.read = newMail.mailItem.read
+    mail.inBlackList = newMail.inBlackList
+end
+
+function GetMailIndex(arr,mailId)
+    for i,v in ipairs(arr) do
+        if v.mailItem.id == mailId then
+            return i 
+        end
+    end
+    return 0
+end 
+
+function CheckHasBlackListMail()
+    if curType == 1 then
+        return false
+    end
+    for i,v in ipairs(playerMailArr) do
+        if v.inBlackList then
+            return true
+        end
+    end
+    return false
+end
+
+function CheckInBlackList(userId)
+    local blackListInfo = appData:checkData("PlayerMailBlackListInfo")
+    if blackListInfo == nil then
+        return false
+    else
+        return ContainItem(blackListInfo.blackList,userId,function(item)
+            return item == userId
+        end)
+    end
+end
+
+function DoOnExit()
+    curMail = nil
+    mailArr = nil
+    sysMailArr = nil
+    playerMailArr = nil
+    curType  = nil
+    allMailTaken  = nil
+    allMailRead  = nil
+end

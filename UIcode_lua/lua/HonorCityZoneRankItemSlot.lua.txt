@@ -1,0 +1,24 @@
+function OnHonorCityZoneRankItemSlotBindValue(slot, data)
+	local selfTrans = slot.transform
+
+	local zoneTxt = selfTrans:GetComponentAtPath("zoneTxt", CLS_TEXT)
+	zoneTxt.text = data.playerBaseInfo.zone
+
+	local scoreTxt = selfTrans:GetComponentAtPath("scoreTxt", CLS_TEXT)
+	scoreTxt.text = data.score or ""
+
+	local rankTxt = selfTrans:GetComponentAtPath("rankNumTxt", CLS_TEXT)
+	rankTxt.text = data.rank
+
+	local ribbonImageObj = selfTrans:GetGameObjectAtPath("rankIcon")
+	ribbonImageObj:SetActive(data.showRibbon)
+
+	local ribbonBgImg = selfTrans:GetGameObjectAtPath("rankNumBg")
+	ribbonBgImg:SetActive(data.showRibbon)
+	if data.showRibbon then
+		CsBridge.IconData.SetIconByName(ribbonImageObj, data.ribbonIcon)
+	end
+	
+	local selectedImgObj = selfTrans:GetGameObjectAtPath("selectIcon")
+	selectedImgObj:SetActive(data.myRank == data.rank)
+end

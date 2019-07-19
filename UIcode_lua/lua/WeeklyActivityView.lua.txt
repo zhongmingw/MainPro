@@ -1,0 +1,315 @@
+--[[
+	file: WeeklyActivityView.lua
+	author: hangang
+	description: Weekly activity view(七日目标活动)
+]]
+
+local cachedViewData
+
+local dayToggles, taskToggles
+local finishedMarkList, lockedMarkList, dayBtnList, dayTipsList
+local dayTxtList
+local endCDTxt, awardCDTxt
+local taskGrid
+
+local currentTaskItemSlot
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 1     --shadow type
+	InitUI()            --cache UI items
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	dayToggles = {}
+	finishedMarkList = {}
+	lockedMarkList = {}
+	dayBtnList = {}
+	dayTipsList = {}
+	dayIconList = {}
+	dayTxtList = {}
+	local path = "Top/DaysTogGroup"
+	local togglesRoot = selfTrans:Find(path)
+	local finishedMarkPath = "finishedMark"
+	local lockedMarkPath = "Mask"
+	local dayBtnPath = "DayBtn"
+	local dayTipsPath = "Tips"
+	local dayIconPath = "IconImg"
+	local dayTxtPath = "dayTxt"
+	local toggleRoot
+	for i = 0, togglesRoot.childCount - 1 do
+		toggleRoot = togglesRoot:GetChild(i)
+		local toggle = toggleRoot:GetComponent(CLS_TOGGLE_ARCHLY)
+		local toggleIdx = toggle.Index
+		dayToggles[toggleIdx] = toggle
+		finishedMarkList[toggleIdx] = toggleRoot:GetGameObjectAtPath(finishedMarkPath)
+		lockedMarkList[toggleIdx] = toggleRoot:GetGameObjectAtPath(lockedMarkPath)
+		dayBtnList[toggleIdx] = toggleRoot:GetGameObjectAtPath(dayBtnPath)
+		dayTipsList[toggleIdx] = toggleRoot:GetGameObjectAtPath(dayTipsPath)
+		dayIconList[toggleIdx] = toggleRoot:GetGameObjectAtPath(dayIconPath)
+		dayTxtList[toggleIdx] = toggleRoot:GetComponentAtPath(dayTxtPath,CLS_TEXT)
+	end
+
+	path = "Top/activityCDTxt"
+	endCDTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "Top/bonusCDTxt"
+	awardCDTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+	path = "TaskTogGroup"
+	local taskToggleRoot = selfTrans:Find(path)
+	taskToggles = {}
+	for i = 0, taskToggleRoot.childCount - 1 do
+		local toggleItem = {}
+		local toggleObj = taskToggleRoot:GetChild(i).gameObject
+		toggleItem.gameObject = toggleObj
+		toggleItem.toggle = toggleObj:GetComponent(CLS_TOGGLE_ARCHLY)
+		local toggleTrans = toggleObj.transform
+		toggleItem.label = toggleTrans:GetComponentAtPath("nameTxt", CLS_TEXT)
+		toggleItem.tipsObj = toggleTrans:GetGameObjectAtPath("Tips")
+		taskToggles[i] = toggleItem
+	end
+
+	path = "MissionSV/ScrollRect/Viewport/Grid"
+	taskGrid = selfTrans:GetComponentAtPath(path, CLS_UI_ITEM_GRID)
+end
+
+function OnOpen()
+	CsBridge.MoneyBanner.SetBannerVisible(false)
+end
+
+--On animation finished event--------------------------------------------------------
+function OnAnimationFinished()
+	self:SendCommand("GetBaseViewData")
+end
+
+--UIController events handlers-------------------------------------------------------
+function OnNotification_RefreshView(objs)
+	cachedViewData = objs[0]
+	RefreshView(cachedViewData)
+end
+
+function RefreshView(viewData)
+	ResetAllMarks()
+	ResetTasks()
+
+	RefreshCD(viewData.endCD, viewData.awardCD)
+	RefreshDays(viewData.daysData)
+
+	local toggleIdx = viewData.currentDayIdx - 1
+	dayToggles[toggleIdx].isOn = false
+	dayToggles[toggleIdx].isOn = true
+end
+
+function ResetAllMarks()
+	for k, markObj in pairs(finishedMarkList) do
+		markObj:SetActive(false)
+	end
+	for k, markObj in pairs(lockedMarkList) do
+		markObj:SetActive(true)
+	end
+	for k, dayBtnObj in pairs(dayBtnList) do
+		dayBtnObj:SetActive(true)
+	end
+end
+
+function ResetTasks()
+	for k, toggle in pairs(taskToggles) do
+		toggle.tipsObj:SetActive(false)
+		toggle.gameObject:SetActive(false)
+	end
+
+	taskGrid:ClearItems()
+end
+
+function RefreshCD(endCD, awardCD)
+	endCDTxt.text = endCD
+	awardCDTxt.text = awardCD
+end
+
+function RefreshDays(daysData)
+	for k, itemData in pairs(daysData) do
+		local ctrlIdx = itemData.idx - 1
+		lockedMarkList[ctrlIdx]:SetActive(itemData.showLockedMark)
+		finishedMarkList[ctrlIdx]:SetActive(itemData.showFinishedMark)
+		dayBtnList[ctrlIdx]:SetActive(itemData.showDayBtn)
+		dayTipsList[ctrlIdx]:SetActive(itemData.showTips)
+		SetSpriteByModule(dayIconList[ctrlIdx],itemData.icon,self.Module)
+		dayTxtList[ctrlIdx].text = itemData.dayTxt
+	end
+end
+
+function OnNotification_RefreshTaskList(objs)
+	local viewData = objs[0]
+	taskGrid:RefreshItemSlots(viewData, self.gameObject, "WeeklyTaskItemSlot")
+end
+
+function OnNotification_RewardClaimed(objs)
+	local data = currentTaskItemSlot.m_data
+	data.showClaimBtn = false
+	data.showMask = true
+	local itemTrans = currentTaskItemSlot.transform
+	local maskObj = itemTrans:GetGameObjectAtPath("Mask")
+	local tipsObj = itemTrans:GetGameObjectAtPath("ClaimBtn/Tips")
+	local claimBtn = itemTrans:GetComponentAtPath("ClaimBtn", CLS_BUTTON_ARCHLY)
+	claimBtn.interactable = false
+	maskObj:SetActive(true)
+	tipsObj:SetActive(false)
+
+	local showDayTips = objs[0]
+	for i = 0, #dayToggles - 1 do
+		if dayToggles[i].isOn then
+			dayTipsList[i]:SetActive(showDayTips)
+			break
+		end
+	end
+
+	local showTaskTips = objs[1]
+	for k, taskItem in pairs(taskToggles) do
+		if taskItem.toggle.isOn then
+			taskItem.tipsObj:SetActive(showTaskTips)
+		end
+	end
+
+	local claimedData = objs[2]
+	finishedMarkList[claimedData.day-1]:SetSelfActive(claimedData.showClaimedMark)
+end
+
+function OnNotification_RefreshCD(objs)
+	local endCD, awardCD = objs[0], objs[1]
+	RefreshCD(endCD, awardCD)
+end
+
+--UI event handlers-------------------------------------------------------------------
+function OnDaysTogGroupClick(isOn, index)
+	if not isOn then return end
+	local dayIdx = index + 1
+	local toggleData = cachedViewData.daysData[dayIdx].taskTypeList
+	RefreshTaskToggle(toggleData)
+end
+
+function RefreshTaskToggle(viewData)
+	ResetTasks()
+
+	local categoryCount = #viewData
+	for i = 1, categoryCount do
+		local toggleItem = taskToggles[i - 1]
+		toggleItem.gameObject:SetActive(true)
+		local itemViewData = viewData[i]
+		toggleItem.label.text = itemViewData.name
+		toggleItem.taskType = itemViewData.type
+		toggleItem.tipsObj:SetActive(itemViewData.showTips)
+	end
+
+	local defaultIdx = 0
+	local taskToggle = taskToggles[defaultIdx].toggle
+	taskToggle.isOn = false
+	taskToggle.isOn = true
+end
+
+function OnTaskTogGroupClick(isOn, index)	
+	local dayIdx = GetCurrentDayIdx()
+	local taskType = taskToggles[index].taskType
+	self:SendCommand("GetTaskList", dayIdx, taskType)
+end
+
+function GetCurrentDayIdx()
+	for k, toggle in pairs(dayToggles) do
+		if toggle.isOn then
+			return toggle.Index + 1
+		end
+	end
+end
+
+function OnRewardGridItemSlotClick(obj)
+	if obj.gameObject.name == "ItemSlot" then
+		local item = obj.m_data
+    	self:SendCommand("OpenTipView", item)
+	end
+end
+
+function OnGridClaimBtnClick(obj)
+	currentTaskItemSlot = obj
+	local itemData = obj.m_data
+	self:SendCommand("ClaimReward", itemData.taskID)
+end
+
+function OnDayBtnClick(sender)
+	self:SendCommand("DayBtnClicked")
+end
+
+--Bind item slots--------------------------------------------------------------------
+function OnWeeklyTaskItemSlotBindValue(slot, data)
+	local slotTrans = slot.transform
+
+	path = "goalTxt"
+	local goalTxt = slotTrans:GetComponentAtPath(path, CLS_TEXT)
+	goalTxt.text = data.goal
+
+	path = "progressTxt"
+	local progressTxt = slotTrans:GetComponentAtPath(path, CLS_TEXT)
+	progressTxt.text = data.progress
+
+	path = "ClaimBtn"
+	local claimBtn = slotTrans:GetComponentAtPath(path, CLS_BUTTON_ARCHLY)
+	claimBtn.interactable = data.showClaimBtn
+	path = "ClaimBtn/Tips"
+	local claimTipsObj = slotTrans:GetGameObjectAtPath(path)
+	claimTipsObj:SetActive(data.showClaimBtn)
+
+	path = "Mask"
+	local maksObj = slotTrans:GetGameObjectAtPath(path)
+	maksObj:SetActive(data.showMask)
+
+	path = "RewardGrid"
+	local rewardGrid = slotTrans:GetComponentAtPath(path,CLS_UI_ITEM_GRID)
+	rewardGrid:RefreshItemSlots(data.rewards, self.gameObject, "ItemSlot")
+end
+
+--On closing--------------------------------------------------------------------------
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close()
+	self:SendCommand("ViewClosing")
+	self:ReturnBack()
+	CsBridge.MoneyBanner.SetBannerVisible(true)
+end
+
+function DoExit()
+	cachedViewData = nil
+
+	dayToggles = nil
+	taskToggles = nil
+	finishedMarkList = nil
+	lockedMarkList = nil
+	dayBtnList = nil
+	dayTipsList = nil
+	endCDTxt = nil
+	awardCDTxt = nil
+	taskGrid = nil
+
+	currentTaskItemSlot = nil
+end
+
+function DoExit()
+	cachedViewData = nil
+
+	dayToggles = nil
+	taskToggles = nil
+	finishedMarkList = nil
+	lockedMarkList = nil
+	dayBtnList = nil
+	dayTipsList = nil
+	endCDTxt = nil
+	awardCDTxt = nil
+	taskGrid = nil
+
+	currentTaskItemSlot = nil
+end

@@ -1,0 +1,110 @@
+local arenaGroup
+local apArenaFlag
+local crossArenaFlag
+local unCrossBtn_GO
+local unTeamBtn_GO
+
+local PageIndex = {
+    AP_ARENA = 1,
+    CROSS_ARENA = 2,
+    SOUL_ARENA = 3,
+}
+
+local initIndex = PageIndex.AP_ARENA
+
+function DoInit()
+    self.Shadow = 1
+    if not isInit then
+		InitUI()
+		isInit = true
+	end 
+end 
+
+function IsSetAnchor()
+	return true
+end
+
+function InitUI()
+    arenaGroup = self:GetComponentAtPath("Center/ArenaTogGroup",CLS_TOGGLE_GROUP_ARCHLY)
+    
+    local arenaTog = arenaGroup:GetToggleByIndex(PageIndex.AP_ARENA)
+    local crossArenaTog = arenaGroup:GetToggleByIndex(PageIndex.CROSS_ARENA)
+    local soulTog = arenaGroup:GetToggleByIndex(PageIndex.SOUL_ARENA)
+
+    apArenaFlag = arenaTog.transform:GetGameObjectAtPath("CountFlag")
+    crossArenaFlag = crossArenaTog.transform:GetGameObjectAtPath("CountFlag")
+    soulFlag = soulTog.transform:GetGameObjectAtPath("CountFlag")
+
+    unCrossBtn_GO = self:GetGameObjectAtPath("Center/ArenaTogGroup/UnCrossBtn")
+    unTeamBtn_GO = self:GetGameObjectAtPath("Center/ArenaTogGroup/UnTeamBtn")
+
+
+    SetArenaTitle(arenaTog.gameObject,UI_OPEN_TYPE_PVP)
+    SetArenaTitle(crossArenaTog.gameObject,UI_OPEN_TYPE_PVPCROSS)
+    SetArenaTitle(soulTog.gameObject,UI_OPEN_TYPE_SOULTASK)
+    SetArenaTitle(unCrossBtn_GO,UI_OPEN_TYPE_PVPCROSS)
+    SetArenaTitle(unTeamBtn_GO,UI_OPEN_TYPE_SOULTASK)
+
+    unCrossBtn_GO:SetSelfActive(not UIOpen(UI_OPEN_TYPE_PVPCROSS,false))
+    unTeamBtn_GO:SetSelfActive(not UIOpen(UI_OPEN_TYPE_SOULTASK,false))
+    crossArenaTog.gameObject:SetSelfActive(UIOpen(UI_OPEN_TYPE_PVPCROSS,false))
+    soulTog.gameObject:SetSelfActive(UIOpen(UI_OPEN_TYPE_SOULTASK,false))
+end
+
+function OnLinked(data)
+	local params=tonumber(data)
+	initIndex=params
+end
+
+function SetArenaTitle(go,id)
+    local title_Lab = go.transform:Find("nameTxt"):GetComponent(CLS_TEXT)
+    title_Lab.text = ResTblContainer:GetPropToStr(id,UIOpenBase.name,UIOpenBase.actorTbl)
+end
+
+function OnAnimationFinished()
+
+	self:SendCommand("InitArenaData")
+end 
+
+function OnNotification_RefreshFlag(objs)
+    local flagData = objs[0]
+    apArenaFlag:SetSelfActive(flagData.apArenaFlag)
+    crossArenaFlag:SetSelfActive(flagData.crossArenaFlag)
+    soulFlag:SetSelfActive(flagData.soulFlag)
+end
+
+function OnNotification_InitArenaData(objs)
+    arenaGroup:SetToggleOn(initIndex)
+end
+
+function OnArenaTogGroupClick(isOn,index)
+
+    self:SendCommand("ArenaTypeChanged",index,isOn)
+end
+
+function OnComingSoonBtnClick(sender)
+    CsBridge.hintUILayer:ShowHintBox(Language:getStr("Coming_Soon_Common"))
+end
+
+function OnUnCrossBtnClick(sender)
+    UIOpen(UI_OPEN_TYPE_PVPCROSS)
+end
+
+function OnUnTeamBtnClick(sender)
+    UIOpen(UI_OPEN_TYPE_SOULTASK)
+end
+
+function OnCloseBtnClick(sender)
+    self:ReturnBack() 
+end
+
+function DoExit()
+	self.Module=nil
+    arenaGroup = nil
+    apArenaFlag = nil
+    crossArenaFlag = nil
+    unCrossBtn_GO = nil
+    unTeamBtn_GO = nil
+    PageIndex = nil
+    initIndex = nil
+end

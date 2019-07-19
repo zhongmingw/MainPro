@@ -1,0 +1,192 @@
+--[[
+	file: DeleteFriendView.lua
+	author: hangang
+	description: View for remove friends
+
+	version 1.0:File created
+]]
+
+local utils = require "FriendUtils"
+
+local cachedUIItems = {}
+local cachedViewData
+
+--local functions
+local RefreshView
+local OnFilterClicked
+local FilterItems
+local SetItemChecked
+local Close
+local InitUI
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 1     --shadow type
+	InitUI()            --cache UI items
+end
+
+local function GetFilterType(index)
+	return index
+end
+
+local function CacheFilters()
+	local filterCount = 3
+	cachedUIItems.filters = {}
+	for i = 1, filterCount do
+		local filter = {}
+		table.insert(cachedUIItems.filters, filter)	
+
+		local path = "Filter" .. tostring(i) .. "/checkImg"
+		filter.checkFlagObj = self:GetGameObjectAtPath(path)
+		path = "Filter" .. tostring(i)
+		filter.gameObject = self:GetGameObjectAtPath(path)
+		filter.filterType = GetFilterType(i)
+	end
+end
+
+InitUI = function()
+	local selfTrans = self.transform
+
+	local path = "countHeaderTxt/countTxt"
+	cachedUIItems.countTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+	path = "FriendScroll/Viewport/Grid"
+	cachedUIItems.friendsGrid = selfTrans:GetComponentAtPath(path, CLS_UI_ITEM_GRID)
+	path = "Nothing"
+	cachedUIItems.emptyTipsObj = selfTrans:GetGameObjectAtPath(path)
+
+	CacheFilters()
+end
+
+--On animation finished event--------------------------------------------------------
+function OnAnimationFinished()
+	self:SendCommand("GetBaseViewData")	
+end
+
+--UIController events handlers-------------------------------------------------------
+function OnNotification_RefreshView(objs)
+	if self.gameObject.activeInHierarchy then
+		cachedViewData = objs[0]
+		RefreshView(cachedViewData)
+	end
+end
+
+RefreshView = function(data)
+	cachedUIItems.countTxt.text = data.count
+	local friends = data.friends
+	cachedUIItems.emptyTipsObj:SetActive(data.showEmptyTips)
+	cachedUIItems.friendsGrid:RefreshItemSlots(friends, self.gameObject, "SelectFriendItemSlot")
+
+	for k, filter in pairs(cachedUIItems.filters) do
+		filter.checkFlagObj:SetActive(false)
+	end
+end
+
+--Bind item slots--------------------------------------------------------------------
+function OnSelectFriendItemSlotBindValue(slot, data)
+	local path = "Player"
+	local playerRoot = slot.transform:Find(path)
+	BindPlayerBaseInfoValue(playerRoot,data.playerInfo)
+
+	path = "nameTxt"
+	local nameTxt = slot:GetComponentAtPath(path, CLS_TEXT)
+	nameTxt.text = data.name
+
+	path = "timeTxt"
+	local timeTxt = slot:GetComponentAtPath(path, CLS_TEXT)
+	timeTxt.text = data.timeText
+
+	SetItemChecked(slot, data.checked)
+end
+
+--UI event handlers-------------------------------------------------------------------
+function OnFilter1Click(sender)
+	OnFilterClicked(sender)
+end
+
+function OnFilter2Click(sender)
+	OnFilterClicked(sender)
+end
+
+function OnFilter3Click(sender)
+	OnFilterClicked(sender)
+end
+
+OnFilterClicked = function(sender)
+	local filter
+	for k, item in pairs(cachedUIItems.filters) do
+		if item.gameObject == sender then
+			filter = item
+		end
+	end
+
+	local checked = filter.checkFlagObj.activeInHierarchy
+	filter.checkFlagObj:SetActive(not checked)
+	checked = not checked
+	FilterItems(filter.filterType, checked)
+end
+
+FilterItems = function(filterType, checked)
+	local items = cachedUIItems.friendsGrid:GetAllItems()
+	if items and items.Length > 0 then
+		for i = 0, items.Length - 1 do
+			local item = items[i]
+			local itemViewData = item.m_data
+			if itemViewData.offlineTimeType == filterType then
+				itemViewData.checked = checked
+				SetItemChecked(item, checked)
+			end
+		end
+	end
+end
+
+SetItemChecked = function(itemSlot, checked)
+	local path = "ChooseBtn/checkImg"
+	local checkFlagObj = itemSlot:GetGameObjectAtPath(path)
+	checkFlagObj:SetActive(checked)
+end
+
+function OnGridPlayerClick(itemSlot, itemIndex)
+	self:SendCommand("FriendIconClicked", itemSlot.m_data)
+end
+
+function OnGridChooseBtnClick(itemSlot, itemIndex)
+	local itemViewData = itemSlot.m_data
+	itemViewData.checked = not itemViewData.checked
+	SetItemChecked(itemSlot, itemViewData.checked)
+end
+
+function OnDeleteBtnClick(sender)
+	local selectedList = {}
+	for k, itemViewData in pairs(cachedViewData.friends) do
+		if itemViewData.checked then
+			table.insert(selectedList, itemViewData)
+		end
+	end
+
+	if #selectedList > 0 then
+		self:SendCommand("DeleteBtnClicked", selectedList)
+	end
+end
+
+--On closing--------------------------------------------------------------------------
+function Active()
+	self:SendCommand("GetBaseViewData")	
+end
+
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+Close = function() 
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	utils = nil
+	cachedUIItems = nil
+	cachedViewData = nil
+end

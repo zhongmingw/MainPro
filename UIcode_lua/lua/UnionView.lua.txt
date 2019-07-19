@@ -1,0 +1,87 @@
+--[[
+	file: UnionView.lua
+	author: hangang
+	description: Union base view
+]]
+
+local IDX_APPLICATION_TAB = 2
+
+local currentTabIndex = 0
+local childToggles
+local applicationTipsObj
+
+local viewData
+
+function DoInit()
+	self.Shadow = 1
+	InitUI()
+end 
+
+function IsSetAnchor()
+	return true
+end
+
+function InitUI()
+	local selfTrans = self.transform
+
+	childToggles = {}
+	local path = "Top/TogGroup"
+	local togglesRoot = selfTrans:Find(path)
+	for i = 0, togglesRoot.childCount - 1 do
+		local toggle = togglesRoot:GetChild(i):GetComponent(CLS_TOGGLE_ARCHLY)
+		childToggles[toggle.Index] = toggle
+	end
+
+	path = "Top/TogGroup/tog03Tog/NewFlag"
+	applicationTipsObj = selfTrans:GetGameObjectAtPath(path)
+end
+
+function OnAnimationFinished()
+	childToggles[currentTabIndex].isOn = off
+	childToggles[currentTabIndex].isOn = true	
+end 
+
+function OnNotification_RefreshUnionInfoView(objs)
+	viewData = objs[0]
+	childToggles[IDX_APPLICATION_TAB].gameObject:SetActive(viewData.applicationTabEnabled)	
+
+	if viewData.applicationTabEnabled then
+		self:SendCommand("GetApplicationTips")
+	end
+end
+
+function OnNotification_SetApplicationTips(objs)
+	local showTips = objs[0]
+	applicationTipsObj:SetActive(showTips)
+end
+
+function OnTogGroupClick(isOn, index)
+	if currentTabIndex == index + 1 then
+		return
+	end
+	currentTabIndex = index + 1
+	self:SendCommand("OpenChildView", currentTabIndex)
+end
+
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close() 
+	self:SendCommand("CloseUnionView")
+	self:ReturnBack()
+end
+
+function DoExit()
+	IDX_APPLICATION_TAB = nil
+
+	currentTabIndex = nil
+	childToggles = nil
+	applicationTipsObj = nil
+
+	viewData = nil
+end

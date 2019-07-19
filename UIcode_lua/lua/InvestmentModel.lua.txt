@@ -1,0 +1,292 @@
+--[[
+	file: InvestmentModel.lua
+	author: hangang
+	description: Investment view controller
+]]
+
+
+local TIMER_INVESTMENT = "Timer_Investment"
+
+--data
+local cachedData
+local curInvestmentID
+
+--local functions
+local FormatData
+local GetBaseViewData
+local GetInvestmentViewData
+local GetInvestmentTipsData
+local RefreshMainPage
+local SetRewardClaimed
+local IsAnyRewardEnabeld
+local CreatePayItem
+local FetchData
+local StartTimer
+local GetCountdownData
+
+------Http request---------------------------------------------------------------------
+function ClaimReward(finishedCallback, activityID, investmentID, itemID)
+	local req = {}
+	req.acId = activityID
+	req.type = investmentID
+	req.parm = itemID
+	local url, requestCls, responseCls = "getInvestmentActivityReward", "GetInvestmentActivityRewardReq", "GetInvestmentActivityRewardResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+FetchData = function(onFetchFinished)
+	local req = {
+        useless = 0
+    }
+	HttpRequest("getInvestmentActivity",
+		"GetInvestmentActivityReq",	
+		"GetInvestmentResp",
+		req,
+		onFetchFinished)
+end
+
+------View events handler-----------------------------------------------------------------
+function OnCommand_GetBaseViewData(objs)
+	local onFetchFinished = function(resp)
+		cachedData = FormatData(resp)
+		local viewData = GetBaseViewData()
+		self:SendNotification("RefreshInvestmentList", viewData)
+		StartTimer()
+	end
+	FetchData(onFetchFinished)
+end
+
+function OnCommand_SelectInvestment(objs)
+    curInvestmentID = objs[0]
+	self:SendNotification("ShowInvestmentDetails", GetInvestmentViewData(curInvestmentID))
+end
+
+function OnCommand_ClaimReward(objs)
+	local itemID = objs[0]
+	local finishedCallback = function(resp)
+		SetRewardClaimed(curInvestmentID, itemID)
+		local confirmCbk = function()
+			self:SendNotification("RefreshInvestmentTips", GetInvestmentTipsData())
+			self:SendNotification("ShowInvestmentDetails", GetInvestmentViewData(curInvestmentID))
+			RefreshMainPage()
+		end
+		ShowRewardReceivedTip(self, resp.rewards, confirmCbk)
+	end
+
+	local investmentData = cachedData[curInvestmentID]
+	local activityID = investmentData.acId
+	local investmentID = investmentData.type
+
+	ClaimReward(finishedCallback, activityID, investmentID, itemID)
+end
+
+function OnCommand_OpenTipView(objs)
+	local data = objs[0]
+	local itemType = data.typeId
+	if itemType == ItemTypeEnum.Hero then
+		ShowHeroTip(self, data.id, 1, 1)
+	else
+		ShowTip(self, itemType, data.id)
+	end
+end
+
+function OnCommand_BuyBtnClicked(objs)
+	local onFetchFinished = function(resp)
+		cachedData = FormatData(resp)
+		local viewData = GetBaseViewData()
+		self:SendNotification("UpdateInvestmentList", viewData, curInvestmentID)
+		RefreshMainPage()
+	end
+	local finishedCbk = function(resp)
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("CycleChargeHasBuy"))
+		FetchData(onFetchFinished)
+	end
+	local investmentData = cachedData[curInvestmentID]
+	local activityID = investmentData.acId
+	DoPayActivity(activityID, CreatePayItem(investmentData), finishedCbk)
+end
+
+function OnCommand_ViewClosing(objs)
+	Timer:StopTicker(TIMER_INVESTMENT)
+end
+
+------Helpers-----------------------------------------------------------------------------
+CreatePayItem = function(investmentData)
+	local payInfo = investmentData.payInfo
+	local item = {}
+	item.id = payInfo.payId
+	item.price = payInfo.price
+	item.pid = payInfo.pId
+	item.title = payInfo.title
+	item.desp = payInfo.desc
+	item.activityId = investmentData.acId
+	item.rewards = {}
+	return item
+end
+
+FormatData = function(svrData)
+	local formatedData = {}
+	for i, activity in pairs(svrData.activities) do
+		for k, investmentData in pairs(activity.activities) do
+			investmentData.endTime = activity.endTime or 0
+			local idx = tostring(investmentData.acId).."-"..tostring(investmentData.type)
+			investmentData.id = idx
+			formatedData[idx] = investmentData
+		end
+	end
+	return formatedData
+end
+
+GetBaseViewData = function()
+	local viewData = {}
+	for k, investmentData in pairs(cachedData) do
+		local itemViewData = {}
+		itemViewData.name = investmentData.title
+		itemViewData.icon = investmentData.bgPic
+		itemViewData.id = investmentData.id
+		itemViewData.showTips = IsAnyRewardEnabeld(investmentData)
+		itemViewData.restTime = CheckTimeRemain(investmentData.endTime)
+		table.insert(viewData, itemViewData)
+	end
+	return viewData
+end
+
+IsAnyRewardEnabeld = function(investmentData)
+	for k, item in pairs(investmentData.configs) do
+		if item.active then
+			return true
+		end
+	end
+	return false
+end
+
+GetInvestmentViewData = function(investmentID)
+	local viewData = {}
+	local investmentData = cachedData[investmentID]
+	viewData.image = investmentData.topPic
+	viewData.description = investmentData.description
+	viewData.buyBtnEnabled = investmentData.enabled
+
+	local payInfo = investmentData.payInfo
+	viewData.price = payInfo.currencySign .. payInfo.price / 100
+	viewData.vipExp = "+" .. tostring(payInfo.vipExp)
+
+	local FormatProgress = function(item, curParam)
+		local progress = curParam / item.config.parameter
+		progress = progress > 1 and 1 or progress
+		local leftNumber = curParam > item.config.parameter and item.config.parameter or curParam
+		local progressText = leftNumber .. "/" .. item.config.parameter
+
+		return progress, progressText
+	end
+
+	local itemList = {}
+	viewData.itemList = itemList
+	local curParam = investmentData.progress
+	for k, item in pairs(investmentData.configs) do
+		local itemViewData = {}
+		itemViewData.claimBtnEnabled = item.active
+		itemViewData.id = item.config.parameter
+		itemViewData.title = item.config.title
+		itemViewData.parameter = item.config.parameter
+		itemViewData.rewards = item.config.rewards
+		itemViewData.progress, itemViewData.progressText = FormatProgress(item, curParam)
+		table.insert(itemList, itemViewData)
+	end
+
+	table.sort(itemList, function(a, b)
+		if (not a.claimBtnEnabled and not b.claimBtnEnabled)
+			or (a.claimBtnEnabled and b.claimBtnEnabled)
+		then
+			return a.parameter < b.parameter
+		else
+			return a.claimBtnEnabled
+		end
+	end)
+
+	return viewData
+end
+
+GetInvestmentTipsData = function()
+	local viewData = {}
+	for k, investmentData in pairs(cachedData) do
+		viewData[investmentData.id] = IsAnyRewardEnabeld(investmentData)
+	end
+	return viewData
+end
+
+RefreshMainPage = function()
+	local showTips = false
+	for k, investmentData in pairs(cachedData) do
+		if IsAnyRewardEnabeld(investmentData) then
+			showTips = true
+			break
+		end
+	end
+	local showButton = #cachedData > 0
+	
+	local viewData = {
+		["showTips"] = showTips,
+		["showButton"] = showButton,
+	}
+	MsgCenter:Broadcast(Notify_InvestmentTipsChanged, viewData)
+end
+
+SetRewardClaimed = function(investmentID, itemID)
+	local investmentData = cachedData[investmentID]
+	for k, itemData in pairs(investmentData.configs) do
+		if itemData.config.parameter == itemID then
+			itemData.active = false
+			break
+		end
+	end
+end
+
+StartTimer = function()
+	local activityEndTime = 0
+	for k, investmentData in pairs(cachedData) do
+		activityEndTime = investmentData.endTime > activityEndTime
+			and investmentData.endTime or activityEndTime
+	end
+
+	if activityEndTime > CsBridge.timeManager.ServerTime then
+		local onLooping = function()
+			self:SendNotification("UpdateCD", GetCountdownData())
+		end
+		local onFinished = function()
+			self:SendNotification("UpdateCD", "")
+		end
+		local interval = 1
+		Timer:AddTicker(TIMER_INVESTMENT, activityEndTime, onLooping, onFinished, interval)
+	end
+end
+
+GetCountdownData = function()
+	local viewData = {}
+	for k, investmentData in pairs(cachedData) do
+		viewData[investmentData.id] = CheckTimeRemain(investmentData.endTime)
+	end
+	return viewData
+end
+
+function OnClose()
+	Timer:StopTicker(TIMER_INVESTMENT)
+end
+
+function DoOnExit()
+	Timer:StopTicker(TIMER_INVESTMENT)
+	cachedData = nil
+	curInvestmentID = nil
+	FormatData = nil
+	GetBaseViewData = nil
+	GetInvestmentViewData = nil
+	GetInvestmentTipsData = nil
+	RefreshMainPage = nil
+	SetRewardClaimed = nil
+	IsAnyRewardEnabeld = nil
+	CreatePayItem = nil
+	FetchData = nil
+	StartTimer = nil
+	GetCountdownData = nil
+	TIMER_INVESTMENT = nil
+end

@@ -1,0 +1,15 @@
+function DoInit()
+end
+
+function AssetNames(objs)
+    local arr = {"MonopolyView","MonopolyIconItemSlot"}--"MonopolyIconItemSlot"
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    self:OpenView("MonopolyView","MonopolyModel")
+	-- print("打开Monopoly界面",debug.traceback())
+    if(onFinished ~= nil)then
+	    onFinished()  
+    end
+end

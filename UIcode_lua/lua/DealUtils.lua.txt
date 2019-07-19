@@ -1,0 +1,52 @@
+DealType = {
+    Sell = 1,
+    Exchange = 2,
+    Use = 3,
+    Compose = 4,
+    Buy = 5,
+	GetInput = 6,
+}
+
+function ShowSellView(self,typeId,id,count,func,title,btn)
+    ShowDeal(self,typeId,id,count,DealType.Sell,func,nil,nil,title or Language:getStr("Deal_Sell"),btn or Language:getStr("Deal_Sell"))
+end
+
+function ShowExchangeView(self,typeId,id,count,func,title,btn)
+    ShowDeal(self,typeId,id,count,DealType.Exchange,func,nil,nil,title or Language:getStr("Deal_Use"),btn or Language:getStr("Deal_Use"))
+end
+
+function ShowUseView(self,typeId,id,count,func,title,btn)
+    --print(btn)
+    ShowDeal(self,typeId,id,count,DealType.Use,func,nil,nil,title or Language:getStr("Deal_Use"),btn or Language:getStr("Deal_Use"))
+end
+
+function ShowComposeView(self,typeId,id,count,func,title,btn)
+    ShowDeal(self,typeId,id,count,DealType.Compose,func,nil,nil,title or Language:getStr("Deal_Compose"),btn or Language:getStr("Deal_Compose"))
+end
+
+function ShowBuyView(self,typeId,id,count,resId,single,func,title,btn)
+    ShowDeal(self,typeId,id,count,DealType.Buy,func,resId,single,title or Language:getStr("Deal_Buy"),btn or Language:getStr("Deal_Buy"))
+end
+
+function ShowDeal(self,typeId,id,count,dealType,func,resId,single,title,btn)
+    local dealInfo = {
+        item = {
+            id = id,
+            typeId = typeId,
+            count = count or 999999
+        },  
+        title = title,
+        btn = btn,
+        type = dealType,
+        resId = resId,
+        single = single
+    }
+    ShowDealView(self,dealInfo,func)
+end
+
+function ShowDealView(self,dealInfo,func)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view=CsBridge.OpenView("DealView","DealModel",false,true)
+        view:SendCommand("InitData",dealInfo,func)
+	end, "DealView")
+end

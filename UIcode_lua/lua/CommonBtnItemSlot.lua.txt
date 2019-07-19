@@ -1,0 +1,11 @@
+function OnCommonBtnItemSlotBindValue(slot, data)
+    ---@type UnityEngine.Transform
+    local slotTrans = slot.transform
+    ---@type UnityEngine.GameObject
+    local bgImaObj = slotTrans:GetGameObjectAtPath("bgImg")
+    ---@type UnityEngine.TextMesh
+    local nameTxt = slotTrans:GetComponentAtPath("nameTxt", CLS_TEXT)
+
+    CsBridge.IconData.SetIconByName(bgImaObj, data.icon)
+    nameTxt.text = data.nameTxt
+end

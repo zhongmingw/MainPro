@@ -1,0 +1,47 @@
+
+local nickInput
+local nickName
+
+-- local BindUserCallback
+
+function DoInit()
+	nickInput = self.transform:Find("Center/NickInput"):GetComponent("UnityEngine.UI.InputField")
+end
+
+function OnOpen()
+	nickInput.text = ""
+end
+
+function OnConfirmBtnClick(sender)
+	nickName=nickInput.text
+
+	if(string.len(nickName)==0)then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("local_1"))
+	else
+		OnConfirmCallBack()
+	end
+end
+
+function OnConfirmCallBack()
+	local req = {
+		nick = nickName,
+	}
+	HttpRequest("changeNick", "ChangeNickReq", "ChangeNickResp", req, OnChangeNickResp)
+end
+
+function OnChangeNickResp(resp)
+	if(resp.result==0)then
+		--进入主界面
+		CsBridge.httpBehaviour:CheckData("enterGame",{},
+		function()
+		   CsBridge.moduleManager:ResetMainModule("MainModule", nil)
+		   local playerInfo=appData:checkData("PlayerInfo")
+		   CsBridge.sDKHelper:createRole(playerInfo.zone,playerInfo.userId,nickName)
+		end)
+	end
+end
+
+function DoExit()
+	nickInput = nil
+	nickName= nil
+end

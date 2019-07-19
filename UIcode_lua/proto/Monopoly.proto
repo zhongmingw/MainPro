@@ -1,0 +1,111 @@
+import "stage.proto";
+package Monopoly;
+
+message ZillionaireInfo
+{
+    required int32 id = 1;//地图id
+    required int32 location = 2;//当前位置
+    repeated Event_Pos eventPoint = 3;//奇遇事件
+    repeated Event_Type_1 event_1 = 4;//奇遇宝箱
+    repeated Event_Type_1 event_2 = 5;//答题
+    repeated Event_Type_2 event_3 = 6;//半价商品
+    repeated Event_Type_1 event_4 = 7;//奇遇战斗
+    repeated Event_Type_1 event_5 = 8;//英雄挑战    
+    required int32 payDiceCount = 9;//遥控骰子使用次数
+    required int64 strengthResetTime = 10;//精力开始恢复时间
+}
+message Event_Pos
+{
+    required int32 location = 1;//位置
+    required int32 id = 2;//奇遇id
+    required bool active = 3;//true-已触发
+}
+message Event_Type_1
+{
+    required int64 createdTime = 1;
+    required int32 id = 2;
+    repeated stage.RewardItem rewardItems = 3;
+}
+message Event_Type_2
+{
+    required int64 createdTime = 1;
+    repeated Good goods = 2;
+}
+message Good
+{
+    required stage.RewardItem reward = 1;
+    required stage.RewardItem cost = 2;
+    required int32 count = 3;//限购次数
+    required int32 curCount = 4;//限购次数
+
+}
+//
+message ZillionaireCheckReq
+{
+    required int32 useless = 1;
+}
+
+message ZillionaireCheckResp
+{
+    required int32 status = 1;
+}
+
+//0-使用精力 ; 1~6-遥控点数
+message ZillionaireDiceReq
+{
+    required int32 step = 1;
+}
+
+message ZillionaireDiceResp
+{
+    repeated stage.RewardItem stepReward = 1;//步数奖励
+    repeated stage.RewardItem finalReward = 2;//通关奖励
+}
+
+//领取宝箱
+message ZillionaireBoxReq
+{
+    required int64 createdTime = 1;
+}
+
+message ZillionaireBoxResp
+{
+   repeated stage.RewardItem rewardItems = 1;//宝箱奖励
+}
+
+//答题
+message ZillionaireQuestionReq
+{
+    required int64 createdTime = 1;
+    required int32 answer = 2;
+}
+
+message ZillionaireQuestionResp
+{
+    repeated stage.RewardItem rewardItems = 1;//答题奖励
+}
+
+//半价商品
+message ZillionaireGoodReq
+{
+    required int64 createdTime = 1;
+    required int32 goodIndex = 2;
+}
+
+message ZillionaireGoodResp
+{
+    required stage.RewardItem rewardItem = 1;
+}
+
+//挑战关卡
+message ZillionaireBattleReq
+{
+    required int64 createdTime = 1;
+    repeated stage.FormationPos formationPos = 2; //阵容
+}
+//挑战boss
+message ZillionaireBossReq
+{
+    required int64 createdTime = 1;
+    repeated stage.FormationPos formationPos = 2; //阵容
+}

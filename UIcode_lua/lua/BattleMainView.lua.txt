@@ -1,0 +1,168 @@
+local txt_round
+local red_icon
+local black_icon
+
+local redAuraId = 0
+local blackAuraId = 0
+
+local txt_speed
+local curSpeed=1
+
+local go_auraTip
+local img_icon
+local txt_name
+local conditionGrid
+local effectGrid
+
+function DoInit()
+	go_auraTip=self.transform:Find("Center/AuraTip").gameObject
+	img_icon=go_auraTip.transform:Find("IconImg"):GetComponent("UnityEngine.UI.Image")
+	txt_name=go_auraTip.transform:Find("nameTxt"):GetComponent(CLS_TEXT)
+	conditionGrid=go_auraTip.transform:Find("Condition/ConditionGrid"):GetComponent("UIItemGrid")
+	effectGrid=go_auraTip.transform:Find("EffectGrid"):GetComponent("UIItemGrid")
+	go_auraTip:SetActive(false)
+
+
+	txt_round=self.transform:Find("TopRight/roundNum"):GetComponent(CLS_TEXT)
+	red_icon=self.transform:Find("TopLeft/MyAura/MyAuraIcon"):GetComponent("UnityEngine.UI.Image")
+	black_icon=self.transform:Find("TopRight/EnemyAura/EnemyAuraIcon"):GetComponent("UnityEngine.UI.Image")
+	txt_speed=self.transform:Find("BottomLeft/SpeedBtn/SpeedNum"):GetComponent(CLS_TEXT)
+
+	curSpeed=tonumber(CsBridge.UnityHelper.GetString("timeScale")) 
+	if(curSpeed==nil)then
+		curSpeed=1
+	end
+	ShowSpeed(curSpeed)
+end
+
+
+local battleView
+
+function SetParamDataList(obj)
+	battleView=obj[0]
+end
+
+function ChangeRoundNum(obj)
+	txt_round.text= tostring(obj[0]).."/"..tostring(obj[1])
+end
+
+function TrySetAura(obj)
+	redAuraId=tonumber(obj[0])
+	blackAuraId=tonumber(obj[1])
+	DoSetAura(redAuraId,red_icon)
+	DoSetAura(blackAuraId,black_icon)
+end
+
+function DoSetAura(_id,obj)
+	local iconStr=""
+	local tbl=ResTblContainer:GetTable(GameBaseInfo.actorTbl)
+	if(_id==0)then
+		iconStr=tbl:Get("auraNone","value")
+		--obj.color=CS.UnityEngine.Color.gray
+	else
+		iconStr= tbl:Get(_id,AuraBase.icon)
+		--obj.color=CS.UnityEngine.Color.white
+	end
+	--iconStr="aura_1"
+	CsBridge.IconData.SetIconByName(obj.gameObject,iconStr)
+end
+
+function OnMyAuraClick(sender)
+	if redAuraId ~= 0 then
+		ShowAuraTip(redAuraId)
+	end 
+end 
+
+function OnEnemyAuraClick(sender)
+	if blackAuraId ~= 0 then
+		ShowAuraTip(blackAuraId)
+	end
+end 
+
+function ShowAuraTip(id) 
+	go_auraTip:SetActive(true)
+	local aura = global_auraArr[id]
+	CsBridge.IconData.SetIconByName(img_icon.gameObject,aura.icon)
+	txt_name.text=aura.title
+	-- effect grid
+	if aura.desp ~= nil or aura.desp ~= "" then
+		local desArr = {}
+		local result = SplitString(aura.desp, "，")
+		for i=0, result.Length-1 do
+			local desStr = SplitString(result[i], "+")
+			local effect = {
+				name = desStr[0],
+				num = desStr[1]
+			}
+			table.insert(desArr, effect)
+		end 
+		effectGrid:RefreshItemSlots(desArr, self.gameObject, "AuraEffectItemSlot")
+	end 
+	-- condition grid
+	if aura.cond ~= nil or aura.cond ~= "" then
+		local condArr = {}
+		local result = SplitString(aura.cond,";")
+		for i=0, result.Length-1 do
+			local condStr = SplitString(result[i], ",")
+			local cond = {race=condStr[0], num=condStr[1]}
+			table.insert(condArr, cond)
+		end
+		conditionGrid:RefreshItemSlots(condArr, self.gameObject, "AuraConditionItemSlot")
+	end 
+end 
+
+function OnAuraEffectItemSlotBindValue(slot, effect)
+	local name = slot.transform:Find("NameTxt"):GetComponent(CLS_TEXT)
+	local num = slot.transform:Find("NumTxt"):GetComponent(CLS_TEXT)
+	name.text = effect.name 
+	num.text = "+"..effect.num
+end 
+
+function OnAuraConditionItemSlotBindValue(slot, cond)
+	local icon = slot.transform:Find("Icon")
+	local num = slot.transform:Find("Num"):GetComponent(CLS_TEXT)
+	CsBridge.IconData.SetIconByName(icon.gameObject, "new_com_zy"..cond.race)
+	num.text = "x"..cond.num
+end 
+
+function OnAuraTipCloseBtnClick(sender)
+	go_auraTip:SetActive(false)
+end
+
+function OnSpeedBtnClick(sender)
+	if(curSpeed==1)then
+		curSpeed=2
+	elseif(curSpeed==2)then
+		curSpeed=1
+	end
+	ShowSpeed(curSpeed)
+	CsBridge.UnityHelper.SetString("timeScale", tostring(CS.UnityEngine.Time.timeScale));
+end
+
+function OnSkipBtnClick(sender)
+	battleView:SetSkip()
+end
+
+function ShowSpeed(speed)
+	CS.UnityEngine.Time.timeScale=speed
+	local int_speed=GetFloat(speed)
+	txt_speed.text="x"..tostring(int_speed)
+end
+
+function DoExit()
+	txt_round = nil
+	red_icon = nil
+	black_icon = nil
+
+	redAuraId = nil
+	blackAuraId = nil
+
+	txt_speed = nil
+	curSpeed = nil
+
+	go_auraTip = nil
+	img_icon = nil
+	txt_name = nil
+	conditionGrid = nil
+	effectGrid = nil
+end

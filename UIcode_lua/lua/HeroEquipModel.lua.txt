@@ -1,0 +1,620 @@
+local audio = CsBridge.audioManager
+local utils = require "HeroBagUtils"
+
+local curHero
+
+local EquipType = {
+    Weapon = 1,
+    Hat = 2,
+    Cloth = 3,
+    Shoe = 4,
+    Rune = 5,
+    Relic = 6
+}
+
+local EquipMode = {
+    Wear = 1,
+    Exchange = 2
+}
+
+local curHeroEquipArr
+local curEquipType
+local curSelectEquip
+
+local equipRedTip
+local runeRedTip
+
+local RUNE_OPEN_LEVEL
+
+local function GetEquipDefaultTxtColorByType(type)
+    local color
+    if type == EquipType.Weapon or
+    type == EquipType.Hat or
+    type == EquipType.Cloth or
+    type == EquipType.Shoe then
+        color = color29
+    elseif type == EquipType.Rune then
+        color = color27
+    elseif type == EquipType.Relic then
+        color = color28
+    end
+    return color
+end
+
+local function GetEquipDefaultQualityImgByType(type)
+    local img = ""
+    if type == EquipType.Weapon or
+    type == EquipType.Hat or
+    type == EquipType.Cloth or
+    type == EquipType.Shoe then
+        img = "ui_com_quality8"
+    elseif type == EquipType.Rune then
+        img = "ui_com_quality12"
+    elseif type == EquipType.Relic then
+        img = "ui_com_quality13"
+    end
+    return img
+end
+
+local function GetEquipDefaultTextByType(type)
+    local text = ""
+    if type == EquipType.Weapon then
+        text = Language:getStr("HeroEquipView_NameTxt_Extra_13")
+    elseif type == EquipType.Hat then
+        text = Language:getStr("HeroEquipView_NameTxt_Extra_14")
+    elseif type == EquipType.Cloth then
+        text = Language:getStr("HeroEquipView_NameTxt_Extra_15")
+    elseif type == EquipType.Shoe then
+        text = Language:getStr("HeroEquipView_NameTxt_Extra_16")
+    elseif type == EquipType.Rune then
+        text = string.format(Language:getStr("RuneOpenDesp"),RUNE_OPEN_LEVEL)
+    elseif type == EquipType.Relic then
+        text = Language:getStr("HeroEquipView_NameTxt_Extra_18")
+    end
+    return text
+end
+
+local function RefreshHeroEquipRedTip()
+    local ret = false
+    if curHero then
+        local result = CheckHeroGreatEquipRedFlag(curHero)
+        ret = result.redFlag
+        if curHeroEquipArr then
+            for i,equip in ipairs(curHeroEquipArr) do
+                if i ~= EquipType.Rune and equip.redFlag ~= result[i] then
+                    equip.redFlag = result[i]
+                    self:SendNotification("RefreshSingleEquip",equip)
+                end
+            end
+        end
+    end
+    return ret
+end
+
+local function RefreshHeroRuneRedTip()
+    local ret = false
+    if curHero then
+        local rune = curHero.rune or utils.GetHeroRune(curHero.runeData)
+        local heroMaxLevel = GetHeroAllLevel(curHero.grade, curHero.level)
+        local noRune = heroMaxLevel >= RUNE_OPEN_LEVEL and rune.level == 0
+        local canLevel = rune.level ~= 0 and CheckRuneLevelUp(rune)
+        ret = noRune or canLevel
+        if curHeroEquipArr and curHeroEquipArr[EquipType.Rune].redFlag ~= ret then
+            local runeEquip = curHeroEquipArr[EquipType.Rune]
+            runeEquip.redFlag = ret
+            self:SendNotification("RefreshSingleEquip",runeEquip)
+        end
+    end
+    return ret
+end
+
+local function OnUpdateHeroRuneRedTip()
+    runeRedTip = RefreshHeroRuneRedTip()
+    MsgCenter:Broadcast(Notify_UpdateHeroShowHeroEquipRedTip, equipRedTip or runeRedTip)
+end
+
+local function OnUpdateHeroEquipRedTip(obj)
+    equipRedTip = RefreshHeroEquipRedTip()
+    MsgCenter:Broadcast(Notify_UpdateHeroShowHeroEquipRedTip, equipRedTip or runeRedTip)
+end
+
+local function UpdateHeroEquipData(hero)
+    if hero == nil then
+        return
+    end
+    local newHero = appData:checkItem("HeroItem",hero.uid)
+    hero.weaponId = newHero.weaponId or 0
+    hero.hatId = newHero.hatId or 0
+    hero.clothId = newHero.clothId or 0
+    hero.shoesId = newHero.shoesId or 0
+    hero.relicId = newHero.relicId
+    hero.runeData = newHero.rune
+    hero.rune = utils.GetHeroRune(newHero.rune)
+    hero.relic = utils.GetRelic(newHero.relicId)
+end
+
+local function FormatOwnRelicsData()
+    local curSelectEquipArr = {}
+    local pbs = appData:checkAllItems("RelicItem")
+    if pbs ~= nil then
+        local tbl=ResTblContainer:GetTable(Relic.tblName)
+        for i=0,pbs.Length-1 do
+            local pb = pbs[i]
+            if pb.owner == nil or pb.owner == 0 then
+                local selectEquip = {
+                    id = pbs[i].id,
+                    typeId = 4,
+                    uid = pbs[i].uid,
+                    level = pbs[i].level,
+                    count = 1
+                }
+                selectEquip.quality = tbl:GetInt(selectEquip.id, Relic.quality)
+                table.insert(curSelectEquipArr, selectEquip)
+            end
+        end
+        curSelectEquipArr = MergeRelic(curSelectEquipArr)
+        table.sort(curSelectEquipArr,SortRelicByQuality)
+    end
+    return curSelectEquipArr
+end
+
+local function FormatOwnGearsData(curEquipType)
+    local curSelectEquipArr = {}
+    local pbs = appData:checkAllItems("PackItem")
+    if pbs ~= nil then
+        local itemTbl=ResTblContainer:GetTable(ItemBase.actorTbl)
+        local equipTbl=ResTblContainer:GetTable(Equipment.actorTbl)
+        for i = 0,pbs.Length-1 do
+            local pb = pbs[i]
+            if pb.count ~= 0 then
+                local itemType = itemTbl:GetInt(pb.itemId,ItemBase.type)
+                if itemType == ItemType.HeroEquip then
+                    local equipType = equipTbl:GetInt(pb.itemId,Equipment.type)
+                    if equipType == curEquipType then
+                        local selectEquip = {
+                            id = pb.itemId,
+                            count = pb.count,
+                            typeId = ItemTypeEnum.Item
+                        } 
+                        table.insert(curSelectEquipArr, selectEquip)
+                    end
+                end
+            end
+        end
+        table.sort(curSelectEquipArr,function(a,b)
+            return a.id > b.id
+        end)
+    end
+    return curSelectEquipArr
+end
+
+local function GetEquipInfoData(equip)
+    local equipInfo = {}
+    if equip.typeId == ItemTypeEnum.Relic then
+        equipInfo.id = equip.id
+        equipInfo.typeId = equip.typeId
+        equipInfo.level = equip.level
+        equipInfo.name = ResTblContainer:GetPropToStr(equip.id,Relic.name,Relic.tblName)
+        equipInfo.summary = Language:getStr("RelicSummary")
+        local attrs = GetRelicAttrs(equipInfo.id,equipInfo.level)
+        equipInfo.propInfos = attrs.baseAttrs
+        equipInfo.activateAttrs = attrs.activateAttrs
+    else
+        equipInfo.id = equip.id
+        equipInfo.typeId = equip.typeId
+        equipInfo.name = ResTblContainer:GetPropToStr(equipInfo.id,ItemBase.title,ItemBase.actorTbl)
+        equipInfo.summary = ResTblContainer:GetPropToStr(equipInfo.id,ItemBase.summary,ItemBase.actorTbl)
+        equipInfo.propInfos = {}
+        local propStr = ResTblContainer:GetPropToStr(equipInfo.id,Equipment.propStr,Equipment.actorTbl)
+        GetProp(propStr,equipInfo.propInfos)
+        local suitId = ResTblContainer:GetPropToStr(equipInfo.id,Equipment.suitId,Equipment.actorTbl)
+        if suitId~="" then
+            local suitInfos = ResTblContainer:GetRowFromTbl(EquipmentSuits.actorTbl,suitId,EquipmentSuits.title,EquipmentSuits.fightingProps1,EquipmentSuits.fightingProps2,EquipmentSuits.fightingProps3)
+            equipInfo.suit = {}
+            equipInfo.suit.suitName=suitInfos[0]
+            equipInfo.suit.suitNum = GetEquipSuitNum(tonumber(suitId),nil)
+            equipInfo.suit.suitProps={}
+            for i=1,3 do
+                GetProp(suitInfos[i],equipInfo.suit.suitProps)
+            end
+        else
+            equipInfo.suit = nil
+        end
+    end
+    return equipInfo
+end
+
+local function InitSelectEquipData()
+    return curEquipType == EquipType.Relic 
+        and FormatOwnRelicsData() or FormatOwnGearsData(curEquipType)
+end
+
+local function InitCompareEquipData()
+    return GetEquipInfoData(curHeroEquipArr[curEquipType]),GetEquipInfoData(curSelectEquip)
+end
+
+local function UpdateHeroEquip()
+    UpdateHeroEquipData(curHero)
+    curHeroEquipArr = {}
+    table.insert(curHeroEquipArr,{
+        id = curHero.weaponId,
+        typeId = ItemTypeEnum.Item,
+        defaultTxt = GetEquipDefaultTextByType(EquipType.Weapon),
+        defaultImg = GetEquipDefaultQualityImgByType(EquipType.Weapon),
+        defaultColor = GetEquipDefaultTxtColorByType(EquipType.Weapon)
+    })
+    table.insert(curHeroEquipArr,{
+        id = curHero.hatId,
+        typeId = ItemTypeEnum.Item,
+        defaultTxt = GetEquipDefaultTextByType(EquipType.Hat),
+        defaultImg = GetEquipDefaultQualityImgByType(EquipType.Hat),
+        defaultColor = GetEquipDefaultTxtColorByType(EquipType.Hat)
+    })
+    table.insert(curHeroEquipArr,{
+        id = curHero.clothId,
+        typeId = ItemTypeEnum.Item,
+        defaultTxt = GetEquipDefaultTextByType(EquipType.Cloth),
+        defaultImg = GetEquipDefaultQualityImgByType(EquipType.Cloth),
+        defaultColor = GetEquipDefaultTxtColorByType(EquipType.Cloth)
+    })
+    table.insert(curHeroEquipArr,{
+        id = curHero.shoesId,
+        typeId = ItemTypeEnum.Item,
+        defaultTxt = GetEquipDefaultTextByType(EquipType.Shoe),
+        defaultImg = GetEquipDefaultQualityImgByType(EquipType.Shoe),
+        defaultColor = GetEquipDefaultTxtColorByType(EquipType.Shoe)
+    })
+    table.insert(curHeroEquipArr, {
+        id = curHero.rune.level,
+        typeId = 0,
+        runeLock=curHero.rune.level==0,
+        defaultTxt = GetEquipDefaultTextByType(EquipType.Rune),
+        defaultImg = GetEquipDefaultQualityImgByType(EquipType.Rune),
+        defaultColor = GetEquipDefaultTxtColorByType(EquipType.Rune),
+        showLock = true
+    })
+    table.insert(curHeroEquipArr, {
+        id = curHero.relic.id,
+        typeId = ItemTypeEnum.Relic,
+        level=curHero.relic.level,
+        defaultTxt = GetEquipDefaultTextByType(EquipType.Relic),
+        defaultImg = GetEquipDefaultQualityImgByType(EquipType.Relic),
+        defaultColor = GetEquipDefaultTxtColorByType(EquipType.Relic)
+    })
+    local unLock = GetHeroAllLevel(curHero.grade, curHero.level)>=RUNE_OPEN_LEVEL
+    self:SendNotification("RefreshHeroEquip",curHeroEquipArr,unLock)
+    if unLock and curHeroEquipArr[EquipType.Rune].id == 0 then
+        curHeroEquipArr[EquipType.Rune].runeUnLock = true
+        self:SendNotification("RefreshSingleEquip",curHeroEquipArr[EquipType.Rune])
+    end
+end
+
+local function UpdateHeroSingleEquip()
+    if curEquipType == EquipType.Weapon then
+        curHeroEquipArr[curEquipType].id = curHero.weaponId
+    elseif curEquipType == EquipType.Hat then
+        curHeroEquipArr[curEquipType].id = curHero.hatId
+    elseif curEquipType == EquipType.Cloth then
+        curHeroEquipArr[curEquipType].id = curHero.clothId
+    elseif curEquipType == EquipType.Shoe then
+        curHeroEquipArr[curEquipType].id = curHero.shoesId
+    elseif curEquipType == EquipType.Rune then
+        curHeroEquipArr[curEquipType].id = curHero.rune.level
+        curHeroEquipArr[curEquipType].runeLock = curHero.rune.level==0
+    elseif curEquipType == EquipType.Relic then
+        curHeroEquipArr[curEquipType].id = curHero.relic.id
+        curHeroEquipArr[curEquipType].level = curHero.relic.level
+    end
+end 
+
+local function GetAllUpdateEquip(oldHeroEquipArr)
+    local updateEquipArr = {}
+    if oldHeroEquipArr then
+        for i,old in ipairs(oldHeroEquipArr) do
+            if i ~= 5 then
+                if old.id ~= curHeroEquipArr[i].id then
+                    table.insert(updateEquipArr, i)
+                end
+            end
+        end
+    end
+    return updateEquipArr
+end
+
+local function GetSingleUpdateEquip()
+    local updateEquipArr = {}
+    table.insert(updateEquipArr, curEquipType)
+    return updateEquipArr
+end
+
+local function GetRune()
+    local lock = GetHeroAllLevel(curHero.grade, curHero.level) < RUNE_OPEN_LEVEL
+    if lock then
+        utils.ShowHintBox(string.format(Language:getStr("Rune_Lock"), RUNE_OPEN_LEVEL))
+        return
+    end
+    local onFinished = function(resp)
+        if resp.status == 0 then
+            UpdateHeroEquipData(curHero)
+            UpdateHeroSingleEquip()
+            self:SendNotification("RefreshSingleEquip",curHeroEquipArr[curEquipType])
+            self:SendNotification("RefreshHeroEquipEffect",GetSingleUpdateEquip())
+            MsgCenter:Broadcast(Notify_UpdateHeroRuneRedTip)
+            MsgCenter:Broadcast(Notify_UpdateCurHero)
+        end
+    end
+    utils.RequestGetRune(curHero.uid,onFinished)
+end 
+
+local function UnWearEquip()
+    local type = curEquipType == EquipType.Relic and curEquipType+1 or curEquipType
+    local onFinished = function(resp)
+        if resp.status == 0 then
+            UpdateHeroEquipData(curHero)
+            UpdateHeroSingleEquip()
+            self:SendNotification("RefreshSingleEquip",curHeroEquipArr[curEquipType])
+            self:SendNotification("RefreshHeroEquipEffect",GetSingleUpdateEquip())
+            MsgCenter:Broadcast(Notify_UpdateHeroEquipRedTip)
+            MsgCenter:Broadcast(Notify_UpdateCurHero)
+            audio:PlayUI("putdownequip")
+        end
+    end
+    utils.RequestTakeOffEquip(curHero.uid,type,onFinished)
+end
+
+local function OnPutOnEquipResp(resp)
+    if resp.status == 0 then
+        UpdateHeroEquipData(curHero)
+        UpdateHeroSingleEquip()
+        self:SendNotification("CloseEquip")
+        self:SendNotification("RefreshSingleEquip",curHeroEquipArr[curEquipType])
+        self:SendNotification("RefreshHeroEquipEffect",GetSingleUpdateEquip())
+        MsgCenter:Broadcast(Notify_UpdateHeroEquipRedTip)
+        MsgCenter:Broadcast(Notify_UpdateCurHero)
+        audio:PlayUI("pickupequip")
+    end
+end 
+
+local function WearRelic()
+    utils.RequestPutOnRelic(curSelectEquip.uid,curHero.uid,OnPutOnEquipResp)
+end
+
+local function WearEquip(itemId)
+    if curEquipType == EquipType.Relic then
+        WearRelic()
+    else
+        utils.RequestPutOnEquip(curHero.uid,itemId,OnPutOnEquipResp)
+    end
+end 
+
+local function OnOpenRuneLevelUpConversionView(obj)
+    local type = obj
+    local hero = table.copy(curHero)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+		local view=CsBridge.OpenView("RuneLevelUpConversionView","RuneLevelUpConversionModel",true,true)
+        view:SetParamDataList(hero, type)
+	end, "RuneLevelUpConversionView")
+end
+
+local function OnUpdateHeroSingleEquip(obj)
+    UpdateHeroEquipData(curHero)
+    UpdateHeroSingleEquip()
+    self:SendNotification("RefreshSingleEquip",curHeroEquipArr[curEquipType])
+end
+
+local function OnOpenRelicLevelUpView(obj)
+    local hero = table.copy(curHero)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+		local view=CsBridge.OpenView("RelicLevelUpView","RelicLevelUpModel",true,true)
+        view:SetParamDataList(hero)
+	end, "RelicLevelUpView","ItemSlot")
+end
+
+local function OnHeroShowViewSwitchHero(obj)
+    curHero = obj
+    UpdateHeroEquip()
+    MsgCenter:Broadcast(Notify_UpdateHeroEquipRedTip)
+end
+
+function DoInit()
+    RUNE_OPEN_LEVEL = GetConstValue("runeOpen")
+    MsgCenter:Subscribe(Notify_UpdateHeroSingleEquip,OnUpdateHeroSingleEquip)
+    MsgCenter:Subscribe(Notify_UpdateHeroEquipRedTip,OnUpdateHeroEquipRedTip)
+    MsgCenter:Subscribe(Notify_UpdateHeroRuneRedTip,OnUpdateHeroRuneRedTip)
+    MsgCenter:Subscribe(Notify_OpenRuneLevelUpConversionView,OnOpenRuneLevelUpConversionView)
+    MsgCenter:Subscribe(Notify_OpenRelicLevelUpView,OnOpenRelicLevelUpView)
+    MsgCenter:Subscribe(Notify_HeroShowView_SwitchHero,OnHeroShowViewSwitchHero)
+end
+
+function DoOnExit()
+    MsgCenter:Unsubscribe(Notify_UpdateHeroSingleEquip,OnUpdateHeroSingleEquip)
+    MsgCenter:Unsubscribe(Notify_UpdateHeroEquipRedTip,OnUpdateHeroEquipRedTip)
+    MsgCenter:Unsubscribe(Notify_UpdateHeroRuneRedTip,OnUpdateHeroRuneRedTip)
+    MsgCenter:Unsubscribe(Notify_OpenRuneLevelUpConversionView,OnOpenRuneLevelUpConversionView)
+    MsgCenter:Unsubscribe(Notify_OpenRelicLevelUpView,OnOpenRelicLevelUpView)
+    MsgCenter:Unsubscribe(Notify_HeroShowView_SwitchHero,OnHeroShowViewSwitchHero)
+    audio = nil
+    utils = nil
+
+    curHero = nil
+
+    EquipType = nil
+
+    EquipMode = nil
+
+    curHeroEquipArr = nil
+    curEquipType = nil
+    curSelectEquip = nil
+
+    equipRedTip = nil
+    runeRedTip = nil
+
+    RUNE_OPEN_LEVEL = nil
+end
+
+function OnCommand_InitData(objs)
+    curHero = objs[0]
+    UpdateHeroEquip()
+    equipRedTip = RefreshHeroEquipRedTip()
+    runeRedTip = RefreshHeroRuneRedTip()
+end
+
+function OnCommand_InitEquipCompareData(objs)
+    self:SendNotification("RefreshEquipCompareView",InitCompareEquipData())
+end
+
+function OnCommand_InitEquipSelectData(objs)
+    self:SendNotification("RefreshEquipSelectView",InitSelectEquipData())
+end
+
+function OnCommand_OpenEquip(objs)
+    curEquipType = objs[0]
+    local curSelectEquipArr = InitSelectEquipData()
+    if curHeroEquipArr[curEquipType].id ~= 0 then
+        local equip = {
+            id = curHeroEquipArr[curEquipType].id,
+            typeId = curHeroEquipArr[curEquipType].typeId,
+            count = 1,
+            heroUid = curHero.uid
+        }
+        if equip.typeId == 0 then
+            equip.hasMaxLevel = utils.CheckRuneMaxLevel(curHero)
+            equip.attrs = curHero.rune.attrs
+        end
+        if equip.typeId == ItemTypeEnum.Relic then
+            equip.level = curHero.relic.level
+            equip.quality = curHero.relic.quality
+            equip.owner = curHero.relic.owner
+            equip.hasMaxLevel = equip.level >= GetRelicMaxLevel(equip.quality)
+        end
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            local view = CsBridge.OpenView("ItemTipView", "ItemTipModel")
+            view:SetParamDataList(equip,itemBaseIndex+PropsIndex+itemSuitIndex+itemBtnsIndex+itemActivateIndex)
+            local callFunc = {
+                exchange = function(callback)
+                    callback() 
+                    if #curSelectEquipArr == 0 then
+                        utils.ShowHintBox(Language:getStr("HeroEquip_NoEquip"))
+                    else
+                        CsBridge.CacheAssetsByModule(self.Module,function()
+                            CsBridge.OpenView("EquipSelectView","HeroEquipModel")
+                        end, "EquipSelectView","ItemSlot")    
+                    end
+                end,
+                unWear = function(callback)
+                    callback()
+                    UnWearEquip(callback)
+                end
+            }
+            view:SendCommand("InitEquipData", EquipMode.Exchange, callFunc)
+            view:SendCommand("InitItemData")
+        end, "ItemTipView")
+    else
+        if curEquipType == EquipType.Rune then -- 符文
+            GetRune()
+        else
+            if #curSelectEquipArr == 0 then
+                utils.ShowHintBox(Language:getStr("HeroEquip_NoEquip"))
+            else
+                CsBridge.CacheAssetsByModule(self.Module,function()
+                    CsBridge.OpenView("EquipSelectView","HeroEquipModel")
+                end, "EquipSelectView","ItemSlot")    
+            end
+        end
+    end
+end
+
+function OnCommand_SelectEquip(objs)
+    curSelectEquip = objs[0]
+    if curHeroEquipArr[curEquipType].id ~= 0 then
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            CsBridge.OpenView("EquipCompareView","HeroEquipModel")
+        end,"EquipCompareView")
+    else
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            local view = CsBridge.OpenView("ItemTipView", "ItemTipModel")
+            local equip = {
+                id = curSelectEquip.id,
+                typeId = curSelectEquip.typeId,
+                count = 1
+            }
+            if equip.typeId == 4 then
+                equip.level = curSelectEquip.level
+            end
+
+            view:SetParamDataList(equip,itemBaseIndex+PropsIndex+itemSuitIndex+itemBtnsIndex+itemActivateIndex)
+            local callFunc = {
+                wear = function(callback, itemId)
+                    callback()
+                    WearEquip(itemId)
+                end
+            }
+            view:SendCommand("InitEquipData", EquipMode.Wear, callFunc, function()
+                self:SendNotification("ActiveEquipSelect")
+            end)
+            view:SendCommand("InitItemData")
+        end, "ItemTipView")
+    end
+end
+
+function OnCommand_QuickWear(objs)
+    local onFinished = function(resp)
+        if resp.status == 0 then
+            UpdateHeroEquipData(curHero)
+            local oldEquip = table.copy(curHeroEquipArr)
+            UpdateHeroEquip()
+            self:SendNotification("CloseEquip")
+            local updateEquip = GetAllUpdateEquip(oldEquip)
+            self:SendNotification("RefreshHeroEquipEffect",updateEquip)
+            MsgCenter:Broadcast(Notify_UpdateHeroRuneRedTip)
+            MsgCenter:Broadcast(Notify_UpdateHeroEquipRedTip)
+            MsgCenter:Broadcast(Notify_UpdateCurHero)
+            audio:PlayUI("putdownequip")
+        end
+    end
+    utils.RequestPutOnAllEquip(curHero.uid,onFinished)
+end
+
+function OnCommand_QuickUnWear(objs)
+    local onFinished = function(resp)
+        if resp.status == 0 then
+            UpdateHeroEquipData(curHero)
+            local oldEquip = table.copy(curHeroEquipArr)
+            UpdateHeroEquip()
+            self:SendNotification("CloseEquip")
+            self:SendNotification("RefreshHeroEquipEffect",GetAllUpdateEquip(oldEquip))
+            MsgCenter:Broadcast(Notify_UpdateHeroRuneRedTip)
+            MsgCenter:Broadcast(Notify_UpdateHeroEquipRedTip)
+            MsgCenter:Broadcast(Notify_UpdateCurHero)
+            audio:PlayUI("putdownequip")
+        end
+    end
+    utils.RequestTakeOffAllEquip(curHero.uid,onFinished)
+end
+
+function OnCommand_WearEquip(objs)
+    WearEquip(curSelectEquip.id)
+end
+
+function OnCommand_ExchangeEquip(objs)
+    local curSelectEquipArr = InitSelectEquipData()
+    if #curSelectEquipArr == 0 then
+        utils.ShowHintBox(Language:getStr("HeroEquip_NoEquip"))
+    else
+        self:SendNotification("CloseEquip")
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            CsBridge.OpenView("EquipSelectView","HeroEquipModel")
+        end, "EquipSelectView","ItemSlot")    
+    end
+end
+
+function OnCommand_ActiveEquipSelect(objs)
+    self:SendNotification("ActiveEquipSelect")
+end
+
+function OnCommand_OnClose(objs)
+    curHero = nil
+    curHeroEquipArr = nil
+    curEquipType = nil
+    curSelectEquip = nil
+end

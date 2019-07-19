@@ -1,0 +1,88 @@
+--[[
+	file: LeaderboardUtils.lua
+	author: hangang
+	description: Leaderboard model
+]]
+
+PlayerLeaderboardType = 
+{
+	Power = 1,
+	MapLevel = 2,
+	GloryRoad = 3,
+	Tower = 4,
+}
+
+PowerLeaderboardType = 
+{
+	Local = 1,
+	Global = 2,
+}
+
+local COUNT_RECORD = 50
+
+------Http requet---------------------------------------------------------------------
+function FetchPowerLeaderboard(finishedCallback)
+    local req = {}
+	req.count = COUNT_RECORD
+	local url, requestCls, responseCls = "getPvpCombatRank", "GetPvpCombatRankReq", "GetPvpCombatRankResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function FetchGlobalPowerLeaderboard(finishedCallback)
+    local req = {}
+	req.count = COUNT_RECORD
+	local url, requestCls, responseCls = "getMulTeamCombatRank", "GetPvpCombatRankReq", "GetPvpCombatRankResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function FetchLevelLeaderboard(finishedCallback)
+    local req = {}
+	req.count = COUNT_RECORD
+	local url, requestCls, responseCls = "getCampaignRank", "GetCampaignRankReq", "GetCampaignRankResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function FetchGloryRoadLeaderboard(finishedCallback)
+    local req = {}
+	req.count = COUNT_RECORD
+	local url, requestCls, responseCls = "getGloryRoadRankInfo", "GetSkyTowerRankInfoReq", "GetSkyTowerRankInfoResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function FetchTowerLeaderboard(finishedCallback)
+    local req = {}
+	req.count = COUNT_RECORD
+	local url, requestCls, responseCls = "getSkyTowerRankInfo", "GetSkyTowerRankInfoReq", "GetSkyTowerRankInfoResp"
+	HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+------Helpers---------------------------------------------------------------------
+function OpenPlayerInfoView(self, playerInfo, parentView)
+	local uid = tostring(playerInfo.userId)
+	local cachedOwnPlayerInfo = appData:checkData("PlayerInfo")
+	local zone = tostring(playerInfo.zone)
+	local isLocal = uid == cachedOwnPlayerInfo.userId and zone == cachedOwnPlayerInfo.zone
+	local showUnionInfoBtn = true
+	local siblingIdx = -1
+	CsBridge.CacheAssetsByModule(self.Module,
+		function()
+			local view = CsBridge.OpenView("PlayerInfoView", "PlayerInfoModel", true, true)
+			view:SetParamDataList(isLocal, uid, zone, siblingIdx, showUnionInfoBtn)
+		end, 
+		"PlayerInfoView","AchievementItemSlot")
+end
+
+function FormatGloryRoadLevel(id)
+	if id > 0 then
+		local stage = ResTblContainer:GetPropToStr(id, GloryRoadTbl.stage, GloryRoadTbl.tblName)
+		local floor = ResTblContainer:GetPropToStr(id, GloryRoadTbl.floor, GloryRoadTbl.tblName)
+
+		return floor .. "-" .. stage
+	else
+		return "-"
+	end
+end
+
+function OpenLeaderboard(self, leaderboardType)
+    self:ShowModule("LeaderboardModule", {leaderboardType})
+end

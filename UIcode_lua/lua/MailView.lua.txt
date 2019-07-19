@@ -1,0 +1,237 @@
+local loadedMailItemSlot=require "MailItemSlot"
+
+local titleTxt
+local contentTxt
+local rewardObj 
+local rewardRecevedBtn
+local rewardGrid
+
+local nothingObj 
+local mailGridBgObj
+
+local deleteAllBtn 
+local receiveAllBtn 
+local readAllBtn 
+
+local typeTogArr
+
+local mailGrid
+
+local banBtn
+local banImg
+local unBanImg
+
+local replyBtn
+local replyButton
+
+local isInit = false
+
+function DoInit()
+	self.Shadow = 1
+end 
+
+function InitUI()
+	titleTxt=self:GetComponentAtPath("Center/Detail/TitleTxt",CLS_TEXT)
+	contentTxt=self:GetComponentAtPath("Center/Detail/ContentSV/Viewport/ContentTxt",CLS_TEXT)
+	rewardObj=self:GetGameObjectAtPath("Center/Detail/RewardObj")
+	local rewardObjTrans = rewardObj.transform
+	rewardRecevedBtn=rewardObjTrans:GetComponentAtPath("ReceiveBtn",CLS_BUTTON_ARCHLY)
+	rewardGrid=rewardObjTrans:GetComponentAtPath("Viewport/RewardGrid",CLS_UI_ITEM_GRID)
+	deleteAllBtn=self:GetComponentAtPath("Bottom/DeleteAllBtn",CLS_BUTTON_ARCHLY)
+	deleteAllBtn.gameObject:SetSelfActive(true)
+	receiveAllBtn=self:GetComponentAtPath("Bottom/ReceiveAllBtn",CLS_BUTTON_ARCHLY)
+	receiveAllBtn.gameObject:SetSelfActive(true)
+	readAllBtn=self:GetComponentAtPath("Bottom/ReadAllBtn",CLS_BUTTON_ARCHLY)
+
+	nothingObj = self:GetGameObjectAtPath("Center/Nothing")
+	mailGridBgObj = self:GetGameObjectAtPath("BGS/middlebgImg")
+
+	typeTogArr = {}
+	local typeTog = self.transform:Find("Top/TypeTog")
+	for i=0,typeTog.childCount-1 do
+		local type = typeTog:GetChild(i):GetComponent("ToggleArchly")
+		table.insert(typeTogArr, type)
+	end 
+
+	mailGrid=self:GetComponentAtPath("Center/MailSV/ScrollRect/Viewport/MailGrid",CLS_UI_ITEM_GRID)
+
+	banBtn = self:GetGameObjectAtPath("Center/Detail/BanBtn")
+	local banTrans = banBtn.transform
+	banImg = banTrans:GetGameObjectAtPath("BanImg")
+	unBanImg = banTrans:GetGameObjectAtPath("UnBanImg")
+
+	replyBtn = self:GetGameObjectAtPath("Center/Detail/ReplyBtn")
+	replyButton = self:GetComponentAtPath("Center/Detail/ReplyBtn",CLS_BUTTON_ARCHLY)
+end
+
+function OnAnimationFinished()
+	if not isInit then
+		InitUI()
+		isInit = true
+	end 
+	self:SendCommand("InitMailData")
+end
+
+function IsSetAnchor()
+	return true
+end 
+
+function OnNotification_RefreshView(objs)
+	local mailArr = objs[0]
+	banBtn:SetSelfActive(objs[1]~=1 and #mailArr~=0)
+	replyBtn:SetSelfActive(objs[1]~=1 and #mailArr~=0)
+	if #mailArr == 0 then
+		titleTxt.text = ""
+		rewardObj:SetSelfActive(false)
+		contentTxt.text = ""
+		deleteAllBtn.Gray = true
+		receiveAllBtn.Gray = true
+		readAllBtn.Gray = true
+		mailGridBgObj:SetSelfActive(false)
+		nothingObj:SetSelfActive(true)
+	else 
+		contentTxt.text = ""
+		deleteAllBtn.Gray = false
+		receiveAllBtn.Gray = false
+		readAllBtn.Gray = false
+		mailGridBgObj:SetSelfActive(true)
+		nothingObj:SetSelfActive(false)
+	end
+	receiveAllBtn.gameObject:SetSelfActive(objs[1]==1)
+	readAllBtn.gameObject:SetSelfActive(objs[1]~=1)
+	mailGrid:RefreshItemSlots(mailArr, self.gameObject, "MailItemSlot")
+end
+
+function OnNotification_RefreshReplyBtn(objs)
+	local userId = appData:checkData("PlayerInfo").userId
+	local zone = appData:checkData("PlayerInfo").zone
+	local mailItem = objs[0].mailItem
+	replyBtn:SetSelfActive(mailItem.fromUserId ~= userId)
+end
+
+function OnNotification_RefreshMail(objs)
+	local curMail = objs[0]
+	if curMail ~= nil then
+		--print("view:",curMail.status)
+		mailGrid:SingleRefreshSlot(curMail)
+		titleTxt.text = curMail.mailItem.title 
+		contentTxt.text = curMail.mailItem.content
+		contentTxt:ForceMeshUpdate()
+		banBtn:SetSelfActive(curMail.inBlackList ~= nil)
+		UpdateBanBtnState(curMail.inBlackList ~= nil and curMail.inBlackList or false)
+		if curMail.attach ~= nil then
+			if curMail.attachTaken then
+				rewardRecevedBtn.Gray = true
+			else
+				rewardRecevedBtn.Gray = false
+			end
+			rewardObj:SetSelfActive(true)
+			-- BindItemBaseValue(rewardBase,curMail.attach[1])
+			rewardGrid:RefreshItemSlots(curMail.attach,self.gameObject,"ItemSlot")
+		else 
+			--banBtn:SetSelfActive(false)
+			rewardObj:SetSelfActive(false)
+		end
+	end
+end 
+
+function OnNotification_OpenTypeView(objs)
+	typeTogArr[objs[0]].isOn = true
+end 
+
+function OnNotification_RefreshBanBtnState(objs)
+	UpdateBanBtnState(objs[0])
+end
+
+function UpdateBanBtnState(ban)
+	unBanImg:SetSelfActive(not ban)
+	banImg:SetSelfActive(ban)
+end
+
+function OnSystemMailTogClick(sender)
+	self:SendCommand("SwitchType",1)
+end 
+
+function OnPlayerMailTogClick(sender)
+	self:SendCommand("SwitchType",2)
+end 
+
+function OnMailGridItemBtnClick(obj)
+	self:SendCommand("SelectMail",obj.m_index)
+end
+
+function OnRewardGridItemSlotClick(obj)
+	ShowTip(self,obj.m_data.typeId,obj.m_data.id)
+end
+
+function OnNotification_SelectMail(objs)
+	local itemData = mailGrid:GetItemDataByIndex(objs[0])
+	if itemData ~= nil then
+		itemData.IsSelected = true
+	end
+end
+
+function OnNotification_CancelSelectMail(objs)
+	local itemData = mailGrid:GetItemDataByIndex(objs[0])
+	if itemData ~= nil then
+		itemData.IsSelected = false
+	end
+end
+
+function OnReceiveBtnClick(sender)
+	self:SendCommand("ReceiveMailReward")
+end
+
+function OnReceiveAllBtnClick(sender)
+	self:SendCommand("AutoAttach")
+end
+
+function OnDeleteAllBtnClick(sender)
+	self:SendCommand("AutoDelete")
+end
+
+function OnReadAllBtnClick(sender)
+	self:SendCommand("AutoRead")
+end
+
+function OnBanBtnClick(sender)
+	self:SendCommand("AddMailBlackList")
+end
+
+function OnReplyBtnClick(sender)
+	self:SendCommand("Reply")
+end
+
+function OnCloseBtnClick(sender)
+	self:ReturnBack()
+end
+
+function DoExit()
+
+	loadedMailItemSlot = nil
+	titleTxt = nil
+	contentTxt = nil
+	rewardObj  = nil
+	rewardRecevedBtn = nil
+	rewardGrid = nil
+
+	nothingObj  = nil
+	mailGridBgObj = nil
+
+	deleteAllBtn  = nil
+	receiveAllBtn  = nil
+	readAllBtn  = nil
+
+	typeTogArr = nil
+
+	mailGrid = nil
+
+	banBtn = nil
+	banImg = nil
+	unBanImg = nil
+
+	replyBtn = nil
+	replyButton = nil
+
+	isInit  = nil
+end

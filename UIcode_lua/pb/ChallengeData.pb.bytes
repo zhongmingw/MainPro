@@ -1,0 +1,24 @@
+
+•
+ChallengeData.protoChallengeDatastage.proto"¬
+ChallengeItem
+type (
+
+difficulty (
+remains (
+lastRenewTime (
+challengedTimes (
+
+dailyLimit (
+vipBoughtNum (
+combat ("[
+ChallengeReq
+type (
+
+difficulty ()
+formationPos (2.stage.FormationPos"0
+BuyExtraChanceReq
+type (
+count ("$
+BuyExtraChanceResp
+result (

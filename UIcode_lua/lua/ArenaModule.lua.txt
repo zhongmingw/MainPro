@@ -1,0 +1,16 @@
+function DoInit()
+
+end
+
+function AssetNames(objs)
+	local arr={"ArenaView","ArenaItemSlot"}
+	return arr
+end
+
+function OnEnter(objs,onFinished)
+	-- self:BindViewAndModel("ArenaView","ArenaModel")
+	self:OpenView("ArenaView","ArenaModel")
+	if(onFinished ~= nil)then
+		onFinished()  
+	end
+end

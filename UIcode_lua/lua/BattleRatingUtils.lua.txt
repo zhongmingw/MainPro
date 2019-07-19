@@ -1,0 +1,35 @@
+--[[
+	file: BattleRatingUtils.lua
+	author: hangang
+	description: Battle ratings model helper
+]]
+
+------Http requet---------------------------------------------------------------------
+function FetchReviews(finishedCallback, battleID, endIdx)
+    local req = {}
+    req.uuid = battleID
+    req.beginIndex = 1
+    req.endIndex = endIdx
+
+	local url, requestCls, responseCls = "checkComments", "CheckCommentsReq", "CheckCommentsResp"
+	HttpBackgroundRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function LikeReview(finishedCallback, uuid, reviewID)
+    local req = {}
+    req.uuid = uuid
+    req.time = reviewID
+    req.like = true
+
+    local url, requestCls, responseCls = "likeComment", "LikeCommentReq", "LikeCommentResp"
+    HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end
+
+function PostReview(finishedCallback, battleID, review)
+    local req = {}
+    req.uuid = battleID
+    req.comments = review
+
+    local url, requestCls, responseCls = "comment", "CommentReq", "CommentResp"
+    HttpRequest(url, requestCls, responseCls, req, finishedCallback)
+end

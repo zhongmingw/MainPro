@@ -1,0 +1,721 @@
+ConstantTbl={}
+ConstantTbl.TblName="Constant"
+ConstantTbl.name="name"
+ConstantTbl.val="val"
+
+function GetConstValue(key)
+	local tbl=ResTblContainer:GetTable(ConstantTbl.TblName)
+    if	tbl:HasKey(key) then
+		local str=tbl:Get(key,ConstantTbl.val)
+		return tonumber(str)
+	end
+	return nil
+end
+
+WonderActivityFlags = {}
+
+HeroAttrEnum = {
+  HP = 1,
+  SPEED = 3,
+  ATK = 4,
+  DEF = 5,
+  MAGIC_ATK = 6,
+  MAGIC_DEF = 7,
+  CRIT_RATE = 8,
+  ANTI_CRIT_RATE = 9,
+  CRIT_HURT = 10,
+  ANTI_CRIT_HURT = 11
+}
+
+UI_OPEN_TYPE_PVE=1 --挑战
+UI_OPEN_TYPE_PAY=2 --充值
+UI_OPEN_TYPE_VIP=3 --VIP
+UI_OPEN_TYPE_ACHIEVE=4 --成就
+UI_OPEN_TYPE_HEROSUMMON=5 --英雄召唤
+UI_OPEN_TYPE_HERODECOMPOSE=6 --祭坛
+UI_OPEN_TYPE_EQUIPCOMPOSE=7 --装备合成
+UI_OPEN_TYPE_ADV=8 --广告
+UI_OPEN_TYPE_GOLD=9 --金币挑战
+UI_OPEN_TYPE_SOUL=10 --战魂挑战
+UI_OPEN_TYPE_CHIP=11 --碎片挑战
+UI_OPEN_TYPE_MAIL=12 --邮件
+UI_OPEN_TYPE_AUTOTASK=13 --挂机任务
+UI_OPEN_TYPE_TALK=14 --聊天
+UI_OPEN_TYPE_FRIIEND=15 --好友
+UI_OPEN_TYPE_TOWER=16 --试炼之塔
+UI_OPEN_TYPE_LOGINREWARD=17 --登录奖励
+UI_OPEN_TYPE_PVP=18 --竞技场
+UI_OPEN_TYPE_ONLINEREWARD=19 --在线奖励
+UI_OPEN_TYPE_DAILYTASK=20 --日常任务
+UI_OPEN_TYPE_GUILD=21 --公会
+UI_OPEN_TYPE_TWICESPEED=22 --双倍速度播放
+UI_OPEN_TYPE_TRUNTABLE=23 --转盘
+UI_OPEN_TYPE_EXPEDITIOIN=24 --英灵试炼
+UI_OPEN_TYPE_PVPCROSS=25 --英雄交锋
+UI_OPEN_TYPE_ELEMENT_FUSION=26 --元素融合度
+--UI_OPEN_TYPE_TOWER=27 --装备附魔
+UI_OPEN_TYPE_SKIPBATTLE=28 --跳过战斗
+UI_OPEN_TYPE_HEROCOMPOSE=29 --英雄合成
+UI_OPEN_TYPE_SOULTASK=30 --英灵殿
+UI_OPEN_TYPE_BAG=31 --背包
+UI_OPEN_TYPE_FORMATION=32 --阵容配置
+--UI_OPEN_TYPE_EQUIP=33 --公会副本
+--UI_OPEN_TYPE_GUILD=34 --公会贸易
+UI_OPEN_TYPE_DROGAN=35 --异龙水晶
+UI_OPEN_TYPE_LIMIT_HEROINFO=36 --英雄信息
+--UI_OPEN_TYPE_HERO=37 --公会科技
+UI_OPEN_TYPE_GETGOLD=38 --点金
+UI_OPEN_TYPE_SHOP=40 --黑市
+UI_OPEN_TYPE_LIMIT_FRIENDHELP=41 --好友助战
+UI_OPEN_TYPE_SOMMONENERGY=42 --召唤能量槽
+UI_OPEN_TYPE_GLORYROAD=43 --光辉之路
+UI_OEPN_TYPE_LIMIT_TURNTABLE=45
+UI_OPEN_TYPE_HALLOWEEN=46
+UI_OPEN_TYPE_UNION_BATTLE=47
+UI_OPEN_TYPE_RELIC_DECOMPOSE=48
+UI_OPEN_TYPE_UP_REWARD_VEDIO=49
+UI_OPEN_TYPE_JEWEL=50
+UI_OPEN_TYPE_PET=51
+UI_OPEN_TYPE_WORLD_BOSS=52
+UI_OPEN_TYPE_SOULIMPRINT = 53 --灵魂印刻
+UI_OPEN_TYPE_SELECT_REWARD_BOX = 54 --可选取宝箱
+UI_OPEN_TYPE_MONOPOLY=55--大富翁
+UI_OPEN_TYPE_JEWEL_COMPOSE=56--晶石合成
+UI_OPEN_TYPE_MINING = 57 --采矿
+UI_OPEN_TYPE_HUNT_TREASURE = 58 --探宝
+
+UI_OPEN_TYPE_REAL_NAME_CHECK = 60 --实名认证
+UI_OPEN_QUICK_FIGHT = 61 --快速战斗
+UI_OPEN_TYPE_UP_REWARD_VEDIO_AUTOTASK = 62
+
+--instruction def
+
+INSTRUCTION_HEROSUMMON = 3
+INSTRUCTION_HERODECOMPOSE = 4
+INSTRUCTION_EQUIPCOMPOSE = 5
+INSTRUCTION_CHALLENGE_COIN = 6
+INSTRUCTION_CHALLENGE_SOUL = 7
+INSTRUCTION_CHALLENGE_HERO = 8
+INSTRUCTION_AUTOTASK = 9
+INSTRUCTION_TOWER = 10
+INSTRUCTION_LOGINREWARD = 11
+INSTRUCTION_ELEMENT_FUSION = 17
+INSTRUCTION_DRAGON_PROP = 25
+INSTRUCTION_DRAGON = 26
+INSTRUCTION_HELPFRIEND = 29
+INSTRUCTION_HEROCOMPOSE = 30
+INSTRUCTION_TURNTABLE = 33
+INSTRUCTION_GLORYROAD = 40
+INSTRUCTION_HERO_RESET = 42
+INSTRUCTION_LIMIT_TURNTABLE = 43
+INSTRUCTION_HALLOWEEN = 44
+INSTRUCTION_DISCOUNT_SHOP = 46
+INSTRUCTION_GROUP_PURCHASE = 47
+INSTRUCTION_RELIC_DECOMPOSE = 48
+INSTRUCTION_JEWEL_UPSTAR = 49
+INSTRUCTION_JEWEL_LOTTERY = 50
+INSTRUCTION_JEWEL_EQUIP = 52
+INSTRUCTION_UP_LOTTERY = 55
+INSTRUCTION_WORLD_BOSS = 56
+INSTRUCTION_SOUL_IMPRINT = 57
+INSTRUCTION_PUT_ON_SOUL_IMPRINT = 58
+
+INSTRUCTION_MONOPOLY_SHOP = 59
+INSTRUCTION_MONOPOLY_QUES = 60
+INSTRUCTION_MONOPOLY_BOX = 61
+INSTRUCTION_MONOPOLY_FIGHT = 62
+INSTRUCTION_MONOPOLY_BOSS = 63
+INSTRUCTION_MONOPOLY = 64
+INSTRUCTION_MONOPOLY_BOX_1 = 65
+INSTRUCTION_MINING_MAP = 66 ---采矿地图界面的帮助
+INSTRUCTION_MINING_HOLDER = 67 ---采矿持有者界面的帮助
+INSTRUCTION_MINING_TECHNOLOGY = 68 ---采矿科技界面的帮助
+INSTRUCTION_MAZE = 69
+INSTRUCTION_SUBSCRIBE = 70 ---订阅介绍
+INSTRUCTION_SOULPALACE = 71
+INSTRUCTION_HONORCITY = 72--荣耀之都帮助
+--activity type def
+ACTIVITY_TYPE_ONLINE_REWARD=19
+ACTIVITY_TYPE_LIMIT_TURNTABLE=49
+
+DISTILL_QUALITY = 6 --觉醒开始的quality
+SKILLBREAK_QUALITY = 6
+RESET_QUALITY = 5
+BREAK_DISTILL_STAR = 3 --突破的开始星星
+BREAK_QUALITY = 8 --突破能到达的quality
+BASE_STAR = 5  --基础英雄star
+
+--hero distillation
+HeroMatType = {
+  FixedAll = 1,
+  FixedQualityAndRace = 2
+}
+
+JewelMatType = {
+  FiexedAll = 1,
+  FixedQualityAndStar = 2
+}
+
+--piece type
+PieceType = {
+  Hero = 1,
+  Relic = 2
+}
+
+CLS_IMAGE = "UnityEngine.UI.Image"
+CLS_TEXT = "TMPro.TextMeshProUGUI"
+CLS_SLIDER = "UnityEngine.UI.Slider"
+CLS_BUTTON_ARCHLY = "Client.Library.ButtonArchly"
+CLS_TOGGLE_ARCHLY = "Client.Library.ToggleArchly"
+CLS_TOGGLE_GROUP_ARCHLY = "Client.Library.ToggleGroupArchly"
+CLS_INPUT = "UnityEngine.UI.InputField"
+CLS_UI_ITEM_GRID = "Client.Library.UIItemGrid"
+CLS_RAWIMAGE = "UnityEngine.UI.RawImage"
+CLS_SCROLL_ARCHLY = "Client.Library.ScrollRectArchly"
+CLS_GRID_LAYOUT_GROUP = "UnityEngine.UI.GridLayoutGroup"
+CLS_ITEM_SLOT = "Client.Library.ItemSlot"
+CLS_RECTTRANSFORM = "RectTransform"
+CLS_SKELETONGRAPHIC = "SkeletonGraphic"
+CLS_CANVAS_GROUP = "CanvasGroup"
+CLS_HORIZONTAL_LAYOUT_GROUP = "UnityEngine.UI.HorizontalLayoutGroup"
+CLS_LOCALIZE = "Client.Library.Localize"
+
+DEFAULT_TIME = "00 : 00 : 00"
+NO_TIME = "-- : -- : --"
+
+DEFAULT_PERCENT_RATE = 1000
+Mill_PERCENT_RATE = 10000
+
+--[[资源类型定义]]
+ResourceEnum = {
+  Coin = 1,
+  Gem = 2,
+  BattleSoul = 3,
+  GreenSoul = 4,
+  ExchangeCoin = 5,
+  Exp = 6,
+  FriendCoin = 7,
+  LuckyCoin = 8,
+  GuildCoin = 9,
+  Rune = 10,
+  Physical = 11,
+  HeroSoul = 12,
+  MagicCoin = 13,
+  VipExp = 14,
+  LingHui = 15,
+  ActivityPoint = 16,
+  FTArenaCoin = 17,
+  FTArenaScore = 18,
+  PetSoulEssence = 19,
+  PetSoulStone = 20,
+  JewelDust = 21,
+  Zillionaire = 23,
+}
+
+--[[物品类型定义]]
+ItemTypeEnum = {
+	Resource = 1,
+	Item = 2,
+	Hero = 3,
+	Relic = 4,
+  IconFrame = 5,
+  Jewel = 6
+}
+
+--道具类型
+ItemType = {
+  HeroEquip = 1,
+  Item = 2,
+  Pieces = 3,
+  Box = 4,
+  SubscribeItem = 5, --通行证
+  PetEquip = 8,
+  PetSkillBook = 7
+}
+
+DealType = {
+    Sell = 1,
+    Exchange = 2,
+    Use = 3,
+    Compose = 4,
+    Buy = 5,
+    GetInput = 6,
+    SpecialUse = 7,
+}
+
+--[[商店刷新类型定义]]
+ShopRefreshTypeEnum = {
+	FixTime = 1,
+	ByServer = 2,
+}
+
+--[[阵容类型定义]]
+FormationTypeEnum = {
+  FormationType_PVE = 1,
+  FormationType_PVP = 2,
+  FormationType_OnHook = 3, --主线关卡挂机阵容
+  FormationType_Vahalla = 4,--远征阵容
+  FormationType_Cross_One = 5,--
+  FormationType_Cross_Two = 6,--
+  FormationType_Cross_Three = 7,--
+  FormationType_GloryRoad_1 = 8,
+  FormationType_GloryRoad_2 = 9,
+  FormationType_BraveArena = 10,
+  FormationType_Union = 11,
+  FormationType_BraveArena_1 = 12,
+  FormationType_BraveArena_2 = 13,
+  FormationType_BraveArena_3 = 14,
+  FormationType_Mining = 15, ---采矿阵容
+  FormationType_Temple = 16,--英灵殿阵容
+  FormationType_WorldBoss = 17,
+}
+
+--[[英雄锁定状态定义]]
+HeroDuty = {
+  PVE = 1,
+  PVP = 2,
+  HOOK = 4,
+  AUTO_TASK = 8,
+  LOCK = 16,
+  EXPEDITIOIN = 32,
+  CROSS_1 = 64,
+  CROSS_2 = 128,
+  CROSS_3 = 256,
+  GloryRoad_1 = 512,
+  GloryRoad_2 = 1024,
+  League_1 = 2048,
+  UnionBattle = 4096,
+  League_2 = 8192,
+  League_3 = 16384,
+  Mining = 32768,
+  SOUL_TEMPLE = 65536,
+    WorldBoss = 131072,
+}
+
+--[[英雄duty和阵容的映射]]
+HeroDutyToFormation = {
+    [HeroDuty.PVE] = FormationTypeEnum.FormationType_PVE,
+    [HeroDuty.PVP] = FormationTypeEnum.FormationType_PVP,
+    [HeroDuty.HOOK] = FormationTypeEnum.FormationType_OnHook,
+    [HeroDuty.EXPEDITIOIN] = FormationTypeEnum.FormationType_Vahalla,
+    [HeroDuty.CROSS_1] = FormationTypeEnum.FormationType_Cross_One,
+    [HeroDuty.CROSS_2] = FormationTypeEnum.FormationType_Cross_Two,
+    [HeroDuty.CROSS_3] = FormationTypeEnum.FormationType_Cross_Three,
+    [HeroDuty.GloryRoad_1] = FormationTypeEnum.FormationType_GloryRoad_1,
+    [HeroDuty.GloryRoad_2] = FormationTypeEnum.FormationType_GloryRoad_2,
+    [HeroDuty.League_1] = FormationTypeEnum.FormationType_BraveArena_1,
+    [HeroDuty.League_2] = FormationTypeEnum.FormationType_BraveArena_2,
+    [HeroDuty.League_3] = FormationTypeEnum.FormationType_BraveArena_3,
+    [HeroDuty.Mining] = FormationTypeEnum.FormationType_Mining,
+    [HeroDuty.UnionBattle] = FormationTypeEnum.FormationType_Union,
+	[HeroDuty.SOUL_TEMPLE] = FormationTypeEnum.FormationType_Temple,
+    [HeroDuty.WorldBoss] = FormationTypeEnum.FormationType_WorldBoss,
+}
+
+--[[分享到聊天的类型]]
+--对应聊天类型
+ShareType = {
+  Hero = 2, 
+  Equip = 3
+}
+
+--[[属性加成方式枚举]]
+AttributeBonusType = {
+	Abs = 1,
+	Percent = 2,
+}
+
+---条件礼包类型
+ConditionPackageType = {
+    HeroLevelUpInSufGold  = 1,
+    HeroGradeUp = 2,
+    RuneLevelUp = 3,
+    Crystal = 4,
+    Lottery = 5,
+    ElementFusion = 6,
+    Campaign = 7,
+    SkyTower = 8,
+    GloryRoad = 9,
+    APArena = 10,
+    MultiArena = 11,
+    PlayerLevelUp = 12,
+    Summon = 15,
+    CrystalHero = 14,
+    TotalRecru = 13,
+    HeroLevelUpInSufSoul = 16
+}
+
+UpRewardVedioID = {
+  MainCity = "video_ad_diamond",
+  AutoTask = "video_tavern_diamond"
+}
+
+BattleType =
+{
+    PVE = 1,
+    SkyTower = 16,
+    Arena = 18,
+    CrossArena = 25,
+    SoulPalace = 30,
+    GuildDungeon = 33,
+    FriendBoss = 41,
+    League = 44,
+    Guildwar = 47,
+    Destruction = 1000,
+}
+
+
+---限时活动分类
+ActivityType =
+{
+  SevenDays = 18,
+  Tavern = 25,
+  Militants = 26,
+  Destruction = 27,
+  Gift = 24,
+  SummonGift = 28,
+  SummonCreditGift = 29,
+  Dragon = 30,
+  TurnTableLottery = 31,
+  DailyLogin = 32,
+  HeroMiracles = 33,
+  HonorOfCompose = 34,
+  PVEBonus = 35,
+  WheelBonus = 36,
+  LimitExchange = 37,
+  LimitActivity = 38,
+  LimitBox = 39,
+  HeroGang = 40,
+  GodWeapon = 41,
+  DailyPackage = 43,
+  CycleCharge = 44,
+  LimitCallHero = 45,
+  LimitCrystal = 46,
+  DailyCharge = 42,
+  AccumulativeCharge = 47,
+  AccumulativeConsumpution = 48,
+  HalloweenChallenge = 50,
+  GroupPurchase = -10000,
+  GroupBuy = 51,
+  DiscountShop = 52,
+  DailyDiscount = 55,
+  GoodsMonthlyCard = 56,
+  PowerLeaderboard = 57,
+  ArenaLeaderboard = 58,
+  HeroUpgrading = 64,
+  JewelLottery = 61,
+  GlobalPowerLeaderboard = 62,
+  GloryRoadActivity = 63,
+  SoulBitsShopActivity = 65,--魂屑商店
+  TripShopActivity = 66,--旅行商店
+  FlashSaleActivity = 69,--限时抢购
+  ArenaStandActivity = 70,--竞技场达标活动
+  HeroBoutActivity = 71,--英雄交锋达标活动
+  BattlePassActivity = 72,--战役通关达标活动
+  TrialTowerActivity = 73,--试炼之塔通关达标活动
+  CombatRankAct = 74,--交锋积分排行榜
+  GemLeaders = 75,--钻石消耗排行榜
+  LimitedTaskActivity = 76,--限定任务
+  SelectionAchieveActivity = 77, --精选抽取达标
+  HeroLevelUpActivity = 79,--英雄升级
+  HeroStarUpActivity = 80,--英雄升星
+  JewelQualityActivity = 81,--晶石获得达标
+}
+
+
+--activity icon define--
+ActivityIcon = {
+  LeaderBoard = 1,
+  WonderActivity = 2,
+  LimitWelfare = 3,
+  AllLimitActivity = 4,
+  League = 5,
+  FirstCharge = 6,
+  SevenTarget = 7,
+  FormationRecommend = 8,
+  Investment = 9,
+  ConditionPackage = 10,
+  LimitActivity = 11,
+  LimitTurnTable = 12,
+  UpLottery = 13,
+  DaliLotteryActivity = 14,
+  WorldBoss = 15,
+  SevenDaysLogin = 16,
+  SysPre = 17,
+  RealNameCheck = 18,
+  HonorCity = 19,
+}
+
+ServerActivityType = {
+  LimitActivity = 1,
+  LimitWelfare = 2
+}
+
+HeroGroupType = {
+    AllGroupType = 0, ---所有
+    Water = 1, ---水
+    Electric = 2, ---电
+    Soil = 3,  ---土
+    Fire = 4,  ---火
+    Light = 5, ---光明
+    Night = 6 ---黑暗
+}
+
+---祭坛分页枚举
+AltarSubViewTypeEnum = {
+    HeroDecompositionView = 1,
+    SoulImprintView = 2,
+}
+
+---英雄排序的枚举
+HeroSortEnum = {
+    SortHeroByLevel = 1,
+    SortHeroByQuality = 2,
+}
+
+---矿点状态
+CaveItemStateEnum = {
+    Free = 0,
+    Hold = 1,
+}
+
+---阵容标题类型
+FormationTitleEnum = {
+    GotoFight = 1,
+    ChangeFormation = 2,
+}
+
+---采矿科技开启类型
+MiningTechnologyOpenTypeEnum = {
+    PlayerLevel = 1,  ---英雄等级
+    AttackCount = 2,  ---攻击次数
+    AttackSuccess = 3, ---攻击胜利
+    HoldTime = 4, ---占领时长
+    GetCoin = 5, --- 收货金币
+    GetAttackSoul = 6, --- 收货战魂
+    GetGreenSoul = 7, ---收货绿魂
+}
+
+SettingRedFlags = {}
+SettingRedFlags.showRedFlag = true --是否显示小红点
+SettingRedFlags.showBtn = true --是否显示按钮
+SettingRedFlags.clickShowView = false  --是否点击了显示界面按钮
+
+--奇遇事件分类
+MonoPolyActivity = {
+  MonopolyBox = 1,
+  MonopolyAnswer = 2,
+  MonopolyShop = 3,
+  MonopolyFight = 4,
+  MonopolyChallenge = 5,
+}
+
+---支付项的类型
+PayTableTypeEnum = {
+    Card = 1, ---月卡
+    Subscribe = 3, ---订阅
+}
+
+---支付消费类型
+ConsumeType = {
+    EasyCost = 1, --易耗品
+    Hold = 2, --耐用品
+    Subscribe = 3, --订阅
+}
+
+---日常任务界面分页类型
+DailyTaskTogType = {
+    DailyTaskDetails = 1,
+    SubscribeReward = 2,
+}
+
+---日常任务状态的枚举
+DailyTaskItemStateEnum = {
+    NotFinish = 1, ---未完成
+    Finished = 2, ---完成未领取奖励
+    GotReward  = 3, ---已获取奖励
+}
+
+---物品操作枚举
+ItemIOperateEnum = {
+    Sell = 1,
+    Use = 2,
+    Compose = 3,
+}
+
+---
+-- @function: 获取table的字符串格式内容，递归
+-- @tab： table
+-- @ind：不用传此参数，递归用（前缀格式（空格））
+-- @return: format string of the table
+function dumpTab(tab,ind)
+  if(tab==nil)then return "nil" end;
+  local str="{";
+  if(ind==nil)then ind="  "; end;
+  --//each of table
+  for k,v in pairs(tab) do
+    --//key
+    if(type(k)=="string")then
+      k=tostring(k).." = ";
+    else
+      k="["..tostring(k).."] = ";
+    end;--//end if
+    --//value
+    local s="";
+    if(type(v)=="nil")then
+      s="nil";
+    elseif(type(v)=="boolean")then
+      if(v) then s="true"; else s="false"; end;
+    elseif(type(v)=="number")then
+      s=v;
+    elseif(type(v)=="string")then
+      s="\""..v.."\"";
+    elseif(type(v)=="table")then
+      s=dumpTab(v,ind.."  ");
+      s=string.sub(s,1,#s-1);
+    elseif(type(v)=="function")then
+      s="function : "..v;
+    elseif(type(v)=="thread")then
+      s="thread : "..tostring(v);
+    elseif(type(v)=="userdata")then
+      s="userdata : "..tostring(v);
+    else
+      s="nuknow : "..tostring(v);
+    end;--//end if
+    --//Contact
+    str=str.."\n"..ind..k..s.." ,";
+  end --//end for
+  --//return the format string
+  local sss=string.sub(str,1,#str-1);
+  if(#ind>0)then ind=string.sub(ind,1,#ind-2) end;
+  sss=sss.."\n"..ind.."}\n";
+  return sss;--string.sub(str,1,#str-1).."\n"..ind.."}\n";
+end;--//end function
+
+--//网摘,直接打印到屏幕
+function printTable(t, n)
+  if "table" ~= type(t) then
+    return 0;
+  end
+  n = n or 0;
+  local str_space = "";
+  for i = 1, n do
+    str_space = str_space.."  ";
+  end
+  print(str_space.."{");
+  for k, v in pairs(t) do
+    local str_k_v
+    if(type(k)=="string")then
+      str_k_v = str_space.."  "..tostring(k).." = ";
+    else
+      str_k_v = str_space.."  ["..tostring(k).."] = ";
+    end
+    if "table" == type(v) then
+      print(str_k_v);
+      printTable(v, n + 1);
+    else
+      if(type(v)=="string")then
+        str_k_v = str_k_v.."\""..tostring(v).."\"";
+      else
+        str_k_v = str_k_v..tostring(v);
+      end
+      print(str_k_v);
+    end
+  end
+  print(str_space.."}");
+end
+
+--[[
+-- 打印出tbl的所有(key, value)
+-- 该函数主要功能是自动计算缩进层次打印出table内容
+]]--
+function printt(...)
+    --win窗口下输出text
+    local str = ""
+    local function loop(arg, key)
+        local paramType = type(arg)
+        if paramType == "table" then
+            if key then
+                str = str..key.."={"
+            else
+                str = str.."{"
+            end
+
+            for k, v in pairs(arg) do
+                loop(v, k)
+            end
+            str = string.sub(str, 1, -2)
+            str = str.."},"
+        elseif paramType == "userdata" then
+            str = str .. "=tostring(userdata)->" ..tostring(arg)..","
+        elseif paramType == "boolean" then
+            str = str..key.."="..(arg and " true" or " false") .. ","
+        else
+            if type(key) == "string" then
+                str = str..key.."="..arg..","
+            elseif type(key) == "number" then
+                str = str..arg..","
+            else
+                str = arg
+            end
+        end
+    end
+    local arg = {...}
+    for i=1, #arg do
+        loop(arg[i])
+    end
+
+    print(str)
+end
+
+--[[--
+
+深度克隆一个值
+
+@param mixed object 要克隆的值
+
+@return mixed
+
+]]
+function clone(object)
+    local lookup_table = {}
+    local function _copy(object)
+        if type(object) ~= "table" then
+            return object
+        elseif lookup_table[object] then
+            return lookup_table[object]
+        end
+        local new_table = {}
+        lookup_table[object] = new_table
+        for key, value in pairs(object) do
+            new_table[_copy(key)] = _copy(value)
+        end
+        return setmetatable(new_table, getmetatable(object))
+    end
+    return _copy(object)
+end
+
+--[[
+  获取utf8编码字符长度
+]]
+function string.utf8len(input)
+  local len  = string.len(input)
+  local left = len
+  local cnt  = 0
+  local arr  = {0, 0xc0, 0xe0, 0xf0, 0xf8, 0xfc}
+  while left ~= 0 do
+      local tmp = string.byte(input, -left)
+      local i   = #arr
+      while arr[i] do
+          if tmp >= arr[i] then
+              left = left - i
+              break
+          end
+          i = i - 1
+      end
+      cnt = cnt + 1
+  end
+  return cnt
+end
+
+_G.ShowLoadResCount = false

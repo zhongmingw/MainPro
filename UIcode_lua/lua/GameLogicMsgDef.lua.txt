@@ -1,0 +1,111 @@
+GameNotify_LUO_Base = 1000;
+Notify_OnHeroDead = GameNotify_LUO_Base + 1;
+Notify_OnBattleStart = GameNotify_LUO_Base + 2;
+Notify_OnBattleEnd = GameNotify_LUO_Base + 3;
+Notify_BGMoveStart = GameNotify_LUO_Base + 4;
+Notify_BGMoveEnd = GameNotify_LUO_Base + 5;
+Notify_ShowMap = GameNotify_LUO_Base + 6;
+Notify_HideMap = GameNotify_LUO_Base + 7;
+Notify_InitCoin = GameNotify_LUO_Base + 8;
+Notify_TrophyCoin = GameNotify_LUO_Base + 9;
+Notify_TakeCoin = GameNotify_LUO_Base + 10;
+Notify_StopCoin = GameNotify_LUO_Base + 11;
+Notify_OnBattle = GameNotify_LUO_Base + 12;
+Notify_LoadSimulateBattle = GameNotify_LUO_Base + 13;
+Notify_OnSimulateBattleStart = GameNotify_LUO_Base + 14;
+Notify_OnSkipBattle = GameNotify_LUO_Base + 15;
+Notify_BGMoveInit = GameNotify_LUO_Base + 16;
+
+GameNotify_DONG_Base = 2000;
+Notify_OnMain = GameNotify_DONG_Base + 1;
+Notify_FriendRedFlagChanged = GameNotify_DONG_Base + 2;
+Notify_HeroBagRedFlagChanged = GameNotify_DONG_Base + 3;
+Notify_EquipComposeRedFlagChanged = GameNotify_DONG_Base + 4;
+Notify_HeroComposeRedFlagChanged = GameNotify_DONG_Base + 5;
+Notify_MailRedFlagChanged = GameNotify_DONG_Base + 6;
+Notify_DailyTaskRedFlagChanged = GameNotify_DONG_Base + 7;
+Notify_BagRedFlagChanged = GameNotify_DONG_Base + 8;
+Notify_DragonRedFlagChanged = GameNotify_DONG_Base + 9;
+Notify_WonderActivityRedFlagChanged = GameNotify_DONG_Base + 10;
+Notify_SetUpdateEffect = GameNotify_DONG_Base + 11
+Notify_SetTurnTableLottery = GameNotify_DONG_Base + 12
+Notify_TurnTableRedFlagChanged = GameNotify_DONG_Base + 13
+Notify_ElementFusionRedFlagChanged = GameNotify_DONG_Base + 14
+Notify_ElementFusionCampRedFlagChanged = GameNotify_DONG_Base + 15
+Notify_SetTurnTableIdle = GameNotify_DONG_Base + 16
+Notify_ChatWorldRedFlagChanged = GameNotify_DONG_Base + 17
+Notify_SetBreatheScaleFactor = GameNotify_DONG_Base + 18
+Notify_GuideView = GameNotify_DONG_Base + 19
+-- Notify_GloryRoadGreenFlagChanged = GameNotify_DONG_Base + 20
+Notify_HeadIconChanged = GameNotify_DONG_Base + 21
+Notify_ConditionPackageTimeOver = GameNotify_DONG_Base + 22
+Notify_ConditionPackageChanged = GameNotify_DONG_Base + 23
+------------------这几条在cs侧的sdkHelper代码里会用到-----------------------------
+Notify_ShowUpRewardVedio = GameNotify_DONG_Base + 24
+Notify_UpRewardVedioGetReward = GameNotify_DONG_Base + 25
+Notify_FacebookChangeAccount = GameNotify_DONG_Base + 26
+Notify_UpRewardVedioDontReady = GameNotify_DONG_Base + 28
+Notify_LoginSuccess = GameNotify_DONG_Base + 100
+
+----------------------------------------------------------------------------------
+Notify_ConditionPackageBuy = GameNotify_DONG_Base + 27
+Notify_MainCityUpRewardVedioGetReward = GameNotify_DONG_Base + 29
+Notify_UpdateHeroJewelEquip = GameNotify_DONG_Base + 30
+Notify_CloseHeroShowView = GameNotify_DONG_Base + 31
+Notify_UpdateHeroShowRedTip = GameNotify_DONG_Base + 32
+Notify_UpdateCurHero = GameNotify_DONG_Base + 33
+Notify_CloseDealView = GameNotify_DONG_Base + 34
+Notify_Rename = GameNotify_DONG_Base + 35
+Notify_OpenActivityView = GameNotify_DONG_Base + 36
+Notify_UpdateActivityIcon = GameNotify_DONG_Base + 37
+Notify_UpdateCurHeroJewelEquipRedTip = GameNotify_DONG_Base + 38
+NOtify_CheckFailedOrder = GameNotify_DONG_Base + 39
+Notify_HeroShowView_SwitchHero = GameNotify_DONG_Base + 40
+Notify_UpdatehHeroShowView_TopRes = GameNotify_DONG_Base + 41
+Notify_UpdateHeroShowHeroInfoRedTip = GameNotify_DONG_Base + 42
+Notify_UpdateHeroShowHeroEquipRedTip = GameNotify_DONG_Base + 43
+Notify_UpdateHeroShowHeroDistillRedTip = GameNotify_DONG_Base + 44
+Notify_UpdateHeroShowHeroJewelEquipRedTip = GameNotify_DONG_Base + 45
+Notify_UpdateHeroInfoRedTip = GameNotify_DONG_Base + 46
+Notify_UpdateHeroEquipRedTip = GameNotify_DONG_Base + 47
+Notify_UpdateHeroDistillRedTip = GameNotify_DONG_Base + 48
+Notify_UpdateHeroJewelEquipRedTip = GameNotify_DONG_Base + 49
+Notify_HeroGradeUp = GameNotify_DONG_Base + 50
+Notify_HeroLevelUp = GameNotify_DONG_Base + 51
+Notify_UpdateHeroRuneRedTip = GameNotify_DONG_Base + 52
+Notify_OpenRuneLevelUpConversionView = GameNotify_DONG_Base + 53
+Notify_UpdateHeroSingleEquip = GameNotify_DONG_Base + 54
+Notify_OpenRelicLevelUpView = GameNotify_DONG_Base + 55
+Notify_UpdateCurHeroArr = GameNotify_DONG_Base + 56
+Notify_UpdateHeroEquipJewel = GameNotify_DONG_Base + 57
+Notify_HeroReset = GameNotify_DONG_Base + 58
+Notify_ResetJewelDecompose = GameNotify_DONG_Base + 59
+Notify_HeroDistill = GameNotify_DONG_Base + 60
+Notify_MazeGridTriggerMonster = GameNotify_DONG_Base + 61
+Notify_MazeGridTriggerEnterNext = GameNotify_DONG_Base + 62
+Notify_MazeGridTriggerEvent = GameNotify_DONG_Base + 63
+Notify_UpdateMazeData = GameNotify_DONG_Base + 64
+Notify_MazeGridTriggerBox = GameNotify_DONG_Base + 65 
+Notify_SoulImprintItemPutOnOrDown = GameNotify_DONG_Base + 66
+
+GameNotify_COMM_Base = 10000;
+Notify_PlayerLevelUp = GameNotify_COMM_Base + 1
+    
+local GameNotify_Union_Base = 3000;
+Notify_WithdrawUnion = GameNotify_Union_Base + 1;		--Triggered when player withdraw a union
+Notify_JoinUnion = GameNotify_Union_Base + 2;			--Triggered when player found or joined a union
+Notify_UnionDonationTried = GameNotify_Union_Base + 3;  --Triggered only once when player click "Donation Button" after login
+
+local GameNotify_HeroRating = GameNotify_Union_Base + 100
+Notify_HeroRating_HeroChanged = GameNotify_HeroRating + 1       --Triggered when player checking another hero infomation within HeroShowView by click "Next/Previous Hero Button"
+
+local GameNotify_SettingsUpdated = GameNotify_HeroRating + 100
+Notify_Settings_Marquee = GameNotify_SettingsUpdated + 1        --Triggered within SettingModel,Params_1:bool(marqueeEnabled)
+Notify_WeeklyActivityDataChanged = GameNotify_SettingsUpdated + 2 --Triggered after claim a weekly activity reward
+Notify_InvestmentTipsChanged = GameNotify_SettingsUpdated + 3
+
+local GameNotify_ZDH_Base = 4000
+Notify_RealNameChecked = GameNotify_ZDH_Base + 1
+Notify_MiningHolderChanged = GameNotify_ZDH_Base + 2
+Notify_MiningHolderFormationChanged = GameNotify_ZDH_Base + 3
+

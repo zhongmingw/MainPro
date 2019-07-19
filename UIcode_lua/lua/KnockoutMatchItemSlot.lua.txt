@@ -1,0 +1,75 @@
+--[[
+	file: KnockoutMatchItemSlot.lua
+	author: hangang
+	description: Item to display league match base information
+]]
+
+
+function OnKnockoutMatchItemSlotBindValue(slot, data)
+	local path = "TimeTxt"
+	local timeTxt = slot:GetComponentAtPath(path, CLS_TEXT)
+	timeTxt.text = data.timeText
+	
+	path = "Result"
+	local resultObj = slot:GetGameObjectAtPath(path)
+	resultObj:SetActive(data.showResult)
+	if data.showResult then
+		path = "Result/leftTxt"
+		local leftResultTxt = slot:GetComponentAtPath(path, CLS_TEXT)
+		leftResultTxt.text = data.leftResultText
+		path = "Result/rightTxt"
+		local rightResultTxt = slot:GetComponentAtPath(path, CLS_TEXT)
+		rightResultTxt.text = data.rightResultText
+
+		local color = data.leftResultColor
+        local r, g, b = color[1], color[2], color[3]
+        CsBridge.UnityHelper.SetTextColor(leftResultTxt, r, g, b)
+        color = data.rightResultColor
+        r, g, b = color[1], color[2], color[3]
+        CsBridge.UnityHelper.SetTextColor(rightResultTxt, r, g, b)
+	end
+
+	path = "Mask"
+	local maskObj = slot:GetGameObjectAtPath(path)
+	maskObj:SetActive(data.showMask)
+
+	path = "SelectionImg"
+	local selectionObj = slot:GetGameObjectAtPath(path)
+	selectionObj:SetActive(data.selected)
+
+	path = "Player01NameTxt"
+	local nameTxt = slot:GetComponentAtPath(path, CLS_TEXT)
+	nameTxt.text = data.player1Name
+
+	path = "Player02NameTxt"
+	nameTxt = slot:GetComponentAtPath(path, CLS_TEXT)
+	nameTxt.text = data.player2Name
+
+	path = "Player01ZoneTxt"
+	local zoneTxt = slot:GetComponentAtPath(path, CLS_TEXT)
+	zoneTxt.text = data.player1Zone
+
+	path = "Player02ZoneTxt"
+	zoneTxt = slot:GetComponentAtPath(path, CLS_TEXT)
+	zoneTxt.text = data.player2Zone
+
+	if data.player1Data then
+		path = "Player01/PlayerBase"
+		local playerTrans = slot:GetGameObjectAtPath(path).transform
+		BindPlayerBaseInfoValue(playerTrans, data.player1Data)
+
+		path = "Player01/votedImg"
+		local votedImgObj = slot:GetGameObjectAtPath(path)
+		votedImgObj:SetActive(data.player1Data.betted)
+	end
+
+	if data.player2Data then
+		path = "Player02/PlayerBase"
+		local playerTrans = slot:GetGameObjectAtPath(path).transform
+		BindPlayerBaseInfoValue(playerTrans, data.player2Data)
+
+		path = "Player02/votedImg"
+		local votedImgObj = slot:GetGameObjectAtPath(path)
+		votedImgObj:SetActive(data.player2Data.betted)
+	end
+end

@@ -1,0 +1,281 @@
+--[[
+	file: LeagueMatchDetailsView.lua
+	author: hangang
+	description: League match details view
+]]
+
+require "PlayerBaseInfoUtils"
+require "ItemSlot"
+
+local cachedMatch
+local finishedCbk
+
+local countdownHeaderTxt, countdownTxt, myAmountTxt, myOddsTxt
+local leftResultTxt, rightResultTxt, scoreTxt
+local leftPlayer, rightPlayer
+local replayBtnObj
+local currencyIconList
+local bonusIconObj
+local currencyTxt, bonusTxt
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 1     --shadow type
+	InitUI()            --cache UI items
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+    path = "Rewards/myAmountTxt"
+    myAmountTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+    path = "Rewards/myOddsTxt"
+    myOddsTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+    path = "Countdown/headerTxt"
+    countdownHeaderTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+    path = "Countdown/timeTxt"
+    countdownTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+    path = "Score/scoreTxt"
+    scoreTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+    path = "Score/leftScoreTxt"
+    leftResultTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+    path = "Score/rightScoreTxt"
+    rightResultTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+    path = "Players/LeftPlayer"
+    leftPlayer = CachePlayer(selfTrans:Find(path))
+    path = "Players/RightPlayer"
+    rightPlayer = CachePlayer(selfTrans:Find(path))
+
+    path = "Buttons/ReviewBtn"
+    replayBtnObj = selfTrans:GetGameObjectAtPath(path)
+
+    path = "Rewards/ResBanner2/iconImg"
+    bonusIconObj = selfTrans:GetGameObjectAtPath(path)
+
+    path = "Rewards/ResBanner/numTxt"
+    currencyTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+    path = "Rewards/ResBanner2/numTxt"
+    bonusTxt = selfTrans:GetComponentAtPath(path, CLS_TEXT)
+
+    CacheCurrencyIcons()
+end
+
+function CacheCurrencyIcons()
+    currencyIconList = {}
+    local path = "Players/LeftPlayer/BetPanel/gemImg"
+    table.insert(currencyIconList, self:GetGameObjectAtPath(path))
+    path = "Players/RightPlayer/BetPanel/gemImg"
+    table.insert(currencyIconList, self:GetGameObjectAtPath(path))
+    path = "Rewards/gemImg"
+    table.insert(currencyIconList, self:GetGameObjectAtPath(path))
+    path = "Rewards/ResBanner/iconImg"
+    table.insert(currencyIconList, self:GetGameObjectAtPath(path))
+end
+
+function CachePlayer(playerTrans)
+    local player = {}
+    
+    local path = "unionTxt"
+    player.unionTxt = playerTrans:GetComponentAtPath(path, CLS_TEXT)
+    path = "unionImg"
+    player.unionImgObj = playerTrans:GetGameObjectAtPath(path)
+
+    path = "nameTxt"
+    player.nameTxt = playerTrans:GetComponentAtPath(path, CLS_TEXT)
+    path = "powerTxt"
+    player.powerTxt = playerTrans:GetComponentAtPath(path, CLS_TEXT)
+
+    path = "PlayerBase"
+    player.baseObj = playerTrans:GetGameObjectAtPath(path)
+    path = "shadowImg"
+    path = "votedImg"
+    player.bettedFlagObj = playerTrans:GetGameObjectAtPath(path)
+
+    path = "FormationBtn"
+    player.formationBtnObj = playerTrans:GetGameObjectAtPath(path)
+    path = "BetBtn"
+    player.betBtnObj = playerTrans:GetGameObjectAtPath(path)
+    path = "CheckBtn"
+    player.checkBtnObj = playerTrans:GetGameObjectAtPath(path)
+
+    path = "BetPanel/betAmountTxt"
+    player.betAmountTxt = playerTrans:GetComponentAtPath(path, CLS_TEXT)
+    path = "BetPanel/oddsTxt"
+    player.oddsTxt = playerTrans:GetComponentAtPath(path, CLS_TEXT)
+
+    path = "BetLockedTxt"
+    player.betLockedObj = playerTrans:GetGameObjectAtPath(path)
+
+    return player
+end
+
+function SetParamDataList(obj)
+	cachedMatch = obj[0]
+    finishedCbk = obj[1]
+end
+
+--On animation finished event--------------------------------------------------------
+function OnAnimationFinished()
+	self:SendCommand("GetBaseViewData", cachedMatch)	
+end
+
+--UIController events handlers-------------------------------------------------------
+function OnNotification_RefreshDetailsView(objs)
+	if self.gameObject.activeInHierarchy then
+		local viewData = objs[0]
+		RefreshView(viewData)
+	end
+end
+
+function RefreshView(data)
+    RefreshCountdown(data.countdownData)
+
+    myAmountTxt.text = data.myAmountText or ""
+    myOddsTxt.text = data.myOddsText or ""
+    scoreTxt.text = data.scoreText
+    leftResultTxt.text = data.leftResultText
+    rightResultTxt.text = data.rightResultText
+
+    currencyTxt.text = data.currencyAmount
+    bonusTxt.text = data.bonusAmount
+
+    if not IsNilOrEmpty(data.leftResultText) then
+        local color = data.leftResultColor
+        local r, g, b = color[1], color[2], color[3]
+        CsBridge.UnityHelper.SetTextColor(leftResultTxt, r, g, b)
+        color = data.rightResultColor
+        r, g, b = color[1], color[2], color[3]
+        CsBridge.UnityHelper.SetTextColor(rightResultTxt, r, g, b)
+    end
+
+    UpdatePlayer(leftPlayer, data.leftPlayerData)
+    UpdatePlayer(rightPlayer, data.rightPlayerData)
+    SetCurrencyIcons(data.currencyIcon)
+    CsBridge.IconData.SetIconByName(bonusIconObj, data.bonusIcon)
+end
+
+function OnNotification_RefreshCountdown(objs)
+	if self.gameObject.activeInHierarchy then
+		local viewData = objs[0]
+		RefreshCountdown(viewData)
+	end
+end
+
+function RefreshCountdown(countdownData)
+    if countdownData.countdownVisible then
+	    countdownTxt.text = countdownData.countdownText
+        countdownHeaderTxt.text = countdownData.countdownHeader
+    else
+        countdownTxt.text = ""
+        countdownHeaderTxt.text = countdownData.tipsText
+    end
+
+    replayBtnObj:SetActive(countdownData.replayEnabled)
+end
+
+function UpdatePlayer(player, viewData)
+    player.unionTxt.text = viewData.unionName
+    if IsNilOrEmpty(viewData.unionBanner) then 
+        player.unionImgObj:SetActive(false)
+    else
+        player.unionImgObj:SetActive(true)
+        CsBridge.IconData.SetIconByName(player.unionImgObj, viewData.unionBanner)
+    end
+
+    player.nameTxt.text = viewData.playerName
+    player.powerTxt.text = viewData.powerText
+
+    player.bettedFlagObj:SetActive(viewData.betted)
+    BindPlayerBaseInfoValue(player.baseObj.transform, viewData.playerInfo)
+
+    player.formationBtnObj:SetActive(viewData.showFormationBtn)
+    player.betBtnObj:SetActive(viewData.showBetBtn)
+    player.checkBtnObj:SetActive(viewData.showCheckBtn)
+
+    player.betAmountTxt.text = viewData.betAmountText
+    player.oddsTxt.text = viewData.oddsText
+
+    player.betLockedObj:SetActive(viewData.showBetLocked)
+end
+
+--UI event handlers-------------------------------------------------------------------
+function OnBetBtnClick(sender)
+	local parentTrans = sender.transform.parent
+	self:SendCommand("BetBtnClicked", parentTrans.name)
+end
+
+function OnCheckBtnClick(sender)
+	local parentTrans = sender.transform.parent
+	self:SendCommand("CheckBtnClicked", parentTrans.name)
+end
+
+function OnPlayerBaseClick(sender)
+	local parentTrans = sender.transform.parent
+	self:SendCommand("PlayerBaseClicked", parentTrans.name)
+end
+
+function OnFormationBtnClick(sender)
+	self:SendCommand("FormationBtnClicked")
+end
+
+function OnReviewBtnClick(sender)
+	self:SendCommand("ReplayClicked")
+end
+
+function OnGridItemSlotClick(obj)
+    self:SendCommand("OpenTipView", obj.m_data)
+end
+
+function OnResBanner2Click(obj)
+    self:SendCommand("BonusBannerClicked")
+end
+
+function OnResBannerClick(obj)
+    self:SendCommand("CurrencyBannerClicked")
+end
+
+--On closing--------------------------------------------------------------------------
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close() 
+    self:SendCommand("Closing")
+	self:HideView(self.gameObject.name)
+    if finishedCbk then
+        finishedCbk()
+    end
+end
+
+function SetCurrencyIcons(iconName)
+    for k, currencyIconObj in pairs(currencyIconList) do
+        CsBridge.IconData.SetIconByName(currencyIconObj, iconName)
+    end
+end
+
+function DoExit()
+    cachedMatch = nil
+    finishedCbk = nil
+
+    countdownHeaderTxt = nil
+    countdownTxt = nil 
+    myAmountTxt = nil 
+    myOddsTxt = nil
+    leftResultTxt = nil 
+    rightResultTxt = nil 
+    scoreTxt = nil
+    leftPlayer = nil 
+    rightPlayer = nil
+    replayBtnObj = nil
+    currencyIconList = nil
+    bonusIconObj = nil
+    currencyTxt = nil
+    bonusTxt = nil
+end

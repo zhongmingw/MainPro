@@ -1,0 +1,225 @@
+require('ShopItemSlot')
+
+---@type Client.Library.UIItemGrid
+local itemGrid
+---@type UnityEngine.GameObject 选中的标志
+local toggleTagObj
+---@type UnityEngine.GameObject
+local bgImgObj
+---@type Client.Library.Localize
+local titleImgLocalize
+
+---@type table toggle数组
+local toggleArr = {}
+
+---@type UnityEngine.GameObject 结束字体go
+local overTxtObj
+---@type UnityEngine.TextMesh 倒计时txt
+local lastTimeTxt
+---@type UnityEngine.TextMesh 物品拥有个数txt
+local numberTxt
+---@type UnityEngine.UI.Image 资源图片
+local iconImg
+---@type UnityEngine.GameObject 没有任何东西时的提示
+local centerTipsObj
+
+---@type table 界面显示需要的数据
+local viewData
+---@type number 右上角的资源类型
+local resType
+---@type number 当前分类下表
+local toggleIndex = 1
+
+function DoInit()
+    self.Anim = 0
+
+    itemGrid = self:GetComponentAtPath("Center/ItemSV/ScrollRect/Viewport/Grid", CLS_UI_ITEM_GRID)
+
+    toggleTagObj = self:GetGameObjectAtPath("Center/Toggle/ToggleTag")
+    overTxtObj = self:GetGameObjectAtPath("Center/Banner/OverTxt")
+    bgImgObj = self:GetGameObjectAtPath("Center/Banner/BgImg")
+    titleImgLocalize = self:GetComponentAtPath("Center/Banner/TitleImg", CLS_LOCALIZE)
+
+    local toggle01 = self:GetComponentAtPath("Center/Toggle/Tog01", CLS_TOGGLE_ARCHLY)
+    local toggle02 = self:GetComponentAtPath("Center/Toggle/Tog02", CLS_TOGGLE_ARCHLY)
+    local toggle03 = self:GetComponentAtPath("Center/Toggle/Tog03", CLS_TOGGLE_ARCHLY)
+    local toggle04 = self:GetComponentAtPath("Center/Toggle/Tog04", CLS_TOGGLE_ARCHLY)
+
+    table.insert(toggleArr, toggle01)
+    table.insert(toggleArr, toggle02)
+    table.insert(toggleArr, toggle03)
+    table.insert(toggleArr, toggle04)
+
+    lastTimeTxt = self:GetComponentAtPath("Center/Banner/LastTimeTxt", CLS_TEXT)
+    numberTxt = self:GetComponentAtPath("Button/AddBtn/NumberTxt", CLS_TEXT)
+    iconImg = self:GetComponentAtPath("Button/AddBtn/IconImg", CLS_IMAGE)
+
+    centerTipsObj = self:GetGameObjectAtPath("CenterTips")
+end
+
+function OnAnimationFinished()
+
+end
+
+---显示右上角的花费
+local function ShowRightTopCost(index)
+    if viewData.priceItems ~= nil and #viewData.priceItems >= index then
+        ShowOneConsume(iconImg, numberTxt, viewData.priceItems[index])
+        resType = viewData.priceItems[1].typeId
+    end
+end
+
+---显示界面数据
+local function ShowViewData()
+    if viewData ~= nil and viewData.itemList ~= nil and viewData.itemList[toggleIndex] ~= nil and #viewData.itemList[toggleIndex] > 0 then
+        itemGrid:RefreshItemSlots(viewData.itemList[toggleIndex], self.gameObject, "ShopItemSlot")
+        centerTipsObj.gameObject:SetActive(false)
+    else
+        itemGrid:RefreshItemSlots({}, self.gameObject, "ShopItemSlot")
+        centerTipsObj.gameObject:SetActive(true)
+    end
+end
+
+---设置toggle的状态
+local function SetToggleState(index)
+    for i = 1, #toggleArr do
+        if i == index then
+            toggleArr[i].isOn = true
+        else
+            toggleArr[i].isOn = false
+        end
+    end
+end
+
+---切换Toggle的tag到对应的类型上面去
+local function RanceShopTypeViewTween(index)
+    if not toggleArr[index].isOn then
+        local offset = -10
+        local t1Dur = 0.15
+        local t2Dur = 0.05
+        if index > toggleIndex then
+            offset = -offset
+        end
+        toggleIndex = index
+        local targetX = toggleArr[index].transform.localPosition.x
+        local t1 = CsBridge.TweenUtils.MoveTo(toggleTagObj.transform, targetX + offset, toggleTagObj.transform.localPosition.y, t1Dur, function()
+            local t2 = CsBridge.TweenUtils.MoveTo(toggleTagObj.transform, targetX, toggleTagObj.transform.localPosition.y, t2Dur)
+            t2:DoPlay()
+        end)
+        t1:DoPlay()
+    end
+end
+
+---切换Toggle的tag到对应的类型上面去
+local function RanceShopTypeView(index)
+    if not toggleArr[index].isOn then
+        RanceShopTypeViewTween(index)
+        ShowViewData()
+    end
+end
+
+---刷新界面
+function OnNotification_RefreshActivityView(objs)
+    if self.gameObject.activeInHierarchy then
+        if objs ~= nil then
+            viewData = objs[0]
+            CsBridge.IconData.SetRawImageByName(bgImgObj, viewData.image)
+            if viewData.image ~= nil and viewData.image ~= "" then
+                titleImgLocalize.gameObject:SetActive(true)
+                SetServerActivityArtFontByImage(titleImgLocalize, viewData.image)
+            else
+                titleImgLocalize.gameObject:SetActive(false)
+            end
+        end
+        if viewData ~= nil then
+            ShowRightTopCost(toggleIndex)
+            if viewData.priceItems ~= nil and #viewData.priceItems >= toggleIndex then
+                for i = 1, #toggleArr do
+                    if i <= #viewData.priceItems then
+                        toggleArr[i].gameObject:SetActive(true)
+                    else
+                        toggleArr[i].gameObject:SetActive(false)
+                    end
+                end
+            end
+            ShowViewData()
+            SetToggleState(toggleIndex)
+        end
+    end
+end
+
+---关闭界面
+function OnNotification_CloseActivityView(obj)
+    self:HideView(self.gameObject.name)
+end
+
+---规则按钮点击事件
+function OnRuleBtnClick(sender)
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("HelpView", "ServerActivityModel")
+        view:SetData(54)
+    end, "HelpView")
+end
+
+---物品点击
+function OnGridItemClick(obj)
+    local data = obj.m_data.reward
+    self:SendCommand("OpenTipView", data)
+end
+
+---购买点击
+function OnGridBuyBtnClick(obj)
+    local currentItemData = obj.m_data
+    self:SendCommand("BuyShopItemWithDealView", currentItemData)
+end
+
+---资源图片点击事件
+function OnAddBtnClick(sender)
+    if viewData and viewData.priceItems and #viewData.priceItems >= toggleIndex then
+        ShowTip(self, viewData.priceItems[toggleIndex].typeId, viewData.priceItems[toggleIndex].id)
+    end
+end
+
+---toggle1点击
+function OnTog01Click(sender)
+    RanceShopTypeView(1)
+    SetToggleState(1)
+    ShowRightTopCost(1)
+end
+
+---toggle2点击
+function OnTog02Click(sender)
+    RanceShopTypeView(2)
+    SetToggleState(2)
+    ShowRightTopCost(2)
+end
+
+---toggle3点击
+function OnTog03Click(sender)
+    RanceShopTypeView(3)
+    SetToggleState(3)
+    ShowRightTopCost(3)
+end
+
+---toggle4点击
+function OnTog04Click(sender)
+    RanceShopTypeView(4)
+    SetToggleState(4)
+    ShowRightTopCost(4)
+end
+
+function DoExit()
+    itemGrid = nil
+    toggleTagObj = nil
+    bgImgObj = nil
+    titleImgLocalize = nil
+    toggleArr = nil
+    overTxtObj = nil
+    lastTimeTxt = nil
+    numberTxt = nil
+    iconImg = nil
+    centerTipsObj = nil
+    viewData = nil
+    resType = nil
+    toggleIndex = nil
+end

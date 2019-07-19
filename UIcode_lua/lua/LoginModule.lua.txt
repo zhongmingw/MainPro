@@ -1,0 +1,38 @@
+
+function DoInit()
+	self.enableRender = false
+end
+
+function forceClear()
+    return true
+end
+
+function AssetNames(objs)
+  local arr={"LoginView"}
+  return arr
+end
+
+function PermanentAsset(objs)
+  local arr={ "MessageView", "MessageBtn", "HintBox","LoadUIView", "ShadowView", "ConsiderView"}
+  return arr
+end
+
+function IsNeedComUIBG()
+	return false
+end
+
+
+
+function OnEnter(objs, onFinished)
+	local view=self:OpenView("LoginView","LoginModel",false)
+	if objs ~= nil then
+		view:SetParamDataList(objs[0])
+	end
+	if(onFinished~=nil)then
+	    onFinished()
+	end
+end
+
+function OnPermanent()
+
+end

@@ -1,0 +1,695 @@
+--[[
+	file: ServerActivityModel.lua
+	author: hangang
+	description: Time limited activities logic script
+]]
+
+local utils
+local tripShopUtils
+local soulBitsShopUtils
+local gloryRoadActivity
+local groupBuyActivityUtils
+local discountShopActivityUtils
+local heroGangActivityUtils
+local halloweenActivityUtils
+local exchangeLimitActivityUtils
+local cycleChargeActivityUtils
+local sevenDaysActivityUtils
+local leaderboardActivityUtils
+local dailyDiscountActivityUtils
+local groupPurchaseActivityUtils
+local destructionActivityUtils
+local flashSaleActivityUtils
+local limitedTaskActivityUtils
+local TargetActivityUtils
+
+local activityList	--list of activityIDs
+local activityData	--current activity data
+local currentActivityID = -1
+local serverActivityType
+
+function OnCommand_InitServerActivityType(objs)
+	local type, name = objs[0], objs[1]
+	serverActivityType = type
+	self:SendNotification("RefreshServerActivityType",name)
+end
+
+local function LoadUtils()
+	if not utils then
+		require "CommPayUtils"
+		utils = require "ServerActivityUtils"
+		tripShopUtils = require "TripShopUtils"
+		soulBitsShopUtils = require "SoulBitsShopUtils"
+		gloryRoadActivity = require "GloryRoadActivityUtils"
+		groupBuyActivityUtils = require "GroupBuyActivityUtils"
+		discountShopActivityUtils = require "DiscountShopActivityUtils"
+		heroGangActivityUtils = require "HeroGangActivityUtils"
+		halloweenActivityUtils = require "HalloweenActivityUtils"
+		exchangeLimitActivityUtils = require "ExchangeLimitActivityUtils"
+		cycleChargeActivityUtils = require "CycleChargeActivityUtils"
+		sevenDaysActivityUtils = require "SevenDaysActivityUtils"
+		leaderboardActivityUtils = require "LeaderboardActivityUtils"
+		dailyDiscountActivityUtils = require "DailyDiscountActivityUtils"
+		groupPurchaseActivityUtils = require "GroupPurchaseActivityUtils"
+		destructionActivityUtils = require "DestructionActivityUtils"
+		flashSaleActivityUtils = require "FlashSaleActivityUtils"
+		limitedTaskActivityUtils = require "LimitedTaskActivityUtils"
+		TargetActivityUtils = require "TargetActivityUtils"
+	end
+end
+
+function OnCommand_GetBaseViewData(objs)
+	LoadUtils()
+
+	local req = {}
+	req.id = serverActivityType
+	HttpRequest("getAllActivities", "GetAllActivitiesReq", "GetAllActivitiesResp", req, OnGetActivitiesResp)
+end
+
+local ReadActivitiesData
+local GetBaseViewData
+local GetRestTime
+function OnGetActivitiesResp(resp)
+	local data = resp == nil and {} or resp.activityItems
+	activityList = ReadActivitiesData(data)
+	self:SendNotification("RefreshBaseView", GetBaseViewData(activityList))
+end
+
+ReadActivitiesData = function(data)
+	local activityList = {}
+	if data then
+		local activityTypeList = {}
+		for k, activity in pairs(data) do
+			activityTypeList[activity.type] = activity
+		end
+
+		for k,type in pairs(ActivityType) do
+			local activity = activityTypeList[type]
+			if activity then
+				activityList[activity.id] = activity
+			end
+		end
+	end
+
+	return activityList
+end
+
+GetBaseViewData = function(activityList)
+	local viewData = {}
+	for k, activity in pairs(activityList) do
+		local activityViewData = {}
+		activityViewData.id = activity.id
+		activityViewData.type = activity.type
+		activityViewData.name = activity.content
+		activityViewData.title = activity.title
+		activityViewData.description = activity.description
+		activityViewData.icon = activity.bgPic
+		activityViewData.image = activity.topPic
+		activityViewData.bg = activity.rawPic
+		activityViewData.restTime = GetRestTime(activity.endTime)
+		activityViewData.order = activity.order
+		activityViewData.showTips = activity.active
+		table.insert(viewData, activityViewData)
+	end
+	table.sort(viewData,function(a,b)
+		if a.order ~= b.order then
+			return a.order > b.order
+		end
+		return a.id < b.id
+	end)
+
+	return viewData
+end
+
+GetRestTime = function(endTime)
+	if not endTime then
+		return ""
+	end
+
+	local showDays = false
+	return CheckTimeRemain(endTime, showDays)
+end
+
+---更新左侧那一列的状态
+local function RefreshActivityTypeItemState()
+	local req = {}
+	req.id = serverActivityType
+	HttpRequest("getAllActivities", "GetAllActivitiesReq", "GetAllActivitiesResp", req, function (resp)
+		local data = resp == nil and {} or resp.activityItems
+		activityList = ReadActivitiesData(data)
+		local curType = -1
+		if currentActivityID > 0 then
+			curType = activityList[currentActivityID].type
+		end
+		self:SendNotification("UpdateActivityTypeList", GetBaseViewData(activityList), curType)
+	end )
+end
+
+function OnCommand_GetAllRestTime(objs)
+	local viewData = {}
+	for id, activity in pairs(activityList) do
+		local restTime = GetRestTime(activity.endTime)
+		viewData[id] = restTime
+	end
+	if currentActivityID ~= -1 then
+		local subRestTimeData = GetCurActivityRestTime()
+		self:SendNotification("RefreshSubCountdown", subRestTimeData)
+	end
+	self:SendNotification("RefreshCountdown", viewData)
+end
+
+function GetCurActivityRestTime()
+	local curType = activityList[currentActivityID].type
+	if curType == ActivityType.FlashSaleActivity then
+		return flashSaleActivityUtils.RefreshSubRestTime()
+	end
+end
+
+function OnCommand_GetActivityViewData(objs)
+	local activityID = objs[0]
+	currentActivityID = activityID
+	TryToGetActivityStatus(activityID)
+end
+
+function TryToGetActivityStatus(activityID)
+	local activity = activityList[activityID]
+	local activityType = activity.type
+	local req = {}
+
+	if activityType == ActivityType.Militants or activityType == ActivityType.Tavern then
+		req.type = activity.type
+	else
+		req.id = activityID
+	end
+
+	if activityType == ActivityType.PowerLeaderboard or
+		activityType == ActivityType.ArenaLeaderboard or
+		activityType == ActivityType.GlobalPowerLeaderboard or
+		activityType == ActivityType.CombatRankAct or
+		activityType == ActivityType.GemLeaders
+	then
+		req.count = 50
+	end
+    if activityType == ActivityType.SoulBitsShopActivity
+	or activityType == ActivityType.TripShopActivity
+	or activityType == ActivityType.FlashSaleActivity
+	or activityType == ActivityType.HeroLevelUpActivity 
+	or activityType == ActivityType.HeroStarUpActivity 
+	or activityType == ActivityType.JewelQualityActivity then
+        req.activityId = activityID
+    end
+
+	if activityType == ActivityType.LimitedTaskActivity then
+		req.acid = activityID
+	end
+
+	local url, requestMsgName, responseMsgName = utils.GetUrl(activityType)
+
+	HttpRequest(url, requestMsgName, responseMsgName, req, OnGetActivityStatusResp)
+end
+
+function GetUrl(activityType)
+	return utils.GetUrl(activityType)
+end
+
+function OnGetActivityStatusResp(resp)
+	activityData = utils.ReadActivityData(resp, activityList[currentActivityID])
+	local viewData = GetActivityViewData()
+	self:SendNotification("RefreshActivityView", viewData)
+end
+
+local function CacheActivityAssets(viewName, ... )
+	self:SendNotification("CloseActivityView")
+	CsBridge.CacheAssetsByModule(self.Module,function()
+		CsBridge.OpenView(viewName,"ServerActivityModel",false,true)
+		self:SendNotification("CacheActivityAssetsFinished")
+	end, viewName, ...)
+end
+
+function OnCommand_OpenActivityView(obj)
+	local activityType = obj[0]
+	CacheActivityAssets(utils.GetAssetsName(activityType))
+end
+
+function OnCommand_CloseActivityView(obj)
+	self:SendNotification("CloseActivityView")
+end
+
+function GetActivityViewData()
+	local viewData = {}
+	viewData.itemList = utils.GetActivityItemsViewData(activityData)
+	GetActivityBaseViewData(activityData.type,viewData)
+	return viewData
+end
+
+function GetActivityBaseViewData(activityType,viewData)
+	local activity = activityList[currentActivityID]
+	viewData.restTime = GetRestTime(activity.endTime)
+	viewData.title = activity.title
+	viewData.desc = activity.description
+	viewData.image = activity.topPic
+	viewData.bg = activity.rawPic
+	viewData.id = currentActivityID
+	if activityType == ActivityType.Destruction then
+		destructionActivityUtils.GetBaseViewData(activity, viewData)
+	end
+
+	if activityType == ActivityType.PVEBonus or
+		activityType == ActivityType.WheelBonus
+	then
+		viewData.image = activity.topPic
+		viewData.rewards = activityData.rewards
+		viewData.showPVETips = activityType == ActivityType.PVEBonus
+		viewData.desc = activity.description
+		viewData.bg = activity.rawPic
+	end
+
+	if activityType == ActivityType.Dragon or
+		activityType == ActivityType.SummonCreditGift or
+		activityType == ActivityType.TurnTableLottery or
+		activityType == ActivityType.JewelLottery
+	then
+		viewData.totalScore = activityData.totalScore
+		viewData.round = activityData.round
+	end
+
+	if activityType == ActivityType.DailyLogin or
+		activityType == ActivityType.LimitCallHero or
+		activityType == ActivityType.LimitCrystal
+	then
+		viewData.rewards = activityData.rewards
+	end
+
+	if activityType == ActivityType.LimitActivity then
+		local item = activityData.items[1].activity.prices[1]
+		local festivalItem = {
+			typeId = item.typeId,
+			id = item.id,
+			count = GetCountByItemType(item.id,item.typeId)
+		}
+		viewData.festivalItem = festivalItem
+	end
+
+	if activityType == ActivityType.CycleCharge
+		or activityType == ActivityType.GoodsMonthlyCard
+	then
+		cycleChargeActivityUtils.GetBaseViewData(viewData, activityData)
+	end
+
+	if activityType == ActivityType.PowerLeaderboard
+		or activityType == ActivityType.ArenaLeaderboard
+		or activityType == ActivityType.GlobalPowerLeaderboard
+		or activityType == ActivityType.CombatRankAct
+		or activityType == ActivityType.GemLeaders
+	then
+		viewData.image = activity.rawPic
+		viewData.activityType = activityType
+		local showTips = activity.active
+		leaderboardActivityUtils.GetActivityViewData(viewData, activityData, showTips)
+	end
+
+	if activityType == ActivityType.SoulBitsShopActivity then
+		viewData.consumes = activityData.consumes
+		viewData.itemList = soulBitsShopUtils.GetItemViewData(activityData)
+	end
+
+	if activityType == ActivityType.TripShopActivity then
+		viewData.itemList = tripShopUtils.GetItemViewData(activityData)
+        viewData.priceItems = activityData.priceItems
+	end
+
+	if activityType == ActivityType.FlashSaleActivity then
+		flashSaleActivityUtils.SetModelAndCallback(currentActivityID, self, OnGetActivityStatusResp)
+		viewData.thisTimeData = flashSaleActivityUtils.ChangeThisTimeGoodsItemData(activityData.thisTimeData)
+		viewData.nexTimeData = flashSaleActivityUtils.ChangeNextTimeGoodsItemData(activityData.nexTimeData)
+	end
+
+	if activityType == ActivityType.LimitedTaskActivity then
+		limitedTaskActivityUtils.InitViewData(viewData, activityData)
+	end
+
+	if activityType == ActivityType.HeroLevelUpActivity 
+		or activityType == ActivityType.HeroStarUpActivity
+		or activityType == ActivityType.JewelQualityActivity then
+		local targetList = TargetActivityUtils.GetTargetItemsViewData(activityData)
+		viewData.targetList = targetList
+		viewData.activityType = activityType
+	end
+end
+
+function OnCommand_OpenTipView(objs)
+	local data = objs[0]
+	local itemType = data.typeId
+	if itemType == ItemTypeEnum.Hero then
+		ShowHeroTip(self, data.id, 1, 1)
+	else
+		ShowTip(self, itemType, data.id)
+	end
+end
+
+function OnCommand_OpenPlayerView(objs)
+	local curPlayer = objs[0]
+	CsBridge.CacheAssetsByModule( self.Module,
+	function()
+        local view = CsBridge.OpenView("PlayerInfoView", "PlayerInfoModel",true, true)
+        view:SetParamDataList(false, curPlayer.userId, curPlayer.zone)
+	end, "PlayerInfoView","AchievementItemSlot")
+end
+
+function OnCommand_BuyShopItemWithDealView(objs)
+	local currentItemData = objs[0]
+
+	local dealInfo = {
+		item = {
+			id = currentItemData.id,
+			count = currentItemData.remainCount,
+			priceIcon = currentItemData.priceTypeId
+		}
+	}
+	dealInfo.resId = currentItemData.priceTypeId
+	dealInfo.title = Language:getStr("buy")
+	dealInfo.btn = Language:getStr("buy")
+	dealInfo.type = 5
+	dealInfo.single = currentItemData.basePrice
+	dealInfo.itemData = currentItemData
+
+	if currentItemData.remainCount and currentItemData.remainCount <=0 then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("HasMaxCount"), 2)
+		return
+	end
+
+	CsBridge.CacheAssetsByModule( self.Module,  function()
+		local view = CsBridge.OpenView("DealView", "DealModel",false,true)
+		view:SendCommand("InitData", dealInfo, function(buyCount)
+			local title = ""
+			local content = Language:getStr("HeroSummonShop_Check")
+			local confirmText = Language:getStr("local_confirm")
+			local cancelText = Language:getStr("local_cancel")
+			CsBridge.messageManager:PopMsgBox(title, content, cancelText, nil, confirmText, function()
+				self:HideView("DealView", nil, false)
+				DoBuyWithDealView(currentItemData, buyCount or 1)
+			end);
+		end)
+	end, "DealView")
+end
+
+---输入框购买
+function DoBuyWithDealView(currentItemData, buyCount)
+	local curType = activityList[currentActivityID].type
+	if curType == ActivityType.FlashSaleActivity then
+		flashSaleActivityUtils.DoBuyItem(currentItemData, buyCount, self)
+	elseif curType == ActivityType.TripShopActivity then
+		tripShopUtils.BuyTripShopActivityItem(currentItemData, buyCount, currentActivityID, TryToGetActivityStatus, self)
+	elseif curType == ActivityType.SoulBitsShopActivity then
+		soulBitsShopUtils.BuySoulBitsShopItem(currentItemData, buyCount, currentActivityID, TryToGetActivityStatus, self)
+	elseif curType == ActivityType.LimitActivity then
+		exchangeLimitActivityUtils.Exchange(currentItemData , buyCount, activityList[currentActivityID], TryToGetActivityStatus, self)
+	end
+end
+
+-----------------------------------------------------------Exchange Limit Activity Logic------------------------------------------------------
+function OnCommand_Exchange(objs)
+	local data = objs[0]
+	local count = 1
+	local activity = activityList[currentActivityID]
+	exchangeLimitActivityUtils.Exchange(data, count, activity, TryToGetActivityStatus, self)
+end
+
+-----------------------------------------------------------Power/Arena leaderboard Activity Logic-------------------------------------------------------------
+
+function OnCommand_GetLeaderboardActivityRewards(objs)
+	local activity = activityList[currentActivityID]
+	leaderboardActivityUtils.GetLeaderboardRewards(
+		activityList[currentActivityID],
+		activityData,
+		TryToGetActivityStatus,
+		self)
+end
+
+function OnCommand_ClaimLeadersActivityRewards(objs)
+	local activity = activityList[currentActivityID]
+	leaderboardActivityUtils.ClaimLeadersActivityRewards(currentActivityID, activity.type, self)
+end
+
+function OnCommand_LeadersActivityCDFinished(objs)
+	TryToGetActivityStatus(currentActivityID)
+end
+-----------------------------------------------------------SevenDays Activity Logic-------------------------------------------------------------
+function OnCommand_ClaimSevenDaysReward(objs)
+	local data = objs[0]
+	local dayId = data.dayId
+	sevenDaysActivityUtils.ClaimSevenDaysReward(dayId, currentActivityID, TryToGetActivityStatus, self)
+end
+
+-----------------------------------------------------------Daily discount Activity Logic---------------------------------------------------------
+function OnCommand_BuyDailyDiscountItem(objs)
+	local itemData = objs[0]
+	dailyDiscountActivityUtils.BuyDailyDiscountItem(itemData, TryToGetActivityStatus, currentActivityID, self)
+end
+
+-----------------------------------------------------------Gift Activity Logic-------------------------------------------------------------
+function OnCommand_BuyGiftBox(objs)
+	cycleChargeActivityUtils.BuyGiftBox(objs, currentActivityID, TryToGetActivityStatus, self)
+end
+
+-----------------------------------------------------------Destruction Activity Logic------------------------------------------------------
+function OnCommand_ShowDestructionTips(objs)
+	destructionActivityUtils.ShowDestructionTips(self)
+end
+
+function OnCommand_OpenShopView(objs)
+	destructionActivityUtils.OpenShopView(currentActivityID, TryToGetActivityStatus, self)
+end
+
+function OnCommand_OpenDestructionRewardsView(objs)
+	destructionActivityUtils.OpenDestructionRewardsView(activityData, self)
+end
+
+function OnCommand_GetDestructionRank(objs)
+	destructionActivityUtils.GetDestructionRank(self)
+end
+
+function OnCommand_OpenDestructionEnemyView(obj)
+	local destructionType = obj[0]
+	destructionActivityUtils.OpenDestructionEnemyView(destructionType, self)
+end
+
+function OnCommand_OpenRaidCountView(objs)
+	local destructionType = objs[0]
+	destructionActivityUtils.OpenRaidCountView(activityData, currentActivityID, destructionType, TryToGetActivityStatus, self)
+end
+
+function OnCommand_OpenFormationView(objs)
+	local data = objs
+	destructionActivityUtils.OpenFormationView(data, currentActivityID, self)
+end
+
+-----------------------------------------------------------Hero Gang Activity Logic------------------------------------------------------
+function OnCommand_OpenHeroGangCompose(objs)
+	local id = objs[0]
+	heroGangActivityUtils.OpenHeroGangCompose(id, activityData, self)
+end
+
+function OnCommand_InitHeroGangComposeData(objs)
+	self:SendNotification("RefreshHeroGangComposeView",activityData.heroGangData.curComposeData)
+end
+
+function OnCommand_OpenMaterialSelect(objs)
+	local index = objs[0]
+	heroGangActivityUtils.OpenMaterialSelect(activityData.heroGangData, index, self)
+end
+
+function OnCommand_InitMaterialSelectData(objs)
+	local materialData = activityData.heroGangData.curSelectedMaterialArr
+    self:SendNotification(
+		"InitMaterialSelectView",
+		materialData,
+		#materialData==0)
+end
+
+function OnCommand_SelectMaterial(objs)
+	local index = objs[0]
+	heroGangActivityUtils.SelectMaterials(activityData.heroGangData, index, self)
+end
+
+function OnCommand_CancelSelectMaterial(objs)
+    local materialData = objs[0]
+    heroGangActivityUtils.CancelSelectMaterial(materialData, activityData.heroGangData, self)
+end
+
+function OnCommand_ConfirmSelectMaterial()
+	heroGangActivityUtils.ConfirmSelectMaterial(activityData.heroGangData, self)
+end
+
+function OnCommand_NoSelectMaterial()
+	heroGangActivityUtils.NoSelectMaterial(activityData.heroGangData, self)
+end
+
+function OnCommand_HeroGangCompose(objs)
+	heroGangActivityUtils.HeroGangCompose(activityData, TryToGetActivityStatus, self)
+end
+
+--------------------Halloween--------------------------
+function OnCommand_InitHalloweenActivityData(objs)
+	halloweenActivityUtils.InitHalloweenActivityData(activityData, self)
+end
+
+function OnCommand_SelectHalloweenLevel(objs)
+	local data = objs[0]
+	halloweenActivityUtils.SelectHalloweenLevel(data, activityData, self)
+end
+
+function OnCommand_UpdateHalloweenData(objs)
+	halloweenActivityUtils.UpdateHalloweenData(activityData, self)
+end
+
+function OnCommand_InitHalloweenActivityLevelData(objs)
+	halloweenActivityUtils.InitHalloweenActivityLevelData(activityData, self)
+end
+
+function OnCommand_BuyHalloweenCount(objs)
+	halloweenActivityUtils.BuyHalloweenCount(activityData, self)
+end
+
+function OnCommand_OpenAuraView(objs)
+	halloweenActivityUtils.OpenAuraView(activityData, self)
+end
+
+function OnCommand_HalloweenFight(objs)
+	halloweenActivityUtils.HalloweenFight(activityData, self)
+end
+
+--------------------Group Charge--------------------------
+function OnCommand_OpenMyGroupPurchaseDetailView(objs)
+	groupPurchaseActivityUtils.OpenMyGroupPurchaseDetailView(activityData, self)
+end
+
+function OnCommand_OpenGroupPurchaseDetailView(objs)
+	local data = objs[0]
+	groupPurchaseActivityUtils.OpenGroupPurchaseDetailView(data, activityData, self)
+end
+
+function OnCommand_UpdateGroupPurchaseRemain(objs)
+	TryToGetActivityStatus(currentActivityID)
+end
+
+function OnCommand_InitGroupPurchaseDetailData(objs)
+	self:SendNotification(
+		"RefreshGroupPurchaseDetailView",
+		activityData.isMine and activityData.myGPGoods or activityData.curGPGoods,
+		activityData.isMine)
+end
+
+function OnCommand_BuyGroupPurchase(objs)
+	local data = objs[0]
+	groupPurchaseActivityUtils.BuyGroupPurchase(data, activityData, self)
+end
+
+function OnCommand_NewGroupPurchase(objs)
+	groupPurchaseActivityUtils.NewGroupPurchase(activityData, self)
+end
+
+-----------------------Discount Shop-----------------------
+local discountData = {
+	dsFreeRefreshInterval = nil,
+	curDSGoods = nil,
+}
+
+function OnCommand_InitDiscountShopActivityData(objs)
+	discountShopActivityUtils.InitDiscountShopActivityData(activityData, self)
+end
+
+function OnCommand_RefreshDiscountShop(objs)
+	local data = objs[0]
+	discountShopActivityUtils.RefreshDiscountShop(data, activityData, self)
+end
+
+function OnCommand_BuyDiscountShopGoods(objs)
+	local data = objs[0]
+	discountShopActivityUtils.BuyDiscountShopGoods(data, activityData, self)
+end
+
+----------------Group Buy-------------------------
+function OnCommand_InitGBGoods(objs)
+    self:SendNotification("RefreshGBGoods",utils.GetActivityItemsViewData(activityData))
+end
+
+function OnCommand_GroupBuy(objs)
+	local data = objs[0]
+	groupBuyActivityUtils.GroupBuy(data, currentActivityID, TryToGetActivityStatus, self)
+end
+
+function OnCommand_ShowGBInfoView(objs)
+	CsBridge.CacheAssetsByModule(self.Module,function()
+		CsBridge.OpenView("GroupBuyInfoView","ServerActivityModel",false,true)
+	end,"GroupBuyInfoView","GBInfoItemSlot")
+end
+
+function OnCommand_InitGroupBuyInfoData(objs)
+	groupBuyActivityUtils.InitGroupBuyInfoData(activityData.groupBuyData, self)
+end
+
+----------------------光辉之路---------------------
+function OnCommand_GloryRoadActivityGetReward(objs)
+	local data = objs[0]
+	gloryRoadActivity.GloryRoadActivityGetReward(data, currentActivityID, TryToGetActivityStatus, self)
+end
+
+---------------------限定任务--------------------
+function OnCommand_LimitedTaskGetReward(objs)
+	local data = objs[0]
+	if data.curCount < data.count then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("TaskNotFinished"), 2)
+		return
+	end
+	if data.curCount >= data.count and data.active == false then
+		CsBridge.hintUILayer:ShowHintBox(Language:getStr("1218"), 2)
+		return
+	end
+	if data.active == true then
+		limitedTaskActivityUtils.GetRewardForFinishTask(data, function (resp)
+			ShowRewardReceivedTip(self, resp.rewardItems,function ()
+				RefreshActivityTypeItemState()
+				TryToGetActivityStatus(currentActivityID)
+			end)
+		end)
+	end
+end
+
+-----------------获取达标奖励----------------
+function OnCommand_TargetGetReward(objs)
+	local data = objs[0]
+	local activityType = objs[1]
+	if data.active == true then
+		TargetActivityUtils.GetTargetRewards(data, activityType, function (resp)
+			ShowRewardReceivedTip(self, resp.rewardItems,function ()
+				RefreshActivityTypeItemState()
+				TryToGetActivityStatus(currentActivityID)
+			end)
+		end)
+	end
+end
+
+function DoOnExit()
+	utils = nil
+	tripShopUtils = nil
+	soulBitsShopUtils = nil
+	gloryRoadActivity = nil
+	groupBuyActivityUtils = nil
+	discountShopActivityUtils = nil
+	heroGangActivityUtils = nil
+	halloweenActivityUtils = nil
+	exchangeLimitActivityUtils = nil
+	cycleChargeActivityUtils = nil
+	sevenDaysActivityUtils = nil
+	leaderboardActivityUtils = nil
+	dailyDiscountActivityUtils = nil
+	groupPurchaseActivityUtils = nil
+	destructionActivityUtils = nil
+	flashSaleActivityUtils = nil
+
+	activityList = nil
+	activityData = nil
+	currentActivityID = nil
+	serverActivityType = nil
+end

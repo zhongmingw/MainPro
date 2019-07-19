@@ -1,0 +1,79 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-11-26 15:57:38
+local isInit = false
+
+local GROUP_SPINE = "ConditionPackageSpine"
+
+local conditionPackageObj
+local flyTarget
+local startPos
+local endPos
+local spParenTrans
+local spineGo
+local exitCallback
+
+function DoInit()
+    self.Shadow = 0
+    self.Anim = 0
+end
+
+function InitUI()
+    conditionPackageObj = self:GetGameObjectAtPath("ConditionPackageBtn")
+    flyTarget = self:GetComponentAtPath("Dynamic/FlyItems",CLS_RECTTRANSFORM)
+    startPos = flyTarget:CheckLocalPosition()
+    endPos = conditionPackageObj.transform:CheckLocalPosition()
+    spParenTrans = self.transform:Find("ConditionPackageBtn/SpParent")
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    LoadSpine()
+    ShowConditionPackageEffectView()
+end
+
+function SetParamDataList(objs)
+    exitCallback = objs[0]
+end
+
+function OnClose()
+    flyTarget:ResetLocalPosition(startPos)
+    ClearSpine()
+    exitCallback()
+end
+
+function LoadSpine()
+    CsBridge.CacheAssetsByGroup(GROUP_SPINE,  function()
+        spineGo = CsBridge.objectCache:CreateObject("ConditionPackageSpine", true, spParenTrans)
+    end, "ConditionPackageSpine")
+end
+
+function ClearSpine()
+    CS.UnityEngine.GameObject.Destroy(spineGo)
+    spineGo = nil
+    CsBridge.objectCache:ClearGroup(GROUP_SPINE, true)
+end
+
+function ShowConditionPackageEffectView()
+    CsBridge.UnityHelper.MoveItemTo(flyTarget,startPos,endPos,0.5,function()
+        conditionPackageObj:PlayPopAnimation(0.3)
+        conditionPackageObj:FadeAlpha(0,1,0.5,function()
+            self:HideView(self.gameObject.name)
+        end)
+    end)
+end
+
+function DoExit()
+    isInit = nil
+    conditionPackageObj = nil
+    flyTarget = nil
+    startPos = nil
+    endPos = nil
+    spineGo = nil
+    spParenTrans = nil
+    exitCallback = nil
+end

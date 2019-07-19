@@ -1,0 +1,932 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-03-13 20:08:10
+
+local WorldBossUtils = require "WorldBossUtils"
+
+local WorldBossPageType = {
+    WorldBoss = 1
+}
+
+local curPageType = WorldBossPageType.WorldBoss
+local curView
+
+local WorldBossState = {
+    Appear = 0,
+    Dead = 1,
+    Settle = 2, --结算
+    Recover = 3,
+}
+
+local curWorldBossState
+local curWorldBoss
+
+local allHurtRankData
+local selfHurtRankData
+
+local COUNT_HURT_RANK = 10
+
+local isPlayerHurtRank = false
+
+local refreshTimerCallbackList = {}
+local TIMER_REFRESH = "TIMER_REFRESH"
+local TIMER_HURT_RANK_REFRESH = "WorldBossHurtRankRefreshTimer"
+local TIMER_WORLD_BOSS_STATE_COUNT_DOWN = "WorldBossStateCountDownTimer"
+local TIMER_WORLD_BOSS_REFRESH = "WorldBossRefreshTimer"
+local TIMER_WORLD_BOSS_FIGHT_CD = "WorldBossFightCD"
+local TIMER_WORLD_BOSS_CHALLENGE_COUNT_RECOVER = "WolrdBossChallengeCountRecoverTimer"
+local TIMER_WORLD_BOSS_REWARD_TIMER = "WorldBossRewardTimer"
+
+local isOpenHurtRank = false
+local isRankExpand = false
+--refresh interval
+local REFRESH_TIME_INTERVAL = 15
+
+local WorldBoss = {
+    tblName = "WorldBoss",
+    id = "id",
+    monster = "monster",
+    spine = "spine",
+    isOpen = "isOpen",
+    reward = "reward"
+}
+
+local WorldBossBuff = {
+    tblName = "WorldBossBuff",
+    id = "id",
+    passive = "passive"
+}
+
+local worldBossChallengeRecoveryMaxLimit
+local worldBossChallengeRcoveryCountLimit
+local worldBossChallengeRcoveryTime
+
+local worldBossChallengeCost
+local worldBossChallengeCostGrow
+local worldBossChallengeCostLimt
+local worldBossChallengeTimesLimit
+
+local cacheCallbacks
+
+local function AddCallback(cbk)
+    local idx = #cacheCallbacks+1
+    cacheCallbacks[idx] = cbk
+    local function managedCbk(...)
+        local c = cacheCallbacks[idx]
+        if c then c(...) end
+    end
+    return managedCbk
+end
+
+local function ClearCacheCbks()
+    cacheCallbacks = {}
+end
+
+local function GetWorldBossPlayerInfo()
+    return appData:checkData("WorldBossPlayerInfo")
+end
+
+local function GetBuyChallengeCountCost(count)
+    local costCount = count*worldBossChallengeCostGrow
+    return {
+        typeId = ItemTypeEnum.Resource,
+        id = ResourceEnum.Gem,
+        count = math.min(costCount, worldBossChallengeCostLimt)
+    }
+end
+
+local function AddRefreshTimer(name,update)
+    if curWorldBossState ~= WorldBossState.Appear then
+        return
+    end
+    refreshTimerCallbackList[name] = update
+end
+
+local function RemoveRefreshTimer(name)
+    refreshTimerCallbackList[name] = nil
+end
+
+local function GetWorldBossData(worldBoss)
+    if worldBoss == nil or worldBoss.id == 0 then
+        return
+    end
+    local actorId = ResTblContainer:GetPropToInt(worldBoss.id,WorldBoss.monster,WorldBoss.tblName)
+    local infos = ResTblContainer:GetRowFromTbl(Monster.actorTbl,actorId,Monster.actorId,Monster.grade,Monster.level)
+    local heroId = tonumber(infos[0])
+    local grade = tonumber(infos[1])
+    local level = tonumber(infos[2])
+    local allLevel = level
+    local buffId = ResTblContainer:GetPropToInt(worldBoss.buff,WorldBossBuff.passive,WorldBossBuff.tblName)
+    local tbl = ResTblContainer:GetTable(HeroBase.actorTbl)
+    local data = {
+        id = worldBoss.id,
+        heroId = tonumber(infos[0]),
+        model = tbl:Get(heroId,HeroBase.model),
+        level = level,
+        grade = grade,
+        allLevel = allLevel,
+        name = tbl:Get(heroId,HeroBase.title),
+        raceId = tbl:GetInt(heroId,HeroBase.group),
+        curHp = worldBoss.curHp,
+        hp = worldBoss.hp
+    }
+    data.buffArr = {GetHeroSkill(buffId, true, data)}
+    return data
+end
+
+local function UpdateCurWorldBoss(onFinished)
+    local function callback(resp)
+        if resp == nil then
+            return
+        end
+        local oldHp = curWorldBoss and curWorldBoss.curHp or 0
+        local hp = curWorldBoss and curWorldBoss.hp or 0
+        curWorldBoss = table.copy(resp.worldBoss)
+        curWorldBoss.payPrice = resp.payCount
+        curWorldBoss.payTime = resp.payTime
+        curWorldBoss.rewardTime = resp.rewardTime
+        if onFinished then
+            onFinished(resp,oldHp,hp)
+        end
+    end
+    WorldBossUtils.RequestGetWorldBoss(AddCallback(callback))
+end
+
+local function OnWorldBossRefresh()
+    local oldHp = curWorldBoss.curHp
+    UpdateCurWorldBoss(function()
+        local newHp = curWorldBoss.curHp
+        if oldHp ~= newHp then
+            local viewData = {
+                oldHp = oldHp,
+                newHp = newHp,
+                hp = curWorldBoss.hp,
+            }
+            self:SendNotification("RefreshCurWorldBossHp",viewData)
+        end
+    end)
+end
+
+local function CheckTimeRemainSeconds(time)
+    local now = CsBridge.timeManager.ServerTime
+    if now > time then
+        return 0
+    end
+    local timeSpan = CsBridge.TimeSpan.FromMilliseconds(time - now + 1000);
+    return timeSpan.Seconds
+end
+
+local function GetFightCdDesp(endCD)
+    local seconds = CheckTimeRemainSeconds(endCD)
+    return string.format(Language:getStr("WorldBossFightCountDown"),seconds)
+end
+
+local function UpdateChallengeCount()
+    local wbpInfo = GetWorldBossPlayerInfo()
+    self:SendNotification("RefreshChallengeCountView",wbpInfo.dailyChallengeCount)
+    if wbpInfo.dailyChallengeCount >= worldBossChallengeRecoveryMaxLimit or
+    wbpInfo.dailyChallengeRecoveryCount >= worldBossChallengeRcoveryCountLimit  then
+        Timer:StopTicker(TIMER_WORLD_BOSS_CHALLENGE_COUNT_RECOVER)
+        self:SendNotification("RefreshCountDownDesp","")
+        return
+    end
+    local endTime = wbpInfo.dailyChallengeRecoveryTime + worldBossChallengeRcoveryTime*1000
+    Timer:AddTicker(
+        TIMER_WORLD_BOSS_CHALLENGE_COUNT_RECOVER,endTime,
+        function()
+            local countDownDesp = Language:getStr("WorldBossChallengeCountDown")
+            local desp = string.format(countDownDesp,CheckTimeRemain(endTime,false))
+            self:SendNotification("RefreshCountDownDesp",desp)
+        end,
+        function()
+            self:SendNotification("RefreshCountDownDesp","")
+            UpdateCurWorldBoss(UpdateChallengeCount)
+        end)
+end
+
+local function StartWorldBossStateCountDownTimer(endTime,countDownDesp,onFinished)
+    Timer:AddTicker(TIMER_WORLD_BOSS_STATE_COUNT_DOWN,endTime,function()
+        local desp = string.format(countDownDesp,CheckTimeRemain(endTime,false))
+        self:SendNotification("RefreshCountDownDesp",desp)
+    end,onFinished,1)
+end
+
+local function UpdateCurWorldBossApearState(data)
+    local bossData = GetWorldBossData(curWorldBoss)
+    AddRefreshTimer(TIMER_WORLD_BOSS_REFRESH, OnWorldBossRefresh)
+    AddRefreshTimer(TIMER_WORLD_BOSS_REWARD_TIMER, data.upStateFinished)
+    local wbpInfo = GetWorldBossPlayerInfo()
+    local endCD = wbpInfo.lastChallengeTime+GetConstValue("WorldBossChallengeCD")*1000
+    local fightEnabled = endCD <= CsBridge.timeManager.ServerTime
+    local viewData = {
+        boss = bossData,
+        countDownDesp = data.countDownDesp,
+        hasTransAnim = data.hasTransAnim,
+        fightEnabled = fightEnabled,
+    }
+    self:SendNotification("RefreshAppearState",viewData)
+    Timer:AddTicker(TIMER_WORLD_BOSS_FIGHT_CD,endCD,function()
+        local viewData = {
+            enabled = false,
+            price = curWorldBoss.payPrice,
+            countDown = GetFightCdDesp(endCD)
+        }
+        self:SendNotification("RefreshFightBtnState",viewData)
+    end,
+    function()
+        local viewData = {
+            enabled = true,
+            price = 0,
+            countDown = GetFightCdDesp(0)
+        }
+        self:SendNotification("RefreshFightBtnState",viewData)
+    end)
+    Timer:StopTicker(TIMER_WORLD_BOSS_STATE_COUNT_DOWN)
+    UpdateChallengeCount()
+end
+
+local function UpdateCurWorldBossDeadState(data)
+    Timer:StopTicker(TIMER_WORLD_BOSS_FIGHT_CD)
+    Timer:StopTicker(TIMER_WORLD_BOSS_CHALLENGE_COUNT_RECOVER)
+    RemoveRefreshTimer(TIMER_WORLD_BOSS_REFRESH)
+    RemoveRefreshTimer(TIMER_HURT_RANK_REFRESH)
+    RemoveRefreshTimer(TIMER_WORLD_BOSS_REWARD_TIMER)
+    local bossData = GetWorldBossData(curWorldBoss) or {}
+    bossData.curHp = 0
+    bossData.hp = data.hp
+    local viewData = {
+        boss = bossData,
+        countDownDesp = data.countDownDesp,
+        hasTransAnim = data.hasTransAnim,
+        oldHp = data.oldHp,
+    }
+    self:SendNotification("RefreshDeadState",viewData)
+    StartWorldBossStateCountDownTimer(data.curStateEndTime,data.desp,data.upStateFinished)
+end
+
+local function UpdateCurWorldBossSettleState(data)
+    Timer:StopTicker(TIMER_WORLD_BOSS_FIGHT_CD)
+    Timer:StopTicker(TIMER_WORLD_BOSS_CHALLENGE_COUNT_RECOVER)
+    RemoveRefreshTimer(TIMER_WORLD_BOSS_REFRESH)
+    RemoveRefreshTimer(TIMER_HURT_RANK_REFRESH)
+    RemoveRefreshTimer(TIMER_WORLD_BOSS_REWARD_TIMER)
+    local viewData = {
+        countDownDesp = data.countDownDesp,
+        hasTransAnim = data.hasTransAnim,
+    }
+    self:SendNotification("RefreshSettleState",viewData)
+    StartWorldBossStateCountDownTimer(data.curStateEndTime,data.desp,data.upStateFinished)
+end
+
+local function UpdateCurWorldBossRecoverState(data)
+    Timer:StopTicker(TIMER_WORLD_BOSS_FIGHT_CD)
+    Timer:StopTicker(TIMER_WORLD_BOSS_CHALLENGE_COUNT_RECOVER)
+    RemoveRefreshTimer(TIMER_WORLD_BOSS_REFRESH)
+    RemoveRefreshTimer(TIMER_HURT_RANK_REFRESH)
+    RemoveRefreshTimer(TIMER_WORLD_BOSS_REWARD_TIMER)
+    local viewData = {
+        countDownDesp = data.countDownDesp,
+        hasTransAnim = data.hasTransAnim,
+    }
+    self:SendNotification("RefreshRecoverState",viewData)
+    StartWorldBossStateCountDownTimer(data.curStateEndTime,data.desp,data.upStateFinished)
+end
+
+local function UpdateCurWorldBossState(resp,oldHp,hp)
+    local function upStateFinished()
+        UpdateCurWorldBoss(UpdateCurWorldBossState)
+    end
+    if curWorldBossState == resp.status then
+        local countDownDesp = ""
+        if curWorldBossState == WorldBossState.Appear then
+            countDownDesp = ""
+            self:SendNotification("RefreshCountDownDesp",countDownDesp)
+            Timer:StopTicker(TIMER_WORLD_BOSS_STATE_COUNT_DOWN)
+        elseif curWorldBossState == WorldBossState.Dead then
+            countDownDesp = Language:getStr("CountDown_NextAppear")
+            StartWorldBossStateCountDownTimer(resp.endTime,countDownDesp,upStateFinished)
+        elseif curWorldBossState == WorldBossState.Settle then
+            countDownDesp = Language:getStr("CountDown_Settle")
+            StartWorldBossStateCountDownTimer(resp.endTime,countDownDesp,upStateFinished)
+        elseif curWorldBossState == WorldBossState.Recover then
+            countDownDesp = Language:getStr("CountDown_NextAppear")
+            StartWorldBossStateCountDownTimer(resp.endTime,countDownDesp,upStateFinished)
+        end
+        return
+    end
+    local hasTransAnim = curWorldBossState and curWorldBossState ~= resp.status
+    curWorldBossState = resp.status
+    local curStateEndTime = resp.endTime
+    local timeRemain = CheckTimeRemain(curStateEndTime)
+    if curWorldBossState == WorldBossState.Appear then
+        local countDownDesp = ""
+        local data = {
+            countDownDesp = countDownDesp,
+            hasTransAnim = hasTransAnim,
+            upStateFinished = upStateFinished,
+        }
+        UpdateCurWorldBossApearState(data)
+    elseif curWorldBossState == WorldBossState.Dead then
+        local desp = Language:getStr("CountDown_NextAppear")
+        local data = {
+            desp = desp,
+            countDownDesp = string.format(desp,timeRemain),
+            hasTransAnim = hasTransAnim,
+            oldHp = oldHp,
+            hp = hp,
+            curStateEndTime = curStateEndTime,
+            upStateFinished = upStateFinished,
+        }
+        UpdateCurWorldBossDeadState(data)
+    elseif curWorldBossState == WorldBossState.Settle then
+        local desp = Language:getStr("CountDown_Settle")
+        local data = {
+            desp = desp,
+            countDownDesp = string.format(desp,timeRemain),
+            hasTransAnim = hasTransAnim,
+            curStateEndTime = curStateEndTime,
+            upStateFinished = upStateFinished,
+        }
+        UpdateCurWorldBossSettleState(data)
+    elseif curWorldBossState == WorldBossState.Recover then
+        local desp = Language:getStr("CountDown_NextAppear")
+        local data = {
+            desp = desp,
+            countDownDesp = string.format(desp,timeRemain),
+            hasTransAnim = hasTransAnim,
+            curStateEndTime = curStateEndTime,
+            upStateFinished = upStateFinished,
+        }
+        UpdateCurWorldBossRecoverState(data)
+    end
+end
+
+local function CheckNewUnionHurtRankData(onFinished)
+    local function onResp(resp)
+        local rankItems = resp and resp.rankItems or {}
+        local myRankItem = resp and resp.myRankItem or nil
+        onFinished(rankItems or {}, myRankItem)
+    end
+    WorldBossUtils.RequestGetWorldBossUnionScoreRank(COUNT_HURT_RANK,AddCallback(onResp))
+end
+
+local function CheckNewPlayerHurtRankData(onFinished)
+    local req = {
+        count = COUNT_HURT_RANK
+    }
+    local function onResp(resp)
+        local rankItems = resp and resp.rankItems or {}
+        local myRankItem = resp and resp.myRankItem or nil
+        onFinished(rankItems, myRankItem)
+    end
+    WorldBossUtils.RequestGetWorldBossUnionMemberRank(COUNT_HURT_RANK,AddCallback(onResp))
+end
+
+local function GetBaseHurtRankData(isPlayer,svrData)
+    local id
+    local name
+    local zone
+    local icon
+    local combat
+    if isPlayer then
+        id = svrData.baseInfo.userId
+        name = svrData.baseInfo.name
+        zone = svrData.baseInfo.zone
+        combat = svrData.combat
+    else
+        id = svrData and svrData.unionBaseInfo.id or 0
+        name = svrData and svrData.unionBaseInfo.name or "-"
+        zone = svrData and svrData.zone or ""
+        local svrIcon = svrData and svrData.unionBaseInfo.icon or 0
+        icon = ResTblContainer:GetPropToStr(svrIcon, GuildBanner.banner, GuildBanner.tblName)
+        combat = svrData and svrData.unionBaseInfo.combat or 0
+    end
+    return {
+        id = id,
+        name = name,
+        zone = zone,
+        icon = icon,
+        combat = combat
+    }
+end
+
+local function FormatUid(zone, id)
+    if zone == nil or zone == "" then
+        zone = 0
+    end
+    if id == nil or id == "" then
+        id = 0
+    end
+    local z = math.abs(tonumber(zone))
+    local i = math.abs(tonumber(id))
+    return tonumber(tostring(z)..tostring(i))
+end
+
+local function GetNewHurtRankData(isPlayer, rankItems, myRankItem)
+    local allDatas = {}
+    local maxHurt = 1
+    for i,v in ipairs(rankItems) do
+        if v.rank == 1 then
+            maxHurt = v.score
+        end
+        local base = GetBaseHurtRankData(isPlayer,v)
+        local data = {
+            id = base.id,
+            name = FormatWorldPlayerName(base.name, base.zone),
+            icon = base.icon ,
+            combat = base.combat,
+            hurt = v.score,
+            hurtPercent = v.score / maxHurt,
+            rank = v.rank,
+            isPlayer = isPlayer
+        }
+        data.uid = FormatUid(base.zone, base.id)
+        table.insert(allDatas, data)
+    end
+
+    local base = GetBaseHurtRankData(isPlayer,myRankItem)
+    local myData = {
+        id = base.id,
+        name = FormatWorldPlayerName(base.name,base.zone),
+        icon = base.icon,
+        combat = base.combat,
+        hurt = myRankItem and myRankItem.score or 0,
+        rank = myRankItem and myRankItem.rank or -1,
+        isPlayer = isPlayer
+    }
+    myData.uid = FormatUid(base.zone, base.id)
+    myData.hurtPercent = myData.hurt / maxHurt
+    return allDatas, myData
+end
+
+local function CheckNewHurtRankData(isPlayer, onFinished)
+    local CheckNewData = function(rankItems, myRankItem)
+        local r, m = GetNewHurtRankData(isPlayer, rankItems, myRankItem)
+        onFinished(r, m)
+    end
+    if isPlayer then
+        CheckNewPlayerHurtRankData(CheckNewData)
+    else
+        CheckNewUnionHurtRankData(CheckNewData)
+    end
+end
+
+local function UpdateAllHurtRankData(isPlayer,onFinished)
+    if allHurtRankData and #allHurtRankData ~= 0 and isPlayer == isPlayerHurtRank then
+        CheckNewHurtRankData(isPlayer, function(rankItems, myRankItem)
+            local updateDatas = {}
+            for i,v in ipairs(allHurtRankData) do
+                local newData = table.get(rankItems, function(new)
+                    return v.uid == new.uid
+                end)
+                local updateData = {}
+                if newData then
+                    updateData.data = newData
+                    newData.hurtPercentUpdate = newData.hurtPercent ~= v.hurtPercent
+                    newData.hurtUpdate = newData.hurt ~= v.hurt
+                    newData.oldHurt = v.hurt
+                    if newData.rank ~= v.rank or newData.hurtPercentUpdate or newData.hurtUpdate then
+                        updateData.type = WorldBossUtils.HurtRankUpdateType.Update
+                        updateData.oldRank = v.rank
+                        table.insert(updateDatas, updateData)
+                    end
+                else
+                    updateData.oldRank = v.rank
+                    updateData.type = WorldBossUtils.HurtRankUpdateType.Remove
+                    table.insert(updateDatas, updateData)
+                end
+            end
+            for i,v in ipairs(rankItems) do
+                local data = table.get(allHurtRankData, function(d)
+                    return d.uid == v.uid
+                end)
+                if data == nil then
+                    local updateData = {
+                        data = v,
+                        newRank = v.rank,
+                        type = WorldBossUtils.HurtRankUpdateType.Add
+                    }
+                    table.insert(updateDatas, updateData)
+                end
+            end
+            allHurtRankData = rankItems
+            if selfHurtRankData then
+                local oldHurtPercent = selfHurtRankData.hurtPercent
+                local oldHurt = selfHurtRankData.hurt
+                selfHurtRankData = myRankItem
+                selfHurtRankData.hurtPercentUpdate = oldHurtPercent ~= selfHurtRankData.hurtPercent
+                selfHurtRankData.hurtUpdate = oldHurt ~= selfHurtRankData.hurt
+                selfHurtRankData.oldHurt = oldHurt
+            else
+                selfHurtRankData = myRankItem
+            end
+            if onFinished then
+                table.sort(updateDatas,function(a,b)
+                    if a.type ~= b.type then
+                        return a.type < b.type
+                    end
+                    return a.data.uid < b.data.uid
+                end)
+                onFinished(selfHurtRankData,allHurtRankData, updateDatas)
+            end    
+        end)
+    else
+         CheckNewHurtRankData(isPlayer,function(rankItems, myRankItem)
+            if isRankExpand then
+                allHurtRankData = rankItems
+            end
+            if selfHurtRankData then
+                local oldHurtPercent = selfHurtRankData.hurtPercent
+                local oldHurt = selfHurtRankData.hurt
+                selfHurtRankData = myRankItem
+                selfHurtRankData.hurtPercentUpdate = oldHurtPercent ~= selfHurtRankData.hurtPercent
+                selfHurtRankData.hurtUpdate = oldHurt ~= selfHurtRankData.hurt
+                selfHurtRankData.oldHurt = oldHurt
+            else
+                selfHurtRankData = myRankItem
+            end
+            if onFinished then
+                onFinished(selfHurtRankData,allHurtRankData)
+            end
+        end)
+    end
+end
+
+local function OnHurtRankRefresh(t)
+    UpdateAllHurtRankData(isPlayerHurtRank,function(selfData, allDatas, updateDatas)
+        self:SendNotification("RefreshSelfHurtRankView",selfData)
+        if isRankExpand then
+            if updateDatas then
+                self:SendNotification("UpdateAllHurtRank",allDatas,updateDatas)
+            else
+                self:SendNotification("RefreshAllHurtRankView",allDatas)
+            end
+        end
+    end)
+end
+
+local function ManualUpdateHurtRank()
+    UpdateAllHurtRankData(isPlayerHurtRank,function(selfData, allDatas, updateDatas)
+        self:SendNotification("RefreshSelfHurtRankView",selfData)
+        if isRankExpand then
+            if updateDatas then
+                self:SendNotification("UpdateAllHurtRank",allDatas,updateDatas)
+            else
+                self:SendNotification("RefreshAllHurtRankView",allDatas)
+            end
+        end
+    end)
+end
+
+local function OnBattleEndToWorldBoss(obj)
+    local oldHp = curWorldBoss.curHp
+    local hp = curWorldBoss.hp
+    UpdateCurWorldBoss(function(resp)
+        --refresh rank 
+        if resp.status == WorldBossState.Appear then
+            if isOpenHurtRank then
+                UpdateAllHurtRankData(isPlayerHurtRank,function(selfData, allDatas, updateDatas)
+                    self:SendNotification("RefreshSelfHurtRankView",selfData)
+                    if isRankExpand then
+                        if updateDatas then
+                            self:SendNotification("UpdateAllHurtRank",allDatas,updateDatas)
+                        else
+                            self:SendNotification("RefreshAllHurtRankView",allDatas)
+                        end
+                    end
+                    AddRefreshTimer(TIMER_HURT_RANK_REFRESH,OnHurtRankRefresh)
+                end)
+            end
+
+            --refresh hp
+            local newHp = curWorldBoss.curHp
+            local viewData = {
+                oldHp = oldHp,
+                newHp = newHp,
+                hp = curWorldBoss.hp,
+            }
+            self:SendNotification("RefreshCurWorldBossHp",viewData)
+            AddRefreshTimer(TIMER_WORLD_BOSS_REFRESH,OnWorldBossRefresh)
+
+            --refresh fight cd
+            local wbpInfo = GetWorldBossPlayerInfo()
+            local endCD = wbpInfo.lastChallengeTime+GetConstValue("WorldBossChallengeCD")*1000
+            local viewData = {
+                enabled = false,
+                price = curWorldBoss.payPrice,
+                countDown = GetFightCdDesp(endCD)
+            }
+            self:SendNotification("RefreshFightBtnState",viewData)
+            Timer:AddTicker(TIMER_WORLD_BOSS_FIGHT_CD,endCD,function()
+                viewData.countDown = GetFightCdDesp(endCD)
+                self:SendNotification("RefreshFightBtnState",viewData)
+            end,
+            function()
+                local viewData = {
+                    enabled = true,
+                    price = 0,
+                    countDown = GetFightCdDesp(0)
+                }
+                self:SendNotification("RefreshFightBtnState",viewData)
+            end)
+        else
+            ManualUpdateHurtRank()
+        end
+
+        --refreshstate
+        UpdateCurWorldBossState(resp,oldHp,hp)
+    end)
+end
+
+function DoInit()
+    cacheCallbacks = {}
+    MsgCenter:Subscribe(Notify_OnBattleEnd,OnBattleEndToWorldBoss)
+    Timer:AddNonstopTicker(TIMER_REFRESH,function() 
+        for k,v in pairs(refreshTimerCallbackList) do
+            v()
+        end
+    end,REFRESH_TIME_INTERVAL)
+    
+    worldBossChallengeRecoveryMaxLimit = GetConstValue("WorldBossChallenge")
+    worldBossChallengeRcoveryCountLimit = GetConstValue("WorldBossChallengeRcovery")
+    worldBossChallengeRcoveryTime = GetConstValue("WorldBossChallengeRcoveryTime")
+
+    worldBossChallengeCost = GetConstValue("WorldBossChallengeCost")
+    worldBossChallengeCostGrow = GetConstValue("WorldBossChallengeCostGrow")
+    worldBossChallengeCostLimt = GetConstValue("WorldBossChallengeCostLimt")
+    worldBossChallengeTimesLimit = GetConstValue("WorldBossChallengeTimesLimit")
+end
+
+function DoOnExit()
+    ClearCacheCbks()
+    MsgCenter:Unsubscribe(Notify_OnBattleEnd,OnBattleEndToWorldBoss)
+    Timer:StopTicker(TIMER_WORLD_BOSS_STATE_COUNT_DOWN)
+    Timer:StopTicker(TIMER_WORLD_BOSS_FIGHT_CD)
+    Timer:StopTicker(TIMER_REFRESH)
+    WorldBossPageType = nil
+
+    curPageType = nil
+    curView = nil
+
+    WorldBossState = nil
+
+    curWorldBossState = nil
+    curWorldBoss = nil
+
+    COUNT_HURT_RANK = nil
+
+    isPlayerHurtRank = nil
+
+    refreshTimerCallbackList = nil
+    TIMER_REFRESH = nil
+    TIMER_HURT_RANK_REFRESH = nil
+    TIMER_WORLD_BOSS_STATE_COUNT_DOWN = nil
+    TIMER_WORLD_BOSS_REFRESH = nil
+    TIMER_WORLD_BOSS_FIGHT_CD = nil
+    TIMER_WORLD_BOSS_CHALLENGE_COUNT_RECOVER = nil
+
+    isOpenHurtRank = nil
+    isRankExpand = nil
+
+    REFRESH_TIME_INTERVAL = nil
+
+    WorldBoss = nil
+
+    WorldBossBuff = nil
+
+    worldBossChallengeRecoveryMaxLimit = nil
+    worldBossChallengeRcoveryCountLimit = nil
+    worldBossChallengeRcoveryTime = nil
+
+    worldBossChallengeCost = nil
+    worldBossChallengeCostGrow = nil
+    worldBossChallengeCostLimt = nil
+    worldBossChallengeTimesLimit = nil
+end 
+
+function InitProperties()
+end
+
+--------------------outer-------------------------------------
+function OnCommand_InitWorldBossPageType(objs)
+    curPageType = objs[0]
+end
+
+--------------------world boss view-------------------------------------
+local function OpenPage(viewName, ...)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        curView = CsBridge.OpenView(viewName, self.ModelName,false,true)
+    end,viewName, ...)
+end
+
+local function OpenPageByType(type)
+    if curView then
+        self:HideView(curView.gameObject.name)
+    end
+    if type == WorldBossPageType.WorldBoss then
+        OpenPage("WorldBossDetailView","HurtRankItemSlot")
+    end
+end
+
+function OnCommand_InitWorldBossData(objs)
+    self:SendNotification("RefreshWorldBossView",curPageType)
+    OpenPageByType(curPageType)
+end
+
+function OnCommand_OpenWorldBossPage(objs)
+    local type = objs[0]
+    if type == curPageType then
+        return
+    end
+    curPageType = type
+    OpenPageByType(curPageType)
+end
+
+------------------------world boss detail view--------------------------
+
+function OnCommand_InitWorldBossDetailData(objs)
+    UpdateCurWorldBoss(function(resp, oldHp, hp)
+        UpdateCurWorldBossState(resp,oldHp,hp)
+    end)
+end
+
+function OnCommand_UpdateCurWorldBoss(objs)
+    local oldHp = curWorldBoss.curHp
+    UpdateCurWorldBoss(function()
+        local newHp = curWorldBoss.curHp
+        if oldHp ~= newHp then
+            local viewData = {
+                oldHp = oldHp,
+                newHp = newHp,
+                hp = curWorldBoss.hp,
+            }
+            self:SendNotification("RefreshCurWorldBossHp",viewData)
+        end
+    end)
+end
+
+function OnCommand_OpenHurtRank(objs)
+    if curWorldBossState == WorldBossState.NoMonster or
+    curWorldBossState == WorldBossState.DontAppear then
+        WorldBossUtils.ShowHintBox(Language:getStr("WorldBoss_DontAppear"))
+        return
+    end
+    isOpenHurtRank = not isOpenHurtRank
+    if not isOpenHurtRank then
+        isRankExpand = false
+        RemoveRefreshTimer(TIMER_HURT_RANK_REFRESH)
+        allHurtRankData = nil
+        selfHurtRankData = nil
+    end
+    local rankName = isPlayerHurtRank and Language:getStr("WorldBoss_UnionHurtRank") or Language:getStr("WorldBoss_PlayerHurtRank")
+    local expandName = isRankExpand and Language:getStr("WorldBoss_ExpandOff") or Language:getStr("WorldBoss_ExpandOn")
+    self:SendNotification("OpenHurtRank",isOpenHurtRank,rankName,expandName)
+    UpdateAllHurtRankData(isPlayerHurtRank, function(selfData, allDatas, updateDatas)
+        self:SendNotification("RefreshSelfHurtRankView",selfData)
+        AddRefreshTimer(TIMER_HURT_RANK_REFRESH,OnHurtRankRefresh)
+    end)
+end
+
+function OnCommand_UpdateHurtRankType(objs)
+    isPlayerHurtRank = not isPlayerHurtRank
+    local name = isPlayerHurtRank and Language:getStr("WorldBoss_UnionHurtRank") or Language:getStr("WorldBoss_PlayerHurtRank")
+    self:SendNotification("RefreshRankBtnName",name)
+    selfHurtRankData = nil
+    allHurtRankData = nil
+    UpdateAllHurtRankData(isPlayerHurtRank, function(selfData, allDatas, updateDatas)
+        selfData.hurtPercentUpdate = false
+        selfData.hurtUpdate = false
+        self:SendNotification("RefreshSelfHurtRankView",selfData)
+        if isRankExpand then
+            self:SendNotification("RefreshAllHurtRankView",allDatas)
+        end
+    end)
+end
+
+function OnCommand_ExpandHurtRank(objs)
+    isRankExpand = not isRankExpand
+    local name = isRankExpand and Language:getStr("WorldBoss_ExpandOff") or Language:getStr("WorldBoss_ExpandOn")
+    if isRankExpand then
+        self:SendNotification("ExpandHurtRank",isRankExpand,name,function()
+            UpdateAllHurtRankData(isPlayerHurtRank,function(selfData, allDatas, updateDatas)
+                AddRefreshTimer(TIMER_HURT_RANK_REFRESH,OnHurtRankRefresh)
+                self:SendNotification("RefreshAllHurtRankView",allDatas)    
+            end)
+        end)
+    else
+        allHurtRankData = nil
+        self:SendNotification("ExpandHurtRank",isRankExpand,name)
+    end
+end
+
+function OnCommand_OpenRankRewardView(objs)
+    if curWorldBossState == WorldBossState.NoMonster or
+    curWorldBossState == WorldBossState.DontAppear then
+        WorldBossUtils.ShowHintBox(Language:getStr("WorldBoss_DontAppear"))
+       return
+    end
+    local rewardStr = ResTblContainer:GetPropToStr(curWorldBoss.id,WorldBoss.reward,WorldBoss.tblName)
+    local rewards = GetRewardFromTbl(rewardStr)
+    local data = {
+        rewardTime = curWorldBoss.rewardTime,
+        rewards = rewards,
+    }
+    self:ShowModule("WorldBossRankRewardModule",{data})
+end
+
+local function OnFormationReady(data,payGem)
+    local function onFinished(battleInfo)
+        RemoveRefreshTimer(TIMER_HURT_RANK_REFRESH)
+        RemoveRefreshTimer(TIMER_WORLD_BOSS_REFRESH)
+        Timer:StopTicker(TIMER_WORLD_BOSS_FIGHT_CD)
+        UpdateChallengeCount()
+        ShowBattleModule(battleInfo, self)
+    end
+    WorldBossUtils.RequestChallengeBoss(data,AddCallback(onFinished))
+end
+
+local function DoFightWorldBoss(isPay)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view=CsBridge.OpenView("WorldBossFormationView","WorldBossFormationModel",true)
+        local function callback(data)
+            OnFormationReady(data,isPay)
+        end
+        local data = {
+            formationCallback = callback,
+        }
+        view:SetParamDataList(data) 
+    end,"WorldBossFormationView","HeroItemSlot")
+end
+
+local function DoFight(isPay)
+    local playerInfo = appData:checkData("PlayerInfo")
+    local wbpInfo = GetWorldBossPlayerInfo()
+    if wbpInfo.dailyChallengeCount <= 0 then
+        WorldBossUtils.ShowHintBox(Language:getStr("1042"))
+        return
+    end
+    if playerInfo.union == nil or playerInfo.union == "0" then
+        WorldBossUtils.ShowMsgBox(Language:getStr("WorldBossNewNoUnion"),function()
+            DoFightWorldBoss(isPay)
+        end)
+    else
+        DoFightWorldBoss(isPay)
+    end
+end
+
+function OnCommand_FightWorldBoss(objs)
+    if curWorldBossState == WorldBossState.Dead then
+        WorldBossUtils.ShowHintBox(Language:getStr("WorldBoss_DontAppear"))
+        return
+    end
+    if curWorldBossState == WorldBossState.Recover then
+        WorldBossUtils.ShowHintBox(Language:getStr("WorldBoss_DontAppear"))
+        return
+    end
+    if curWorldBossState == WorldBossState.Settle then
+        WorldBossUtils.ShowHintBox(Language:getStr("WorldBoss_Settle"))
+        return
+    end
+    local wbpInfo = GetWorldBossPlayerInfo()
+    local endCD = wbpInfo.lastChallengeTime+GetConstValue("WorldBossChallengeCD")*1000
+    if endCD > CsBridge.timeManager.ServerTime then
+        local desp = string.format(Language:getStr("WorldBoss_ChallengeCD"),CheckTimeRemainSeconds(endCD))
+        WorldBossUtils.ShowHintBox(desp)
+    else
+        DoFight(false)
+    end
+end
+
+function OnCommand_OpenSkillTip(objs)
+    local data = objs[0]
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("SkillTipView","SkillTipModel",false,true)
+		view:SendCommand("InitData",data)
+	end, "SkillTipView")
+end
+
+function OnCommand_OpenHelpTip(objs)
+    ShowHelpTip(self, INSTRUCTION_WORLD_BOSS)
+end
+
+function OnCommand_AddChallengeCount(objs)
+    if curWorldBossState == WorldBossState.Settle then
+        return
+    end
+    local wbpInfo = GetWorldBossPlayerInfo()
+    local count = wbpInfo.payCount
+    if count >= worldBossChallengeTimesLimit then
+        WorldBossUtils.ShowHintBox(Language:getStr("WorldBossBuyChallengeMax"))
+        return
+    end
+    local cost = GetBuyChallengeCountCost(count+1)
+    local desp = string.format(Language:getStr("WorldBossBuyChallengeCount"),cost.count..GetRewardName(cost))
+    local function onFinished(resp)
+        UpdateChallengeCount()
+    end
+    local function confirmCallback()
+        WorldBossUtils.RequestBuyExtraChance(1,AddCallback(onFinished))
+    end
+    WorldBossUtils.ShowMsgBox(desp,confirmCallback)
+end

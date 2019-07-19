@@ -1,0 +1,23 @@
+
+
+function OnHeroSummonShopItemSlotBindValue(slot,itemData)
+
+	local coin_Sprite=slot.transform:Find("ItemBtn/CoinSprite"):GetComponent("UnityEngine.UI.Image")
+
+	local price_Lab=slot.transform:Find("ItemBtn/PriceTxt"):GetComponent(CLS_TEXT)
+
+	local itemBase_TF=slot.transform:Find("ItemBase")
+
+	BindItemBaseValue(itemBase_TF,itemData.reward)
+
+    if	itemData.priceType==1 then
+    	SetIconByResourceId(coin_Sprite.gameObject,itemData.priceTypeId)
+    end
+    local exchangeCoin = appData:checkData("PlayerInfo").exchangeCoin
+    if exchangeCoin>=itemData.price then
+		SetFontColor(price_Lab,color2)
+	else
+		SetFontColor(price_Lab,color20)
+    end
+	price_Lab.text= tostring(itemData.price)
+end

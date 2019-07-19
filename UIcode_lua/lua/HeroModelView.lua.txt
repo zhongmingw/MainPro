@@ -1,0 +1,73 @@
+local heroInfoObj
+local img_race
+local img_job
+local txt_name
+
+local heroId
+
+local modelRoot
+
+local skeletonGraphic 
+local modelObj 
+
+function DoInit()
+	img_race=self.transform:Find("Top/HeroInfo/raceIcon"):GetComponent("UnityEngine.UI.Image")
+	txt_name=self.transform:Find("Top/HeroInfo/name"):GetComponent(CLS_TEXT)
+	img_job = txt_name.transform:Find("jobIcon"):GetComponent("UnityEngine.UI.Image")
+
+	modelRoot=self.transform:Find("HeroModel/ModelRoot")
+
+	startRoot_TF=self.transform:Find("Top/HeroInfo/StarRoot")
+
+end
+
+function OnAnimationFinished()
+	CreateModels()
+end
+
+function SetData(obj)
+	heroId=obj
+	OnReset()
+end
+
+function OnReset()	
+	SetRaceIconByHeroId(img_race.gameObject,heroId)
+	SetJobIconByHeroId(img_job.gameObject, heroId)
+	ShowHeroQuality(heroId,startRoot_TF)
+	local nameStr = ResTblContainer:GetPropToStr(heroId,HeroBase.title,HeroBase.actorTbl)
+	txt_name.text= tostring(nameStr)
+	
+end
+
+--Add:-
+function CreateModels()
+	local modelName = ResTblContainer:GetPropToStr(heroId,HeroBase.model,HeroBase.actorTbl)
+	CsBridge.CacheAssetsByModule( self.Module,
+    function ()
+	    modelObj = CsBridge.objectCache:CreateObject(modelName, true, modelRoot);
+	    skeletonGraphic = modelObj.transform:GetComponent("SkeletonGraphic")
+	    CsBridge.SpineHelper.SetSpineLoaclPosition(skeletonGraphic, 0, 0);
+		CsBridge.SpineHelper.SetSpineLoaclScale(skeletonGraphic,2)
+		CsBridge.SpineHelper.SetSpineReverse(skeletonGraphic)
+	    skeletonGraphic:PlayAnimation("stand", true);
+    end
+     ,modelName);
+end
+
+function OnCloseBtnClick(sender)
+	self:ReturnBack()
+end
+
+function DoExit()
+	heroInfoObj = nil
+	img_race = nil
+	img_job = nil
+	txt_name = nil
+
+	heroId = nil
+
+	modelRoot = nil
+
+	skeletonGraphic  = nil
+	modelObj  = nil
+end

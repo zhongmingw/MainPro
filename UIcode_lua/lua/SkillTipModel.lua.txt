@@ -1,0 +1,21 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-05-07 11:27:33
+
+local curSkill
+
+function DoInit()
+end
+
+function InitProperties()
+end
+
+function OnCommand_InitData(objs)
+    curSkill = objs[0]
+    self:SendNotification("RefreshSkillTipView",curSkill)
+end
+
+function DoOnExit()
+	curSkill = nil
+end

@@ -1,0 +1,8 @@
+function OnSubAssistItemSlotBindValue(slot,data)
+    local numTxt = slot:GetComponentAtPath("NumTxt",CLS_TEXT)
+    local despTxt = slot:GetComponentAtPath("DespTxt",CLS_TEXT)
+    local jumpBtn = slot:GetGameObjectAtPath("JumpBtn")
+    numTxt.text = data.orderId
+    despTxt.text = data.desp
+    jumpBtn.gameObject:SetSelfActive(data.systemId ~= -1)
+end

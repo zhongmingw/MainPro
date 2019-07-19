@@ -1,0 +1,82 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-05-14 12:00:37
+
+local equipGrid 
+
+local isInit = false
+
+local hasItemSlot = false
+local cnt = 0
+
+function DoInit()
+    self.Shadow = 1
+    self.Anim = 8
+end
+
+function InitUI()
+    equipGrid = self:GetComponentAtPath("Center/itemSV/ScrollRect/Viewport/EquipGrid",CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+	hasItemSlot = false
+	cnt = 0
+    self:SendCommand("InitEquipSelectData")
+end
+
+function OnNotification_RefreshEquipSelectView(objs)
+    local equipArr = objs[0]
+    equipGrid:RefreshItemSlots(equipArr, self.gameObject, "ItemSlot")
+	hasItemSlot=true
+end
+
+function OnEquipGridItemSlotClick(obj)
+    self:SendCommand("SelectEquip",obj.m_data)
+    self:Deactive()
+end
+
+function OnNotification_ActiveEquipSelect(objs)
+    self:Active()
+end
+
+function OnNotification_CloseEquip(objs)
+    Close()
+end 
+
+function OnMaskClick(sender)
+    Close()
+end
+
+function Close()
+    equipGrid:ClearItems()
+    self:HideView(self.gameObject.name)
+end
+
+function CheckHasItemSlot()
+    if (hasItemSlot) then
+	    cnt=cnt+1
+		if (cnt > 1) then
+		    return true
+		else
+		    return false
+		end
+	else
+	    cnt = 0
+	    return false
+	end
+end
+
+function DoExit()
+    equipGrid = nil
+    isInit = nil
+    hasItemSlot = nil
+    cnt = nil
+end
+
+
+

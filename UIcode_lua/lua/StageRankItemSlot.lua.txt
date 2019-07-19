@@ -1,0 +1,35 @@
+
+function OnStageRankItemSlotBindValue(slot,data)
+	-- body
+
+	local name_Lab
+	local rank_Lab
+	local score_Lab
+	local lv_Lab
+
+	local icon_Sprite
+	local rank_Sprite
+
+
+	name_Lab=slot:GetComponentAtPath("NameTxt" ,CLS_TEXT)
+	rank_Lab=slot:GetComponentAtPath("RankTxt" ,CLS_TEXT)
+	score_Lab=slot:GetComponentAtPath("ScoreTxt" ,CLS_TEXT)
+	lv_Lab=slot:GetComponentAtPath("LvTxt" ,CLS_TEXT)
+
+	icon_Sprite=slot:GetComponentAtPath("IconSprite" ,CLS_IMAGE)
+	rank_Sprite=slot:GetComponentAtPath("RankSprite" ,CLS_IMAGE)
+
+
+	name_Lab.text=data.playerBaseInfo.name
+	rank_Lab.text=tostring(data.rank)
+	score_Lab.text=tostring(data.score)
+    lv_Lab.text=tostring(data.playerBaseInfo.level)
+
+	SetIconByHeadId(icon_Sprite.gameObject,data.playerBaseInfo.icon)
+	rank_Sprite.gameObject:SetActive(true)
+	if data.rank<=3 and data.rank>0 then
+		CsBridge.IconData.SetIconByName(rank_Sprite.gameObject,"new_com_paiming"..data.rank)
+	else
+		rank_Sprite.gameObject:SetActive(false)
+	end
+end

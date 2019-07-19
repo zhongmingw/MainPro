@@ -1,0 +1,20 @@
+--[[
+	file: ServerActivityItemSlot.lua
+	author: hangang
+	description:Time limited activity item slot
+]]
+
+function OnServerActivityItemSlotBindValue(slot, data)
+    local iconObj = slot:GetGameObjectAtPath("iconImg")
+	CsBridge.IconData.SetIconByName(iconObj, data.icon)
+	local nameText = slot:GetComponentAtPath("nameTxt" ,CLS_TEXT)
+	nameText.text = data.name
+	local countdownText = slot:GetComponentAtPath("countdownTxt" ,CLS_TEXT)
+	countdownText.text = data.restTime or ""
+	if data.restTime == nil or data.restTime == "" then
+		nameText.transform.localPosition = CsBridge.Vector3ForLua.CreateVector3ForLua(nameText.transform.localPosition.x,
+				nameText.transform.localPosition.y-9,nameText.transform.localPosition.z):ToVector3()
+	end
+	local tipsObj = slot:GetGameObjectAtPath("Tips")
+	tipsObj:SetActive(data.showTips)
+end

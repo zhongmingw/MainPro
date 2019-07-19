@@ -1,0 +1,32 @@
+function OnChallengeLevelItemSlotBindValue(slot,data)
+	local btn_Sprite = slot:GetComponentAtPath("ChallengeBtn/BtnSprite",CLS_IMAGE)
+	local level_Sprite=slot:GetComponentAtPath("LevelSprite",CLS_IMAGE)
+	local challenge_Btn=slot:GetComponentAtPath("ChallengeBtn",CLS_BUTTON_ARCHLY)
+	local btn_Lab = slot:GetComponentAtPath("ChallengeBtn/BtnTxt",CLS_TEXT)
+	local lv_Lab = slot:GetComponentAtPath("ChallengeBtn/LevelTxt",CLS_TEXT)
+
+	local level_Lab=slot:GetComponentAtPath("LevelTxt",CLS_TEXT)
+	local fight_Lab=slot:GetComponentAtPath("FightTxt",CLS_TEXT)
+	local rewardGrid = slot:GetComponentAtPath("RewardGrid",CLS_UI_ITEM_GRID)
+
+	level_Lab.text=tostring(data.difficulty)
+	fight_Lab.text=CsBridge.UnityHelper.ChangeFightNum(data.recommendFight)
+    local rewardItems = GetRewardFromTbl(data.rewardStr)
+    rewardGrid:RefreshItemSlots(rewardItems,slot.m_grid.viewBase.gameObject,"ItemSlot")
+
+	CsBridge.IconData.SetIconByName(level_Sprite.gameObject,data.icon)
+	if data.canCond and data.canDiff then
+		CsBridge.IconData.ChangeImageMaterial(btn_Sprite.gameObject,"")
+		if data.showLab then
+			btn_Lab.gameObject:SetSelfActive(true)
+			lv_Lab.gameObject:SetSelfActive(false)
+		end
+	else
+		CsBridge.IconData.ChangeImageMaterial(btn_Sprite.gameObject,"SpriteGray")
+		if data.showLab then
+			btn_Lab.gameObject:SetSelfActive(false)
+			lv_Lab.gameObject:SetSelfActive(true)
+			lv_Lab.text="Lv."..data.requiredCond
+		end
+	end 
+end

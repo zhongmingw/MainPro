@@ -1,0 +1,213 @@
+local utils = require "HeroBagUtils"
+local HeroAttrData = require "HeroAttrData"
+local soulImprintItemBagUtils = require "SoulImprintItemBagUtils"
+
+local curHero
+local curType
+local heroBreakDataFromTbl
+local consumeArr
+
+local function CheckHeroHasMaxGradeAndLevel()
+    local quality = ResTblContainer:GetPropToInt(curHero.heroId, HeroBase.quality,HeroBase.actorTbl)
+    local maxGrade = ResTblContainer:GetPropToInt(quality,HeroQuality.maxGrade,HeroQuality.actorTbl)
+    local maxLevel = GetHeroMaxLevel(curHero.grade)
+    return curHero.level >= maxLevel and curHero.grade >= maxGrade   
+end
+
+local function GetNextLevelId()
+    return GetLevelUpId(curHero.grade,curHero.level)+1
+end
+
+local function GetConsume()
+    local coinConsume,soulConsume
+    if not CheckHeroHasMaxGradeAndLevel() then
+        if curHero.level >= GetHeroMaxLevel(curHero.grade) then
+            local nextGrade = curHero.grade+1
+            coinConsume = ResTblContainer:GetPropToInt(nextGrade,HeroEvelution.coin,HeroEvelution.actorTbl)
+            soulConsume = ResTblContainer:GetPropToInt(nextGrade,HeroEvelution.stepStoneCoin,HeroEvelution.actorTbl)
+        else
+            coinConsume=ResTblContainer:GetPropToInt(GetNextLevelId(),HeroLevelUp.coin,HeroLevelUp.actorTbl)
+            soulConsume=ResTblContainer:GetPropToInt(GetNextLevelId(),HeroLevelUp.soulCoin,HeroLevelUp.actorTbl)
+        end
+    else
+        local heroAllLevel = GetHeroAllLevel(curHero.grade, curHero.level, curHero.distillationLevel, curHero.breakLevel)
+        local heroMaxLevel = GetHeroAllMaxLevel(curHero.grade, curHero.distillationStar, curHero.quality)
+        local nextLevel = heroAllLevel + 1
+        if heroAllLevel < heroMaxLevel and consumeArr[nextLevel] then
+            local consumeData = consumeArr[nextLevel]
+            coinConsume = consumeData.coinConsume
+            soulConsume = consumeData.soulConsume
+        else
+            coinConsume = -1
+            soulConsume = -1
+        end
+    end
+    return coinConsume, soulConsume
+end
+
+local function GetAttr(isUp)
+    local heroAttrs = nil
+    if curType == 1 then
+        heroAttrs = HeroAttrData.GetHeroAttrsByUid(curHero.uid, true)
+    else
+        heroAttrs = HeroAttrData.GetHeroAttrsByHero(curHero, true)
+    end
+    local upFight = HeroAttrData.GetHeroFightByHero(curHero, true)
+    local upAllLevel = GetHeroAllLevel(curHero.grade, curHero.level, curHero.distillationLevel, curHero.breakLevel)
+    local upHp = heroAttrs[HeroAttrEnum.HP].val
+    local upAttack = heroAttrs[HeroAttrEnum.ATK].val
+    local upDef = heroAttrs[HeroAttrEnum.DEF].val
+    local upSpeed = heroAttrs[HeroAttrEnum.SPEED].val
+
+    curHero.isUp = isUp
+    if isUp then
+        curHero.upFight = upFight - curHero.fight
+        curHero.upLevel = upAllLevel - curHero.allLevel
+        curHero.upHp = upHp - curHero.hp
+        curHero.upAttack = upAttack - curHero.attack
+        curHero.upDef = upDef - curHero.def
+        curHero.upSpeed = upSpeed - curHero.speed
+    end
+    curHero.fight = upFight
+    curHero.allLevel = upAllLevel
+    curHero.allMaxLevel = GetHeroAllMaxLevel(curHero.grade,curHero.distillationStar,curHero.quality)
+    curHero.hp = upHp
+    curHero.attack = upAttack
+    curHero.def = upDef
+    curHero.speed = upSpeed
+end
+
+local function UpdateHeroInfo(isAttrUp)
+    local maxLevel = GetHeroMaxLevel(curHero.grade)
+    local coinConsume,soulConsume = GetConsume()
+    GetAttr(isAttrUp)
+    local upGrade = curHero.level >= maxLevel and not CheckHeroHasMaxGradeAndLevel()
+    
+    self:SendNotification("RefreshHeroInfo",curHero)
+    self:SendNotification("RefreshConsume",upGrade,coinConsume,soulConsume)
+    self:SendNotification("RefreshLevelUpBtn",upGrade)
+end  
+
+local function OpenGradeUpView()
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("GradeUpView","GradeUpModel",true,true)
+        view:SetParamDataList(table.copy(curHero))
+    end,"GradeUpView","SkillItemSlot")
+end
+
+local function UpdateHeroInfoData(hero)
+    local newHero = appData:checkItem("HeroItem",hero.uid)
+    hero.grade = newHero.grade
+    hero.level = newHero.level
+    hero.distillationStar = newHero.distillationStar
+    hero.distillationLevel = newHero.distillationLevel
+    hero.breakLevel = newHero.breakLevel
+end
+
+local function HeroLevelUp(goldRequired, battleSoulRequired)
+    local levelUp = false
+    if not CheckHeroHasMaxGradeAndLevel() then
+        local maxLevel = GetHeroMaxLevel(curHero.grade)
+        levelUp = curHero.level < maxLevel
+    else
+        levelUp = true
+    end
+
+    if levelUp then
+        local havaEnoughRes = utils.CheckHeroBreakConditionPkg(self, goldRequired, battleSoulRequired, curHero)
+        if not havaEnoughRes then
+            return
+        end
+        local onFinished = function(resp)
+            if resp.status == 0 then
+                UpdateHeroInfoData(curHero)
+                UpdateHeroInfo(true)
+                MsgCenter:Broadcast(Notify_HeroLevelUp)
+                MsgCenter:Broadcast(Notify_UpdatehHeroShowView_TopRes,{true,false})
+                MsgCenter:Broadcast(Notify_UpdateHeroInfoRedTip)
+                MsgCenter:Broadcast(Notify_UpdateCurHero)
+                CsBridge.audioManager:PlayUI("herolvlup")
+            end 
+        end
+        utils.RequestUpGradeHeroLevel(curHero.uid,onFinished)
+    else
+        OpenGradeUpView()
+    end
+end
+
+local function RefreshHeroLevelRedTip()
+    local ret
+    if curType == 1 and curHero then
+        ret = CheckHeroGreatLevelRedFlag(curHero)
+        self:SendNotification("RefreshHeroLevelRedTip",ret)
+    end
+    return ret
+end
+
+local function OnUpdateHeroInfoRedTip(obj)
+    local ret = RefreshHeroLevelRedTip()
+    MsgCenter:Broadcast(Notify_UpdateHeroShowHeroInfoRedTip,ret)
+end
+
+local function OnHeroShowViewSwitchHero(obj)
+    curHero = obj
+    UpdateHeroInfo(false)
+    MsgCenter:Broadcast(Notify_UpdateHeroInfoRedTip)
+end
+
+local function OnHeroGradeUp(obj)
+    UpdateHeroInfoData(curHero)
+    UpdateHeroInfo(true)
+end
+
+local function SoulImprintItemPutOnOrDown(item)
+    if curHero then
+        UpdateHeroInfoData(curHero)
+        UpdateHeroInfo(true)
+    end
+end
+
+function DoInit()
+    if heroBreakDataFromTbl == nil then
+        heroBreakDataFromTbl = GetHeroBreakDataFromTbl()
+    end
+    consumeArr = GetHeroLevelUpConsumeArr()
+    MsgCenter:Subscribe(Notify_HeroShowView_SwitchHero,OnHeroShowViewSwitchHero)
+    MsgCenter:Subscribe(Notify_UpdateHeroInfoRedTip,OnUpdateHeroInfoRedTip)
+    MsgCenter:Subscribe(Notify_HeroGradeUp,OnHeroGradeUp)
+    MsgCenter:Subscribe(Notify_SoulImprintItemPutOnOrDown,SoulImprintItemPutOnOrDown)
+end 
+
+function DoOnExit()
+    MsgCenter:Unsubscribe(Notify_HeroShowView_SwitchHero,OnHeroShowViewSwitchHero)
+    MsgCenter:Unsubscribe(Notify_UpdateHeroInfoRedTip,OnUpdateHeroInfoRedTip)
+    MsgCenter:Unsubscribe(Notify_HeroGradeUp,OnHeroGradeUp)
+    MsgCenter:Unsubscribe(Notify_SoulImprintItemPutOnOrDown,SoulImprintItemPutOnOrDown)
+end
+
+function OnCommand_InitData(objs)
+    local data = objs[0]
+    curHero,curType = data.curHero,data.curType
+    UpdateHeroInfo(false) 
+    RefreshHeroLevelRedTip()
+end
+
+function OnCommand_HeroLevelUp(objs)
+    local coinConsume,soulConsume = GetConsume()
+    if coinConsume == -1 and soulConsume == -1 then
+        utils.ShowHintBox(Language:getStr("HeroInfo_MaxLevelGrade"))
+        return
+    end
+    HeroLevelUp(coinConsume, soulConsume)
+end
+
+function OnCommand_OpenDetailAttr(objs)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("AttrDetailView","AttrDetailModel")
+        view:SetParamDataList(table.copy(curHero))
+    end,"AttrDetailView","AttrItemSlot")
+end
+
+function OnCommand_OnClose(objs)
+    curHero = nil
+end

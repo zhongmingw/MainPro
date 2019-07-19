@@ -1,0 +1,146 @@
+---登陆
+local function AccountLogin(objs, respCallback)
+    local req = {
+        userName = objs[0],
+        pwd = objs[1]
+    }
+    CsBridge.httpBehaviour.serverURL = CsBridge.configUtil:loadStrValue("server")
+    HttpRequest("globalLogin", "UserLoginRequest", "GlobalLoginResp", req, function(resp)
+        if respCallback then
+            respCallback(resp)
+        end
+    end)
+end
+
+--检查密码和账号
+local function CheckAccountAndPwd(objs, respCallback)
+    local req = {
+        account = objs[0],
+        pwd = objs[1]
+    }
+    HttpRequest("checkPwd", "CheckPwdReq", "CheckPwdResp", req, function(resp)
+        if respCallback then
+            respCallback(resp)
+        end
+    end)
+end
+
+--加密密码
+local function EncriptionPwd(pwdStr)
+    return CsBridge.MD5.GetMd5String(pwdStr)
+end
+
+--初始化有sdk时的账号按钮
+local function InitLoginViewSDKAccountBtn(self)
+    local accountBtnObj = self:GetGameObjectAtPath("TopRight/AccountBtn")
+    accountBtnObj:SetActive(not CsBridge.sDKHelper.enableSDK)
+end
+
+--更新url
+local function UpdateserverURL()
+    CsBridge.httpBehaviour.serverURL = CsBridge.configUtil:loadStrValue("server")
+end
+
+--绑定登陆成功回调
+local function SubscribeLoginSuccess(callback)
+    CsBridge.MsgCenter.Subscribe(Notify_LoginSuccess, callback)
+end
+
+--取消登陆成功帮忙回调
+local function UnsubscribeLoginSuccess(callback)
+    CsBridge.MsgCenter.Unsubscribe(Notify_LoginSuccess, callback)
+end
+
+--匿名登陆
+local function DoAnonLogin(req, respCallback)
+    HttpRequest("globalAnonLogin", "AnonLoginReq", "GlobalAnonLoginResp", req, function(resp)
+        if respCallback then
+            respCallback(resp)
+        end
+    end)
+end
+
+--获取账号登陆的请求数据
+local function GetAcountLoginReq(userName, pwd)
+    local req = {userName = userName, pwd = pwd}
+    return req
+end
+
+--账号登陆
+local function DoAcountLogin(req, anonRespCallback, accountRespCallback)
+    HttpRequest("globalLogin", "UserLoginRequest", "GlobalLoginResp", req, function(resp)
+        if accountRespCallback then
+            accountRespCallback(resp)
+        end
+    end)
+end
+
+--账号按钮点击事件
+local function OnAccountBtnClick(DoOpenAccountView)
+    local localUserName = CsBridge.UnityHelper.GetString("local_userName")
+    if localUserName == nil or string.len(localUserName) == 0 then
+        CsBridge.messageManager:showAlertView(
+                Language:getStr("NoBindAccountTitle"),
+                Language:getStr("NoBindAccountDesp"),
+                Language:getStr("local_cancel"),
+                nil,
+                Language:getStr("local_confirm"),
+                function()
+                    DoOpenAccountView()
+                end
+        )
+    else
+        DoOpenAccountView()
+    end
+end
+
+--获取当前玩家的信息
+local function GetCurPlayerInfo(playerInfo, userName)
+    local curPlayer = {
+        name = playerInfo.nick,
+        icon = playerInfo.icon,
+        userName = userName, --~= "" and userName or Language:getStr("Setting_NoAccount") ,
+        level = playerInfo.level,
+        vip = playerInfo.vip
+    }
+    return curPlayer
+end
+
+---打开修改密码界面
+local function OpenChangePwdView(self, curPlayer)
+    CsBridge.CacheAssetsByModule(
+            self.Module,
+            function()
+                CsBridge.OpenView("ChangePwdView", "SettingModel", false, true)
+            end,
+            "ChangePwdView"
+    )
+end
+
+---设置玩家名字
+local function SetPlayerUserNameTxt(playerUserNameTxt, player)
+    playerUserNameTxt:SetText(player.userName)
+end
+
+---设置绑定用户按钮的状态
+local function SetBindUserBtnState(bindUserBtnObj, sdkHelper, player)
+    bindUserBtnObj:SetSelfActive(not sdkHelper.enableSDK and player.isAnonLogin)
+end
+
+return {
+    AccountLogin = AccountLogin,
+    CheckAccountAndPwd = CheckAccountAndPwd,
+    EncriptionPwd = EncriptionPwd,
+    InitLoginViewSDKAccountBtn = InitLoginViewSDKAccountBtn,
+    UpdateserverURL = UpdateserverURL,
+    SubscribeLoginSuccess = SubscribeLoginSuccess,
+    UnsubscribeLoginSuccess = UnsubscribeLoginSuccess,
+    DoAnonLogin = DoAnonLogin,
+    GetAcountLoginReq = GetAcountLoginReq,
+    DoAcountLogin = DoAcountLogin,
+    OnAccountBtnClick = OnAccountBtnClick,
+    GetCurPlayerInfo = GetCurPlayerInfo,
+    OpenChangePwdView = OpenChangePwdView,
+    SetPlayerUserNameTxt = SetPlayerUserNameTxt,
+    SetBindUserBtnState = SetBindUserBtnState,
+}

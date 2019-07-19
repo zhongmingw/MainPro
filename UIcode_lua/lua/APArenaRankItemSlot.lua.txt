@@ -1,0 +1,40 @@
+local IconData=CS.Client.Library.IconData
+local UnityHelper=CS.Client.Library.UnityHelper
+
+function OnAPArenaRankItemSlotBindValue(slot,data)
+	-- body
+
+	local name_Lab
+	local rank_Lab
+	local score_Lab
+	local fight_Lab
+
+	local rank_Sprite
+
+
+	name_Lab=slot:GetComponentAtPath("NameTxt",CLS_TEXT)
+	rank_Lab=slot:GetComponentAtPath("RankTxt",CLS_TEXT)
+	score_Lab=slot:GetComponentAtPath("ScoreTxt",CLS_TEXT)
+	fight_Lab=slot:GetComponentAtPath("FightTxt",CLS_TEXT)
+	rank_Sprite=slot:GetComponentAtPath("RankSprite",CLS_IMAGE)
+	
+	local palyer_TF=slot:GetComponentAtPath("PlayerBase",CLS_RECTTRANSFORM)
+	BindPlayerBaseInfoValue(palyer_TF,data.playerBaseInfo)
+	if data.playerBaseInfo.haveGroup then
+		name_Lab.text= FormatWorldPlayerName(data.playerBaseInfo.name, data.playerBaseInfo.zone)
+		--"S"..data.playerBaseInfo.zone.."_"..data.playerBaseInfo.name
+	else
+		name_Lab.text=data.playerBaseInfo.name
+	end
+
+	rank_Lab.text=tostring(data.rank)
+	score_Lab.text=tostring(data.score)
+	fight_Lab.text=tostring(data.combat)
+	rank_Sprite.gameObject:SetActive(true)
+
+	if data.rank<=3 and data.rank>0 then
+		IconData.SetIconByName(rank_Sprite.gameObject,"new_com_paiming"..data.rank)
+	else
+		rank_Sprite.gameObject:SetActive(false)
+	end
+end

@@ -1,0 +1,120 @@
+--[[
+	file: LeagueReplayModel.lua
+	author: hangang
+	description: league match replay
+]]
+
+require "LeagueUtils"      --Commands
+
+local cachedMatch
+local cachedBattleData
+
+------initialization----------------------------------------------------------------
+function DoInit()
+end
+
+------View events handler-----------------------------------------------------------------
+function OnCommand_GetBaseViewData(objs)
+    cachedMatch = objs[0]
+    FetchMatchVideos(OnFetchDetailsFinished, cachedMatch.roundID, cachedMatch.IDOnServer)
+end
+
+function OnFetchDetailsFinished(resp)
+	cachedBattleData = resp or {}
+    if resp then
+        local battleList = {
+                [1] = cachedBattleData.battleInfos1,
+                [2] = cachedBattleData.battleInfos2,
+                [3] = cachedBattleData.battleInfos3,
+            }
+        cachedBattleData.battleList = battleList
+    else 
+        cachedBattleData.battleList = {}
+    end
+    self:SendNotification("RefreshView", GetViewData())
+end
+
+function OnCommand_PlayerClicked(objs)
+    local battleIdx = objs[0]
+    local fightIdx = objs[1]
+    local playerIdx = objs[2]
+
+    local battleResult = cachedBattleData.battleList[battleIdx][fightIdx]
+    local IDX_PLAYER_RED = 1
+    local player = playerIdx == IDX_PLAYER_RED
+        and battleResult.redPlayer or battleResult.blackPlayer
+    OpenPlayerInfoView(self, player, "LeagueReplayView")
+end
+
+function OnCommand_MatchItemClicked(objs)
+    local battleIdx = objs[0]
+    local fightIdx = objs[1]
+
+    local fights = cachedBattleData.battleList[battleIdx]
+    local battleResult = fights[fightIdx]
+    local battleInfo = battleResult.battleInfo
+    if battleInfo then
+        PlayVideo(battleInfo)
+    else
+        local playerInfo = battleResult.redWin
+            and battleResult.blackPlayer
+            or battleResult.redPlayer
+        local playerName = FormatWorldPlayerName(playerInfo.name, playerInfo.zone)
+        local hintContent = playerName .. ResultText.Abstention
+        CsBridge.hintUILayer:ShowHintBox(hintContent)
+    end
+end
+
+------Helpers-----------------------------------------------------------------------------
+function GetViewData(data)
+	local viewData = {}
+	if cachedBattleData then
+        local battleList = cachedBattleData.battleList
+        local fightCount = #battleList * MATCH_BATTLE_COUNT
+        local maxIdx = math.min(cachedMatch.fightProcess, fightCount)
+        for idx = 1, maxIdx do
+            local battleIdx = math.floor((idx - 1) / BATTLE_FIGHT_COUNT) + 1
+            local fightIdx = math.fmod(idx, BATTLE_FIGHT_COUNT)
+            fightIdx = fightIdx == 0 and BATTLE_FIGHT_COUNT or fightIdx
+
+            local itemData = {}
+            itemData.battleIdx = battleIdx
+            itemData.fightIdx = fightIdx
+            itemData.timeText = string.format(Language:getStr("Round"), battleIdx) .. " - " .. fightIdx
+
+            local fights = battleList[battleIdx]
+            local battleResult = fights[fightIdx]
+            itemData.player1Data = battleResult.redPlayer
+            itemData.player2Data = battleResult.blackPlayer
+            itemData.player1Name = itemData.player1Data.name
+            itemData.player2Name = itemData.player2Data.name
+            itemData.player1Zone = FormatZone(itemData.player1Data.zone)
+            itemData.player2Zone = FormatZone(itemData.player2Data.zone)
+
+            local givenUp = battleResult.battleInfo == nil
+            local loseText = givenUp and ResultText.Abstention or ResultText.Lose
+            local leftWon = battleResult.redWin
+            itemData.leftResultText = leftWon and ResultText.Win or loseText
+            itemData.rightResultText = leftWon and loseText or ResultText.Win
+            itemData.leftResultColor = leftWon and ResultText.WinColor or ResultText.LoseColor
+            itemData.rightResultColor = leftWon and ResultText.LoseColor or ResultText.WinColor
+
+            itemData.showMask = false
+            itemData.showResult = true
+            itemData.selected = false
+
+            table.insert(viewData, itemData)
+        end
+    end
+
+	return viewData
+end
+
+function PlayVideo(battleInfo)
+    ShowBattleModule(battleInfo, self)
+end
+
+function DoOnExit()
+    cachedMatch = nil
+    cachedBattleData = nil
+end

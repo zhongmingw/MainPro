@@ -1,0 +1,338 @@
+local iconRoot --玩家头像框
+local modelPos = 1--玩家位置
+local endPos = 60--一轮结束位置
+local stepReward = {} --步数奖励
+local finalReward = {} --通关奖励
+local reqReward = {}--奖励缓存
+local slotsData = {} --地图点位
+local stepType = 0--投掷骰子类型
+local costNum = 0
+local EventTable = {--服务器返回的奇遇事件key对应的事件id
+	["event_1"] = MonoPolyActivity.MonopolyBox,
+	["event_2"] = MonoPolyActivity.MonopolyAnswer,
+	["event_3"] = MonoPolyActivity.MonopolyShop,
+	["event_4"] = MonoPolyActivity.MonopolyFight,
+	["event_5"] = MonoPolyActivity.MonopolyChallenge,
+}
+local isAuto
+local TIMER_TICKER = "MonopolyActivityTimer"
+
+--顶部精力资源刷新
+local function RefreshMoneyBanner()
+	local playerInfo = appData:checkData("PlayerInfo")
+	local num = playerInfo.zillionaire
+	self:SendNotification("RefreshEnergy",num)
+end
+
+--刷新遥控骰子消耗
+local function RefreshCostNum(payDiceCount)
+	local tbl = ResTblContainer:GetTable("Remote")
+	local numMixTbl = tbl.numMix
+	local numMaxTbl = tbl.numMax
+	local index = 0
+	local nextNum = payDiceCount+1
+	for i = 0,numMixTbl.Length - 1 do
+		if nextNum >= tonumber(numMixTbl[i]) and nextNum <= tonumber(numMaxTbl[i]) then
+			index = i
+			break
+		end
+	end
+	costNum = tbl.price[index]
+	self:SendNotification("RefreshCostNum",costNum)
+end
+
+--设置头像位置
+local function SetHeroPos(pos)
+	self:SendNotification("ScrollToCenter",pos)
+	modelPos = pos
+	local stageSlot = slotsData[modelPos]
+	local pox = stageSlot.transform.localPosition.x
+	local poy = stageSlot.transform.localPosition.y+70
+	CsBridge.UnityHelper.SetAnchoredPosition(iconRoot.gameObject,pox,poy)
+	CsBridge.UnityHelper.SetlocalScale(iconRoot.gameObject,0.7,0.7,0.7)
+end
+
+--刷新奇遇icon
+local function UpdateActivityIconCountDown(iconData)
+	local tbl = ResTblContainer:GetTable("ZillionaireFortuitous")
+	Timer:AddNonstopTicker(TIMER_TICKER,function()
+		local tempTab = {}
+		local flag = false
+		for _,v in pairs(iconData) do
+			local existTime = tbl:Get(v.id,"time")
+			local tempTime = 0
+			for k,data in pairs(v.actData) do
+				if tempTime < data.createdTime then
+					tempTime = data.createdTime
+				end
+			end
+			local remainTime = CheckTimeRemain(tempTime + existTime*1000)
+			if remainTime ~= "" then--所有事件倒计时都结束后移除活动按钮
+				table.insert(tempTab,v)
+			else
+				flag = true
+			end
+		end
+		if flag then
+			iconData = tempTab
+			self:SendNotification("RefreshActivityIconView",iconData)
+		end
+        self:SendNotification("RefreshActivityIconCountDown",iconData)
+	end,1)
+end
+
+--奇遇事件信息处理
+local function InitMonopolyActData()
+	local zillionaireInfo = appData:checkData("ZillionaireInfo")
+	local iconData = {}--已触发的奇遇事件
+	local eventPoint = zillionaireInfo.eventPoint--当前地图点位对应的奇遇事件
+
+	local tbl = ResTblContainer:GetTable("ZillionaireFortuitous")
+	for key,val in pairs(zillionaireInfo) do
+		local isEvent = string.find(key,"event_")
+		if isEvent then
+			local count = #val
+			local id = EventTable[key]
+			local tempTime = 0
+			local existTime = tbl:Get(id,"time")
+			for k,v in pairs(val) do
+				if tempTime < v.createdTime then
+					tempTime = v.createdTime
+				end
+			end
+			local endTime = tempTime + existTime*1000
+			table.insert(iconData,{count = count,actData = val,id = id,endTime = endTime})
+		end
+	end
+	table.sort(iconData,function(a,b)
+		if a.endTime ~= b.endTime then
+			return a.endTime > b.endTime
+		end
+	end)
+	
+	self:SendNotification("RefreshActivityIconView",iconData)
+	self:SendNotification("RefreshMap",eventPoint,zillionaireInfo.location)
+	UpdateActivityIconCountDown(iconData)
+end
+
+--初始化地图
+local function DoInitMap()
+	-- body
+	local zillionaireInfo = appData:checkData("ZillionaireInfo")
+	if zillionaireInfo then
+		RefreshMoneyBanner()
+		local mapId = zillionaireInfo.id--地图id
+		local tbl = ResTblContainer:GetTable("ZillionaireCustoms")
+		local mapStr = tbl:Get(mapId,"mapId")
+		local mapinfos = string.split(mapStr, ",")
+		self:SendNotification("RefreshBgImage",mapinfos[0],mapinfos[1])
+
+		local eventPoint = zillionaireInfo.eventPoint
+		local tbl = ResTblContainer:GetTable("ZillionaireFortuitous")
+		for k,v in pairs(eventPoint) do
+			local icon = tbl:Get(v.id,"iconImg")
+			eventPoint[k].icon = icon
+		end
+		InitMonopolyActData()
+		RefreshCostNum(zillionaireInfo.payDiceCount)
+		SetHeroPos(zillionaireInfo.location)
+	end
+end
+
+--请求地图信息
+local function DoReqInfo()
+	local req={}
+    req.useless=1
+    HttpRequest("zillionaireCheck", "ZillionaireCheckReq", "ZillionaireCheckResp", req, function(resp)
+        if resp then
+        	DoInitMap()
+        end
+    end)
+end
+
+local function GetAwards()
+	if isAuto and stepType == 0 then
+		for _,reward in pairs(reqReward) do
+			local flag = false
+			for k,v in pairs(stepReward) do
+				if v.id == reward.id then
+					stepReward[k].count = stepReward[k].count + reward.count
+					flag = true
+					break
+				end
+			end
+			if not flag then
+
+				table.insert(stepReward,reward)
+			end
+		end
+	else
+		stepReward = reqReward
+	end
+	PopRewardView(self,stepReward)
+end
+
+--头像框移动
+local function MoveToPos(pos)
+	if modelPos < pos then
+		modelPos = modelPos + 1
+		local stageSlot = slotsData[modelPos]
+		local pox = stageSlot.transform.localPosition.x
+		local poy = stageSlot.transform.localPosition.y+70
+		local t1 = CsBridge.TweenUtils.MoveToByAnchored(iconRoot.transform, pox, poy, 0.5, function()
+	        MoveToPos(pos)
+	    end)
+	    t1:DoPlay()
+	else--移动完成
+		if pos == endPos then--一轮结束
+			pos = 1
+			DoReqInfo()
+			local rewardTab = {}
+			for k,v in pairs(finalReward) do--最终奖励
+				table.insert(rewardTab,v)
+			end
+			for k,v in pairs(stepReward) do--步数奖励
+				table.insert(rewardTab,v)
+			end
+			CsBridge.CacheAssetsByModule( self.Module,
+			function()
+			    local view = CsBridge.OpenView("MonopolyFinalAwardView", "MonopolyModel",false,true)
+		        view:SetParamDataList(rewardTab)
+		    end, "MonopolyFinalAwardView", "ItemSlot")
+		    self:SendNotification("RefreshThrowBtn",true)
+		else
+			local zillionaireInfo = appData:checkData("ZillionaireInfo")
+			local eventPoint = zillionaireInfo.eventPoint
+			local qyId = nil--是否触发奇遇事件
+			local tbl = ResTblContainer:GetTable("ZillionaireFortuitous")
+			local showIcon
+			for k,v in pairs(eventPoint) do
+				local icon = tbl:Get(v.id,"iconImg")
+				eventPoint[k].icon = icon
+				if v.location == pos then
+					qyId = v.id
+					showIcon = icon
+				end
+			end
+			if qyId then
+				self:SendNotification("TriggerIncident",showIcon,eventPoint)
+			else
+				if isAuto and stepType == 0 then
+					self:SendNotification("AutoThrow")
+				else
+					GetAwards()
+					stepReward = {}
+				end
+				self:SendNotification("RefreshMap",eventPoint,zillionaireInfo.location)
+				self:SendNotification("RefreshThrowBtn",true)
+			end
+		end
+	end
+end
+
+function OnCommand_InitMonopolyActData(objs)
+	-- body
+	InitMonopolyActData()
+	GetAwards()
+	stepReward = {}
+	self:SendNotification("RefreshThrowBtn",true)
+end
+
+--设置地图
+function OnCommand_InitMap(objs)
+	iconRoot = objs[0]
+	slotsData = objs[1]
+	DoReqInfo()
+end
+
+local function CheckEnergyEnoug()
+	-- body
+	local tbl = ResTblContainer:GetTable(UIOpenBase.actorTbl)
+	local itemId = tbl:Get(UI_OPEN_TYPE_MONOPOLY,UIOpenBase.addCountItemId)
+    local itemData = appData:checkItem("PackItem",tostring(itemId))
+	local count = 0
+	if itemData ~= nil then
+		count = itemData.count
+	end
+    ShowExchangeView(self,2,tonumber(itemId),count,function()
+    	RefreshMoneyBanner()
+    end)
+end
+
+--购买精力道具
+function OnCommand_BuyEnergyItem()
+	CheckEnergyEnoug()
+end
+
+--是否设置自动投掷
+function OnCommand_AutoThrow(objs)
+	isAuto = objs[0]
+	if isAuto then
+		stepReward = {}
+	end
+end
+
+--打开奇遇活动界面
+function OnCommand_OpenActivityView(objs)
+	local actData = objs[0]
+	actData.refreshCallback = DoReqInfo
+	self:ShowModule("MonopolyActivityModule",{actData})
+end
+
+--头像框位置刷新
+local function RefreshIconPos(pos)
+	self:SendNotification("RefreshThrowBtn",false)
+	if pos == 1 then
+		pos = endPos
+	end
+	self:SendNotification("ScrollToCenter",pos)
+	MoveToPos(pos)
+end
+
+--投掷骰子🎲
+function OnCommand_ThrowPoint(objs)
+	local req = {}
+	req.step = objs[0]
+	stepType = objs[0]
+	if stepType ~= 0 then
+		if not CheckResEnough(ResourceEnum.Gem,tonumber(costNum),true) then
+			self:ShowModule("PayModule",nil,false)
+			return
+		elseif not CheckResEnough(ResourceEnum.Zillionaire,GetConstValue("ExpendVigor"),true) then
+			CheckEnergyEnoug()
+			return
+		end
+	else
+		if not CheckResEnough(ResourceEnum.Zillionaire,GetConstValue("ExpendVigor"),true) then
+			CheckEnergyEnoug()
+			return
+		end
+	end
+	reqReward = {}
+	HttpRequest("zillionaireDice","ZillionaireDiceReq","ZillionaireDiceResp",req,function(resp)
+		if resp then
+			reqReward = resp.stepReward
+			finalReward = resp.finalReward
+			local zillionaireInfo = appData:checkData("ZillionaireInfo")
+			local movePos = zillionaireInfo.location - modelPos
+			if zillionaireInfo.location == 1 then
+				movePos = endPos - modelPos
+			end
+			self:SendNotification("PlaySpine",movePos,zillionaireInfo.location)
+			RefreshMoneyBanner()
+			RefreshCostNum(zillionaireInfo.payDiceCount)
+		end
+	end)
+end
+
+function OnCommand_RefreshIconPos(objs)
+	local location = objs[0]
+	RefreshIconPos(location)
+end
+
+function DoOnExit()
+	iconRoot = nil
+	stepReward = nil
+	finalReward = nil
+	slotsData = nil
+end

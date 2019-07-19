@@ -1,0 +1,573 @@
+require "SkillItemSlot"
+
+local heroComposeObj
+local heroUnknownObj
+local heroKnownObj
+local raceBgObj
+local backRaceBgObj
+local floorSpineObj
+local floorSpine
+local modelRoot
+local heroModel
+local heroModelSkeleton
+local heroNameTxt 
+local heroRaceObj 
+local heroRaceImg
+local heroStarRoot 
+
+local heroSimpleInfoObj
+local heroSimpleInfoFightTxt 
+local heroSimpleInfoHpTxt
+local heroSimpleInfoAttackTxt
+local heroSimpleInfoDefTxt
+local heroSimpleInfoSpeedTxt
+local heroSimpleInfoSkillGrid
+
+local initModelRootPos
+local targetModelRootPos
+
+local heroInfoBtn
+local composeBtn
+
+local material1HeroBase
+local material1AddFlag 
+local material1NumTxt
+local material1RedFlag
+local t1
+local material2HeroBase
+local material2AddFlag 
+local material2NumTxt
+local material2RedFlag
+local t2
+local material3HeroBase
+local material3AddFlag 
+local material3NumTxt
+local material3RedFlag
+local t3
+local material4HeroBase
+local material4AddFlag 
+local material4NumTxt
+local material4RedFlag
+local t4
+
+local heroComposeGrid
+
+local composeEffectObj
+local apearSpine
+local heroEffect
+
+local togArr
+local flag
+
+local moveTweener
+local fadeTweener
+
+local isInit = false
+local waitSelectEffect = false
+
+local consume 
+local topNumTxt
+
+function DoInit()
+    self.Shadow = 1
+end
+
+function InitUI()
+
+    local togGroup = self.transform:Find("Bottom/TogGroup")
+	togArr = {}
+    for i=1,togGroup.childCount-1 do
+		local tog = togGroup:GetChild(i):GetComponent(CLS_TOGGLE_ARCHLY)
+        tog.ClickAnim = true
+        if i >= 2 then
+            tog.SubImg = tog.transform:Find("iconImg"):GetComponent(CLS_IMAGE)
+        end
+		table.insert(togArr, tog)
+    end 
+    flag = togGroup:Find("Flag")
+
+    heroComposeObj = self.transform:Find("Center/HeroCompose")
+    heroUnknownObj = self:GetGameObjectAtPath("Center/HeroCompose/Unknown") 
+    heroKnownObj = self:GetGameObjectAtPath("Center/HeroCompose/Known") 
+    raceBgObj = self:GetGameObjectAtPath("Center/RaceBg") 
+    backRaceBgObj = self:GetGameObjectAtPath("Center/BackRaceBg") 
+    floorSpineObj = self.transform:Find("Center/HeroCompose/FloorSpine")
+    modelRoot = heroKnownObj.transform:Find("HeroModelRoot")
+    heroNameTxt = heroKnownObj.transform:GetComponentAtPath("NameTxt" ,CLS_TEXT) 
+    heroRaceObj = heroKnownObj.transform:GetGameObjectAtPath("NameTxt/Race") 
+    heroRaceImg = heroRaceObj.transform:GetGameObjectAtPath("RaceImg") 
+    heroStarRoot = heroKnownObj.transform:Find("StarRoot")
+
+    heroSimpleInfoObj = self:GetComponentAtPath("Center/HeroSimpleInfo" ,CLS_CANVAS_GROUP) 
+    heroSimpleInfoFightTxt = heroSimpleInfoObj.transform:GetComponentAtPath("Center/FightTxt" ,CLS_TEXT) 
+    heroSimpleInfoHpTxt = heroSimpleInfoObj.transform:GetComponentAtPath("Center/Hp/HpTxt" ,CLS_TEXT) 
+    heroSimpleInfoAttackTxt = heroSimpleInfoObj.transform:GetComponentAtPath("Center/Attack/AttackTxt" ,CLS_TEXT) 
+    heroSimpleInfoDefTxt = heroSimpleInfoObj.transform:GetComponentAtPath("Center/Def/DefTxt" ,CLS_TEXT) 
+    heroSimpleInfoSpeedTxt = heroSimpleInfoObj.transform:GetComponentAtPath("Center/Speed/SpeedTxt" ,CLS_TEXT) 
+    heroSimpleInfoSkillGrid = heroSimpleInfoObj.transform:GetComponentAtPath("Center/SkillGrid" ,CLS_UI_ITEM_GRID)
+
+
+    initModelRootPos = heroComposeObj.localPosition
+    composeBtn = self:GetComponentAtPath("Center/ComposeBtn" ,CLS_BUTTON_ARCHLY) 
+    heroInfoBtn = self:GetComponentAtPath("Top/HeroInfoBtn" ,CLS_BUTTON_ARCHLY) 
+
+    material1HeroBase = self.transform:Find("Center/Materials/Material1/Mat1HeroBase")
+    material1AddFlag = self:GetGameObjectAtPath("Center/Materials/Material1/AddFlag") 
+    material1NumTxt = self:GetComponentAtPath("Center/Materials/Material1/NumTxt" ,CLS_TEXT) 
+    material1RedFlag = self:GetGameObjectAtPath("Center/Materials/Material1/NewFlag") 
+    material2HeroBase = self.transform:Find("Center/Materials/Material2/Mat2HeroBase")
+    material2AddFlag = self:GetGameObjectAtPath("Center/Materials/Material2/AddFlag") 
+    material2NumTxt = self:GetComponentAtPath("Center/Materials/Material2/NumTxt" ,CLS_TEXT) 
+    material2RedFlag = self:GetGameObjectAtPath("Center/Materials/Material2/NewFlag") 
+    material3HeroBase = self.transform:Find("Center/Materials/Material3/Mat3HeroBase")
+    material3AddFlag = self:GetGameObjectAtPath("Center/Materials/Material3/AddFlag") 
+    material3NumTxt = self:GetComponentAtPath("Center/Materials/Material3/NumTxt" ,CLS_TEXT) 
+    material3RedFlag = self:GetGameObjectAtPath("Center/Materials/Material3/NewFlag")
+    material4HeroBase = self.transform:Find("Center/Materials/Material4/Mat4HeroBase")
+    material4AddFlag = self:GetGameObjectAtPath("Center/Materials/Material4/AddFlag") 
+    material4NumTxt = self:GetComponentAtPath("Center/Materials/Material4/NumTxt" ,CLS_TEXT) 
+    material4RedFlag = self:GetGameObjectAtPath("Center/Materials/Material4/NewFlag") 
+
+    heroComposeGrid = self:GetComponentAtPath("Bottom/heroSV/ScrollRect/Viewport/HeroComposeGrid" ,CLS_UI_ITEM_GRID) 
+    composeEffectObj = self:GetGameObjectAtPath("Effect") 
+
+    apearSpine = self.transform:Find("Center/HeroCompose/ApearSpine")
+    heroEffect = composeEffectObj.transform:Find("HeroBase")
+
+    consume = {
+        icon = self:GetGameObjectAtPath("Center/ComposeBtn/iconImg"),
+        num = self:GetComponentAtPath("Center/ComposeBtn/NumTxt", CLS_TEXT)
+    }
+    topNumTxt = self:GetComponentAtPath("Top/kuang/NumTxt",CLS_TEXT)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitHeroComposeData")
+end
+
+local function RefreshComposeConsume(curConsume)
+    ShowOneConsume(consume.icon,consume.num,curConsume)
+    SetFontColorWithEnough(consume.num,function()
+        return CheckItemEnough(curConsume.id,curConsume.typeId,curConsume.count,false)
+    end,color2)
+end
+
+function OnNotification_RefreshRedFlag(objs)
+    local redHeros = objs[0]
+    for i,redHero in ipairs(redHeros) do
+        heroComposeGrid:SingleRefreshSlot(redHero)
+    end
+end
+
+function OnNotification_RefreshTopView(objs)
+    local data = objs[0]
+    topNumTxt.text = GetValueAbbreviation(data)
+end
+
+function OnNotification_RefreshHeroComposeView(objs)
+    if floorSpine == nil then
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            local model = CsBridge.objectCache:CreateObject("HeroFloorSpine", true)
+            model.transform:SetParent(floorSpineObj, false)
+            CsBridge.UnityHelper.SetAnchoredPosition(model.gameObject,0,0)
+            CsBridge.UnityHelper.SetlocalScale(model.gameObject,-0.3,0.3,1)
+            floorSpine = model:GetComponent("Spine.Unity.SkeletonGraphic")
+            floorSpine:PlayAnimation("tongyong", true)
+        end, "HeroFloorSpine")
+    end
+    composeBtn.Gray = true
+    heroInfoBtn.Gray = true
+    local heroArr = objs[0]
+    heroComposeGrid:RefreshItemSlots(heroArr,self.gameObject,"HeroItemSlot")
+end
+
+function OnNotification_InitScreen(objs)
+    togArr[objs[0]+1].isOn = false
+    togArr[1].isOn = true
+    CsBridge.UnityHelper.SetAnchoredPosition(flag.gameObject,togArr[1].transform.localPosition.x,flag.localPosition.y)
+end
+
+function OnNotification_ScreenAnim(objs)
+    local curSort = objs[0]+1
+    local direct = objs[1]
+    local offset = 10
+    if direct then
+        offset = -offset
+    end
+    togArr[curSort].isOn = true
+    local targetX = togArr[curSort].transform.localPosition.x
+    local t1 = CsBridge.TweenUtils.MoveTo(flag,targetX+offset,flag.localPosition.y,0.15,function()
+        local t2 = CsBridge.TweenUtils.MoveTo(flag,targetX,flag.localPosition.y,0.05)
+        t2:DoPlay()
+    end)
+    t1:DoPlay()
+end
+
+function OnNotification_ScreenHero(objs)
+	local heroArr = objs[0]
+	heroComposeGrid:RefreshItemSlots(heroArr, self.gameObject, "HeroItemSlot")
+end 
+
+function OnHeroComposeGridHeroItemSlotClick(obj)
+    if waitSelectEffect then
+		return
+	end
+    if not obj.m_data.IsSelected then
+        --self:SendCommand("SelectHero",obj.m_index)
+        ShowHeroEffect(obj.m_data,obj.transform.localPosition,function()
+            self:SendCommand("SelectHero",obj.m_index)
+        end)
+    end
+end
+
+function ShowHeroEffect(hero,startPos,onFinish)
+    composeEffectObj:SetSelfActive(true)
+    heroEffect.gameObject:SetSelfActive(true)
+    heroEffect.localPosition = startPos
+    BindHeroBaseValue(heroEffect,hero)
+    CrossRaceBg(hero.heroId,backRaceBgObj,raceBgObj)
+    CsBridge.TweenUtils.MoveTo(heroEffect,heroComposeObj.transform.localPosition.x,heroUnknownObj.transform.localPosition.y,0.2,function()
+        heroEffect.gameObject:SetSelfActive(false)
+        composeEffectObj:SetSelfActive(false)
+        onFinish()
+    end)
+end 
+
+function OnNotification_SelectHero(objs)
+    local heroSelectData = objs[0]
+    heroSelectData.IsSelected = true 
+    heroComposeGrid:SingleRefreshSlot(heroSelectData)
+    if heroInfoBtn.Gray then
+        material1AddFlag:SetSelfActive(true)
+        material2AddFlag:SetSelfActive(true)
+        material3AddFlag:SetSelfActive(true)
+        material4AddFlag:SetSelfActive(true)
+        material1NumTxt.gameObject:SetSelfActive(true)
+        material2NumTxt.gameObject:SetSelfActive(true)
+        material3NumTxt.gameObject:SetSelfActive(true)
+        material4NumTxt.gameObject:SetSelfActive(true)
+    end
+    heroInfoBtn.Gray = false
+    --end
+end
+
+function OnNotification_CancelSelectHero(objs)
+    local heroSelectData = objs[0]
+    heroSelectData.IsSelected = false
+    heroComposeGrid:SingleRefreshSlot(heroSelectData)
+end
+
+function OnNotification_RefreshComposeHero(objs)
+    local curHero = objs[0]
+    local matArr = objs[1]
+    local refreshHero = objs[2]
+    local refreshMat = objs[3]
+    local matEnough = objs[4]
+    local ownHasMatArr = objs[5]
+    local curConsumeArr = objs[6]
+    local matType = objs[7]
+
+    if refreshHero then
+        if heroModel ~= nil then
+            DestroyModel(heroModel.gameObject)
+            heroModel = nil
+            heroModelSkeleton = nil
+        end
+
+        CreateModel(curHero.model,modelRoot)
+        heroUnknownObj:SetSelfActive(false)
+        heroKnownObj:SetSelfActive(true)
+        RefreshComposeHeroInfo(curHero)
+
+        CsBridge.CacheAssetsByModule(self.Module,function()
+            local obj = CsBridge.objectCache:CreateObject("HeroApearSpine", true)
+            obj.transform:SetParent(apearSpine,false)
+            CsBridge.UnityHelper.SetAnchoredPosition(obj.gameObject,0,0)
+		    CsBridge.UnityHelper.SetlocalScale(obj.gameObject,0.5,0.5,1)
+		    obj:GetComponent("SkeletonGraphic"):PlayAnimation("born",false,function()
+                DestroyModel(obj)
+		    end)
+        end,"HeroApearSpine")
+    end
+    if refreshMat then
+        RefreshComposeMaterial(objs[1], refreshHero, ownHasMatArr, matType)
+    end
+    if curConsumeArr then
+        RefreshComposeConsume(curConsumeArr[1])
+    end
+    composeBtn.Gray = not matEnough
+
+    if heroModelSkeleton ~= nil then
+        heroModelSkeleton:ChangeAlpha(matEnough and 1 or 0.6)
+    end
+end
+
+function RefreshComposeHeroInfo(curHero)
+    CsBridge.IconData.SetRawImageByName(raceBgObj, "ui_bg_zy"..curHero.group)
+    raceBgObj:SetSelfActive(true)
+    heroNameTxt:SetText(curHero.title)
+    heroNameTxt:SetTextWithSizeChange(curHero.title)
+    SetIconByRaceId(heroRaceImg,curHero.group)
+    SetHeroStar(curHero.quality, heroStarRoot, curHero.distillationStar)
+    floorSpine:PlayAnimation(GetPlatformAnim(curHero.group),true)
+end
+
+function RefreshComposeMaterial(materials,update,ownHasMatArr,matType)
+    t1 = SetComposeMaterial(material1HeroBase,materials[1],material1NumTxt,material1AddFlag,update or matType == 1,material1RedFlag,ownHasMatArr[1],t1)
+    t2 = SetComposeMaterial(material2HeroBase,materials[2],material2NumTxt,material2AddFlag,update or matType == 2,material2RedFlag,ownHasMatArr[2],t2)
+    t3 = SetComposeMaterial(material3HeroBase,materials[3],material3NumTxt,material3AddFlag,update or matType == 3,material3RedFlag,ownHasMatArr[3],t3)
+    t4 = SetComposeMaterial(material4HeroBase,materials[4],material4NumTxt,material4AddFlag,update or matType == 4,material4RedFlag,ownHasMatArr[4],t4)
+end
+
+function SetComposeMaterial(base,mat,numTxt,addFlag,update,redFlag,ownMat,t)
+    BindHeroBaseValue(base,mat)
+    local putNum = #mat.putMatList
+    numTxt:SetText(putNum.."/"..mat.count)
+    if putNum >= mat.count then
+        SetFontColor(numTxt,color2)
+        addFlag:SetSelfActive(false)
+    else
+        SetFontColor(numTxt,color32)
+        addFlag:SetSelfActive(true)
+        addFlag:SetSelfActive(true)
+        if t then
+            t:DoKill()
+        end
+        t = CsBridge.TweenUtils.DoImageFadeInAndOut(addFlag:GetComponent(CLS_IMAGE),0.5)
+        t:DoPlay()
+    end
+    if putNum == 0 then
+        base.gameObject:SetSelfAndChildrenGray(true)
+    else
+        base.gameObject:SetSelfAndChildrenGray(false)
+    end
+    if update then
+        SetUpdateEffect(base.transform.parent,0.5)
+    end
+    redFlag:SetSelfActive(ownMat)
+    return t
+end
+
+function CreateModel(name, root, matEnough)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local model = CsBridge.objectCache:CreateObject(name, true)
+        model.transform:SetParent(root, false)
+        CsBridge.UnityHelper.SetAnchoredPosition(model.gameObject,0,0)
+		CsBridge.UnityHelper.SetlocalScale(model.gameObject,-0.7,0.7,1)
+        heroModelSkeleton = model.transform:GetChild(0):GetComponent("Spine.Unity.SkeletonGraphic")
+        heroModelSkeleton:PlayAnimation("stand", true)
+        heroModel = model
+        heroModelSkeleton:ChangeAlpha(0.6)
+        waitSelectEffect = false
+	end, name)
+end 
+
+function OnMat1HeroBaseClick(sender)
+    self:SendCommand("OpenMaterialSelect",1)
+end
+
+function OnMat2HeroBaseClick(sender)
+    self:SendCommand("OpenMaterialSelect",2)
+end
+
+function OnMat3HeroBaseClick(sender)
+    self:SendCommand("OpenMaterialSelect",3)
+end
+
+function OnMat4HeroBaseClick(sender)
+    self:SendCommand("OpenMaterialSelect",4)
+end
+
+function OnTogGroupClick(isOn,index)
+	if not isOn then
+		return
+    end 
+	self:SendCommand("ScreenHero",index-1)
+end 
+
+function OnComposeBtnClick(sender)
+    self:SendCommand("Compose")
+end
+
+function OnNotification_ComposeEnd(objs)
+    ShowComposeEffect(objs[0],function()
+        objs[1]()
+    end)
+end
+
+function ShowComposeEffect(isBreak,onFinish)
+    composeEffectObj:SetSelfActive(true)
+    local spineName = isBreak and "HeroBreakComposeSpine" or "EquipmentComposeSpine"
+    local animName = isBreak and "hero_breakthrough" or "a_1"
+    CsBridge.CacheAssetsByGroup(spineName,function()
+		local obj = CsBridge.objectCache:CreateObject(spineName, true)
+		obj.transform:SetParent(composeEffectObj.transform:GetChild(0),false)
+		obj:GetComponent(CLS_SKELETONGRAPHIC):PlayAnimation(animName,false,function()
+			local name = obj.name
+			CS.UnityEngine.GameObject.Destroy(obj)
+            CsBridge.objectCache:ClearGroup(name, true)
+            composeEffectObj:SetSelfActive(false)
+			onFinish()
+		end)
+	end,spineName)
+end 
+
+function OnHeroInfoBtnClick(sender)
+    self:SendCommand("OpenSimpleInfoView")
+end
+
+function OnNotification_ShowSimpleInfoEffect(objs)
+    local offset = -150
+    local fadeTo = 1
+    heroSimpleInfoObj.gameObject:SetSelfActive(true)
+    if objs[0] then
+        offset = initModelRootPos.x
+        fadeTo = 0
+    end
+    if moveTweener then
+        moveTweener:DoKill()
+    end
+    moveTweener = CsBridge.TweenUtils.MoveTo(heroComposeObj,offset,initModelRootPos.y,0.5)
+    if objs[1]~=nil then
+        moveTweener:OnCompleteAction(objs[1])
+    end
+    moveTweener:DoPlay()
+
+    if fadeTweener then
+        fadeTweener:DoKill()
+    end
+    fadeTweener = CsBridge.TweenUtils.FadeTo(heroSimpleInfoObj,fadeTo,0.5)
+    if fadeTo == 0 then
+        fadeTweener:OnCompleteAction(function()
+            heroSimpleInfoObj.gameObject:SetSelfActive(false)
+        end)
+    end
+    fadeTweener:DoPlay()
+end
+
+function OnNotification_RefreshSimpleInfoView(objs)
+    local curHero = objs[0]
+    heroSimpleInfoFightTxt:SetText(tostring(curHero.fight))
+    heroSimpleInfoHpTxt:SetText(tostring(curHero.hp))
+	heroSimpleInfoAttackTxt:SetText(tostring(curHero.attack))
+	heroSimpleInfoDefTxt:SetText(tostring(curHero.def))
+    heroSimpleInfoSpeedTxt:SetText(tostring(curHero.speed))
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        heroSimpleInfoSkillGrid:RefreshItemSlots(curHero.skill,self.gameObject,"SkillItemSlot")
+	end, "SkillItemSlot")
+end
+
+function OnSkillGridItemClick(obj)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+		local view = CsBridge.OpenView("SkillTipView","SkillTipModel",false,true)
+		view:SendCommand("InitData",obj.m_data)
+	end, "SkillTipView")
+end
+
+function OnHeroSimpleInfoBtnClick(sender)
+    self:SendCommand("OpenDetailAttr")
+end
+
+function OnHelpBtnClick(sender) --帮助
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("HelpView","HeroComposeModel",false,true)
+        view:SetData(INSTRUCTION_HEROCOMPOSE)
+	end, "HelpView")
+end
+
+function OnClose()
+    if heroModel ~= nil then
+        DestroyModel(heroModel.gameObject)
+        heroModel = nil
+        heroModelSkeleton = nil
+    end
+    if floorSpine ~= nil then
+        DestroyModel(heroModel.gameObject)
+        heroModel = nil
+        heroModelSkeleton = nil
+    end
+    SetRaceBgByHeroId(raceBgObj,nil)
+end
+
+function OnCloseBtnClick(sender)
+    self:ReturnBack()
+end
+
+function OnMaskClick(sender)
+    self:ReturnBack()
+end
+
+function DoExit()
+
+    heroComposeObj = nil
+    heroUnknownObj = nil
+    heroKnownObj = nil
+    raceBgObj = nil
+    backRaceBgObj = nil
+    floorSpineObj = nil
+    floorSpine = nil
+    modelRoot = nil
+    heroModel = nil
+    heroModelSkeleton = nil
+    heroNameTxt  = nil
+    heroRaceObj  = nil
+    heroRaceImg = nil
+    heroStarRoot  = nil
+
+    heroSimpleInfoObj = nil
+    heroSimpleInfoFightTxt  = nil
+    heroSimpleInfoHpTxt = nil
+    heroSimpleInfoAttackTxt = nil
+    heroSimpleInfoDefTxt = nil
+    heroSimpleInfoSpeedTxt = nil
+    heroSimpleInfoSkillGrid = nil
+
+    initModelRootPos = nil
+    targetModelRootPos = nil
+
+    heroInfoBtn = nil
+    composeBtn = nil
+
+    material1HeroBase = nil
+    material1AddFlag  = nil
+    material1NumTxt = nil
+    material1RedFlag = nil
+    t1 = nil
+    material2HeroBase = nil
+    material2AddFlag  = nil
+    material2NumTxt = nil
+    material2RedFlag = nil
+    t2 = nil
+    material3HeroBase = nil
+    material3AddFlag  = nil
+    material3NumTxt = nil
+    material3RedFlag = nil
+    t3 = nil
+    material4HeroBase = nil
+    material4AddFlag  = nil
+    material4NumTxt = nil
+    material4RedFlag = nil
+    t4 = nil
+
+    heroComposeGrid = nil
+
+    composeEffectObj = nil
+    apearSpine = nil
+    heroEffect = nil
+
+    togArr = nil
+    flag = nil
+
+    moveTweener = nil
+    fadeTweener = nil
+
+    isInit = nil
+    waitSelectEffect = nil
+
+    consume  = nil
+    topNumTxt = nil
+end

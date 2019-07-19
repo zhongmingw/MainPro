@@ -1,0 +1,532 @@
+local utils = require "HeroBagUtils"
+local HeroAttrData = require "HeroAttrData"
+local soulImprintItemBagUtils = require "SoulImprintItemBagUtils"
+local commonHeroBagUtils = require('CommonHeroBagUtils')
+
+local ArrOperation = {
+    Update = 1,
+    Add = 2,
+    Remove = 3
+}
+
+local HeroShowPageType = utils.HeroShowPageType
+
+local HeroBagPageType = utils.HeroBagPageType
+
+local curType
+
+local curPageType = HeroShowPageType.HeroInfo
+local curView
+
+local curHero
+local curHeroArr
+local curIndex
+local maxIndex
+local leftHero
+local rightHero
+local curPos
+local isRight
+local MIN_USE_LEVEL
+
+local function IsShowPutOnSoulImprintBtn()
+    local showSoulImprintItemBtn = false
+    if curHero == nil or curType == HeroBagPageType.Book then
+        return showSoulImprintItemBtn
+    end
+    local pbHero = GetPbHero(curHero)
+    if pbHero then
+        curHero.showHaveEmblem = (pbHero.haveEmblemUid and pbHero.haveEmblemUid > 0)
+        showSoulImprintItemBtn = (not pbHero.isEmblem) and UIOpen(UI_OPEN_TYPE_SOULIMPRINT,false)
+    end
+    return showSoulImprintItemBtn
+end
+
+local function OpenPage(viewName, modelName, data, ...)
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        curView = CsBridge.OpenView(viewName, modelName)
+        curView:SetParamDataList(data)
+    end,viewName, ...)
+end
+
+local function OpenPageByType(type)
+    if curView then
+        self:HideView(curView.gameObject.name)
+    end
+    if type == HeroShowPageType.HeroInfo then
+        local data = {
+            curHero = table.copy(curHero),
+            curType = curType
+        }
+        OpenPage("HeroInfoView","HeroInfoModel",data)
+    elseif type == HeroShowPageType.HeroEquip then
+        OpenPage("HeroEquipView","HeroEquipModel",table.copy(curHero),"HeroEquipItemSlot")
+    elseif type == HeroShowPageType.HeroDistillation then
+        OpenPage("HeroDistillationView","HeroDistillationModel",table.copy(curHero),"HeroMatItemSlot")
+    elseif type == HeroShowPageType.HeroRating then
+        utils.OpenHeroRatingView(self, curHero.heroId, true, function(view)
+            curView = view
+        end)
+    elseif type == HeroShowPageType.HeroJewelEquip then
+        OpenPage("JewelEquipView","HeroJewelEquipModel",table.copy(curHero),"JewelItemSlot")
+    end
+end
+
+local function GetHeroByIndex(index)
+    if index < 1 or index > maxIndex then
+        return nil
+    end
+    return curHeroArr[index]
+end
+
+local function UpdateHeroShowData(hero)
+    if hero == nil or curType == HeroBagPageType.Book then
+        return
+    end
+    local newHero = appData:checkItem("HeroItem",hero.uid)
+    hero.lock = CheckHeroInDuty(newHero,HeroDuty.LOCK)
+    hero.skill = GetHeroSkillArr(hero)
+end
+
+local function CheckHeroShowDistillationTog(curHero)
+    local quality = curHero.qulity or ResTblContainer:GetPropToInt(curHero.heroId, HeroBase.quality, HeroBase.actorTbl)
+    return quality >= DISTILL_QUALITY and quality < BREAK_QUALITY and global_heroDistillationDic[curHero.heroId]
+end
+
+local function CheckHeroShowJewelTog()
+    return UIOpen(UI_OPEN_TYPE_JEWEL, false)
+end
+
+local function UpdateExtraTog()
+    if curType ~= HeroBagPageType.Hero then
+        return
+    end
+    self:SendNotification("RefreshExtraTog",{
+        {
+            type = 3,
+            ret = CheckHeroShowDistillationTog(curHero)
+        },
+        {
+            type = 5,
+            ret = curType == HeroBagPageType.Hero and CheckHeroShowJewelTog() or false
+        }
+    })
+end
+
+local function CheckRuneRedTip()
+    local rune = utils.GetHeroRune(curHero.runeData)
+    local runeOpenLevel = GetConstValue("runeOpen")
+    return (GetHeroAllLevel(curHero.grade, curHero.level) >= runeOpenLevel and rune.level == 0)
+            or (rune.level ~= 0 and CheckRuneLevelUp(rune))
+end
+
+local function RefreshHeroShowRedTip()
+    if curType == HeroBagPageType.Book then
+        return
+    end
+    local infoRet = CheckHeroGreatLevelRedFlag(curHero)
+    local equipRet = CheckHeroGreatEquipRedFlag(curHero).redFlag or CheckRuneRedTip()
+    local distillRet = CheckHeroDistillationRedFlag(curHero)
+    local jewelRet = CheckHeroJewelEquipRedFlag(curHero)
+    self:SendNotification("RefreshHeroShowRedTip",infoRet,equipRet,distillRet,jewelRet)
+end
+
+local function OnUpdateHeroShowHeroInfoRedTip(obj)
+    local redFlag = obj
+    self:SendNotification("RefreshHeroShowHeroInfoRedTip", redFlag)
+end
+
+local function OnUpdateHeroShowHeroEquipRedTip(obj)
+    local redFlag = obj
+    self:SendNotification("RefreshHeroShowHeroEquipRedTip", redFlag)
+end
+
+local function OnUpdateHeroShowHeroDistillRedTip(obj)
+    local redFlag = obj
+    self:SendNotification("RefreshHeroShowHeroDistillRedTip", redFlag)
+end
+
+local function OnUpdateHeroShowHeroJewelEquipRedTip(obj)
+    local redFlag = obj
+    self:SendNotification("RefreshHeroShowHeroJewelEquipRedTip", redFlag)
+end
+
+local function OnUpdateHeroShowRedTip(obj)
+    RefreshHeroShowRedTip()
+end
+
+local function OnUpdateHeroShowViewTopRes(obj)
+    local anims = obj
+    local playerInfo = appData:checkData("PlayerInfo")
+    local soulCoin = playerInfo.soulCoin or 0
+    local stepStoneCoin = playerInfo.stepStoneCoin or 0
+    local showSoulAnim,showStepStoneAnim = anims[1],anims[2]
+    self:SendNotification("RefreshTopView",showSoulAnim,soulCoin,showStepStoneAnim,stepStoneCoin)
+end
+
+local function OnUpdateCurHero(obj)
+    local newHero = appData:checkItem("HeroItem",curHero.uid)
+    curHero.heroId = newHero.heroId
+    curHero.quality = ResTblContainer:GetPropToInt(newHero.heroId,HeroBase.quality,HeroBase.actorTbl)
+    curHero.model = ResTblContainer:GetPropToStr(newHero.heroId,HeroBase.model,HeroBase.actorTbl)
+    curHero.level = newHero.level
+    curHero.grade = newHero.grade
+    curHero.weaponId = newHero.weaponId or 0
+    curHero.hatId = newHero.hatId or 0
+    curHero.clothId = newHero.clothId or 0
+    curHero.shoesId = newHero.shoesId or 0
+    curHero.relicId = newHero.relicId
+    curHero.runeData = newHero.rune
+    curHero.distillationStar = newHero.distillationStar
+    curHero.distillationLevel = newHero.distillationLevel
+    curHero.breakLevel = newHero.breakLevel
+    curHero.jewelIds = newHero.jewelIds
+end
+
+local function OnHeroGradeUp(obj)
+    UpdateHeroShowData(curHero)
+    self:SendNotification("RefreshSkill", curHero.skill)
+end
+
+local function OnHeroLevelUp(obj)
+    self:SendNotification("ShowLevelUpEffect")
+end
+
+local function OnUpdateCurHeroArr(obj)
+    local operation, updateArr = obj.operation, obj.updateArr
+    if operation == ArrOperation.Remove then
+        for i,hero in ipairs(updateArr) do
+            local index = table.indexofbyfunc(curHeroArr,function(v)
+                return v.uid == hero.uid
+            end)
+            if index ~= false then
+                table.remove(curHeroArr,index)
+            end
+        end
+    end
+    curIndex = table.indexof(curHeroArr,curHero)
+    maxIndex = #curHeroArr
+    UpdateHeroShowData(curHero)
+    local oldUid = leftHero and leftHero.uid or 0
+    leftHero = GetHeroByIndex(curIndex-1)
+    UpdateHeroShowData(leftHero)
+    if leftHero then
+        leftHero.clear = oldUid ~= leftHero.uid
+    end
+    oldUid = rightHero and rightHero.uid or 0
+    rightHero = GetHeroByIndex(curIndex+1)
+    UpdateHeroShowData(rightHero)
+    if rightHero then
+        rightHero.clear = oldUid ~= rightHero.uid
+    end
+end
+
+local function OnHeroDistill(obj)
+    --TODO:clear掉被作为狗粮的英雄spine，再加载，不是狗粮的不clear
+    --ClearGroup
+    self:SendNotification("ResetAllModel",curHero,leftHero,rightHero)
+end
+
+local function OnHeroReset(obj)
+    self:SendNotification("CloseHeroShowView")
+end
+
+local function HeroAttrChanged(attrs)
+    self:SendNotification("ShowAttrEffect", attrs)
+end
+
+local function SoulImprintItemPutOnOrDown(item)
+    local showSoulImprintItemBtn = IsShowPutOnSoulImprintBtn()
+    self:SendNotification("ShowModel",curHero,leftHero,rightHero)
+    self:SendNotification("RefreshSwitchBtns",leftHero~=nil,rightHero~=nil,curHero.lock,showSoulImprintItemBtn) --todo:lock
+end
+
+function DoInit()
+    HeroAttrData.Init()
+    MsgCenter:Subscribe(Notify_UpdateCurHero, OnUpdateCurHero)
+    MsgCenter:Subscribe(Notify_UpdateHeroShowRedTip, OnUpdateHeroShowRedTip)
+    MsgCenter:Subscribe(Notify_UpdateHeroShowHeroInfoRedTip, OnUpdateHeroShowHeroInfoRedTip)
+    MsgCenter:Subscribe(Notify_UpdateHeroShowHeroEquipRedTip, OnUpdateHeroShowHeroEquipRedTip)
+    MsgCenter:Subscribe(Notify_UpdateHeroShowHeroDistillRedTip, OnUpdateHeroShowRedTip)
+    MsgCenter:Subscribe(Notify_UpdateHeroShowHeroJewelEquipRedTip, OnUpdateHeroShowRedTip)
+    MsgCenter:Subscribe(Notify_UpdatehHeroShowView_TopRes,OnUpdateHeroShowViewTopRes)
+    MsgCenter:Subscribe(Notify_HeroGradeUp,OnHeroGradeUp)
+    MsgCenter:Subscribe(Notify_HeroLevelUp,OnHeroLevelUp)
+    MsgCenter:Subscribe(Notify_UpdateCurHeroArr,OnUpdateCurHeroArr)
+    MsgCenter:Subscribe(Notify_HeroDistill,OnHeroDistill)
+    MsgCenter:Subscribe(Notify_HeroReset,OnHeroReset)
+    MsgCenter:Subscribe(Notify_SoulImprintItemPutOnOrDown,SoulImprintItemPutOnOrDown)
+    MIN_USE_LEVEL = GetConstValue("SoulHeroLevel")
+end
+
+function DoOnExit()
+    HeroAttrData.Clear()
+    MsgCenter:Unsubscribe(Notify_UpdateCurHero, OnUpdateCurHero)
+    MsgCenter:Unsubscribe(Notify_UpdateHeroShowRedTip, OnUpdateHeroShowRedTip)
+    MsgCenter:Unsubscribe(Notify_UpdateHeroShowHeroInfoRedTip, OnUpdateHeroShowHeroInfoRedTip)
+    MsgCenter:Unsubscribe(Notify_UpdateHeroShowHeroEquipRedTip, OnUpdateHeroShowHeroEquipRedTip)
+    MsgCenter:Unsubscribe(Notify_UpdateHeroShowHeroDistillRedTip, OnUpdateHeroShowRedTip)
+    MsgCenter:Unsubscribe(Notify_UpdateHeroShowHeroJewelEquipRedTip, OnUpdateHeroShowRedTip)
+    MsgCenter:Unsubscribe(Notify_UpdatehHeroShowView_TopRes,OnUpdateHeroShowViewTopRes)
+    MsgCenter:Unsubscribe(Notify_HeroGradeUp,OnHeroGradeUp)
+    MsgCenter:Unsubscribe(Notify_HeroLevelUp,OnHeroLevelUp)
+    MsgCenter:Unsubscribe(Notify_UpdateCurHeroArr,OnUpdateCurHeroArr)
+    MsgCenter:Unsubscribe(Notify_HeroDistill,OnHeroDistill)
+    MsgCenter:Unsubscribe(Notify_HeroReset,OnHeroReset)
+    MsgCenter:Unsubscribe(Notify_SoulImprintItemPutOnOrDown,SoulImprintItemPutOnOrDown)
+
+    utils = nil
+    HeroAttrData = nil
+    ArrOperation = nil
+    HeroShowPageType = nil
+    HeroBagPageType = nil
+    curType = nil
+    curPageType = nil
+    curView = nil
+    curHero = nil
+    curHeroArr = nil
+    curIndex = nil
+    maxIndex = nil
+    leftHero = nil
+    rightHero = nil
+    curPos = nil
+    isRight = nil
+    MIN_USE_LEVEL = nil
+end
+
+function InitProperties()
+
+end
+
+function OnCommand_InitData(objs)
+    curType,curHeroArr,curIndex = objs[0],objs[1],objs[2]
+    curHero = curHeroArr[curIndex]
+    if curType == HeroBagPageType.Hero then
+        HeroAttrData.AddAttrChangeEvent(HeroAttrChanged)
+    else
+        HeroAttrData.RemoveChangeEvent(HeroAttrChanged)
+    end
+end
+
+function OnCommand_InitHeroShowData(objs)
+    local showSoulImprintItemBtn = IsShowPutOnSoulImprintBtn()
+    maxIndex = #curHeroArr
+    leftHero = GetHeroByIndex(curIndex-1)
+    rightHero = GetHeroByIndex(curIndex+1)
+    UpdateHeroShowData(curHero)
+    UpdateHeroShowData(leftHero)
+    UpdateHeroShowData(rightHero)
+    self:SendNotification("InitShowModel",curHero,leftHero,rightHero)
+    self:SendNotification("SwitchRace",curHero)
+    self:SendNotification("RefreshSwitchBtns",leftHero~=nil,rightHero~=nil,curHero.lock,showSoulImprintItemBtn) --todo:lock
+    self:SendNotification("RefreshOperationBtns",curType)
+    self:SendNotification("RefreshTopView",false,appData:checkData("PlayerInfo").soulCoin or 0,false,appData:checkData("PlayerInfo").stepStoneCoin or 0)
+    UpdateExtraTog()
+    self:SendNotification("RefreshHeroShowView",curPageType)
+    OpenPageByType(curPageType)
+    RefreshHeroShowRedTip()
+end
+
+function OnCommand_OpenHeroShowPage(objs)
+    local type = objs[0]
+    if type == curPageType then
+        return
+    end
+    curPageType = type
+    OpenPageByType(curPageType)
+end
+
+function OnCommand_HeroShowViewOpened(objs)
+    if curType == HeroBagPageType.Hero then
+        local showBottomPanel = false
+        local utils = require "HeroBagUtils"
+        utils.OpenHeroRatingView(self, curHero.heroId, showBottomPanel)
+    end
+end
+
+function OnCommand_SwitchRaceEffect(objs)
+    if curHero == nil then
+        return --不知道什么情况下curHero为空了，先做个判断
+    end
+    local toRight = objs[0]
+    local curRaceId = curHero.race
+    local nextRaceId
+    if toRight then
+        nextRaceId = leftHero.race
+    else
+        nextRaceId = rightHero.race
+    end
+    if curRaceId ~= nextRaceId then
+        self:SendNotification("SwitchRaceEffect")
+    end
+end
+
+function OnCommand_SetBackRace(objs)
+    local pos = objs[0]
+    if curPos == pos then
+        return
+    end
+    curPos = pos
+    if curPos == -1 then
+        self:SendNotification("SetBackRace",leftHero)
+    elseif curPos == 0 then
+        self:SendNotification("SetBackRace",curHero)
+    elseif curPos == 1 then
+        self:SendNotification("SetBackRace",rightHero)
+    end
+end
+
+function OnCommand_SwitchRace(objs)
+    local pos = objs[0]
+    if curPos == pos then
+        return
+    end
+    curPos = pos
+    if curPos == -1 then
+        self:SendNotification("SwitchRace",leftHero)
+    elseif curPos == 0 then
+        self:SendNotification("SwitchRace",curHero)
+    elseif curPos == 1 then
+        self:SendNotification("SwitchRace",rightHero)
+    end
+end
+
+function OnCommand_SwitchPos(objs)
+    isRight = objs[0]
+    if curIndex == 1 and isRight or curIndex == maxIndex and not isRight then
+        self:SendNotification("ResetPos")
+    else
+        self:SendNotification("SwitchPos",isRight)
+    end
+end
+
+function OnCommand_SwitchHero(objs)
+    self:SendNotification("SwitchModel",isRight)
+    if isRight then
+        rightHero = curHero
+        curHero = leftHero
+        leftHero = nil
+        if curIndex ~= 1 then
+            curIndex = curIndex - 1
+            leftHero = GetHeroByIndex(curIndex-1)
+            UpdateHeroShowData(leftHero)
+        end
+    else
+        leftHero = curHero
+        curHero = rightHero
+        rightHero = nil
+        if curIndex ~= maxIndex then
+            curIndex = curIndex + 1
+            rightHero = GetHeroByIndex(curIndex+1)
+            UpdateHeroShowData(rightHero)
+        end
+    end
+    curPos = 0
+    curHero.showHaveEmblem = false
+    local showSoulImprintItemBtn = IsShowPutOnSoulImprintBtn()
+    self:SendNotification("ShowModel",curHero,leftHero,rightHero)
+    self:SendNotification("RefreshSwitchBtns",leftHero~=nil,rightHero~=nil,curHero.lock,showSoulImprintItemBtn) --todo:lock
+
+    UpdateExtraTog()
+
+    MsgCenter:Broadcast(Notify_HeroRating_HeroChanged, curHero.heroId)
+    MsgCenter:Broadcast(Notify_HeroShowView_SwitchHero, table.copy(curHero))
+end
+
+local function OnLockHeroResp(resp)
+    if resp.status == 0 then
+        curHero.lock = not curHero.lock
+        local showSoulImprintItemBtn = IsShowPutOnSoulImprintBtn()
+        self:SendNotification("RefreshSwitchBtns",leftHero~=nil,rightHero~=nil,curHero.lock,showSoulImprintItemBtn)
+    end
+end
+
+function OnCommand_LockHero(objs)
+    if curHero.lock then
+        utils.RequestUnLockHero(curHero.uid, OnLockHeroResp)
+    else
+        utils.RequestLockHero(curHero.uid, OnLockHeroResp)
+    end
+end
+
+function OnCommand_ShareHero(objs)
+    if not UIOpen(UI_OPEN_TYPE_TALK) then
+        return
+    end
+    ShowHeroShareTip(self,curHero)
+end
+
+function OnCommand_OpenResetHeroView(objs)
+    if curHero.grade == 1 and curHero.level == 1 then
+        utils.ShowHintBox(Language:getStr("ResetLimitLevel"))
+        return
+    end
+    if curHero.quality < RESET_QUALITY then
+        utils.ShowHintBox(Language:getStr("ResetQualityLimit"))
+        return
+    end
+    CsBridge.CacheAssetsByModule(self.Module,function()
+        local view = CsBridge.OpenView("HeroResetView","HeroResetModel",true,true)
+        view:SetParamDataList(table.copy(curHero))
+    end,"HeroResetView")
+end
+
+function OnCommand_CloseHeroShowView(objs)
+    curHero = nil
+    leftHero = nil
+    rightHero = nil
+    curIndex = 0
+    maxIndex = 0
+    isRight = false
+    curPageType = HeroShowPageType.HeroInfo
+    MsgCenter:Broadcast(Notify_CloseHeroShowView)
+end
+
+---是否可以使用纹章
+local function CanUseSoulImprintItem( heroData)
+    local allLevel = GetHeroAllLevel(heroData.grade, heroData.level, heroData.distillationLevel, heroData.breakLevel)
+    return allLevel >= MIN_USE_LEVEL
+end
+
+---使用一个纹章
+function OnCommand_UseSoulImprintItem(objs)
+    curType = 1
+    curHeroArr = {}
+    commonHeroBagUtils.GetMyHeroList(curHeroArr, 1)
+    table.sort(curHeroArr, SortHeroByLevel)
+    local index = 0
+    if #curHeroArr > 0 then
+        for i = 1, #curHeroArr do
+            local newHero = GetPbHero(curHeroArr[i])
+            if ((not newHero.isEmblem)) and newHero.haveEmblemUid <= 0 and CanUseSoulImprintItem(newHero) then
+                index = i
+                break
+            end
+        end
+    end
+    if index > 0 then
+        curIndex = index
+        maxIndex = #curHeroArr
+        curHero = curHeroArr[index]
+        CsBridge.CacheAssetsByModule(self.Module, function()
+            local view = CsBridge.OpenView("HeroShowView", "HeroShowModel", true, true)
+            view:SetParamDataList(curType, curHeroArr, index)
+        end, "HeroShowView", "SkillItemSlot")
+    else
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("NoHeroCanPutOnSoulImprintItem"), 2)
+    end
+end
+
+---打开装备纹章界面
+function OnCommand_OpenPutSoulImprintItemOnView()
+    local pbHero = GetPbHero(curHero)
+    if not CanUseSoulImprintItem(curHero) then
+        utils.ShowHintBox(string.format(Language:getStr("SoulImprintItemPutOnLevel"), MIN_USE_LEVEL))
+        return
+    end
+    local itemInfo = soulImprintItemBagUtils.GetSoulImprintItemByHero(curHero)
+    local viewData = soulImprintItemBagUtils.InitSoulItemTipsViewData(itemInfo)
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("SoulImprintItemPutOnView", "SoulImprintItemPutOnModel", true, true)
+        view:SetParamDataList(viewData, pbHero)
+    end, "SoulImprintItemPutOnView", "SoulAttrNameTxtItemSlot")
+end

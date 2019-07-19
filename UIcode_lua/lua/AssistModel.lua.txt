@@ -1,0 +1,108 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-08-15 10:57:03
+
+local assistId = 1
+local assistArr
+local curAssist
+local assistDataFromTbl
+
+local Help = {}
+Help.tblName = "Help"
+Help.id = "id"
+Help.name = "name"
+Help.icon = "icon"
+
+local HelpContent = {}
+HelpContent.tblName = "HelpContent"
+HelpContent.id = "id"
+HelpContent.UIOpenbaseId = "UIOpenbaseId"
+HelpContent.desc = "desc"
+HelpContent.helpId = "helpId"
+
+function DoInit()
+    assistDataFromTbl = GetAssistDataFromTbl()
+end
+
+function InitProperties()
+end
+
+function OnCommand_InitAssistData(objs)
+    InitAssistData()
+    curAssist = assistArr[assistId]
+    curAssist.selected = true
+    self:SendNotification("RefreshAssistView",assistArr,assistId)
+end
+
+function OnCommand_SelectAssist(objs)
+    if curAssist ~= nil then
+        curAssist.selected = false
+        self:SendNotification("CancelSelectAssist",curAssist)
+    end
+    curAssist = objs[0]
+    curAssist.selected = true
+    self:SendNotification("SelectAssist",curAssist)
+end
+
+function InitAssistData()
+    assistArr = {}
+    for k,assistData in pairs(assistDataFromTbl) do
+        local assist = {
+            id = k,
+            name = assistData.name,
+            icon = assistData.icon,
+            selected = false
+        }
+        assist.subAssistArr = {}
+        for orderId,subAssistData in pairs(assistData.subAssist) do
+            local subAssist = {
+                orderId = orderId,
+                desp = subAssistData.desp,
+                systemId = subAssistData.systemId
+            }
+            table.insert(assist.subAssistArr,subAssist)
+        end
+        table.insert(assistArr,assist)
+    end
+end
+
+function GetAssistDataFromTbl()
+    assistDataFromTbl = {}
+    local helpIds = GetIds(Help.tblName)
+    local tbl=ResTblContainer:GetTable(Help.tblName)
+    for i=0,helpIds.Length-1 do
+        local helpId = tonumber(helpIds[i])
+        local infos = tbl:GetRow(tostring(helpId),Help.name,Help.icon)
+        assistDataFromTbl[helpId] = {
+            name = infos[0],
+            icon = infos[1],
+            subAssist = {}
+        }
+    end
+    local helpContentIds = GetIds(HelpContent.tblName)
+    local tbl1=ResTblContainer:GetTable(HelpContent.tblName)
+    for i=0,helpContentIds.Length-1 do
+        local helpContentId = tonumber(helpContentIds[i])
+        local infos = tbl1:GetRow(tostring(helpContentId),HelpContent.UIOpenbaseId,HelpContent.desc,HelpContent.helpId)
+        local helpContent = {
+            systemId = infos[0] == "" and -1 or tonumber(infos[0]),
+            desp = infos[1]
+        }
+        local helpId = tonumber(infos[2])
+        if assistDataFromTbl[helpId] ~= nil then
+            local orderId = table.count(assistDataFromTbl[helpId].subAssist)+1
+            assistDataFromTbl[helpId].subAssist[orderId] = helpContent
+        end
+    end
+    return assistDataFromTbl
+end
+
+function DoOnExit()
+    assistId = nil
+    assistArr = nil
+    curAssist = nil
+    assistDataFromTbl = nil
+    Help = nil
+    HelpContent = nil
+end

@@ -1,0 +1,136 @@
+local vipTxt
+local vipGrid
+local msgGrid
+
+local payTbls
+
+function DoInit()
+    self.Anim = 0
+    vipTxt=self:GetComponentAtPath("OTHER/VIP3/VIPLevelTxt" ,CLS_TEXT)
+    vipGrid=self:GetComponentAtPath("OTHER/VIPSV/ScrollRect/Viewport/VIPGrid" ,CLS_UI_ITEM_GRID)
+    msgGrid=self:GetComponentAtPath("OTHER/MESSAGESV/ScrollRect/Viewport/MSGGrid" ,CLS_UI_ITEM_GRID)
+end
+
+function IsSetAnchor()
+    return true
+end
+
+function OnAnimationFinished()
+    self:SendCommand("InitVIPItem")
+end
+
+function OnNotification_InitVIPItem(objs)
+    payTbls=objs[0]
+    vipGrid.SelectIndex=0
+    vipGrid:RefreshItemSlots(payTbls.vipPrivilege, self.gameObject, "VIPSlotItem")
+end
+
+function OnVIPSlotItemBindValue(slot,data)
+    local selectSprite = slot:GetComponentAtPath("icon01Img" ,CLS_IMAGE)
+    slot.m_SelectSprite = selectSprite.gameObject
+    local vipTxt = slot:GetComponentAtPath("VIPLevelTxt" ,CLS_TEXT)
+    SetVipText(vipTxt, data.vip)
+    slot.m_SelectSprite:SetActive(slot.IsSelected)    
+end
+
+function OnVIPGridVIPSlotItemClick(obj)
+	self:SendCommand("SelectVIP",obj.m_index)
+end
+
+function OnNotification_SelectVIP(objs)
+    local oldIndex=objs[0]
+    if oldIndex ~= nil then
+        local oldItemData = vipGrid:GetItemDataByIndex(oldIndex)
+        if oldItemData ~= nil then
+            oldItemData.IsSelected = false
+        end
+    end
+    local index = objs[1]
+    local itemData = vipGrid:GetItemDataByIndex(index)
+	if itemData ~= nil then
+		itemData.IsSelected = true
+		DoSelectVIP(itemData.data)
+	end
+end
+
+function DoSelectVIP(data)
+	local vipLevel = data.vip
+    SetVipText(vipTxt, vipLevel)
+    msgGrid:RefreshItemSlots(data.privilege, self.gameObject, "messageSlotItem")
+end
+
+function OnmessageSlotItemBindValue(slot,data)
+    local nameTxt=slot:GetComponentAtPath("name01Txt" ,CLS_TEXT)
+    local name02Txt=slot:GetComponentAtPath("name02Txt" ,CLS_TEXT)
+    local item = slot:GetGameObjectAtPath("name01Txt/Items")
+    local item01=slot:GetGameObjectAtPath("name01Txt/Items/Item01")
+    local item02=slot:GetGameObjectAtPath("name01Txt/Items/Item02")
+    local item03=slot:GetGameObjectAtPath("name01Txt/Items/Item03")
+    local slotRT = slot.transform
+    if data.reward ~= nil then
+        nameTxt.gameObject:SetSelfActive(true)
+        name02Txt.gameObject:SetSelfActive(false)
+        nameTxt.text = data.hint
+        nameTxt:ForceMeshUpdate()
+        local nameTxtY = nameTxt:GetPreferredValues().y
+        CsBridge.UnityHelper.SetUISizeDelta(nameTxt.transform,nameTxt.transform:CheckSizeDelta().x,nameTxtY)
+        CsBridge.UnityHelper.SetUISizeDelta(slotRT,0,90+nameTxtY)
+        item:SetSelfActive(true)
+        for i = 1,#data.reward do
+            if i == 1 then
+                item01:SetSelfActive(true)
+                BindItemBaseValue(item01.transform,data.reward[1])
+            elseif i == 2 then
+                item02:SetSelfActive(true)
+                BindItemBaseValue(item02.transform,data.reward[2])
+            elseif i == 3 then
+                item03:SetSelfActive(true)
+                BindItemBaseValue(item03.transform,data.reward[3])
+            end
+        end
+        if #data.reward == 1 then
+            item02:SetSelfActive(false)
+            item03:SetSelfActive(false)
+        elseif #data.reward == 2 then
+            item03:SetSelfActive(false)
+        end
+    else
+        item:SetSelfActive(false)
+        nameTxt.gameObject:SetSelfActive(false)
+        name02Txt.gameObject:SetSelfActive(true)
+        if(data.val ~= nil) then
+            name02Txt.text=data.hint.."<color=#1FA012FF>+"..data.val.."</color>"
+        else
+            name02Txt.text=data.hint
+        end
+        name02Txt:ForceMeshUpdate()
+        CsBridge.UnityHelper.SetUISizeDelta(slotRT,0,name02Txt:GetPreferredValues().y)
+    end
+end
+
+function BeoforeReturnBack()
+    self.gameObject:SetSelfActive(false)
+end
+
+function OnMSGGridItem01Click(obj)
+    local data=obj.m_data
+    ShowRewardTip(self,data.reward[1])
+end
+
+function OnMSGGridItem02Click(obj)
+    local data=obj.m_data
+    ShowRewardTip(self,data.reward[2])
+end
+
+function OnMSGGridItem03Click(obj)
+    local data=obj.m_data
+    ShowRewardTip(self,data.reward[3])
+end
+
+function DoExit()
+    vipTxt = nil
+    vipGrid = nil
+    msgGrid = nil
+
+    payTbls = nil
+end

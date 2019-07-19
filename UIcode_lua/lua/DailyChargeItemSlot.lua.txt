@@ -1,0 +1,16 @@
+function OnDailyChargeItemSlotBindValue(slot,data)
+    local lightObj = slot:GetGameObjectAtPath("LightImg")
+    local overObj = slot:GetGameObjectAtPath("OverObj")
+    local nameTxt = slot:GetComponentAtPath("NameTxt",CLS_TEXT)
+    local progress = slot:GetComponentAtPath("Progress",CLS_SLIDER)
+    local numTxt = slot:GetComponentAtPath("Progress/NumTxt",CLS_TEXT)
+    local rewardGrid = slot:GetComponentAtPath("RewardGrid",CLS_UI_ITEM_GRID)
+    local arrowObj = slot:GetGameObjectAtPath("ArrowObj")
+
+    lightObj:SetSelfActive(data.isCurrent)
+    overObj:SetSelfActive(data.isOver)
+    arrowObj:SetSelfActive(not data.isEnd)
+    nameTxt.text = string.format(Language:getStr("DailyChargeDesp"),data.price)
+    SetSliderProgress(numTxt,progress,data.score,data.price)
+    rewardGrid:RefreshItemSlots(data.rewards,slot.m_grid.viewBase.gameObject,"ItemSlot")
+end

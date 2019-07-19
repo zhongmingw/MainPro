@@ -1,0 +1,209 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-11-12 15:00:15
+local cache=CsBridge.objectCache
+
+local ScreenUtils = require "ScreenUtils"
+require "DecomposeRelicItemSlot"
+
+local isInit = false
+
+local togGroup
+local togArr
+local flag
+
+local relicGrid
+local selectRelicGrid
+local nothingObj
+
+local quickBtnTxt
+local previewBtn
+local decomposeBtn
+
+local effectObj
+local relicEffect
+
+local selectRelicPosArr
+
+function DoInit()	
+    self.Shadow = 1
+end
+
+function InitUI()
+    togGroup = self:GetComponentAtPath("Center/TogGroup",CLS_TOGGLE_GROUP_ARCHLY)
+    local togGroupTrans = togGroup.transform
+    togArr = {}
+    for i=1,togGroupTrans.childCount-1 do
+		local tog = togGroupTrans:GetChild(i):GetComponent("ToggleArchly")
+        tog.ClickAnim = true
+		table.insert(togArr, tog)
+    end 
+    flag = togGroupTrans:Find("Flag")
+
+    relicGrid = self:GetComponentAtPath("Center/RelicSV/ScrollRect/Viewport/RelicGrid",CLS_UI_ITEM_GRID)
+    selectRelicGrid = self:GetComponentAtPath("Center/DecomposeSV/ScrollRect/Viewport/DecomposeGrid",CLS_UI_ITEM_GRID)
+    nothingObj = self:GetGameObjectAtPath("Center/Nothing")
+
+    quickBtnTxt = self:GetComponentAtPath("Center/QuickBtn/nameTxt",CLS_TEXT)
+    previewBtn = self:GetComponentAtPath("Center/PreviewBtn",CLS_BUTTON_ARCHLY)
+    decomposeBtn = self:GetComponentAtPath("Center/DecomposeBtn",CLS_BUTTON_ARCHLY)
+
+    effectObj = self:GetGameObjectAtPath("Effect")
+    relicEffect = {
+        trans = self:GetComponentAtPath("Effect/ItemSlot",CLS_RECTTRANSFORM),
+        obj = self:GetGameObjectAtPath("Effect/ItemSlot")
+    }
+
+    selectRelicPosArr = {}
+    local selectRelicGridTrans = selectRelicGrid.transform
+    for i=0,selectRelicGridTrans.childCount-1 do
+        local trans = selectRelicGridTrans:GetChild(i)
+        table.insert(selectRelicPosArr,{
+            trans = trans,
+            pos = trans:CheckPosition()
+        })
+    end
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    ScreenUtils.InitScreenUI(togGroup,togArr,flag)
+    self:SendCommand("InitRelicDecomposeData")
+end
+
+function DoExit()
+    cache = nil
+    ScreenUtils = nil
+
+    isInit = nil
+
+    togGroup = nil
+    togArr = nil
+    flag = nil
+
+    relicGrid = nil
+    selectRelicGrid = nil
+    nothingObj = nil
+
+    quickBtnTxt = nil
+    previewBtn = nil
+    decomposeBtn = nil
+
+    effectObj = nil
+    relicEffect = nil
+
+    selectRelicPosArr = nil
+end
+
+function OnClose()
+    relicGrid:ClearItems()
+end
+
+function OnNotification_RefreshRelicDecomposeView(objs)
+    local relicArr = objs[0]    
+    nothingObj:SetSelfActive(#relicArr == 0)
+    relicGrid:RefreshItemSlots(relicArr,self.gameObject,"DecomposeRelicItemSlot")
+end
+
+function OnNotification_RefreshSelectRelic(objs)
+    local selectRelicArr = objs[0]
+    selectRelicGrid:RefreshItemSlots(selectRelicArr,self.gameObject,"ItemSlot")
+end
+
+function OnNotification_ShowSelectRelicEffect(objs)
+    local relic = objs[0]
+    local startPos = objs[1]
+    local endPos = selectRelicPosArr[objs[2]].pos
+    local onFinished = objs[3]
+    effectObj:SetSelfActive(true)
+    relicEffect.trans:ResetPosition(startPos)
+    relicEffect.obj:SetSelfActive(true)
+    BindItemBaseValue(relicEffect.trans, relic)
+    local t = CsBridge.TweenUtils.MoveToByWorld(relicEffect.trans,endPos.x,endPos.y,0.2,function()
+		effectObj:SetSelfActive(false)
+		relicEffect.obj:SetSelfActive(false)
+		onFinished()
+	end)
+	t:DoPlay()
+end
+
+function OnNotification_ShowDecomposeEffect(objs)
+    effectObj:SetSelfActive(true)
+    local num = objs[0]
+    for i=1,num do
+        CsBridge.CacheAssetsByGroup("HeroDecompositionSpine",function()
+            local obj = cache:CreateObject("HeroDecompositionSpine", true)
+            obj.transform:SetParent(selectRelicPosArr[i].trans,false)
+            CsBridge.UnityHelper.SetlocalScale(obj,0.5,0.5,1)
+            obj:GetComponent("SkeletonGraphic"):PlayAnimation("a_1",false,function()
+                local name = obj.name
+                CsBridge.GameObject.Destroy(obj)
+                cache:ClearGroup(name, true)
+                if i>=num then
+                    effectObj:SetSelfActive(false)
+                    objs[1]()
+                end
+            end)
+        end,"HeroDecompositionSpine")
+    end
+end
+
+function OnNotification_UpdateSingleRelic(objs)
+    local relic = objs[0]
+    relicGrid:SingleRefreshSlot(relic)
+end
+
+function OnNotification_UpdateSingleSelectRelic(objs)
+    local selectRelic = objs[0]
+    selectRelicGrid:SingleRefreshSlot(selectRelic)
+end
+
+function OnNotification_RefreshQuickBtn(objs)
+	quickBtnTxt.text = objs[0]
+end
+
+function OnNotification_RefreshPreviewBtn(objs)
+    local gray = objs[0]
+    previewBtn.Gray = gray
+    --decomposeBtn.Gray = gray
+end 
+
+function OnRelicGridDecomposeRelicItemSlotClick(obj)
+    self:SendCommand("UpdateRelic",obj.m_data,obj.transform:CheckPosition())
+end
+
+function OnDecomposeGridDecomposeRelicItemSlotClick(obj)
+    self:SendCommand("DownSelectRelic",obj.m_data,obj.m_index)
+end
+
+function OnQuickBtnClick(sender)
+    self:SendCommand("QuickOperation")
+end
+
+function OnPreviewBtnClick(sender)
+	self:SendCommand("OpenDecomposePreview")
+end
+
+function OnDecomposeBtnClick(sender)
+	self:SendCommand("Decompose")
+end
+
+function OnHelpBtnClick(sender)
+    ShowHelpTip(self,INSTRUCTION_RELIC_DECOMPOSE)
+end
+
+function OnCloseBtnClick(sender)
+    self:ReturnBack()
+end
+
+function OnMaskClick(sender)
+    self:ReturnBack()
+end
+
+function OnTogGroupClick(isOn,index)
+	ScreenUtils.TogGroupClick(isOn,index)
+end

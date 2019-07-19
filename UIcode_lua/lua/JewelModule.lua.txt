@@ -1,0 +1,24 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-02-15 15:20:53
+
+function DoInit()
+end
+
+function ResourceIds(objs)
+    local arr={}
+    return arr
+end
+
+function AssetNames(objs)
+    local arr = {"JewelView"}
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    self:OpenView("JewelView", "JewelModel")
+    if(onFinished ~= nil) then
+        onFinished()
+    end
+end

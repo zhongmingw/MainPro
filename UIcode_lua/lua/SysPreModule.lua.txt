@@ -1,0 +1,18 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-05-31 09:59:30
+
+function AssetNames(objs)
+    local arr = {"SysPreView","SysPreItemSlot"}
+    return arr
+end
+
+function OnEnter(objs, onFinished)
+    local view = self:OpenView("SysPreView", "SysPreModel")
+    local name = objs[0]
+    view:SetParamDataList(name)
+    if(onFinished ~= nil) then
+        onFinished()
+    end
+end

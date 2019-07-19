@@ -1,0 +1,71 @@
+
+ï	
+stage.protostage"D
+BeginOnHookReq
+
+difficulty (
+chapter (
+stage ("!
+BeginOnHookResp
+result ("J
+SwitchOnHookStageReq
+
+difficulty (
+chapter (
+stage ("~
+SwitchOnHookStageResp
+result (&
+rewardItems (2.stage.RewardItem-
+upLevelRewardItems (2.stage.RewardItem""
+TakeOnHookRewardsReq
+
+id ("~
+TakeOnHookRewardsResp
+result (&
+rewardItems (2.stage.RewardItem-
+upLevelRewardItems (2.stage.RewardItem"5
+FightStageReq$
+heroIds (2.stage.FormationPos"L
+	Formation
+
+id ($
+heroIds (2.stage.FormationPos
+order ("8
+FormationPos
+pos (
+uid (
+heroId ("%
+UpdateFormationResp
+result ("7
+
+RewardItem
+typeId (
+
+id (
+count ("K
+GMPassSpecifyStageReq
+
+difficulty (
+chapter (
+stage ("(
+GMPassSpecifyStageResp
+result ("^
+GMGetSpecifyStageRewardReq
+
+difficulty (
+chapter (
+stage (
+type ("E
+GMGetSpecifyStageRewardResp&
+rewardItems (2.stage.RewardItem")
+RemoveHeroFormationReq
+heroUid (")
+RemoveHeroFormationResp
+status ("G
+CheckCanOnHookReq
+
+difficulty (
+chapter (
+stage ("$
+CheckCanOnHookResp
+result (

@@ -1,0 +1,21 @@
+FloorState = 
+{
+    UnPass = 0,
+    Passed = 1,
+    Passing = 2
+}
+StageState = 
+{
+    UnPass = 0,
+    Passed = 1,
+    Passing = 2
+}
+FightState = 
+{
+    UnPass = 0,
+    Passed = 1
+}
+FightType = {
+    Light = 1,
+    Dark = 2
+}

@@ -1,0 +1,96 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-11-05 15:55:04
+
+require "GPItemSlot"
+
+local isInit = false
+
+local titleTxt
+local newBtn
+local gpGrid
+local nothingObj
+
+function DoInit()	
+    self.Shadow = 1
+end
+
+function InitUI()
+    titleTxt = self:GetComponentAtPath("Center/TitleTxt",CLS_TEXT)
+    newBtn = self:GetComponentAtPath("button/NewBtn",CLS_BUTTON_ARCHLY)
+    gpGrid = self:GetComponentAtPath("Center/itemSV/ScrollRect/Viewport/GPGrid",CLS_UI_ITEM_GRID)
+    nothingObj = self:GetGameObjectAtPath("Center/Nothing")
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitGroupPurchaseDetailData")
+end
+
+function OnClose()
+    gpGrid:ClearItems()
+end
+
+function OnNotification_RefreshGroupPurchaseDetailView(objs)
+    local isMine = objs[1]
+    titleTxt.text = Language:getStr(isMine and "TitleMyGroupPurchase" or "TitleGroupPurchase")
+    newBtn.gameObject:SetSelfActive(not isMine)
+    UpdateGPGoods(objs[0])
+end
+
+function OnNotification_UpdateGPGoods(objs)
+    UpdateGPGoods(objs[0])
+end
+
+function UpdateGPGoods(curGPGoods)
+    newBtn.Gray = curGPGoods.remain == 0
+    if #curGPGoods.gpGoodsArr == 0 then
+        nothingObj:SetSelfActive(true)
+    else
+        nothingObj:SetSelfActive(false)
+        gpGrid:RefreshItemSlots(curGPGoods.gpGoodsArr,self.gameObject,"GPItemSlot")
+    end
+end
+
+function OnGPGridItemSlotClick(obj)
+    local data = obj.m_data.goods
+    self:SendCommand("OpenTipView",data)
+end
+
+function OnGPGridPlayerBaseClick(obj)
+    local data = obj.m_data.player
+    self:SendCommand("OpenPlayerView",data)
+end
+
+function OnGPGridBuyBtnClick(obj)
+    local data = obj.m_data
+    self:SendCommand("BuyGroupPurchase",data)
+end
+
+function OnNewBtnClick(sender)
+    self:SendCommand("NewGroupPurchase")
+end
+
+function OnNotification_CloseGroupPurchaseDetailView(objs)
+    self:HideView(self.gameObject.name)
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function OnMaskClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+    isInit = nil
+    titleTxt = nil
+    newBtn = nil
+    gpGrid = nil
+    nothingObj = nil
+end

@@ -1,0 +1,76 @@
+local vipCheck
+local worldCheck
+local guildCheck
+local recruitCheck
+
+local vipCheckVal
+local worldCheckVal
+local guildCheckVal
+local recruitCheckVal
+
+local MSG_ChatStatusChanged = 1003
+local ChatGroup = {}
+ChatGroup.ChatGroup_Zone = 1
+ChatGroup.ChatGroup_Legion = 4
+ChatGroup.ChatGroup_Recruit = 6
+
+function DoInit()
+    self.Shadow = 1
+    vipCheck = self:GetGameObjectAtPath("details/VIP/iconImg")
+    worldCheck = self:GetGameObjectAtPath("details/World/iconImg")
+    guildCheck = self:GetGameObjectAtPath("details/Guild/iconImg")
+    recruitCheck = self:GetGameObjectAtPath("details/Recruit/iconImg")
+
+    vipCheckVal = CsBridge.UnityHelper.GetString("local_vip") == "false"
+    worldCheckVal = CsBridge.UnityHelper.GetString("local_world") == "false"
+    guildCheckVal = CsBridge.UnityHelper.GetString("local_guild") == "false"
+    recruitCheckVal = CsBridge.UnityHelper.GetString("local_recruit") == "false"
+
+    vipCheck:SetActive(vipCheckVal)
+    worldCheck:SetActive(worldCheckVal)
+    guildCheck:SetActive(guildCheckVal)
+    recruitCheck:SetActive(recruitCheckVal)
+end
+
+function OnVIPClick(sender)
+    vipCheckVal = not vipCheckVal
+    vipCheck:SetActive(vipCheckVal)
+    CsBridge.UnityHelper.SetString("local_vip", tostring(not vipCheckVal))
+    CsBridge.MsgCenter.Broadcast(MSG_ChatStatusChanged,-1)
+end
+
+function OnWorldClick(sender)
+    worldCheckVal = not worldCheckVal
+    worldCheck:SetActive(worldCheckVal)
+    CsBridge.UnityHelper.SetString("local_world", tostring(not worldCheckVal))
+    CsBridge.MsgCenter.Broadcast(MSG_ChatStatusChanged,ChatGroup.ChatGroup_Zone)
+end
+
+function OnGuildClick(sender)
+    guildCheckVal = not guildCheckVal
+    guildCheck:SetActive(guildCheckVal)
+    CsBridge.UnityHelper.SetString("local_guild", tostring(not guildCheckVal))
+    CsBridge.MsgCenter.Broadcast(MSG_ChatStatusChanged,ChatGroup.ChatGroup_Legion)
+end
+
+function OnRecruitClick(sender)
+    recruitCheckVal = not recruitCheckVal
+    recruitCheck:SetActive(recruitCheckVal)
+    CsBridge.UnityHelper.SetString("local_recruit", tostring(not recruitCheckVal))
+    CsBridge.MsgCenter.Broadcast(MSG_ChatStatusChanged,ChatGroup.ChatGroup_Recruit)
+end
+
+function DoExit()
+   vipCheck = nil
+   worldCheck = nil
+   guildCheck = nil
+   recruitCheck = nil
+
+   vipCheckVal = nil
+   worldCheckVal = nil
+   guildCheckVal = nil
+   recruitCheckVal = nil
+
+   MSG_ChatStatusChanged = nil
+   ChatGroup = nil
+end

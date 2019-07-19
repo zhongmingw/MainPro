@@ -1,0 +1,354 @@
+local loadedRewardUtils = require "RewardUtils"
+local CsColor = CS.UnityEngine.Color
+
+local rewardGrid, rewardScroll
+local rewardGridLayout
+
+local playerIconObj, heroIconObj, bagIconObj, iconTips
+local lv_Lab
+local head_Sprite
+local player_TF
+
+local iconsParentTrans
+local gridCenterPos
+
+local summonType 
+local summonCount
+
+local IsInit = false
+local viewClosed = false
+
+local rewardData
+local effectStartedCbk, effectFinishedCbk
+local InMainModule = false
+local mergeRewards = true
+
+local DURATION_EFFECT_FLY = 0.5;
+local DURATION_EFFECT_FADE = 0.5;
+local DURATION_EFFECT_POP = 0.1;
+
+function DoInit()
+	self.Shadow = 1
+	local viewTrans = self.transform
+	rewardGrid = self:GetComponentAtPath("Dynamic/RewardGrid" ,CLS_UI_ITEM_GRID)
+	rewardGridLayout = rewardGrid:GetComponent(CLS_GRID_LAYOUT_GROUP)
+	gridCenterPos = rewardGrid.transform.parent.position
+	
+	local iconsRoot = viewTrans:Find("LeftTop")
+	playerIconObj = iconsRoot:GetGameObjectAtPath("Player")
+	iconsRoot = viewTrans:Find("Bottom")
+	heroIconObj = iconsRoot:GetGameObjectAtPath("HeroTog")
+	bagIconObj = iconsRoot:GetGameObjectAtPath("BagTog")
+
+	local playerRoot = playerIconObj.transform
+	player_TF = playerRoot:Find("PlayerBase")
+	iconTips = playerRoot:GetGameObjectAtPath("Tips")
+
+	SetAllIconsActive(false)
+end
+
+function SetParamDataList(obj)
+	rewardData = obj[0]
+	effectStartedCbk = obj[1]
+	mergeRewards = obj[2]
+	effectFinishedCbk = obj[3]
+	
+	local moduleMgr = CS.Client.Library.ModuleManager.instance
+	InMainModule = (moduleMgr.MainModule == moduleMgr.CurrentModule.ModuleName);--print(InMainModule)
+
+	rewardGridLayout.enabled = true
+	RefreshView(rewardData)
+	self.transform.parent:SetAsLastSibling()
+end
+
+function SetAllIconsActive(activated)
+	playerIconObj:SetActive(activated)
+	heroIconObj:SetActive(activated)
+	bagIconObj:SetActive(activated)
+end
+
+function RefreshView(rewardItems)	
+	rewardGrid:ClearItems()
+	local data = mergeRewards and MergeRewards(rewardItems) or rewardItems
+	rewardGrid:RefreshItemSlots(data,self.gameObject,"ItemSlot")
+	SetItemsToCenter()
+end
+
+function OnNotification_PlayRewardRecivedFx(objs)
+	PlayFlyEffect()
+end 
+
+function PlayFlyEffect()
+	if effectStartedCbk then
+		effectStartedCbk()
+	end
+
+	local itemSlots = rewardGrid:GetAllItems()
+	if not itemSlots then
+		Close()
+		return
+	end
+
+	local RESOURCE_ID_COIN, RESOURCE_ID_GEM = 1, 2
+	local itemTransTbl, heroItemTransTbl, resItemTransTbl, resIDTbl = {}, {}, {}, {}
+	local coinItemTransTbl, gemItemTransTbl = {}, {}
+	local item, itemType, itemTrans
+	for i = 0, itemSlots.Length - 1 do
+		item = itemSlots[i]
+		itemTrans = item.transform
+		itemType = item.m_data.typeId
+		if itemType == ItemTypeEnum.Resource then
+			local itemID = item.m_data.id
+			if itemID == RESOURCE_ID_COIN then
+				table.insert(coinItemTransTbl, itemTrans)
+			elseif itemID == RESOURCE_ID_GEM then
+				table.insert(gemItemTransTbl, itemTrans)
+			else
+				table.insert(resItemTransTbl, itemTrans)
+				table.insert(resIDTbl, itemID)
+			end
+		elseif itemType == ItemTypeEnum.Item or itemType == ItemTypeEnum.Relic then
+			table.insert(itemTransTbl, itemTrans)
+		elseif itemType == ItemTypeEnum.Hero or itemType == ItemTypeEnum.IconFrame or itemType == ItemTypeEnum.Jewel then
+			table.insert(heroItemTransTbl, itemTrans)
+		end
+	end
+	
+	local duration = 0.9
+	local onOneFinishedCbk = nil
+	local onFinishedCbk = OnFlyEffectFinished
+	if #coinItemTransTbl > 0 then
+		local startPos
+		for k, trans in pairs(coinItemTransTbl) do
+			trans.gameObject:SetActive(false)
+			startPos = trans.position
+		end
+		CsBridge.MoneyBanner.PlayCoinFlyEffect(startPos, duration, onOneFinishedCbk, onFinishedCbk)
+	end
+	if #gemItemTransTbl > 0 then
+		local startPos
+		for k, trans in pairs(gemItemTransTbl) do
+			trans.gameObject:SetActive(false)
+			startPos = trans.position
+		end
+		CsBridge.MoneyBanner.PlayGemFlyEffect(startPos, duration, onOneFinishedCbk, onFinishedCbk)
+	end
+
+	local resCount = #resItemTransTbl
+	playerIconObj:SetActive(resCount > 0)
+	if resCount > 0 then
+		RefreshPlayerIcon()
+		if not InMainModule then
+			FadeIn(playerIconObj)
+		end
+		for k, trans in pairs(resItemTransTbl) do
+			trans.gameObject:SetActive(false)
+		end
+		local heroIconPos = playerIconObj.transform.position
+		onOneFinishedCbk = function()
+			playerIconObj:PlayPopAnimation(DURATION_EFFECT_POP)
+		end
+		local tbl=ResTblContainer:GetTable(Resource.ResourceTbl)
+		for k, resID in pairs(resIDTbl) do
+		    local iconName=tbl:Get(resID,Resource.icon)
+			CsBridge.MoneyBanner.PlayOtherFlyEffect(iconName, resItemTransTbl[k].position, heroIconPos, duration, onOneFinishedCbk, onFinishedCbk)
+		end
+	end
+
+	local itemCount, heroCount = #itemTransTbl, #heroItemTransTbl
+	local allItemCount = itemCount + heroCount
+	if allItemCount == 0 then 
+		return 
+	end
+	bagIconObj:SetActive(itemCount > 0)
+	heroIconObj:SetActive(heroCount > 0)	
+
+	local bagIconTrans, heroIconTrans
+	local allItemTransTbl, destinations = {}, {}
+
+	local destination = bagIconObj.transform:CheckPosition()
+	if(itemCount > 0) then
+		for i = 1, itemCount do
+			table.insert(allItemTransTbl, itemTransTbl[i])
+			table.insert(destinations, destination)
+		end
+		PlayGeneralFlyEffect(allItemTransTbl, bagIconObj, destinations, OnFlyEffectFinished)
+	end
+	
+	if(heroCount > 0) then
+		allItemTransTbl = {}
+		destinations = {}
+		destination = heroIconObj.transform:CheckPosition()
+		for i = 1, heroCount do
+			table.insert(allItemTransTbl, heroItemTransTbl[i])
+			table.insert(destinations, destination)
+		end
+		PlayGeneralFlyEffect(allItemTransTbl, heroIconObj, destinations, OnFlyEffectFinished)
+	end
+end
+
+function FadeIn(target)
+	target:FadeAlpha(1, 0, DURATION_EFFECT_FADE)
+end
+
+function FadeOut(target, finishedCbk)
+	target:FadeAlpha(0, 1, DURATION_EFFECT_FADE, finishedCbk)
+end
+
+function OnFlyEffectFinished()
+	if viewClosed then
+		return
+	end
+
+	if not InMainModule then
+		local anyObjectActive = false
+		if playerIconObj.activeInHierarchy then
+			FadeOut(playerIconObj, Close)
+			anyObjectActive = true
+		end
+		if heroIconObj.activeInHierarchy then
+			FadeOut(heroIconObj, anyObjectActive and nil or Close)
+			anyObjectActive = true
+		end
+		if bagIconObj.activeInHierarchy then
+			FadeOut(bagIconObj, anyObjectActive and nil or Close)
+		end
+
+		if not anyObjectActive then
+			Close()
+		end
+	else
+	
+		SetAllIconsActive(false)
+		Close()
+	end
+end
+
+function PlayGeneralFlyEffect(targets, icon, destinations, finishedCbk)
+	if not InMainModule then
+		FadeIn(icon)
+	end
+
+	rewardGrid.enabled = false
+	local oneFinishedCbk = function()
+		icon:PlayPopAnimation(DURATION_EFFECT_POP)
+	end
+
+	local startPos, endPos
+	local callback
+	local targetCount = #targets
+	local delay = 0.04
+	for i = 1, targetCount do
+		local target = targets[i]
+		startPos = target:CheckPosition()
+		endPos = destinations[i]
+		callback = i < targetCount
+			and oneFinishedCbk
+			or function()
+				oneFinishedCbk()
+				finishedCbk()
+			end
+		CsBridge.UnityHelper.MoveItemTo(
+			target,
+			startPos,
+			endPos,
+			DURATION_EFFECT_FLY + i * delay,
+			callback)
+	end
+end
+
+function Close()
+	SetAllIconsActive(false)
+	rewardGrid:ClearItems()
+	self:HideView(self.gameObject.name, false)
+end
+
+function RefreshPlayerIcon()
+	playerIconObj:SetActive(true)
+
+	local playerInfo = appData:checkData("PlayerInfo")
+	BindPlayerBaseInfoValue(player_TF,playerInfo)
+
+	local rewardEnabled = CheckAchivementTips()
+	iconTips:SetActive(rewardEnabled)
+end
+
+function CheckAchivementTips()
+	local achievements = appData:checkAllItems("PlayerAchievement")
+	if achievements and achievements.Length > 0 then
+		local rewardFlag = 1
+		for i = 0, achievements.Length - 1 do
+			local achievement = achievements[i]
+			local enabled = (achievement.status == rewardFlag)
+			if enabled then
+				return true
+			end
+		end
+	end
+
+	return false
+end
+
+function SetItemsToCenter()
+	local itemsCenterPos = rewardGrid:GetItemsCenter()
+	if itemsCenterPos ~= gridCenterPos then
+		rewardGrid:AlignItemsToCenter(gridCenterPos, 
+			function() 
+				PlayFlyEffect() 
+			end)
+	end
+end
+
+function OnMaskClick(sender)
+	
+end
+
+function OnOpen()
+	viewClosed = false
+end
+
+function OnClose()
+	if not viewClosed then
+		viewClosed = true
+		if effectFinishedCbk then
+			effectFinishedCbk()
+		end
+	end
+end
+
+function DoExit()
+
+	loadedRewardUtils = nil
+	CsColor = nil
+
+	rewardGrid = nil 
+	rewardScroll = nil
+	rewardGridLayout = nil
+
+	playerIconObj = nil
+	heroIconObj = nil
+	bagIconObj = nil
+	iconTips = nil
+	lv_Lab = nil
+	head_Sprite = nil
+	player_TF = nil
+
+	iconsParentTrans = nil
+	gridCenterPos = nil
+
+	summonType  = nil
+	summonCount = nil
+
+	IsInit = nil
+	viewClosed  = nil
+
+	rewardData = nil
+	effectStartedCbk = nil 
+	effectFinishedCbk = nil
+	InMainModule  = nil
+	mergeRewards  = nil
+
+	DURATION_EFFECT_FLY  = nil
+	DURATION_EFFECT_FADE  = nil
+	DURATION_EFFECT_POP = nil
+end

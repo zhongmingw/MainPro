@@ -1,0 +1,37 @@
+
+Â
+HeroDistillationData.protoHeroDistillationDatastage.proto"d
+HeroDistillationReq
+uid (
+subMaterial1 (
+subMaterial2 (
+subMaterial3 ("N
+HeroDistillationResp&
+rewardItems (2.stage.RewardItem
+status ("2
+CommentHeroReq
+heroId (
+comments (	"!
+CommentHeroResp
+result ("L
+CheckHeroCommentsReq
+heroId (
+
+beginIndex (
+endIndex ("`
+CheckHeroCommentsResp3
+comments (2!.HeroDistillationData.HeroComment
+
+totalCount ("[
+HeroComment
+time (
+nick (	
+content (	
+like (
+	likeCount ("@
+LikeHeroCommentReq
+heroId (
+time (
+like ("%
+LikeHeroCommentResp
+result (

@@ -1,0 +1,12 @@
+require "ConstantTbl"
+require "HeroBaseUtils"
+require "ItemSlot"
+
+function OnSummonGiftActivityItemSlotBindValue(slot, data)
+	local slotTrans = slot.transform
+    local heroBaseTF = slotTrans:Find("HeroItemSlot/HeroBase")
+    local rewardGrid = slot:GetComponentAtPath("RewardGrid" ,CLS_UI_ITEM_GRID)
+    BindHeroBaseValue(heroBaseTF,{heroId=data.heroId,level=1,grade=1})
+    local view = slotTrans.parent:GetComponent(CLS_UI_ITEM_GRID).viewBase
+    rewardGrid:RefreshItemSlots(data.rewards,view.gameObject,"ItemSlot")
+end

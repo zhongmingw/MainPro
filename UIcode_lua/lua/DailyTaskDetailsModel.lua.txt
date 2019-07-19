@@ -1,0 +1,85 @@
+local dailyTaskUtils = require "DailyTaskUtils"
+
+---@type table
+local viewData
+
+function DoInit()
+
+end
+
+---重新刷新界面
+local function RefreshViewData()
+    dailyTaskUtils.ClearServerData()
+    InitDailyTaskView()
+end
+
+---初始化界面数据
+local function InitViewData()
+    local taskArr, totalCount, finishedCount = dailyTaskUtils.GetDailyTaskArr()
+    viewData = {}
+    viewData.sliderValue = totalCount <= 0 and 0 or finishedCount / totalCount
+    viewData.sliderStr = finishedCount .. "/" .. totalCount
+    viewData.dailyTaskArr = taskArr
+    dailyTaskUtils.InitBuySubscribeBtnState(viewData)
+    dailyTaskUtils.StartSubscribeTicker(self, viewData, RefreshViewData)
+    self:SendNotification("InitDailyTaskView", viewData)
+end
+
+---初始化界面
+function InitDailyTaskView()
+    dailyTaskUtils.GetDailyTaskServerData(function()
+        InitViewData()
+    end)
+end
+
+---初始化界面
+function OnCommand_InitDailyTaskView()
+    InitDailyTaskView()
+end
+
+---显示介绍
+function OnCommand_ShowDailyTaskRule()
+    CsBridge.CacheAssetsByModule(self.Module, function()
+        local view = CsBridge.OpenView("HelpView", "DailyTaskDetailsModel")
+        view:SetData(INSTRUCTION_SUBSCRIBE)
+    end, "HelpView")
+end
+
+---跳转界面
+function OnCommand_LinkSystem(objs)
+    local data = objs[0]
+    LinkSystem(data.linkedSysId, self)
+end
+
+---完成任务，获取资源
+function OnCommand_GetDailyTaskReward(objs)
+    local data = objs[0]
+    dailyTaskUtils.TakeDailyTaskReward(data.id, function(resp)
+        ShowRewardReceivedTip(self, resp.rewardItems, InitDailyTaskView, true)
+    end)
+end
+
+---已购买点击
+function OnCommand_AlreadyBuyBtnClick()
+    CsBridge.hintUILayer:ShowHintBox(Language:getStr("SubscribeNotOver"), 2)
+end
+
+---购买订阅
+function OnCommand_BuySubscribe()
+    dailyTaskUtils.BuySubscribe(self, function()
+        RefreshViewData()
+    end)
+end
+
+---显示物品信息
+function OnCommand_ShowItemTip(objs)
+    local data = objs[0]
+    ShowItemTip(self, data)
+end
+
+function DoOnExit()
+    dailyTaskUtils.ClearServerData()
+    dailyTaskUtils.StopSubscribeTicker()
+    dailyTaskUtils = nil
+    viewData = nil
+end

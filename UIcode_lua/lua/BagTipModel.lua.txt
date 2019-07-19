@@ -1,0 +1,6 @@
+function DoInit()
+end
+
+function InitProperties()
+end
+

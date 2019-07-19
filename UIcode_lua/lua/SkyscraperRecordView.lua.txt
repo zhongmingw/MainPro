@@ -1,0 +1,61 @@
+require "SkyscraperRecordItemSlot"
+
+local skyscraperRecordGrid 
+local none_GO
+
+function DoInit()
+	self.Shadow = 1
+	skyscraperRecordGrid= self:GetComponentAtPath("Center/SkyscraperRecordGrid" ,"UIItemGrid")
+	none_GO = self:GetGameObjectAtPath("Center/None")
+end
+
+function OnOpen()
+
+end
+
+function OnNotification_Record(objs)
+	local records = {}
+	local resp = objs[0]
+	if resp and resp.infos then
+		for i,data in ipairs(resp.infos) do
+			local record = {}
+			record.index = i
+			record.playerBaseInfo=data.playerBaseInfo
+			record.time = data.time
+			table.insert(records,record)
+		end
+	end
+	none_GO:SetSelfActive(records==nil or #records==0)
+	skyscraperRecordGrid:RefreshItemSlots(records,self.gameObject,"SkyscraperRecordItemSlot")
+end
+
+function OnSkyscraperRecordGridViewBtnClick(obj)
+	local data=obj.m_data
+	self:SendCommand("RecordVedio",data.index)
+end
+
+function OnSkyscraperRecordGridPlayerBaseClick(obj)
+	local data = obj.m_data
+	CsBridge.CacheAssetsByModule(self.Module,
+	function()
+		local view = CsBridge.OpenView("PlayerInfoView", "PlayerInfoModel",true,true)
+		view.transform.parent:SetAsLastSibling()
+		local isLocal = false
+		local uid = data.playerBaseInfo.userId
+		local zone = data.playerBaseInfo.zone
+		view:SetParamDataList(isLocal, uid, zone)
+	end, "PlayerInfoView","AchievementItemSlot")
+end
+
+function OnCloseBtnClick(sender)
+	self:HideView(self.gameObject.name)
+end
+
+function OnMaskClick(sender)
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	skyscraperRecordGrid = nil
+	none_GO = nil
+end

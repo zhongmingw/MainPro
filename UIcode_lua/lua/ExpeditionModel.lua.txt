@@ -1,0 +1,410 @@
+local expeditionData
+local valhallaHeroLevelLimit
+local canSkip=false
+local raceId = 0
+local sortId = 1
+
+local downHeroDic={}
+local upHeroArray={}
+local formationHeros={}
+local downHeroArray={}
+local fight = 0
+local auraArr={}
+local curAura
+
+local ValhallaExtraReward = {
+	id = "id",
+	count = "count",
+	reward = "reward",
+	tblName = "ValhallaExtraReward"
+}
+
+function DoInit()
+    valhallaHeroLevelLimit = GetConstValue("valhallaHeroLevelLimit")
+end
+
+function OnCommand_InitData(objs)
+    local req = {}
+    req.id=6
+    HttpRequest("initPBItem", "InitPBItemReq", "InitPBItemResp", req,
+        function (resp)
+            if resp~=nil then
+                InitView()
+            end
+        end)
+end
+
+function InitView()
+    
+    expeditionData = {}
+    local pbTBCInfo = appData:checkData("TBCInfo")
+    expeditionData.endTime=pbTBCInfo.lastRenewTime
+    expeditionData.passedStage=pbTBCInfo.passedStage
+    expeditionData.maxStage=#pbTBCInfo.stageInfos
+    expeditionData.heroInfos=pbTBCInfo.heroInfos
+    local levels = {}
+	local tbl=ResTblContainer:GetTable(Valhalla.tblName)
+    for k,stage in pairs(pbTBCInfo.stageInfos) do
+        local data = {}
+        data.id=stage.id
+		data.playerBaseInfo=stage.playerBaseInfo
+		data.playerBaseInfo.vip = nil
+        data.combat=stage.combat
+        data.passed=stage.passed
+        data.robot=stage.robot
+        data.state=stage.passed and 0 or (data.id==expeditionData.passedStage+1 and 1 or 2)
+        data.rewardStr=tbl:Get(data.id,Valhalla.rewardStr)
+        table.insert(levels,1,data)
+    end
+    expeditionData.levels=levels
+    local boxes = {}
+    for k,box in pairs(pbTBCInfo.extraRewards) do
+        local data = {}
+        data.id=box.id
+        data.count=box.count
+        data.taken=taken
+        if box.taken then
+            data.state=0
+        else
+            data.state=expeditionData.passedStage>=data.count and 1 or 2
+        end
+        
+        data.rewardStr=ResTblContainer:GetPropToStr(data.id,ValhallaExtraReward.reward,ValhallaExtraReward.tblName)
+        table.insert(boxes,data)
+    end
+    expeditionData.boxes=boxes
+    self:SendNotification("InitView",expeditionData)
+end
+
+function OnCommand_RefreshView(objs)
+    self:SendNotification("RefreshView",expeditionData)
+end
+
+function OnCommand_ExpeditionBattle(objs)
+	CsBridge.CacheAssetsByModule(self.Module,function()
+		CsBridge.OpenView("ExpeditionFormationView","ExpeditionModel",true,true)
+	end, "ExpeditionFormationView","ExpeditionHeroItemSlot","HeroItemSlot")
+
+end
+
+function OnCommand_GoToBattle(objs)
+	local heroIds = objs[0]
+	local req={}
+	req.formationPos=heroIds
+	HttpBattle("fightValhalla", "FightValhallaReq", req,
+		function(battleInfo)
+			ShowBattleModule(battleInfo, self)
+		end)
+end
+
+function OnCommand_GetExtraReward(objs)
+    local req={}
+    req.id=1
+    HttpRequest("getValhallaExtraReward", "GetValhallaExtraRewardReq","GetValhallaExtraRewardResp",req,
+        function(resp)
+            ShowRewardReceivedTip(self,resp.rewardItems, InitView)
+        end)
+end
+function OnCommand_InitFormationData(objs)
+    PackData()
+    for i, data in pairs(upHeroArray) do 
+	    if(data.heroId~=0)then
+		    ChangeRepeatHero(data.heroId,true)
+	    end
+	end
+	downHeroArray = RefreshAllDownHero()
+	fight = GetCurUpHeroFight()
+	curAura=CalcAura()
+	self:SendNotification("InitFormationData", upHeroArray, downHeroArray, fight,auraArr,curAura)
+end
+
+function CheckInAutoTask(heroData)
+	local dutys = CheckHeroDuty(heroData)
+	if dutys ~= nil then
+		if ContainItem(CheckHeroDuty(heroData),11) then
+			heroData.lock = true
+		end 
+	end
+end
+
+function RefreshAllDownHero()
+	local dataArray={}
+	local tbl=ResTblContainer:GetTable(HeroBase.actorTbl)
+	for i, kv in pairs(downHeroDic) do  
+    	for key, data in pairs(kv) do 
+    		local race=tbl:GetInt(data.heroId,HeroBase.group)
+		    if(raceId==0)then
+				--CheckInAutoTask(data)
+    			table.insert(dataArray,data)
+			elseif(raceId==race)then
+				--CheckInAutoTask(data)
+    			table.insert(dataArray,data)
+    		end
+		end 
+	end
+	table.sort(dataArray, SortHeroByQuality)
+    return dataArray
+end
+
+function GetCurUpHeroFight()
+	local allFight=0
+	for i, data in pairs(upHeroArray) do  
+		if(data.heroId~=0)then
+			local heroInfo=appData:checkItem("HeroItem",tostring(data.srcUid))
+			allFight=allFight+GetHeroFight(heroInfo)
+		end
+	end
+	return allFight
+end
+
+function PackData()
+    auraArr={}
+	for i, data in pairs(global_auraArr) do  
+		local newData={}
+		newData.id=data.id
+		newData.title=data.title
+		newData.icon=data.icon
+		newData.des=data.desp
+		newData.condition=data.cond
+		newData.isOn=false
+		newData.pos=i
+		newData.condDesp=data.condDesp
+		table.insert(auraArr,newData)
+    end
+
+    downHeroDic={}
+	local pbs=appData:checkAllItems("HeroItem")
+	if(pbs~=nil)then
+	    local tbl=ResTblContainer:GetTable(HeroBase.actorTbl)
+		for  i = 0,pbs.Length-1 do
+			local pb=pbs[i]
+			local newData={}
+			newData.uid=pb.uid
+			newData.heroId=pb.heroId
+			newData.level=pb.level
+			newData.grade=pb.grade
+			local quality = tbl:GetInt(pb.heroId,HeroBase.quality)
+			newData.quality=quality
+			newData.IsSelected=false
+			newData.isRepeat=false
+			newData.distillationStar = pb.distillationStar
+			newData.distillationLevel = pb.distillationLevel
+			newData.breakLevel = pb.breakLevel
+			local kv={[pb.uid]=newData}
+			if GetHeroAllLevel(pb.grade,pb.level)>= valhallaHeroLevelLimit then
+				table.insert(downHeroDic,kv)
+			end
+		end
+	end
+	if expeditionData.heroInfos~=nil then
+		for i,heroInfo in pairs(expeditionData.heroInfos) do
+			for n, kv in pairs(downHeroDic) do  
+				for key, data in pairs(kv) do
+					if(key==heroInfo.uid)then
+						data.curHp = heroInfo.curHp
+						data.maxHp = heroInfo.maxHp
+					end
+				end
+			end
+		end
+	end
+	upHeroArray={}
+	formationHeros={}
+	formationHeros=appData:checkItem("Formation",tostring(FormationTypeEnum.FormationType_Vahalla))
+
+	for  i = 1,6 do
+		local data=GetFormationHero(i)
+		local newData={}
+		if(data==nil)then
+			newData.pos=i
+			newData.srcUid=0
+			newData.heroId=0
+		else
+			local downHero=GetDownHeroInfo(data.uid)
+			newData.pos=data.pos
+			newData.srcUid=data.uid
+			if(downHero~=nil)then
+				newData.heroId=downHero.heroId
+				newData.level=downHero.level
+				newData.grade=downHero.grade
+			end
+		end
+		
+		table.insert(upHeroArray,newData)
+	end
+end
+
+function GetFormationHero(_pos)
+	if(formationHeros==nil or formationHeros.heroIds==nil or next(formationHeros.heroIds)==nil)then
+		return nil
+	end
+	for i, data in pairs(formationHeros.heroIds) do  
+		if(data~=nil and data.pos==_pos)then
+			return data
+		end
+	end
+	return nil
+end
+
+--获取对应下面英雄数据
+function GetDownHeroInfo(_uid)
+	for i, kv in pairs(downHeroDic) do  
+    	for key, data in pairs(kv) do
+			if(key==_uid)then
+	    		data.IsSelected=true
+				return data
+	    	end
+		end
+	end
+	return nil
+end
+
+function ChangeRepeatHero(heroId,active)
+    local changedHero={}
+	local tbl=ResTblContainer:GetTable(Hero.actorTbl)
+	local relationId=tbl:GetInt(heroId,Hero.relationId)
+	for i, kv in pairs(downHeroDic) do  
+    	for key, data in pairs(kv) do  
+    		local relationId_i=tbl:GetInt(data.heroId,Hero.relationId)
+    		if(data.heroId==heroId or (relationId ~= 0 and relationId == relationId_i))then
+				data.isRepeat=active
+				table.insert(changedHero,data)
+			end
+		end 
+	end
+	return changedHero
+end
+
+function OnCommand_ScreenHero(objs)
+    raceId = objs[0]
+	downHeroArray = RefreshAllDownHero()
+	self:SendNotification("ScreenHero", downHeroArray)
+end
+
+function OnCommand_DownHero(objs)
+    local index=objs[0]
+    local changedHero={}
+	local upHero=upHeroArray[index]
+	if(upHero.heroId~=0)then
+		local heros=ChangeRepeatHero(upHero.heroId,false)
+		for i=1,#heros do
+		    table.insert(changedHero,heros[i])
+		end
+		for i, kv in pairs(downHeroDic) do  
+    		for key, data in pairs(kv) do  
+    			if(key==upHero.srcUid)then
+					data.IsSelected=false
+	    			break
+	    		end
+    		end
+    	end
+    	--置0
+		upHero.srcUid=0
+		upHero.heroId=0
+		
+	end
+	fight=GetCurUpHeroFight()
+	curAura=CalcAura()
+	self:SendNotification("DownHero", changedHero,upHero,fight,curAura)
+end
+
+function OnCommand_SelectHeroEffect(objs)
+    local uid = objs[0]
+    local pos = 0
+    for i=1,#upHeroArray do
+        if upHeroArray[i].heroId==0 then
+            pos=i
+            break
+        end
+    end
+    self:SendNotification("SelectHeroEffect",uid,pos,objs[1])
+end
+
+--上阵
+function OnCommand_UpHero(objs)
+    local downHero=objs[0]
+    local upHero
+    local changedHero={}
+    downHero.IsSelected=true
+	for i,data in pairs(upHeroArray) do
+		if(data.heroId==0)then
+			data.srcUid=downHero.uid
+			data.heroId=downHero.heroId
+			data.level=downHero.level
+			data.grade=downHero.grade
+			data.distillationStar=downHero.distillationStar
+			data.distillationLevel=downHero.distillationLevel
+			data.breakLevel=downHero.breakLevel
+			local heros= ChangeRepeatHero(data.heroId,true)
+			for i=1,#heros do
+		        table.insert(changedHero,heros[i])
+		    end
+		    upHero=data
+		    break
+		end
+	end
+	fight=GetCurUpHeroFight()
+	curAura=CalcAura()
+	self:SendNotification("UpHero",changedHero,upHero,fight,curAura)
+end
+
+--计算光环数量
+function DoCheckAuraNum(raceId,num)
+	local isEnough=false
+	local col=0
+	local tbl=ResTblContainer:GetTable(HeroBase.actorTbl)
+	for i,data in pairs(upHeroArray) do
+		if(data.heroId~=0) then
+			local race= tbl:GetInt(data.heroId,HeroBase.group)
+			if(raceId==race) then
+				col=col+1
+			end
+		end
+	end
+	if(col>=num)then
+		isEnough=true
+	end
+	return isEnough
+end
+
+function CalcAura()
+    local validAura = nil
+    --光环
+	for i,data in pairs(auraArr) do
+		local result=SplitString(data.condition,";")
+		local isAllOK=true
+		for  i = 0,result.Length-1 do
+			local str=SplitString(result[i],",")
+			local raceId=tonumber(str[0])
+			local num=tonumber(str[1])
+			local isEnough=DoCheckAuraNum(raceId,num)
+			if(isEnough==false)then
+				isAllOK=false
+				break
+			end
+		end
+		data.isOn=isAllOK
+		if(isAllOK==true) then
+		    validAura=data
+			break
+		end
+	end
+	return validAura
+end
+
+function DoOnExit()
+	self.Module = nil
+	expeditionData = nil
+	valhallaHeroLevelLimit = nil
+	canSkip = nil
+	raceId = nil
+	sortId = nil
+	downHeroDic = nil
+	upHeroArray = nil
+	formationHeros = nil
+	downHeroArray = nil
+	fight = nil
+	auraArr = nil
+	curAura = nil
+	ValhallaExtraReward = nil
+end

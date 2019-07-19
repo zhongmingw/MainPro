@@ -1,0 +1,16 @@
+
+function OnHonorOfComposeItemSlotBindValue(slot, data)
+	local slotTrans = slot.transform
+    local composeTxt = slot:GetComponentAtPath("ComposeTxt" ,CLS_TEXT)
+    --local composeCountTxt = slot:GetComponentAtPath("ComposeCountTxt" ,CLS_TEXT)
+    --local composeNumTxt = slot:GetComponentAtPath("ComposeNumTxt" ,CLS_TEXT)
+    local slider = slot:GetComponentAtPath("Slider" ,CLS_SLIDER)
+    local sliderNumTxt = slot:GetComponentAtPath("Slider/NumTxt" ,CLS_TEXT)
+    local rewardGrid = slot:GetComponentAtPath("RewardGrid" ,CLS_UI_ITEM_GRID)
+    composeTxt.text = string.format(Language:getStr("HonorOfComposeDesp"),"<color=red>"..data.id.."</color>")
+    --composeCountTxt.text = data.finishedCount
+    --composeNumTxt.text = data.finishedCount .."/"..data.rewardLimit
+    SetSliderProgress(sliderNumTxt,slider,data.finishedCount,data.rewardLimit)
+    local view = slotTrans.parent:GetComponent(CLS_UI_ITEM_GRID).viewBase
+    rewardGrid:RefreshItemSlots(data.rewards,view.gameObject,"ItemSlot")
+end

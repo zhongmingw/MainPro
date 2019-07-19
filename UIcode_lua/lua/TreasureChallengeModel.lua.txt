@@ -1,0 +1,67 @@
+local treasureChallengeUtils = require "TreasureChallengeUtils"
+
+function DoInit()
+
+end
+
+---获取界面数据
+local function GetViewData()
+    treasureChallengeUtils.GetViewData(function(viewData)
+        self:SendNotification("GetViewData", viewData)
+    end)
+end
+
+function DoEnable()
+    GetViewData()
+end
+
+---打开采矿模块
+local function OpenMiningModule()
+    self:OpenModule("MiningMainModule", nil, 0, true, nil, false)
+end
+
+---打开大富翁模块
+local function OpenMonopolyModule()
+    self:ShowModule("MonopolyModule", nil, false)
+end
+
+---打开迷宫木块
+local function OpenMazeModule()
+    self:OpenModule("MazeModule", nil)
+end
+
+---打开对应的module
+local function OpenTargetModule(itemData)
+    if not UIOpen(itemData.uiOpenId) then
+        return
+    end
+    if itemData.open == false then
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("SystemIsClosed"), 2)
+        return
+    end
+    if itemData.uiOpenId == UI_OPEN_TYPE_MONOPOLY then
+        OpenMonopolyModule()
+    elseif itemData.uiOpenId == UI_OPEN_TYPE_MINING then
+        OpenMiningModule()
+    elseif itemData.uiOpenId == UI_OPEN_TYPE_MAZE then
+        OpenMazeModule()
+    else
+        CsBridge.hintUILayer:ShowHintBox(Language:getStr("SystemIsClosed"), 2)
+        return
+    end
+end
+
+---打开界面
+function OnCommand_OpenTargetView(objs)
+    local data = objs[0]
+    OpenTargetModule(data)
+end
+
+---获取数据
+function OnCommand_GetViewData()
+    GetViewData()
+end
+
+function DoOnExit()
+
+end

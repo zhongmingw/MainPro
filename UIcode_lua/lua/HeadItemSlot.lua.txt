@@ -1,0 +1,4 @@
+
+function OnHeadItemSlotBindValue(slot,data)
+	SetIconByHeadId(slot:GetGameObjectAtPath("icon"), data.heroId)
+end

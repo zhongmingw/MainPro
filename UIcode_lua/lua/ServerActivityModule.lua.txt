@@ -1,0 +1,30 @@
+--[[
+	file: ServerActivityModule.lua
+	author: hangang
+	description:Time limited activity context
+]]
+
+function DoInit()
+
+end
+
+function AssetNames(objs)
+	local arr={
+		"ServerActivityView",
+		"ServerActivityItemSlot",
+	}
+	return arr
+end
+
+function OnEnter(objs,onFinished)
+	local type, name = objs[0], objs[1]
+	local view = self:OpenView("ServerActivityView","ServerActivityModel")
+	if objs.Length >= 3 then
+		view:SetParamDataList(objs[2])
+	end
+	view:SendCommand("InitServerActivityType",type,name)
+	if(onFinished ~= nil)then
+		onFinished()
+	end
+
+end

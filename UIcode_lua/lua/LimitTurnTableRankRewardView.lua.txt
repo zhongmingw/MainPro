@@ -1,0 +1,109 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-10-23 19:50:32
+
+require "LimitTurnTableRankRewardItemSlot"
+
+local isInit = false
+
+local rankTxt
+local ruleTxt
+local timeTxt
+local playerRewardGrid
+local rewardGrid
+local rewardGridTF
+local rewardGridLayout
+local rewardSizeDelta
+
+local TICKER_NAME = "ticker_LimitTurnTableRankRewardView"
+
+function DoInit()
+    self.Shadow = 1
+end
+
+function InitUI()
+    rankTxt = self:GetComponentAtPath("Center/ScrollRect/Viewport/ContentGrid/PlayerRankInfo/RankTxt", CLS_TEXT)
+    ruleTxt = self:GetComponentAtPath("Center/ScrollRect/Viewport/ContentGrid/rule/RuleTxt", CLS_TEXT)
+    timeTxt = self:GetComponentAtPath("Center/ScrollRect/Viewport/ContentGrid/title03/TimeTxt", CLS_TEXT)
+    playerRewardGrid =self:GetComponentAtPath("Center/ScrollRect/Viewport/ContentGrid/PlayerRankInfo/PlayerRewardGrid",CLS_UI_ITEM_GRID)
+    rewardGrid = self:GetComponentAtPath("Center/ScrollRect/Viewport/ContentGrid/RankRewardGrid", CLS_UI_ITEM_GRID)
+    rewardGridTF = rewardGrid.transform
+    rewardGridLayout =self:GetComponentAtPath("Center/ScrollRect/Viewport/ContentGrid/RankRewardGrid", CLS_GRID_LAYOUT_GROUP)
+    rewardSizeDelta = rewardGridTF:CheckSizeDelta()
+    
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitLimitTurnTableRankRewardData")
+end
+
+function OnClose()
+    Timer:StopTicker(TICKER_NAME)
+    -- playerRewardGrid:Reset()
+    -- rewardGrid:Reset()
+end
+
+function OnNotification_RefreshLimitTurnTableRankRewardView(objs)
+    local rewardData = objs[0]
+    rankTxt.text = string.format(Language:getStr("YourRank"), (rewardData.rank == -1 and "-" or rewardData.rank))
+    playerRewardGrid:RefreshItemSlots(rewardData.playerRewardItems, self.gameObject, "ItemSlot")
+    rewardGrid:RefreshItemSlots(rewardData.rankRewardItems, self.gameObject, "LimitTurnTableRankRewardItemSlot")
+    SetRewardGridHeight(#rewardData.rankRewardItems)
+    Timer:AddTicker(TICKER_NAME,rewardData.endTime,	function (targetTime)
+        if self == nil or self.Module == nil then
+            return
+        end
+        if timeTxt==nil then
+            return
+        end
+
+        local timeStr = CheckTimeRemain(targetTime)
+        timeTxt.text=timeStr
+    end,function()
+        timeTxt.text = DEFAULT_TIME
+    end,nil)
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function OnMaskClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function SetRewardGridHeight(count)
+    local height = rewardGridLayout.padding.top + rewardGridLayout.padding.bottom + rewardGridLayout.cellSize.y * count + (count-1) * rewardGridLayout.spacing.y
+    rewardSizeDelta.y = height
+    rewardGridTF:ResetSizeDelta(rewardSizeDelta)
+end
+
+function OnPlayerRewardGridItemSlotClick(obj)
+    local data = obj.m_data
+    ShowTip(self,data.typeId,data.id)
+end
+
+function OnRewardGridItemSlotClick(obj)
+    local data = obj.m_data
+    ShowTip(self,data.typeId,data.id)
+end
+
+function DoExit()
+    Timer:StopTicker(TICKER_NAME)
+    isInit = nil
+
+    rankTxt = nil
+    ruleTxt = nil
+    timeTxt = nil
+    playerRewardGrid = nil
+    rewardGrid = nil
+    rewardGridTF = nil
+    rewardGridLayout = nil
+    rewardSizeDelta = nil
+    TICKER_NAME = nil
+end

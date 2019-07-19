@@ -1,0 +1,27 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-04-17 11:14:02
+]]
+local MazeDef = require "MazeDef"
+local MazeGrid = require "MazeGrid"
+
+local MazeNormalGrid = class("MazeNormalGrid",MazeGrid)
+
+function MazeNormalGrid:Ctor(row, col, state, type)
+    super(self,row,col,state,type)
+end
+
+function MazeNormalGrid:BindOnStateValue(trans)
+    local bg = trans:GetGameObjectAtPath("BgImg")
+    local blockFlag = trans:GetGameObjectAtPath("BgImg/BlockFlag")
+    blockFlag:SetSelfActive(false)
+    bg:SetSelfActive(false)
+end
+
+function MazeNormalGrid:Click(data)
+    data.onFinished()
+end
+
+return MazeNormalGrid

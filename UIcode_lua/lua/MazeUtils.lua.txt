@@ -1,0 +1,294 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-04-17 10:56:48
+]]
+
+local MazeDef = require "MazeDef"
+local json = require "json"
+local VecUtils = require "VecUtils"
+
+local GridType = MazeDef.GridType
+local GridState = MazeDef.GridState
+local MazeEvent = MazeDef.MazeEvent
+local MazeItem = MazeDef.MazeItem
+local EventParamType = MazeDef.EventParamType
+
+local function ShowHintBox(desp, level)
+     local ERROR_LEVEL = 2
+     CsBridge.hintUILayer:ShowHintBox(desp, level or ERROR_LEVEL)
+end
+
+local function ShowMsgBox(desp, confirmCallback, cancelCallback)
+     CsBridge.messageManager:PopMsgBox(
+     Language:getStr("local_confirm"),
+     desp,
+     Language:getStr("local_cancel"),cancelCallback,
+     Language:getStr("local_confirm"),confirmCallback)
+end
+
+local function ShowConfirmMsgBox(desp, confirmCallback)
+     CsBridge.messageManager:PopMsgBox(
+     Language:getStr("local_confirm"),
+     desp,
+     Language:getStr("local_confirm"),confirmCallback)
+end
+
+local function ShowFirstMsgBox(name, desp, confirmCallback)
+     CsBridge.messageManager:FristConfirmBox(name,
+     Language:getStr("local_confirm"),
+     desp,
+     Language:getStr("local_cancel"),nil,
+     Language:getStr("local_confirm"),confirmCallback)
+end
+
+local function JsonDecode(str)
+     return json.decode(str)
+end
+
+local function JsonEncode(data)
+     return json.encode(data)
+end
+
+local function ParseSvrDataFormation(svrData)
+     local formation = {}
+     if svrData then
+         for i,v in ipairs(svrData) do
+             local monster = {
+                 heroId = v.formationPos.heroId,
+                 pos = v.formationPos.pos,
+                 grade = v.heroGrade,
+                 level = 0,
+                 distillationStar = v.distillationStar,
+                 distillationLevel = v.distillationLevel
+             }
+             monster.model = ResTblContainer:GetPropToStr(monster.heroId,HeroBase.model,HeroBase.actorTbl)
+             table.insert(formation, monster)
+         end
+     end
+     return formation
+end
+
+local function GetBoxDataById(id)
+     local data = {}
+     local MazeTreasure = MazeDef.MazeTreasure
+     local BoxType = MazeDef.BoxType
+     local tbl = ResTblContainer:GetTable(MazeTreasure.tblName)
+     data = {
+          id = id,
+          boxType = tbl:GetInt(id,MazeTreasure.type),
+          icon = tbl:Get(id,MazeTreasure.icon)
+     }
+     if data.boxType == BoxType.Unlock then
+          data.spine = "MazeBoxUnlockSpine"
+     elseif data.boxType == BoxType.Lock then
+          data.spine = "MazeBoxLockSpine"
+     end
+     return data
+end
+
+local function GetItemNameById(id)
+     return ResTblContainer:GetPropToStr(
+          id,
+          MazeDef.MazeItem.itemName,
+          MazeDef.MazeItem.tblName)
+end
+
+local function DestroyModel(trans)
+     if trans.childCount > 0 then
+          CsBridge.GameObject.Destroy(trans:GetChild(0).gameObject)
+     end
+end
+
+local function DetachChildren(trans)
+     local count = trans.childCount
+     if count <= 0 then 
+          return 
+     end
+     for i=0,count-1 do
+          CsBridge.GameObject.Destroy(trans:GetChild(i).gameObject)
+     end
+end
+
+local function ShowEventDespView(desp)
+     CsBridge.CacheAssetsByGroup(MazeDef.MazeModuleName,function()
+          local view = CsBridge.OpenView("MazeEventDespView","MazeEventDespModel")
+          view:SetParamDataList(desp)
+     end,"MazeEventDespView")
+end
+
+local function GetMazeBuffDataBySvrData(data)
+     local MazeBattleState = MazeDef.MazeBattleState
+     local tbl = ResTblContainer:GetTable(MazeBattleState.tblName)
+     local id = data.buffId
+     local turn = data.turn
+     local type = data.type
+     local buff = {
+          id = id,
+          turn = data.turn,
+          type = type,
+          icon = tbl:Get(id,MazeBattleState.stateIcon),
+          desp = tbl:Get(id,MazeBattleState.stateDescription)
+     }
+     buff.typeIcon = MazeDef.MazeBuffTypeIcon[buff.type]
+     return buff
+end
+
+local function GetEventParam(paramStr)
+     local result = SplitString(paramStr,",")
+     local type = tonumber(result[0])
+     local param = {
+         type = type,
+         data = {}
+     }
+     if type == EventParamType.Select then
+         param.data.id = tonumber(result[1])
+     elseif type == EventParamType.MazeItem then
+         param.data.id = tonumber(result[1])
+         param.data.count = tonumber(result[2])
+         param.data.icon = ResTblContainer:GetPropToStr(param.data.id,MazeItem.itemIcon,MazeItem.tblName)
+     elseif type == EventParamType.NormalItem then
+         param.data.typeId = tonumber(result[1])
+         param.data.id = tonumber(result[2])
+         param.data.count = tonumber(result[3])
+     elseif type == EventParamType.ChangeHp then
+         param.data.count = tonumber(result[1])
+     elseif type == EventParamType.GetBuff then
+         local data = {
+              buffId = tonumber(result[1]),
+              turn = tonumber(result[2]),
+              type = tonumber(result[3])
+         }
+         param.data = GetMazeBuffDataBySvrData(data)
+     end
+     return param
+end
+
+local function GetEventParams(id)
+     local tbl = ResTblContainer:GetTable(MazeEvent.tblName)
+     local params = tbl:Get(id,MazeEvent.eventTriggerParameter,MazeEvent.tblName)
+     local results = SplitString(params,";")
+     local params = {}
+     for i=0,results.Length-1 do
+          local paramStr = results[i]
+          local param = GetEventParam(paramStr)
+          table.insert(params,param)
+     end
+     return params
+end
+
+local function CheckPlayerMazeItem(player,id)
+     return player.itemMap[id] or 0
+end
+
+local function CheckPlayerHasMazeItem(player,id)
+     return CheckPlayerMazeItem(player,id) ~= 0
+end
+
+local function ShowMazeItemTip(module,data)
+     CsBridge.CacheAssetsByModule(module,function()
+          local view = CsBridge.OpenView("MazeItemTipView","MazeItemTipModel")
+          view:SetParamDataList(data)
+     end,"MazeItemTipView")
+end
+
+local function GetMazeItemsBySvrData(str)
+     local jsonData = JsonDecode(str)
+     if jsonData == nil or jsonData[1] == nil then
+          return
+     end
+     local items = {}
+     for i,param in ipairs(jsonData) do
+          local id = param[2]
+          local count = param[3]
+          local item = {
+               id = id,
+               count = count
+          }
+          item.icon = ResTblContainer:GetPropToStr(item.id,MazeItem.itemIcon,MazeItem.tblName)
+          table.insert(items, item)
+     end
+     return items
+end
+
+local function GetRewardItemsBySvrData(svrItems)
+     local rewardItems = {}
+     for i,v in ipairs(svrItems) do
+          local rewardItem = {
+               typeId = v.objType,
+               id = v.id,
+               count = v.count
+          }
+          table.insert(rewardItems,rewardItem)
+     end
+     return rewardItems
+end
+
+local function CheckPlayerDie(player)
+     return player.status == MazeDef.MazeState.Die
+end
+
+local function CheckMazeOver(svrData)
+     return svrData.status == MazeDef.MazeState.Complete
+end
+
+local function ShowMazeBuffTip(module, buff)
+     CsBridge.CacheAssetsByModule(module,function()
+          local view = CsBridge.OpenView("MazeBuffTipView","MazeBuffTipModel")
+          view:SetParamDataList(buff)
+     end,"MazeBuffTipView")
+end
+
+local function RequestEnterLabyrinth(enterNext, onFinished)
+     local req = {
+          enterNext = enterNext
+     }
+     HttpRequest("enterLabyrinth","EnterLabyrinthReq","LabyrinthResp",req,onFinished)
+end
+
+local function RequestMove(data, onFinished)
+     local str = JsonEncode(data)
+     local req = {
+          moveReq = str
+     }
+     HttpRequest("move","MoveReq","LabyrinthResp",req,onFinished)
+end
+
+local function RequestUseItem(data, onFinished)
+     local req = {
+          itemId = data.itemId,
+          row = data.row,
+          col = data.col
+     }
+     HttpRequest("useItem","UseItemReq","LabyrinthResp",req,onFinished)
+end
+
+return {
+    CreateMazeGridBySvrData = CreateMazeGridBySvrData,
+    ShowMsgBox = ShowMsgBox,
+    ShowFirstMsgBox = ShowFirstMsgBox,
+    ShowConfirmMsgBox = ShowConfirmMsgBox,
+    JsonDecode = JsonDecode,
+    JsonEncode = JsonEncode,
+    RequestEnterLabyrinth = RequestEnterLabyrinth,
+    RequestMove = RequestMove,
+    ShowHintBox = ShowHintBox,
+    ParseSvrDataFormation = ParseSvrDataFormation,
+    DestroyModel = DestroyModel,
+    ShowEventDespView = ShowEventDespView,
+    GetEventParams = GetEventParams,
+    CheckPlayerHasMazeItem = CheckPlayerHasMazeItem,
+    ShowMazeItemTip = ShowMazeItemTip,
+    RequestUseItem = RequestUseItem,
+    GetBoxDataById = GetBoxDataById,
+    GetItemNameById = GetItemNameById,
+    GetMazeItemsBySvrData = GetMazeItemsBySvrData,
+    GetRewardItemsBySvrData = GetRewardItemsBySvrData,
+    DetachChildren = DetachChildren,
+    CheckPlayerDie = CheckPlayerDie,
+    GetMazeBuffDataBySvrData = GetMazeBuffDataBySvrData,
+    ShowMazeBuffTip = ShowMazeBuffTip,
+    CheckMazeOver = CheckMazeOver,
+    CheckPlayerMazeItem = CheckPlayerMazeItem,
+}

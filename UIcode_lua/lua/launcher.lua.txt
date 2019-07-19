@@ -1,0 +1,233 @@
+require "Class"
+require "CsBridge"
+CsBridge.Init()
+require "StringUtil"
+require "HttpHelper"
+require "GameLogicMsgDef"
+require "MsgCenter"
+require "ConstantTbl"
+require "IconData"
+require "ClientData"
+require "ColorUtils"
+require "StructData"
+require "HeroAttrData"
+require "ItemBaseUtils"
+require "ItemSlot"
+require "ItemTipData"
+require "CommPayUtils"
+require "HeroBaseUtils"
+require "HeroItemSlot"
+require "PlayerBaseInfoUtils"
+require "RedTipUtils"
+require "SortUtils"
+require "DealUtils"
+require "TipHelper"
+require "TableUtil"
+require "StringUtil"
+require "HeroAttrUtils"
+require "protoMap"
+require "AppData"
+require "ResourceTableContainer"
+require "Language"
+require "Timer"
+require "HeroAttrData"
+
+local uiRoot
+local inBattle = false
+local logined = false
+local level = 1
+local vip = 0
+
+local function ResetTimeScale()
+	CS.UnityEngine.Time.timeScale = 1
+end
+
+local function onLogout(obj)
+    appData:clear()
+	CsBridge.loadUIMgr:Hide()
+	CsBridge.loading:hideLoading()
+	CsBridge.guideManager:StopGuide()
+	--library.GuideManager.instance:Clear()
+	CsBridge.MoneyBanner.SetBannerVisible(false)
+	local manager=CsBridge.moduleManager
+	if (obj == nil or (not obj)) then
+	    manager:ResetMainModule("LoginModule")
+	end
+	logined=false
+	inBattle = false
+	CsBridge.appData.IsLogined = false
+	ResetTimeScale()
+	Timer:Clear()
+	CsBridge.Clear()
+	CsBridge.Init()
+end
+
+local function ReturnHome(obj)
+	CsBridge.loadUIMgr:Hide()
+	CsBridge.loading:hideLoading()
+	CsBridge.guideManager:StopGuide()
+	local manager=CsBridge.moduleManager
+	manager:ReturnToMainUI()
+end
+
+local function Reload()
+    local manager=CsBridge.moduleManager
+    if (manager.CurrentModule.ModuleName ~= "LoginModule") then
+        appData:clear()
+		CsBridge.loadUIMgr:Hide()
+		CsBridge.loading:hideLoading()
+		CsBridge.guideManager:StopGuide()
+		--library.GuideManager.instance:Clear()
+		CsBridge.MoneyBanner.SetBannerVisible(false)
+	    local param = {}
+	    param.isRelogin=true
+		manager:ResetMainModule("LoginModule", nil, {param})
+		logined=false
+		inBattle = false
+		CsBridge.appData.IsLogined = false
+	end
+	ResetTimeScale()
+	Timer:Clear()
+	CsBridge.Clear()
+	CsBridge.Init()
+end
+
+local function hideStart()
+    local parent = CS.UnityEngine.GameObject.Find("Canvas")
+    if(parent~=nil)then
+    	parent.transform:DestroyAllChildren()
+		CS.UnityEngine.GameObject.DestroyImmediate(parent.gameObject)
+    end
+end
+
+local function LoadClientStruct()
+	LoadArr("HeroLevelUp")
+	LoadArr("Attribute")
+	LoadArr("AuraBase")
+	LoadArr("UIOpenBase")
+	LoadArr("HeroBase")
+	LoadArr("SkillBase")
+	LoadArr("PassiveSkill")
+	LoadArr("Campaign")
+	LoadTabToDic(Hero.actorTbl)
+	LoadTabToDic(HeroLevelUp.actorTbl)
+	LoadTabToDic(HeroDistillation.tblName)
+	LoadTabToDic(HeroDistillationLevel.tblName)
+	LoadTabToDic(ElementCamp.tblName)
+	LoadTabToDic(ElementFusion.tblName)
+	LoadTabToDic(ElementCrystal.tblName)
+end
+
+local function LoadClientSetting()
+	local musicStr = CsBridge.UnityHelper.GetString("local_musicEnabled",tostring(true))
+	local soundStr = CsBridge.UnityHelper.GetString("local_soundEnabled",tostring(true))
+	if musicStr == nil then
+		CsBridge.audioManager.MusicEnabled = true
+	else
+		CsBridge.audioManager.MusicEnabled = musicStr == "true"
+	end 
+	if soundStr == nil then
+		CsBridge.audioManager.SoundEnabled = true
+	else
+		CsBridge.audioManager.SoundEnabled = soundStr == "true"
+	end 
+end 
+
+local function PlayerInfoChanged(obj)
+	if ((not inBattle) and obj=="PlayerInfo") then
+		local playerInfo = appData:checkData("PlayerInfo")
+		if(not logined) then
+			logined = true
+			level = playerInfo.level
+			vip = playerInfo.vip
+			CsBridge.sDKHelper:enterGame(playerInfo.zone, playerInfo.userId, playerInfo.nick, playerInfo.level, playerInfo.vip)
+			CsBridge.guideManager:UpdatePlayer(playerInfo.level, playerInfo.vip)
+		end
+	end
+	if(logined and obj=="PlayerInfo") then
+	    local playerInfo = appData:checkData("PlayerInfo")
+		if (level ~= playerInfo.level) then
+		    level = playerInfo.level
+			CsBridge.MsgCenter.Broadcast(2031, tostring(level))
+		end
+		if (vip ~= playerInfo.vip) then
+		    vip = playerInfo.vip
+			CsBridge.MsgCenter.Broadcast(2032, tostring(vip))
+	    end
+	end
+end
+
+
+local function DoEnterBattle()
+    inBattle = true
+end
+
+local function DoBattleEnd()
+    inBattle = false
+end
+
+local function DoUpdateValue(data)
+    appData:updateValue(data)
+end
+
+local function DoUpdateTbl(data)
+    ResTblContainer:UpdateTbl(data)
+	Language:clear()
+end
+
+function DoInit()
+    logined = false
+	inBattle = false
+    appData:clear()
+	MsgCenter:Clear()
+	CsBridge.MsgCenter.Subscribe(CsBridge.SysMsgDef.Notify_Reload, Reload);
+	CsBridge.MsgCenter.Subscribe(CsBridge.SysMsgDef.Notify_SessionExpired, onLogout);
+	CsBridge.MsgCenter.Subscribe(CsBridge.SysMsgDef.Notify_ReturnHome, ReturnHome);
+	CsBridge.MsgCenter.Subscribe(CsBridge.SysMsgDef.Notify_UpdateResTable, DoUpdateTbl);
+	CsBridge.MsgCenter.Subscribe(CsBridge.SysMsgDef.Notify_UpdateCacheValue, DoUpdateValue);
+	CsBridge.MsgCenter.Subscribe(CsBridge.SysMsgDef.Notify_LanguageChanged, LoadClientStruct)
+
+	MsgCenter:Subscribe(CsBridge.SysMsgDef.Notify_SingleDataChanged, PlayerInfoChanged);
+	MsgCenter:Subscribe(Notify_OnBattle, DoEnterBattle)
+	MsgCenter:Subscribe(Notify_OnBattleEnd, DoBattleEnd)
+	CsBridge.localizationHelper:init()
+	CsBridge.localizationHelper:Clear()
+	CsBridge.resTableContainer:initTables(
+	function()
+		CsBridge.localizationHelper:init()
+		CsBridge.audioManager:InitAudios()
+        CS.UnityEngine.Time.timeScale=1
+	    LoadClientStruct()
+	    LoadClientSetting()
+	    uiRoot = CsBridge.rootManager:CreateCanvasRoot("UIRoot", "UILayer")
+	    local cache = CsBridge.objectCache
+	    cache.enableAutoGC = false
+	    cache.clearCacheInterval = 60
+	    cache.clearAssetCount = 50
+	    cache.clearAssetMaxCount = 200
+	    cache.clearBundleCount = 40
+	    cache.canClearSince = 150
+	    cache.mustGC = 300
+		CsBridge.luaHelper.GCCount = 30
+		CsBridge.guideManager:Init()
+		CsBridge.httpBehaviour.language = CsBridge.localizationHelper.Language
+	    local manager=CS.Client.Library.ModuleManager.instance
+	    manager.Parent=uiRoot.transform
+	    manager.defaultClearClear=true
+	    local frameCount=GetConstValue("FrameCount")
+	    if(frameCount ~= nil and frameCount > 0) then
+			CsBridge.initBehaviour.TargetFrameRate=frameCount
+	    else
+	        CsBridge.initBehaviour.TargetFrameRate=30
+	    end
+	    manager:ResetMainModule("LoginModule", hideStart)
+	    local pb = require "pb"
+	    local luaHelper = CsBridge.luaHelper
+	    local pbFiles = luaHelper:allPbNames()
+		for i = 0,pbFiles.Length - 1 do
+	        local pbfile = luaHelper:loadPbFile(pbFiles[i])
+            pb.load(pbfile)
+	    end
+		CsBridge.objectCache:ForceGC()
+	end)
+end

@@ -1,0 +1,29 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2018-10-23 17:54:00
+]]
+
+function OnLimitTurnTableRankItemSlotBindValue(slot,data)
+	local slotTrans = slot.transform
+	local nameTxt=slot:GetComponentAtPath("NameTxt" ,CLS_TEXT)
+	local scoreTxt=slot:GetComponentAtPath("ScoreTxt" ,CLS_TEXT)
+	local zoneTxt=slot:GetComponentAtPath("ZoneTxt" ,CLS_TEXT)
+    local rankTxt=slot:GetComponentAtPath("RankTxt",CLS_TEXT)
+	local rank_Sprite=slot:GetComponentAtPath("RankSprite" ,CLS_IMAGE)
+
+	local palyer_TF=slotTrans:Find("PlayerBase")
+    BindPlayerBaseInfoValue(palyer_TF,data.playerBaseInfo)
+    nameTxt.text=data.playerBaseInfo.name
+	rankTxt.text=data.rank
+    scoreTxt.text=data.score
+    zoneTxt.text=string.format(Language:getStr("PlayerInZone"),data.playerBaseInfo.zone)
+
+    if data.rank<=3 and data.rank>0 then
+        rank_Sprite.gameObject:SetActive(true)
+		CsBridge.IconData.SetIconByName(rank_Sprite.gameObject,"new_com_paiming"..data.rank)
+	else
+		rank_Sprite.gameObject:SetActive(false)
+	end
+end

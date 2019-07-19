@@ -1,0 +1,74 @@
+--[[
+	file: UnionBattleRankView.lua
+	author: hangang
+	description: Union battle leaderboard and rewards panel container
+]]
+
+local ChildViewIdx =
+{
+	LeaderboardView = 1,
+	RewardView = 2,
+}
+
+local currentTabIndex = 0
+local childToggles
+
+--Initialize on awake---------------------------------------------------------------
+function DoInit()
+	self.Shadow = 1     --shadow type
+	InitUI()            --cache UI items
+end 
+
+function InitUI()
+	local selfTrans = self.transform
+	childToggles = {}
+	local path = "Top/TogGroup"
+	local togglesRoot = selfTrans:Find(path)
+	for i = 0, togglesRoot.childCount - 1 do
+		local toggle = togglesRoot:GetChild(i):GetComponent(CLS_TOGGLE_ARCHLY)
+		childToggles[toggle.Index] = toggle
+	end
+end
+
+--On animation finished event--------------------------------------------------------
+function OnAnimationFinished()
+	currentTabIndex = 0
+	childToggles[0].isOn = false
+	childToggles[0].isOn = true
+end
+
+--UI event handlers-------------------------------------------------------------------
+function OnTogGroupClick(isOn, index)
+	if isOn then
+		if currentTabIndex == index + 1 then
+			return
+		end
+		currentTabIndex = index + 1
+		if currentTabIndex == ChildViewIdx.LeaderboardView then
+			self:SendCommand("OpenLeaderboardViewData")
+		else
+			self:SendCommand("OpenRewardViewData")
+		end
+	end
+end
+
+--On closing--------------------------------------------------------------------------
+function OnMaskClick(sender)
+	Close()
+end
+
+function OnCloseBtnClick(sender)
+	Close()
+end
+
+function Close() 
+	currentTabIndex = 0
+    self:SendCommand("CloseUnionBattleRankView")
+	self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	ChildViewIdx = nil
+	currentTabIndex = nil
+	childToggles = nil
+end

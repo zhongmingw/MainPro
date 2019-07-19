@@ -1,0 +1,31 @@
+
+function OnBagPiecesItemSlotBindValue(slot, data)
+    local itemBaseTF = slot:GetComponentAtPath("ItemSlot",CLS_RECTTRANSFORM)
+    local checkSpriteObj = itemBaseTF:GetGameObjectAtPath("CheckSprite")
+    data.hideCount = true
+    BindItemBaseValue(itemBaseTF, data)
+    
+    local slider = slot:GetComponentAtPath("Slider",CLS_SLIDER)
+    local sliderTrans = slider.transform
+    local sliderImg = sliderTrans:GetGameObjectAtPath("sld01Img")
+    local sliderOverImg = sliderTrans:GetGameObjectAtPath("OverImg")
+    local countTxt = sliderTrans:GetComponentAtPath("numberTxt",CLS_TEXT)
+
+    SetDebrisSlider(countTxt,slider,data.id,data.count,sliderImg,sliderOverImg)
+    slider.gameObject:SetSelfActive(true)
+
+    if data.IsSelected then
+        checkSpriteObj:SetSelfActive(true)
+    else
+        checkSpriteObj:SetSelfActive(false)
+    end
+
+    local redFlagObj = itemBaseTF:Find("RedFlag")
+    if redFlagObj ~= nil then
+        if data.redFlag then
+            redFlagObj.gameObject:SetSelfActive(true)
+        else
+            redFlagObj.gameObject:SetSelfActive(false)
+        end
+    end
+end

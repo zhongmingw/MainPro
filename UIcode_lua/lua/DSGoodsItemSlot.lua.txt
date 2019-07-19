@@ -1,0 +1,59 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2018-11-06 13:22:21
+]]
+
+function OnDSGoodsItemSlotBindValue(slot,data)
+    local itemBase = slot:GetComponentAtPath("ItemSlot",CLS_RECTTRANSFORM)
+    local priceImg = slot:GetGameObjectAtPath("PriceImg")
+    local priceTxt = slot:GetComponentAtPath("PriceTxt",CLS_TEXT)
+    local discountImgObj = slot:GetGameObjectAtPath("DiscountImg")
+    local discountTxt = slot:GetComponentAtPath("DiscountImg/DiscountTxt",CLS_TEXT)
+    local lowDiscountImgObj = slot:GetGameObjectAtPath("LowDiscountImg")
+    local buyBtn = slot:GetComponentAtPath("BuyBtn",CLS_BUTTON_ARCHLY)
+    local buyIconImg = slot:GetGameObjectAtPath("BuyBtn/IconImg")
+    local buyNumTxt = slot:GetComponentAtPath("BuyBtn/NumTxt",CLS_TEXT)
+    local LimitTipsText = slot:GetGameObjectAtPath("LimitTipsText")
+    local LimitNumberText = slot:GetComponentAtPath("LimitNumberText",CLS_TEXT)
+
+    BindItemBaseValue(itemBase,data.goods)
+    ShowOneConsume(priceImg,priceTxt,data.price)
+    if data.islowestDiscount then
+        lowDiscountImgObj:SetSelfActive(true)
+        discountImgObj:SetSelfActive(false)
+    else
+        lowDiscountImgObj:SetSelfActive(false)
+        discountImgObj:SetSelfActive(true)
+        discountTxt.text = string.formatCalc(Language:getStr("DSDiscountNum"),data.discount)
+    end
+    buyBtn.Gray = data.allRemain == 0 or data.remain == 0
+    ShowOneConsume(buyIconImg,buyNumTxt,{
+        typeId = data.price.typeId,
+        id = data.price.id,
+        count = data.discountPrice
+    })
+    SetFontColorWithEnough(buyNumTxt,function()
+        return CheckItemEnough(data.price.id,data.price.typeId,data.discountPrice,false)
+    end,color2)
+    if data.limited then
+        LimitTipsText.gameObject:SetActive(true)
+        LimitNumberText.gameObject:SetActive(true)
+        discountImgObj.gameObject:SetActive(false)
+        lowDiscountImgObj.gameObject:SetActive(false)
+        if data.limit == -1 then
+            LimitNumberText.text = '--'
+        else
+            LimitNumberText.text = data.allRemain
+            SetFontColorWithEnough(LimitNumberText,function ()
+                return data.allRemain > 0
+            end,color2)
+        end
+        buyBtn.Gray = data.allRemain == 0 or data.remain == 0
+    end
+    if data.isStartEndBtn then
+        buyBtn.interactable = data.isStartSale and data.allRemain > 0
+        buyBtn.Gray = not (data.isStartSale and data.allRemain > 0)
+    end
+end

@@ -1,0 +1,21 @@
+
+function OnCrossFormationItemSlotBindValue(slot,data)
+    local team_Lab = slot:GetComponentAtPath("TeamTxt",CLS_TEXT)
+    local combat_Lab = slot:GetComponentAtPath("CombatTxt",CLS_TEXT)
+    local aure_Sprite = slot:GetComponentAtPath("aureole/AureSprite",CLS_IMAGE)
+    local orderSprite = slot:GetComponentAtPath("FightOrderBtn/OrderSprite",CLS_IMAGE)
+    local upHeroGrid = slot:GetComponentAtPath("UpHeroGrid",CLS_UI_ITEM_GRID)
+    
+    team_Lab.text = tostring(data.formationIdx)
+    combat_Lab.text = tostring(data.combat)
+    if(data.aura == nil) then
+        CsBridge.IconData.SetIconByName(aure_Sprite.gameObject,"new_com_guanghuan11")
+    else
+        CsBridge.IconData.SetIconByName(aure_Sprite.gameObject,data.aura.icon)
+    end
+    orderSprite.gameObject:SetSelfActive(data.fightOrder~=0)
+    if(data.fightOrder~=0) then
+        CsBridge.IconData.SetIconByName(orderSprite.gameObject,"new_com_number0"..data.fightOrder)
+    end
+    upHeroGrid:RefreshItemSlots(data.heroes,slot.m_grid.viewBase.gameObject,"HeroItemSlot")
+end

@@ -1,0 +1,97 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-04-15 11:37:48
+
+local isInit = false
+
+local mulDecomposeGrid
+local effect
+
+function DoInit()	
+    self.Anim = 8
+    self.Shadow = 1
+end
+
+function InitUI()
+    mulDecomposeGrid = self:GetComponentAtPath("Center/MulDecomposeGrid",CLS_UI_ITEM_GRID)
+    effect = {
+        trans = self:GetComponentAtPath("Effect",CLS_RECTTRANSFORM)
+    }
+    effect.obj = effect.trans.gameObject
+end
+
+function SetParamDataList(objs)
+    local data = objs[0]
+    self:SendCommand("InitData",data)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitJewelMulDecomposeData")
+end
+
+function OnClose()
+    mulDecomposeGrid:ClearItems()
+end
+
+function DoExit()
+    isInit = nil
+    mulDecomposeGrid = nil
+    effect = nil
+end
+
+function OnNotification_RefreshJewelMulDecomposeView(objs)
+    local data = objs[0]
+    mulDecomposeGrid:RefreshItemSlots(data, self.gameObject, "JewelMulDecomposeItemSlot")
+end
+
+function OnNotification_RefrshSingleDecomposeQuality(objs)
+    local data = objs[0]
+    mulDecomposeGrid:SingleRefreshSlot(data)
+end
+
+function OnNotification_ShowMulDecomposeEffect(objs)
+    local onFinished = objs[0]
+    local spineName = "ComDecomposeSpine"
+    local animName = "shifang"
+    effect.obj:SetSelfActive(true)
+    CsBridge.CacheAssetsByGroup(spineName,function()
+        local obj = CsBridge.objectCache:CreateObject(spineName, true, effect.trans)
+        obj:GetComponent(CLS_SKELETONGRAPHIC):PlayAnimation(animName,false,function()
+            effect.obj:SetSelfActive(false)
+            DestroyModel(obj)
+            onFinished()
+        end)
+    end,spineName)
+end
+
+function OnJewelMulDecomposeItemSlotBindValue(slot, data)
+    local selectImg = slot:GetGameObjectAtPath("SelectBtn/SelectImg")
+    local nameTxt = slot:GetComponentAtPath("NameTxt",CLS_TEXT)
+    local iconImg = slot:GetGameObjectAtPath("IconImg")
+
+    selectImg:SetSelfActive(data.selected)
+    nameTxt.text = string.format(Language:getStr("JewelMulDecompose_Desp"),data.name)
+    CsBridge.IconData.SetIconByName(iconImg, data.icon)
+end
+
+function OnMulDecomposeGridSelectBtnClick(obj)
+    local data = obj.m_data
+    self:SendCommand("SelectQuality",data)
+end
+
+function OnConfirmBtnClick(sender)
+    self:SendCommand("ConfirmDecompose")
+end
+
+function OnMaskClick(sender)
+    self:HideView(self.gameObject.name)
+end
+
+function OnCloseBtnClick(sender)
+    self:HideView(self.gameObject.name)
+end

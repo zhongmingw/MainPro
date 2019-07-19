@@ -1,0 +1,141 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2019-02-18 15:32:21
+local FormationUtils = require "FormationUtils"
+require "FormationRecommendItemSlot"
+
+local isInit = false
+
+local recommendGrid
+
+local euler = {
+    x = 0,
+    y = 0,
+    z = 0
+}
+local duration = 0.3
+local addYs = {}
+local msgPos = {
+    x = nil,
+    y = 0,
+    z = 0
+}
+local offsetYs = {}
+
+function DoInit()	
+    self.Shadow = 1
+end
+
+function InitUI()
+    recommendGrid = self:GetComponentAtPath("other/awardSV/ScrollRect/Viewport/Grid",CLS_UI_ITEM_GRID)
+end
+
+function OnAnimationFinished()
+    if not isInit then
+        InitUI()
+        isInit = true
+    end
+    self:SendCommand("InitFormationRecommendData")
+end
+
+function OnClose()
+    recommendGrid:ClearItems()
+end
+
+function OnNotification_RefreshFormationRecommendView(objs)
+    local arr = objs[0]
+    recommendGrid:RefreshItemSlots(arr,self.gameObject,"FormationRecommendItemSlot")
+end
+
+function OnNotification_RefreshSingleFormationRecommend(objs)
+    local recommend = objs[0]
+    recommendGrid:SingleRefreshSlot(recommend)
+end
+
+function OnFormationRecommendItemSlotBindValue(slot, data)
+    local nameTxt = slot:GetComponentAtPath("Center/NameTxt",CLS_TEXT)
+    local arrow = slot:GetComponentAtPath("Center/Arrow",CLS_RECTTRANSFORM)
+    local msg = slot:GetComponentAtPath("Center/Msg",CLS_RECTTRANSFORM)
+    local msgBgImg = slot:GetComponentAtPath("Center/Msg/bgImg",CLS_RECTTRANSFORM)
+    local despTxt = slot:GetComponentAtPath("Center/Msg/DespTxt",CLS_TEXT)
+    local auraImg = slot:GetGameObjectAtPath("Center/aureole/icon01Img")
+    local heroGrid = slot:GetComponentAtPath("Center/HeroGrid",CLS_UI_ITEM_GRID)
+
+    nameTxt.text = data.name
+
+    FormationUtils.SetAuraIcon(auraImg, data.curAura)
+    local view = slot.m_grid.viewBase
+    heroGrid:RefreshItemSlots(data.upHeroArr,view.gameObject,"HeroItemSlot")
+
+    euler.z = data.showDesp and -180 or 0
+    if data.anim then
+        msg.gameObject:SetSelfActive(true)
+        if msgPos.x == nil then
+            msgPos.x = msg:CheckLocalPosition().x
+        end
+        msgPos.y = data.showDesp and -137 or 127
+        if offsetYs[data.id] == nil then
+            despTxt.text = data.desp
+            offsetYs[data.id] = math.max(despTxt.preferredHeight-17, 0)
+        end
+        local offsetY = data.showDesp and offsetYs[data.id] or -offsetYs[data.id]
+        if addYs[data.id] == nil then
+            sizeDelta = msgBgImg:CheckSizeDelta()
+            sizeDelta.y = sizeDelta.y+offsetY
+            msgBgImg:ResetSizeDelta(sizeDelta)
+            addYs[data.id] = sizeDelta.y
+        end
+        local addY = addYs[data.id]
+        addY = data.showDesp and addY or -addY
+        sizeDelta = slot.transform:CheckSizeDelta()
+        CsBridge.TweenUtils.MoveToByAnchored(msg,msgPos.x,msgPos.y,duration,function()
+            if not data.showDesp then
+                msg.gameObject:SetSelfActive(false)
+            end
+        end)
+        CsBridge.TweenUtils.Rotate(arrow,euler.z,duration)
+        local t = CsBridge.TweenUtils.SizeDeltaTo(slot.transform,sizeDelta.x,sizeDelta.y+addY,duration)
+        t:OnUpdateAction(function()
+            CS.UnityEngine.UI.LayoutRebuilder.MarkLayoutForRebuild(slot.transform)
+        end)
+    else
+        msg.gameObject:SetSelfActive(false)
+        arrow:ResetEulerAngles(euler)
+    end
+end
+
+
+function OnGridArrowClick(obj)
+    local data = obj.m_data
+    self:SendCommand("OpenRecommend", data)
+end
+
+function OnGridaureoleClick(obj)
+    local data = obj.m_data
+    self:SendCommand("OpenAura", data)
+end
+
+function OnHeroGridHeroItemSlotClick(obj)
+    local data = obj.m_data
+    ShowHeroTip(self,data.heroId,data.level,data.grade,data.distillationStar,data.distillationLevel)
+end
+
+function OnCloseBtnClick(sender)
+    self:ReturnBack()
+end
+
+function OnMaskClick(sender)
+    self:ReturnBack()
+end
+
+function DoExit()
+    isInit = nil
+    recommendGrid = nil
+    euler = nil
+    duration = nil
+    addYs = nil
+    msgPos = nil
+    offsetYs = nil
+    FormationUtils = nil
+end

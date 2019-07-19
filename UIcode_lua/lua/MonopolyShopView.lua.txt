@@ -1,0 +1,89 @@
+require "MonopolyGoodsItemSlot"
+local actData
+local bgImg
+local titleArtTxt
+local dsGrid
+local countdownTxt
+local ruleTxt
+
+function DoInit()
+	self.Anim = 0
+	self.Shadow = CS.Client.Library.ShadowType.None
+	InitUI()
+end 
+function InitUI()
+	bgImg = self:GetGameObjectAtPath("banner/bgImg")
+	titleArtTxt = self:GetComponentAtPath("banner/TitleArtImg",CLS_LOCALIZE)
+	dsGrid = self:GetComponentAtPath("Center/itemSV/ScrollRect/Viewport/DSGrid",CLS_UI_ITEM_GRID)
+	countdownTxt = self:GetComponentAtPath("banner/countdownTxt" ,CLS_TEXT)
+	ruleTxt = self:GetComponentAtPath("rule/ruleTxt" ,CLS_TEXT)
+	ruleTxt.text = CsBridge.UnityHelper.SpaceChange(CsBridge.UnityHelper.ReplaceString(ResTblContainer:GetPropToStr(INSTRUCTION_MONOPOLY_SHOP, Instruction.content, Instruction.tblName)))
+end
+function OnAnimationFinished()
+	CsBridge.IconData.SetRawImageByName(bgImg,"ui_bg_activity_bjsd")
+	SetServerActivityArtFontByImage(titleArtTxt,"ui_bg_activity_bjsd")
+	self:SendCommand("AnimationFinished")
+end
+function SetParamDataList(objs)
+	if objs ~= nil then
+
+	end
+end
+
+function OnNotification_SetActivityData(obj)
+	actData = obj[0]
+	local goods = {}
+	for k,v in pairs(actData.goods) do
+		v.index = k
+		table.insert(goods,v)
+	end
+	dsGrid:RefreshItemSlots(goods,self.gameObject,"MonopolyGoodsItemSlot")
+end
+
+function OnDSGridBuyBtnClick(obj)
+    local data = obj.m_data
+    data.createdTime = actData.createdTime
+    self:SendCommand("BuyShopGoods",data)
+end
+
+function OnDSGridItemSlotClick(obj)
+    local data = obj.m_data.reward
+    self:SendCommand("OpenTipView",data)
+end
+
+function OnNotification_RefreshActCountdown(objs)
+	local existTime = objs[0]
+	if actData then
+		local remainTime = CheckTimeRemain(actData.createdTime + existTime*1000)
+		countdownTxt.text = remainTime
+	end
+end
+
+function OnNotification_RefreshShopActivityView(objs)
+	local index = objs[0]
+	local goods = {}
+	for k,v in pairs(actData.goods) do
+		v.index = k
+		if k == index then
+			v.curCount = v.curCount + 1
+		end
+		table.insert(goods,v)
+	end
+	dsGrid:RefreshItemSlots(goods,self.gameObject,"MonopolyGoodsItemSlot")
+end
+
+function OnNotification_CloseActivityView(obj)
+	self:HideView(self.gameObject.name)
+end
+
+function BeoforeReturnBack()
+    self:HideView(self.gameObject.name)
+end
+
+function DoExit()
+	actData = nil
+	bgImg = nil
+	titleArtTxt = nil
+	dsGrid = nil
+	countdownTxt = nil
+end

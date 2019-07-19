@@ -1,0 +1,34 @@
+
+É
+Valhalla.protoValhallaplayerData.protostage.protoArenaData.proto"=
+FightValhallaReq)
+formationPos (2.stage.FormationPos"'
+GetValhallaExtraRewardReq
+
+id ("D
+GetValhallaExtraRewardResp&
+rewardItems (2.stage.RewardItem"©
+	StageInfo
+
+id (-
+	formation (2.ArenaData.FormationPosAdv2
+playerBaseInfo (2.playerData.PlayerBaseInfo
+combat (
+robot (
+passed ("7
+ExtraReward
+
+id (
+count (
+taken ("²
+TBCInfo
+lastRenewTime ('
+
+stageInfos (2.Valhalla.StageInfo
+passedStage (%
+	heroInfos (2.Valhalla.HeroInfo+
+extraRewards (2.Valhalla.ExtraReward"5
+HeroInfo
+uid (
+curHp (
+maxHp (

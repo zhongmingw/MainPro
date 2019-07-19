@@ -1,0 +1,94 @@
+--[[
+    luaide  模板位置位于 Template/FunTemplate/NewFileTemplate.lua 其中 Template 为配置路径 与luaide.luaTemplatesDir
+    luaide.luaTemplatesDir 配置 https://www.showdoc.cc/web/#/luaide?page_id=713062580213505
+    author:dyl
+    time:2019-04-17 10:09:46
+]]
+
+local MazeDef = require "MazeDef"
+local MazeUtils = require "MazeUtils"
+
+local MazeGrid = require "MazeGrid"
+local MazeBoxGrid = class("MazeBoxGrid",MazeGrid)
+
+function MazeBoxGrid:Ctor(row, col, state, type, data)
+    super(self,row,col,state,type)
+    local box = MazeUtils.GetBoxDataById(data.treasureId)
+    self.id = box.id
+    self.boxType = box.boxType
+    self.icon = box.icon
+    self.spine = box.spine
+    self.isOpen = data.isEmpty
+end
+
+function MazeBoxGrid:SetData(svrData)
+    local box = MazeUtils.GetBoxDataById(svrData.treasureId)
+    self.id = box.id
+    self.boxType = box.boxType
+    self.icon = box.icon
+    self.spine = box.spine
+    self.isOpen = svrData.isEmpty
+end
+
+function MazeBoxGrid:BindOnStateValue(trans)
+    local bg = trans:GetGameObjectAtPath("BgImg")
+    local blockFlag = trans:GetGameObjectAtPath("BgImg/BlockFlag")
+    local iconImg = trans:GetGameObjectAtPath("IconImg")
+    blockFlag:SetSelfActive(false)
+    bg:SetSelfActive(false)
+    local iconName = self.isOpen and "new_com_tbbx3" or self.icon
+    SetSpriteByModule(iconImg, iconName)
+    iconImg:SetSelfActive(true)
+end
+
+function MazeBoxGrid:ShowBoxClickAnim(trans, onFinished)
+    if not self.isOpen then
+        onFinished()
+        return
+    end
+    local effectTrans = trans:GetComponentAtPath("Effect",CLS_RECTTRANSFORM)
+    local iconImg = trans:GetGameObjectAtPath("IconImg")
+    local spineName = self.spine
+    local animName = "open"
+    iconImg:SetSelfActive(false)
+    CsBridge.CacheAssetsByGroup(MazeDef.MazeModuleName,function()
+        local obj = CsBridge.objectCache:CreateObject(spineName,true,effectTrans)
+        local skeleton = obj:GetComponent(CLS_SKELETONGRAPHIC)
+        skeleton:PlayAnimation(animName,false,function()
+            CsBridge.GameObject.Destroy(obj)
+            iconImg:SetSelfActive(true)
+            onFinished()
+        end)
+    end,spineName)
+end
+
+function MazeBoxGrid:Click(data)
+    self.trigger = false
+    local function _TriggerBox()
+        MsgCenter:Broadcast(Notify_MazeGridTriggerBox,self)
+    end
+    if self.isOpen then
+        data.onFinished()
+    elseif self.boxType == MazeDef.BoxType.Unlock then
+        _TriggerBox()
+    elseif self.boxType == MazeDef.BoxType.Lock then
+        local itemId = GetConstValue("MazeBoxItemId")
+        local hasItem = MazeUtils.CheckPlayerHasMazeItem(data.curPlayer,itemId)
+        MazeUtils.ShowMsgBox(Language:getStr("MazeLockBoxUseKey"),
+        function()
+            if not hasItem then
+                local name = MazeUtils.GetItemNameById(self.id)
+                local hint = string.format(Language:getStr("MazeItemNotEnough"),name)
+                MazeUtils.ShowHintBox(hint)
+            else
+                self.trigger = true
+            end
+            _TriggerBox()
+        end,
+        function()
+            _TriggerBox()
+        end)
+    end
+end
+
+return MazeBoxGrid

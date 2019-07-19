@@ -1,0 +1,10 @@
+--
+-- 版权所有：archly
+-- Author: dyl
+-- Date: 2018-03-14 15:33:45
+
+function DoInit()
+end
+
+function InitProperties()
+end
